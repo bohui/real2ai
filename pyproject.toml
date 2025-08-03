@@ -1,0 +1,225 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "real2ai"
+version = "1.0.0"
+description = "Australian Real Estate AI Assistant - AI-powered contract analysis and compliance checking"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "Real2.AI Team", email = "team@real2.ai"}
+]
+maintainers = [
+    {name = "Real2.AI Team", email = "team@real2.ai"}
+]
+keywords = ["ai", "real-estate", "contract-analysis", "australia", "compliance", "fastapi"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Legal Industry",
+    "Intended Audience :: Real Estate Industry",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Office/Business :: Financial :: Real Estate",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+requires-python = ">=3.9"
+dependencies = [
+    # Core Framework
+    "fastapi==0.116.1",
+    "uvicorn[standard]==0.35.0",
+    "python-multipart==0.0.20",
+    "python-dotenv==1.1.1",
+    
+    # AI/ML Stack
+    "openai==1.98.0",
+    "langchain==0.3.27",
+    "langgraph==0.6.3",
+    "langsmith==0.4.10",
+    
+    # Database & Storage
+    "supabase==2.17.0",
+    "psycopg2-binary==2.9.10",
+    "redis==6.2.0",
+    "sqlalchemy==2.0.42",
+    
+    # Document Processing
+    "PyPDF2==3.0.1",
+    "python-docx==1.2.0",
+    "unstructured[local-inference]==0.18.11",
+    "pillow==11.3.0",
+    
+    # Authentication & Security
+    "pydantic==2.11.7",
+    "python-jose[cryptography]==3.5.0",
+    "PyJWT==2.10.1",
+    "passlib[bcrypt]==1.7.4",
+    "cryptography==45.0.5",
+    
+    # Payments & External APIs
+    "stripe==12.4.0",
+    "requests==2.32.4",
+    "httpx==0.28.1",
+    
+    # Monitoring & Logging
+    "sentry-sdk[fastapi]==2.34.1",
+    "structlog==25.4.0",
+    
+    # Background Tasks
+    "celery==5.5.3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==8.4.1",
+    "pytest-asyncio==1.1.0",
+    "pytest-cov==4.1.0",
+    "black==24.1.1",
+    "isort==5.13.2",
+    "flake8==7.0.0",
+    "mypy==1.8.0",
+    "pre-commit==3.6.0",
+]
+test = [
+    "pytest==8.4.1",
+    "pytest-asyncio==1.1.0",
+    "pytest-cov==4.1.0",
+    "pytest-mock==3.12.0",
+    "httpx==0.28.1",
+]
+docs = [
+    "mkdocs==1.5.3",
+    "mkdocs-material==9.5.3",
+    "mkdocstrings[python]==0.25.0",
+]
+
+[project.urls]
+Homepage = "https://real2.ai"
+Documentation = "https://docs.real2.ai"
+Repository = "https://github.com/real2ai/real2ai"
+"Bug Tracker" = "https://github.com/real2ai/real2ai/issues"
+"Changelog" = "https://github.com/real2ai/real2ai/blob/main/CHANGELOG.md"
+
+[project.scripts]
+real2ai = "app.main:app"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
+
+[tool.setuptools.package-data]
+"*" = ["*.md", "*.txt", "*.yml", "*.yaml"]
+
+[tool.black]
+line-length = 88
+target-version = ['py39']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+line_length = 88
+known_first_party = ["app"]
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+
+[[tool.mypy.overrides]]
+module = [
+    "fastapi.*",
+    "uvicorn.*",
+    "pydantic.*",
+    "sqlalchemy.*",
+    "celery.*",
+    "redis.*",
+    "stripe.*",
+    "openai.*",
+    "langchain.*",
+    "langgraph.*",
+    "langsmith.*",
+    "unstructured.*",
+    "PyPDF2.*",
+    "docx.*",
+    "PIL.*",
+    "cryptography.*",
+    "jose.*",
+    "passlib.*",
+    "structlog.*",
+    "sentry_sdk.*",
+]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "-ra -q --strict-markers --strict-config"
+testpaths = [
+    "tests",
+    "app",
+]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "unit: marks tests as unit tests",
+]
+
+[tool.coverage.run]
+source = ["app"]
+omit = [
+    "*/tests/*",
+    "*/test_*",
+    "*/__pycache__/*",
+    "*/migrations/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if settings.DEBUG",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if __name__ == .__main__.:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]
+
+[tool.pytest-cov]
+cov_report_terminal = true
+cov_report_html = true 
