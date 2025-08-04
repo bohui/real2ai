@@ -16,6 +16,11 @@ class GeminiClientConfig(ClientConfig):
     # Gemini API settings
     api_key: Optional[str] = None
     model_name: str = "gemini-2.5-pro"
+    
+    # Service role authentication settings
+    use_service_account: bool = True
+    credentials_path: Optional[str] = None
+    project_id: Optional[str] = None
 
     # Safety settings
     harm_block_threshold: str = "BLOCK_NONE"
@@ -50,8 +55,13 @@ class GeminiClientConfig(ClientConfig):
 class GeminiSettings(BaseSettings):
     """Pydantic settings for Gemini configuration from environment."""
 
-    gemini_api_key: str
+    gemini_api_key: Optional[str] = None
     gemini_model_name: str = "gemini-2.5-pro"
+    
+    # Service role authentication settings
+    gemini_use_service_account: bool = True
+    gemini_credentials_path: Optional[str] = None
+    gemini_project_id: Optional[str] = None
 
     # Safety settings
     gemini_harm_block_threshold: str = "BLOCK_NONE"
@@ -83,6 +93,10 @@ class GeminiSettings(BaseSettings):
             # API settings
             api_key=self.gemini_api_key,
             model_name=self.gemini_model_name,
+            # Service role authentication settings
+            use_service_account=self.gemini_use_service_account,
+            credentials_path=self.gemini_credentials_path,
+            project_id=self.gemini_project_id,
             # Safety settings
             harm_block_threshold=self.gemini_harm_block_threshold,
             # OCR settings

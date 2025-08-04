@@ -3,9 +3,12 @@ Main Google Gemini client implementation.
 """
 
 import logging
+import os
 from typing import Any, Dict, Optional
 import google.generativeai as genai
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
+from google.auth import default
+from google.auth.credentials import Credentials
 
 from ..base.client import BaseClient, with_retry
 from ..base.interfaces import AIOperations
@@ -46,14 +49,22 @@ class GeminiClient(BaseClient, AIOperations):
 
     @with_retry(max_retries=3, backoff_factor=2.0)
     async def initialize(self) -> None:
-        """Initialize Gemini client."""
+        """Initialize Gemini client with service role authentication."""
         try:
-            self.logger.info("Initializing Gemini client...")
+            self.logger.info("Initializing Gemini client with service role authentication...")
 
-            # Configure Gemini API
-            if self.config.api_key:
+            # Configure Gemini API authentication
+            if self.config.api_key and not self.config.use_service_account:
+                # Use API key authentication if explicitly configured
+                self.logger.info("Using API key authentication")
                 genai.configure(api_key=self.config.api_key)
+            elif self.config.use_service_account:
+                # Use service role authentication (Application Default Credentials)
+                self.logger.info("Using service role authentication via Application Default Credentials")
+                await self._configure_service_role_auth()
             else:
+                # Fallback to default configuration
+                self.logger.info("Using default Gemini configuration")
                 genai.configure()
 
             # Set up safety settings
@@ -72,7 +83,7 @@ class GeminiClient(BaseClient, AIOperations):
             await self._ocr_client.initialize()
 
             self._initialized = True
-            self.logger.info("Gemini client initialized successfully")
+            self.logger.info("Gemini client initialized successfully with service role authentication")
 
         except Exception as e:
             self.logger.error(f"Failed to initialize Gemini client: {e}")
@@ -80,6 +91,62 @@ class GeminiClient(BaseClient, AIOperations):
                 f"Failed to initialize Gemini client: {str(e)}",
                 client_name=self.client_name,
                 original_error=e,
+            )
+
+    async def _configure_service_role_auth(self) -> None:
+        """Configure Gemini API with service role authentication using Application Default Credentials."""
+        try:
+            # Determine credentials path
+            credentials_path = (
+                self.config.credentials_path or 
+                os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
+            )
+            
+            if credentials_path:
+                self.logger.info(f"Using service account credentials from: {credentials_path}")
+                if not os.path.exists(credentials_path):
+                    raise ClientAuthenticationError(
+                        f"Service account credentials file not found: {credentials_path}",
+                        client_name=self.client_name
+                    )
+                # Set environment variable if provided via config
+                if self.config.credentials_path:
+                    os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = credentials_path
+            else:
+                self.logger.info("Using Application Default Credentials (metadata server or gcloud auth)")
+
+            # Get default credentials with required scopes
+            credentials, project_id = default(
+                scopes=['https://www.googleapis.com/auth/generative-language']
+            )
+            
+            if not credentials:
+                raise ClientAuthenticationError(
+                    "Unable to obtain Application Default Credentials. "
+                    "Please ensure service account is properly configured or run 'gcloud auth application-default login'",
+                    client_name=self.client_name
+                )
+
+            # Use configured project ID if available
+            if self.config.project_id:
+                project_id = self.config.project_id
+                self.logger.info(f"Using configured project ID: {project_id}")
+
+            # Configure genai with credentials
+            genai.configure(credentials=credentials)
+            
+            self.logger.info(f"Service role authentication configured successfully" +
+                           (f" for project: {project_id}" if project_id else ""))
+
+        except Exception as e:
+            if isinstance(e, ClientAuthenticationError):
+                raise
+            
+            self.logger.error(f"Service role authentication configuration failed: {e}")
+            raise ClientAuthenticationError(
+                f"Failed to configure service role authentication: {str(e)}",
+                client_name=self.client_name,
+                original_error=e
             )
 
     def _get_safety_settings(self) -> Dict:
@@ -115,18 +182,35 @@ class GeminiClient(BaseClient, AIOperations):
                     client_name=self.client_name,
                 )
 
-            self.logger.debug("Gemini API connection test successful")
+            self.logger.debug(f"Gemini API connection test successful. Response: {response.text[:50]}...")
 
         except Exception as e:
-            if "API_KEY" in str(e).upper():
+            error_message = str(e).upper()
+            
+            # Enhanced error categorization for service account authentication
+            if any(keyword in error_message for keyword in ["API_KEY", "AUTHENTICATION", "UNAUTHORIZED", "FORBIDDEN"]):
+                auth_method = "service account" if self.config.use_service_account else "API key"
                 raise ClientAuthenticationError(
-                    f"Gemini API authentication failed: {str(e)}",
+                    f"Gemini API authentication failed using {auth_method}: {str(e)}",
                     client_name=self.client_name,
                     original_error=e,
                 )
-            elif "QUOTA" in str(e).upper() or "LIMIT" in str(e).upper():
+            elif any(keyword in error_message for keyword in ["QUOTA", "LIMIT", "EXCEEDED", "RATE"]):
                 raise ClientQuotaExceededError(
-                    f"Gemini API quota exceeded: {str(e)}",
+                    f"Gemini API quota/rate limit exceeded: {str(e)}",
+                    client_name=self.client_name,
+                    original_error=e,
+                )
+            elif any(keyword in error_message for keyword in ["PERMISSION", "ACCESS", "SCOPE"]):
+                raise ClientAuthenticationError(
+                    f"Gemini API permission/scope error: {str(e)}. "
+                    f"Check if service account has required permissions for Generative Language API",
+                    client_name=self.client_name,
+                    original_error=e,
+                )
+            elif any(keyword in error_message for keyword in ["NETWORK", "CONNECTION", "TIMEOUT"]):
+                raise ClientConnectionError(
+                    f"Gemini API network/connection error: {str(e)}",
                     client_name=self.client_name,
                     original_error=e,
                 )
@@ -150,28 +234,53 @@ class GeminiClient(BaseClient, AIOperations):
                 else {"status": "not_initialized"}
             )
 
+            # Determine authentication method
+            auth_method = "api_key" if (self.config.api_key and not self.config.use_service_account) else "service_account"
+            
+            # Get credentials info
+            credentials_info = {}
+            if self.config.use_service_account:
+                credentials_path = self.config.credentials_path or os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
+                credentials_info = {
+                    "credentials_path": credentials_path,
+                    "project_id": self.config.project_id,
+                    "env_var_set": bool(os.getenv('GOOGLE_APPLICATION_CREDENTIALS'))
+                }
+
             return {
                 "status": "healthy",
                 "client_name": self.client_name,
                 "initialized": self._initialized,
                 "model_name": self.config.model_name,
                 "connection": "ok",
+                "authentication": {
+                    "method": auth_method,
+                    "service_account_enabled": self.config.use_service_account,
+                    **credentials_info
+                },
                 "ocr_status": ocr_health.get("status", "unknown"),
                 "config": {
                     "model_name": self.config.model_name,
                     "timeout": self.config.timeout,
                     "max_retries": self.config.max_retries,
                     "max_file_size_mb": self.config.max_file_size / (1024 * 1024),
+                    "use_service_account": self.config.use_service_account,
                 },
             }
 
         except Exception as e:
             self.logger.error(f"Health check failed: {e}")
+            error_type = type(e).__name__
             return {
                 "status": "unhealthy",
                 "client_name": self.client_name,
                 "error": str(e),
+                "error_type": error_type,
                 "initialized": self._initialized,
+                "authentication": {
+                    "method": "api_key" if (self.config.api_key and not self.config.use_service_account) else "service_account",
+                    "service_account_enabled": self.config.use_service_account,
+                }
             }
 
     async def close(self) -> None:
