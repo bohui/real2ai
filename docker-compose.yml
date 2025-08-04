@@ -13,9 +13,11 @@ services:
       - ENVIRONMENT=development
       - DEBUG=true
       - PYTHONPATH=/app
+      - GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp_key.json
     env_file:
       - .env
     volumes:
+      - ./backend/gcp_key.json:/secrets/gcp_key.json:ro
       - ./backend:/app
       - backend_data:/app/data
     depends_on:
@@ -111,9 +113,11 @@ services:
       - PYTHONPATH=/app
       - C_FORCE_ROOT=1
       - WORKER_TYPE=ocr_specialist
+      - GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp_key.json
     env_file:
       - .env
     volumes:
+      - ./backend/gcp_key.json:/secrets/gcp_key.json:ro
       - ./backend:/app
       - backend_data:/app/data
     depends_on:
