@@ -4,7 +4,8 @@ Configuration management for Real2.AI
 
 import os
 from typing import List, Optional
-from pydantic import BaseSettings, validator
+from pydantic_settings import BaseSettings
+from pydantic import validator
 from app.models.contract_state import AustralianState
 
 
@@ -43,7 +44,7 @@ class Settings(BaseSettings):
 
     # File Storage
     max_file_size: int = 52428800  # 50MB
-    allowed_file_types: List[str] = ["pdf", "doc", "docx"]
+    allowed_file_types: str = "pdf,doc,docx"
 
     # Monitoring
     sentry_dsn: Optional[str] = None
@@ -54,11 +55,12 @@ class Settings(BaseSettings):
     enable_stamp_duty_calculation: bool = True
     enable_cooling_off_validation: bool = True
 
-    @validator("allowed_file_types", pre=True)
-    def parse_file_types(cls, v):
-        if isinstance(v, str):
-            return [ft.strip() for ft in v.split(",")]
-        return v
+    @property
+    def allowed_file_types_list(self) -> List[str]:
+        """Get allowed file types as a list"""
+        if isinstance(self.allowed_file_types, str):
+            return [ft.strip() for ft in self.allowed_file_types.split(",")]
+        return self.allowed_file_types
 
     class Config:
         env_file = ".env"

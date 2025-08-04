@@ -213,10 +213,10 @@ async def upload_document(
             )
 
         file_extension = file.filename.split(".")[-1].lower()
-        if file_extension not in settings.allowed_file_types:
+        if file_extension not in settings.allowed_file_types_list:
             raise HTTPException(
                 status_code=400,
-                detail=f"Invalid file type. Allowed: {', '.join(settings.allowed_file_types)}",
+                detail=f"Invalid file type. Allowed: {', '.join(settings.allowed_file_types_list)}",
             )
 
         # Upload to Supabase Storage

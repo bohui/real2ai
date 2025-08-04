@@ -1,0 +1,165 @@
+version: '3.8'
+
+services:
+  # Backend API Service
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: real2ai-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=development
+      - DEBUG=true
+      - PYTHONPATH=/app
+    env_file:
+      - .env
+    volumes:
+      - ./backend:/app
+      - backend_data:/app/data
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - real2ai-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # PostgreSQL Database
+  # postgres:
+  #   image: postgres:15-alpine
+  #   container_name: real2ai-postgres
+  #   environment:
+  #     POSTGRES_DB: real2ai
+  #     POSTGRES_USER: real2ai_user
+  #     POSTGRES_PASSWORD: real2ai_password
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #     - ./database_schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+  #   networks:
+  #     - real2ai-network
+  #   restart: unless-stopped
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U real2ai_user -d real2ai"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: real2ai-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - real2ai-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Celery Worker for Background Tasks
+  celery-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: real2ai-celery-worker
+    command: celery -A app.core.celery worker --loglevel=info
+    environment:
+      - ENVIRONMENT=development
+      - PYTHONPATH=/app
+    env_file:
+      - .env
+    volumes:
+      - ./backend:/app
+      - backend_data:/app/data
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - real2ai-network
+    restart: unless-stopped
+
+  # Celery Beat for Scheduled Tasks
+  celery-beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: real2ai-celery-beat
+    command: celery -A app.core.celery beat --loglevel=info
+    environment:
+      - ENVIRONMENT=development
+      - PYTHONPATH=/app
+    env_file:
+      - .env
+    volumes:
+      - ./backend:/app
+      - backend_data:/app/data
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - real2ai-network
+    restart: unless-stopped
+
+  # Frontend Development Server (Optional)
+  frontend:
+    image: node:18-alpine
+    container_name: real2ai-frontend
+    working_dir: /app
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+    command: sh -c "npm install && npm run dev"
+    networks:
+      - real2ai-network
+    restart: unless-stopped
+    profiles:
+      - frontend-dev
+
+  # Nginx Reverse Proxy (Optional)
+  nginx:
+    image: nginx:alpine
+    container_name: real2ai-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - real2ai-network
+    restart: unless-stopped
+    profiles:
+      - production
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  backend_data:
+    driver: local
+
+networks:
+  real2ai-network:
+    driver: bridge 
