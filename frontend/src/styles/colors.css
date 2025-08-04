@@ -1,0 +1,118 @@
+@theme {
+  /* Professional Legal Brand Colors */
+  --color-primary-50: #f0f8ff;
+  --color-primary-100: #e0f1fe;
+  --color-primary-200: #bae5fd;
+  --color-primary-300: #7dcffc;
+  --color-primary-400: #38b5f8;
+  --color-primary-500: #0ea5e9;
+  --color-primary-600: #0284c7;
+  --color-primary-700: #0369a1;
+  --color-primary-800: #075985;
+  --color-primary-900: #0c4a6e;
+  --color-primary-950: #082f49;
+  
+  /* Legal accent colors */
+  --color-accent-50: #fef7ed;
+  --color-accent-100: #fdedd3;
+  --color-accent-200: #fbd6a5;
+  --color-accent-300: #f8b86d;
+  --color-accent-400: #f59332;
+  --color-accent-500: #f37316;
+  --color-accent-600: #e4550c;
+  --color-accent-700: #bd3e0c;
+  --color-accent-800: #973112;
+  --color-accent-900: #7a2b12;
+  --color-accent-950: #421407;
+  
+  /* Trust indicators */
+  --color-trust-50: #f0fdf9;
+  --color-trust-100: #ccfbef;
+  --color-trust-200: #99f6e0;
+  --color-trust-300: #5feacf;
+  --color-trust-400: #2dd4b8;
+  --color-trust-500: #14b8a1;
+  --color-trust-600: #0f9488;
+  --color-trust-700: #127660;
+  --color-trust-800: #155e52;
+  --color-trust-900: #164e45;
+  --color-trust-950: #042f2a;
+  
+  /* Secondary colors */
+  --color-secondary-50: #fefce8;
+  --color-secondary-100: #fef9c3;
+  --color-secondary-200: #fef08a;
+  --color-secondary-300: #fde047;
+  --color-secondary-400: #facc15;
+  --color-secondary-500: #eab308;
+  --color-secondary-600: #ca8a04;
+  --color-secondary-700: #a16207;
+  --color-secondary-800: #854d0e;
+  --color-secondary-900: #713f12;
+  --color-secondary-950: #422006;
+  
+  /* Success colors */
+  --color-success-50: #f0fdf4;
+  --color-success-100: #dcfce7;
+  --color-success-200: #bbf7d0;
+  --color-success-300: #86efac;
+  --color-success-400: #4ade80;
+  --color-success-500: #22c55e;
+  --color-success-600: #16a34a;
+  --color-success-700: #15803d;
+  --color-success-800: #166534;
+  --color-success-900: #14532d;
+  --color-success-950: #052e16;
+  
+  /* Danger colors */
+  --color-danger-50: #fef2f2;
+  --color-danger-100: #fee2e2;
+  --color-danger-200: #fecaca;
+  --color-danger-300: #fca5a5;
+  --color-danger-400: #f87171;
+  --color-danger-500: #ef4444;
+  --color-danger-600: #dc2626;
+  --color-danger-700: #b91c1c;
+  --color-danger-800: #991b1b;
+  --color-danger-900: #7f1d1d;
+  --color-danger-950: #450a0a;
+  
+  /* Warning colors */
+  --color-warning-50: #fffbeb;
+  --color-warning-100: #fef3c7;
+  --color-warning-200: #fde68a;
+  --color-warning-300: #fcd34d;
+  --color-warning-400: #fbbf24;
+  --color-warning-500: #f59e0b;
+  --color-warning-600: #d97706;
+  --color-warning-700: #b45309;
+  --color-warning-800: #92400e;
+  --color-warning-900: #78350f;
+  --color-warning-950: #451a03;
+  
+  /* Legal compliance colors */
+  --color-compliant-50: #f0fdf4;
+  --color-compliant-100: #dcfce7;
+  --color-compliant-200: #bbf7d0;
+  --color-compliant-300: #86efac;
+  --color-compliant-400: #4ade80;
+  --color-compliant-500: #22c55e;
+  --color-compliant-600: #16a34a;
+  --color-compliant-700: #15803d;
+  --color-compliant-800: #166534;
+  --color-compliant-900: #14532d;
+  --color-compliant-950: #052e16;
+  
+  /* Legal verification colors */
+  --color-verified-50: #eff6ff;
+  --color-verified-100: #dbeafe;
+  --color-verified-200: #bfdbfe;
+  --color-verified-300: #93c5fd;
+  --color-verified-400: #60a5fa;
+  --color-verified-500: #3b82f6;
+  --color-verified-600: #2563eb;
+  --color-verified-700: #1d4ed8;
+  --color-verified-800: #1e40af;
+  --color-verified-900: #1e3a8a;
+  --color-verified-950: #172554;
+}

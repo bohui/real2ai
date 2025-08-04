@@ -14,6 +14,8 @@ import {
 
 import Button from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
+import StatusBadge from "@/components/ui/StatusBadge";
+import EnhancedContractCard from "@/components/analysis/EnhancedContractCard";
 import { useAnalysisStore } from "@/store/analysisStore";
 import { useAuthStore } from "@/store/authStore";
 import { cn } from "@/utils";
@@ -21,6 +23,49 @@ import { cn } from "@/utils";
 const DashboardPage: React.FC = () => {
   const { recentAnalyses } = useAnalysisStore();
   const { user } = useAuthStore();
+
+  // Helper function to get contract display name
+  const getContractDisplayName = (analysis: any) => {
+    // Try to extract meaningful name from contract terms or filename
+    if (analysis.contract_terms?.property_address) {
+      return `Property Contract - ${analysis.contract_terms.property_address}`;
+    }
+    if (analysis.contract_terms?.parties?.buyer && analysis.contract_terms?.parties?.seller) {
+      return `${analysis.contract_terms.parties.buyer} ← ${analysis.contract_terms.parties.seller}`;
+    }
+    if (analysis.contract_terms?.contract_type) {
+      const typeMap: Record<string, string> = {
+        'purchase_agreement': 'Purchase Agreement',
+        'lease_agreement': 'Lease Agreement',
+        'off_plan': 'Off-Plan Purchase',
+        'auction': 'Auction Contract'
+      };
+      return typeMap[analysis.contract_terms.contract_type] || 'Contract Analysis';
+    }
+    return 'Contract Analysis';
+  };
+
+  // Helper function to get risk level text
+  const getRiskLevelText = (score: number) => {
+    if (score >= 7) return 'High Risk';
+    if (score >= 5) return 'Medium Risk';
+    return 'Low Risk';
+  };
+
+  // Helper function to get state context
+  const getStateContext = (state: string) => {
+    const stateNames: Record<string, string> = {
+      'NSW': 'New South Wales',
+      'VIC': 'Victoria',
+      'QLD': 'Queensland',
+      'SA': 'South Australia',
+      'WA': 'Western Australia',
+      'TAS': 'Tasmania',
+      'NT': 'Northern Territory', 
+      'ACT': 'Australian Capital Territory'
+    };
+    return stateNames[state] || state;
+  };
 
   // Calculate dashboard stats
   const totalAnalyses = recentAnalyses.length;
@@ -97,24 +142,48 @@ const DashboardPage: React.FC = () => {
   return (
     <div className="max-w-7xl mx-auto space-y-8">
       {/* Welcome Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-neutral-900">
-            Welcome back, {user?.email.split("@")[0]}
-          </h1>
-          <p className="text-neutral-600 mt-1">
-            Here's what's happening with your contract analyses
-          </p>
-        </div>
-        <div className="hidden sm:flex items-center gap-3">
-          <div className="text-right">
-            <div className="text-sm text-neutral-500">Last login</div>
-            <div className="font-medium text-neutral-900">
-              {new Date().toLocaleDateString()}
+      <Card variant="premium" gradient className="mb-8">
+        <CardContent padding="xl">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-4xl font-heading font-bold text-neutral-900 mb-2">
+                Welcome back, {user?.email.split("@")[0]}
+              </h1>
+              <p className="text-lg text-neutral-600 mb-4">
+                Here's what's happening with your contract analyses
+              </p>
+              <div className="flex items-center gap-3">
+                <StatusBadge 
+                  status={user?.subscription_status === 'premium' ? 'premium' : 'verified'} 
+                  size="sm"
+                  variant="outline"
+                  label={user?.subscription_status === 'premium' ? 'Premium Account' : 'Standard Account'}
+                />
+                <StatusBadge 
+                  status="verified" 
+                  size="sm" 
+                  variant="dot"
+                  label="Australian Legal Compliance"
+                />
+              </div>
+            </div>
+            <div className="hidden sm:flex items-center gap-6">
+              <div className="text-right">
+                <div className="text-sm text-neutral-500 mb-1">Last login</div>
+                <div className="font-semibold text-neutral-900">
+                  {new Date().toLocaleDateString('en-AU')}
+                </div>
+                <div className="text-xs text-neutral-500">
+                  {new Date().toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}
+                </div>
+              </div>
+              <div className="w-16 h-16 bg-gradient-to-br from-primary-500 to-trust-500 rounded-full flex items-center justify-center text-white font-bold text-xl">
+                {user?.email.charAt(0).toUpperCase()}
+              </div>
             </div>
           </div>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -128,49 +197,53 @@ const DashboardPage: React.FC = () => {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3, delay: index * 0.1 }}
             >
-              <Card>
+              <Card 
+                variant="elevated" 
+                interactive 
+                className="hover:shadow-xl group transition-all duration-300"
+              >
                 <CardContent padding="lg">
                   <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-neutral-600">
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-neutral-500 uppercase tracking-wide mb-2">
                         {stat.title}
                       </p>
-                      <p className="text-2xl font-bold text-neutral-900 mt-1">
+                      <p className="text-3xl font-heading font-bold text-neutral-900 mb-3">
                         {stat.value}
                       </p>
-                      <div className="flex items-center mt-2">
+                      <div className="flex items-center">
                         <span
                           className={cn(
-                            "text-sm font-medium",
+                            "text-sm font-semibold px-2 py-1 rounded-full",
                             stat.trend === "up"
-                              ? "text-success-600"
+                              ? "text-success-700 bg-success-100"
                               : stat.trend === "down"
-                              ? "text-danger-600"
-                              : "text-neutral-600"
+                              ? "text-danger-700 bg-danger-100"
+                              : "text-neutral-700 bg-neutral-100"
                           )}
                         >
                           {stat.change}
                         </span>
-                        <span className="text-neutral-500 text-sm ml-1">
+                        <span className="text-neutral-500 text-xs ml-2">
                           vs last month
                         </span>
                       </div>
                     </div>
                     <div
                       className={cn(
-                        "w-12 h-12 rounded-lg flex items-center justify-center",
+                        "w-16 h-16 rounded-xl flex items-center justify-center shadow-soft group-hover:shadow-lg transition-all duration-300",
                         stat.color === "primary"
-                          ? "bg-primary-100"
+                          ? "bg-gradient-to-br from-primary-100 to-primary-200"
                           : stat.color === "success"
-                          ? "bg-success-100"
+                          ? "bg-gradient-to-br from-success-100 to-success-200"
                           : stat.color === "warning"
-                          ? "bg-warning-100"
-                          : "bg-secondary-100"
+                          ? "bg-gradient-to-br from-warning-100 to-warning-200"
+                          : "bg-gradient-to-br from-secondary-100 to-secondary-200"
                       )}
                     >
                       <IconComponent
                         className={cn(
-                          "w-6 h-6",
+                          "w-8 h-8 group-hover:scale-110 transition-transform duration-300",
                           stat.color === "primary"
                             ? "text-primary-600"
                             : stat.color === "success"
@@ -192,12 +265,12 @@ const DashboardPage: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Quick Actions */}
         <div className="lg:col-span-1">
-          <Card>
-            <CardHeader>
-              <CardTitle>Quick Actions</CardTitle>
+          <Card variant="elevated" className="h-fit">
+            <CardHeader padding="lg">
+              <CardTitle className="text-xl font-heading font-semibold">Quick Actions</CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
+            <CardContent padding="none">
+              <div className="space-y-1">
                 {quickActions.map((action) => {
                   const IconComponent = action.icon;
 
@@ -205,28 +278,28 @@ const DashboardPage: React.FC = () => {
                     <Link
                       key={action.title}
                       to={action.href}
-                      className="block p-4 rounded-lg border border-neutral-200 hover:border-primary-300 hover:bg-primary-50 transition-all duration-200 group"
+                      className="block mx-6 mb-6 last:mb-0 p-4 rounded-xl border-2 border-neutral-100 hover:border-primary-300 hover:bg-gradient-to-r hover:from-primary-50 hover:to-transparent transition-all duration-200 group hover:shadow-soft"
                     >
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-4">
                         <div
                           className={cn(
-                            "w-10 h-10 rounded-lg flex items-center justify-center transition-colors",
+                            "w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-200 shadow-soft",
                             action.color === "primary"
-                              ? "bg-primary-100 text-primary-600 group-hover:bg-primary-200"
-                              : "bg-secondary-100 text-secondary-600 group-hover:bg-secondary-200"
+                              ? "bg-gradient-to-br from-primary-100 to-primary-200 text-primary-600 group-hover:from-primary-200 group-hover:to-primary-300"
+                              : "bg-gradient-to-br from-secondary-100 to-secondary-200 text-secondary-600 group-hover:from-secondary-200 group-hover:to-secondary-300"
                           )}
                         >
-                          <IconComponent className="w-5 h-5" />
+                          <IconComponent className="w-6 h-6 group-hover:scale-110 transition-transform duration-200" />
                         </div>
                         <div className="flex-1">
-                          <h3 className="font-medium text-neutral-900">
+                          <h3 className="font-semibold text-neutral-900 group-hover:text-primary-700 transition-colors mb-1">
                             {action.title}
                           </h3>
-                          <p className="text-sm text-neutral-500">
+                          <p className="text-sm text-neutral-600">
                             {action.description}
                           </p>
                         </div>
-                        <ArrowRight className="w-4 h-4 text-neutral-400 group-hover:text-primary-600 transition-colors" />
+                        <ArrowRight className="w-5 h-5 text-neutral-400 group-hover:text-primary-600 group-hover:translate-x-1 transition-all duration-200" />
                       </div>
                     </Link>
                   );
@@ -238,161 +311,120 @@ const DashboardPage: React.FC = () => {
 
         {/* Recent Analyses */}
         <div className="lg:col-span-2">
-          <Card>
-            <CardHeader>
+          <Card variant="elevated">
+            <CardHeader padding="lg">
               <div className="flex items-center justify-between">
-                <CardTitle>Recent Analyses</CardTitle>
+                <CardTitle className="text-xl font-heading font-semibold">Recent Contract Analyses</CardTitle>
                 <Link to="/app/history">
-                  <Button variant="ghost" size="sm">
-                    View all
-                    <ArrowRight className="w-4 h-4 ml-1" />
+                  <Button variant="outline" size="sm" className="group">
+                    View all analyses
+                    <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />
                   </Button>
                 </Link>
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent padding="lg">
               {recentAnalyses.length > 0 ? (
                 <div className="space-y-4">
-                  {recentAnalyses.slice(0, 5).map((analysis) => (
-                    <div
+                  {recentAnalyses.slice(0, 3).map((analysis) => (
+                    <EnhancedContractCard
                       key={analysis.contract_id}
-                      className="flex items-center gap-4 p-3 rounded-lg hover:bg-neutral-50 transition-colors"
-                    >
-                      <div className="flex-shrink-0">
-                        <div
-                          className={cn(
-                            "w-10 h-10 rounded-lg flex items-center justify-center",
-                            analysis.analysis_status === "completed"
-                              ? "bg-success-100"
-                              : analysis.analysis_status === "processing"
-                              ? "bg-warning-100"
-                              : "bg-neutral-100"
-                          )}
-                        >
-                          {analysis.analysis_status === "completed" ? (
-                            <CheckCircle className="w-5 h-5 text-success-600" />
-                          ) : (
-                            <Clock className="w-5 h-5 text-warning-600" />
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <h3 className="font-medium text-neutral-900 truncate">
-                            Contract Analysis
-                          </h3>
-                          <span
-                            className={cn(
-                              "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium",
-                              analysis.analysis_status === "completed"
-                                ? "bg-success-100 text-success-700"
-                                : analysis.analysis_status === "processing"
-                                ? "bg-warning-100 text-warning-700"
-                                : "bg-neutral-100 text-neutral-700"
-                            )}
-                          >
-                            {analysis.analysis_status}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-4 mt-1">
-                          <p className="text-sm text-neutral-500">
-                            {new Date(
-                              analysis.analysis_timestamp
-                            ).toLocaleDateString()}
-                          </p>
-                          {analysis.analysis_status === "completed" && (
-                            <div className="flex items-center gap-1">
-                              <span className="text-sm text-neutral-500">
-                                Risk Score:
-                              </span>
-                              <span
-                                className={cn(
-                                  "text-sm font-medium",
-                                  analysis.executive_summary
-                                    .overall_risk_score >= 7
-                                    ? "text-danger-600"
-                                    : analysis.executive_summary
-                                        .overall_risk_score >= 5
-                                    ? "text-warning-600"
-                                    : "text-success-600"
-                                )}
-                              >
-                                {analysis.executive_summary.overall_risk_score.toFixed(
-                                  1
-                                )}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="flex-shrink-0">
-                        <Link to={`/app/analysis/${analysis.contract_id}`}>
-                          <Button variant="ghost" size="sm">
-                            View
-                          </Button>
-                        </Link>
-                      </div>
-                    </div>
+                      analysis={analysis}
+                      showDetails={false}
+                    />
                   ))}
                 </div>
               ) : (
-                <div className="text-center py-8">
-                  <FileText className="w-12 h-12 text-neutral-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-neutral-900 mb-2">
-                    No analyses yet
+                <Card variant="glass" className="text-center py-16">
+                  <div className="w-24 h-24 bg-gradient-to-br from-primary-100 to-trust-100 rounded-full flex items-center justify-center mx-auto mb-6 shadow-large">
+                    <FileText className="w-12 h-12 text-primary-600" />
+                  </div>
+                  <h3 className="text-2xl font-heading font-bold text-neutral-900 mb-3">
+                    Welcome to Real2.AI
                   </h3>
-                  <p className="text-neutral-500 mb-4">
-                    Upload your first contract to get started with AI-powered
-                    analysis
+                  <p className="text-lg text-neutral-600 mb-8 max-w-lg mx-auto">
+                    Upload your first contract to experience AI-powered analysis 
+                    tailored for Australian legal professionals
                   </p>
-                  <Link to="/app/analysis">
-                    <Button variant="primary">Start Analysis</Button>
-                  </Link>
-                </div>
+                  <div className="space-y-4 max-w-sm mx-auto">
+                    <Link to="/app/analysis">
+                      <Button 
+                        variant="primary" 
+                        size="lg" 
+                        gradient 
+                        elevated 
+                        fullWidth
+                        className="group"
+                      >
+                        Upload Your First Contract
+                        <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
+                      </Button>
+                    </Link>
+                    <div className="flex items-center justify-center gap-4 text-sm text-neutral-500">
+                      <div className="flex items-center gap-1">
+                        <Clock className="w-4 h-4" />
+                        <span>2-3 minutes</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <CheckCircle className="w-4 h-4" />
+                        <span>Australian Law</span>
+                      </div>
+                    </div>
+                  </div>
+                </Card>
               )}
             </CardContent>
           </Card>
         </div>
       </div>
 
-      {/* Australian Market Insights */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Calendar className="w-5 h-5" />
-            Australian Market Insights
+      {/* Australian Legal Market Insights */}
+      <Card variant="premium" gradient className="overflow-hidden">
+        <CardHeader padding="lg">
+          <CardTitle className="flex items-center gap-3 text-xl font-heading font-semibold">
+            <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
+              <Calendar className="w-6 h-6 text-neutral-700" />
+            </div>
+            Australian Legal Market Insights
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <CardContent padding="lg">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <div className="text-center">
-              <div className="text-2xl font-bold text-primary-600 mb-1">
+              <div className="w-16 h-16 bg-primary-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                <TrendingUp className="w-8 h-8 text-primary-600" />
+              </div>
+              <div className="text-3xl font-heading font-bold text-primary-600 mb-2">
                 2.1%
               </div>
-              <div className="text-sm text-neutral-500">
+              <div className="font-medium text-neutral-700 mb-1">
                 Interest Rate Change
               </div>
-              <div className="text-xs text-neutral-400 mt-1">RBA Cash Rate</div>
+              <div className="text-xs text-neutral-500">RBA Cash Rate</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-success-600 mb-1">
+              <div className="w-16 h-16 bg-success-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                <DollarSign className="w-8 h-8 text-success-600" />
+              </div>
+              <div className="text-3xl font-heading font-bold text-success-600 mb-2">
                 +5.2%
               </div>
-              <div className="text-sm text-neutral-500">
+              <div className="font-medium text-neutral-700 mb-1">
                 Property Value Growth
               </div>
-              <div className="text-xs text-neutral-400 mt-1">
+              <div className="text-xs text-neutral-500">
                 National Average
               </div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-warning-600 mb-1">
+              <div className="w-16 h-16 bg-warning-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                <Calendar className="w-8 h-8 text-warning-600" />
+              </div>
+              <div className="text-3xl font-heading font-bold text-warning-600 mb-2">
                 28 days
               </div>
-              <div className="text-sm text-neutral-500">Settlement Period</div>
-              <div className="text-xs text-neutral-400 mt-1">Average</div>
+              <div className="font-medium text-neutral-700 mb-1">Settlement Period</div>
+              <div className="text-xs text-neutral-500">Average</div>
             </div>
           </div>
         </CardContent>

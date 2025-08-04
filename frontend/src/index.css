@@ -1,19 +1,5 @@
 @import "tailwindcss";
-
-/* Custom CSS Variables */
-:root {
-  --color-primary-50: #eff6ff;
-  --color-primary-100: #dbeafe;
-  --color-primary-200: #bfdbfe;
-  --color-primary-300: #93c5fd;
-  --color-primary-400: #60a5fa;
-  --color-primary-500: #3b82f6;
-  --color-primary-600: #2563eb;
-  --color-primary-700: #1d4ed8;
-  --color-primary-800: #1e40af;
-  --color-primary-900: #1e3a8a;
-  --color-primary-950: #172554;
-}
+@import "./styles/colors.css";
 
 /* Base styles */
 * {
@@ -57,6 +43,27 @@ body {
   outline: 2px solid var(--color-primary-500);
   outline-offset: 2px;
 }
+
+/* Ensure custom colors work with Tailwind */
+.bg-primary-500 { background-color: var(--color-primary-500); }
+.text-primary-500 { color: var(--color-primary-500); }
+.bg-compliant-500 { background-color: var(--color-compliant-500); }
+.text-compliant-700 { color: var(--color-compliant-700); }
+.bg-verified-500 { background-color: var(--color-verified-500); }
+.text-verified-700 { color: var(--color-verified-700); }
+.bg-success-50 { background-color: var(--color-success-50); }
+.text-success-700 { color: var(--color-success-700); }
+.bg-warning-50 { background-color: var(--color-warning-50); }
+.text-warning-700 { color: var(--color-warning-700); }
+.bg-danger-50 { background-color: var(--color-danger-50); }
+.text-danger-700 { color: var(--color-danger-700); }
+.bg-trust-500 { background-color: var(--color-trust-500); }
+.text-trust-700 { color: var(--color-trust-700); }
+.border-compliant-500 { border-color: var(--color-compliant-500); }
+.border-verified-500 { border-color: var(--color-verified-500); }
+.border-success-200 { border-color: var(--color-success-200); }
+.border-warning-200 { border-color: var(--color-warning-200); }
+.border-danger-200 { border-color: var(--color-danger-200); }
 
 /* Animation utilities */
 @layer utilities {

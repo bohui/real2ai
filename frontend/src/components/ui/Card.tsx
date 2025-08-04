@@ -2,9 +2,11 @@ import React from 'react'
 import { cn } from '@/utils'
 
 interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
-  variant?: 'default' | 'outlined' | 'elevated' | 'flat'
+  variant?: 'default' | 'outlined' | 'elevated' | 'flat' | 'glass' | 'premium' | 'legal'
   padding?: 'none' | 'sm' | 'md' | 'lg' | 'xl'
   interactive?: boolean
+  status?: 'default' | 'success' | 'warning' | 'danger' | 'info'
+  gradient?: boolean
 }
 
 interface CardHeaderProps extends React.HTMLAttributes<HTMLDivElement> {
@@ -26,20 +28,28 @@ const Card = React.forwardRef<HTMLDivElement, CardProps>(
       variant = 'default',
       padding = 'md',
       interactive = false,
+      status = 'default',
+      gradient = false,
       children,
       ...props
     },
     ref
   ) => {
     const baseClasses = [
-      'rounded-xl transition-all duration-200'
+      'rounded-xl transition-all duration-300 ease-in-out',
+      'relative overflow-hidden'
     ].join(' ')
 
     const variantClasses = {
-      default: 'bg-white shadow-soft',
-      outlined: 'bg-white border border-neutral-200',
-      elevated: 'bg-white shadow-medium',
-      flat: 'bg-neutral-50'
+      default: 'bg-white shadow-card border border-neutral-100/50',
+      outlined: 'bg-white border-2 border-neutral-200 hover:border-primary-300',
+      elevated: 'bg-white shadow-large hover:shadow-xl',
+      flat: 'bg-neutral-50 hover:bg-neutral-100',
+      glass: 'bg-white/80 backdrop-blur-sm border border-white/20 shadow-large',
+      premium: gradient 
+        ? 'bg-gradient-to-br from-white via-primary-50/30 to-accent-50/30 shadow-xl border border-primary-100'
+        : 'bg-white shadow-xl border border-primary-100',
+      legal: 'bg-white shadow-card border-l-4 border-l-trust-500 border-r border-t border-b border-neutral-100'
     }
 
     const paddingClasses = {
@@ -51,8 +61,16 @@ const Card = React.forwardRef<HTMLDivElement, CardProps>(
     }
 
     const interactiveClasses = interactive
-      ? 'cursor-pointer hover:shadow-medium hover:-translate-y-0.5 active:translate-y-0'
+      ? 'cursor-pointer hover:shadow-card-hover hover:-translate-y-1 active:translate-y-0 transform hover:scale-[1.02] active:scale-100'
       : ''
+
+    const statusClasses = {
+      default: '',
+      success: 'ring-1 ring-success-200 bg-success-50/30',
+      warning: 'ring-1 ring-warning-200 bg-warning-50/30',
+      danger: 'ring-1 ring-danger-200 bg-danger-50/30',
+      info: 'ring-1 ring-primary-200 bg-primary-50/30'
+    }
 
     return (
       <div
@@ -61,6 +79,7 @@ const Card = React.forwardRef<HTMLDivElement, CardProps>(
           variantClasses[variant],
           paddingClasses[padding],
           interactiveClasses,
+          status !== 'default' && statusClasses[status],
           className
         )}
         ref={ref}

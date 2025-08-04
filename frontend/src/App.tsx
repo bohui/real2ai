@@ -18,9 +18,11 @@ import SettingsPage from '@/pages/SettingsPage'
 // Components
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
 import NotificationSystem from '@/components/notifications/NotificationSystem'
+import OnboardingWizard from '@/components/onboarding/OnboardingWizard'
 
 // Hooks and stores
 import { useAuthStore } from '@/store/authStore'
+import { useUIStore } from '@/store/uiStore'
 
 // Create a client
 const queryClient = new QueryClient({
@@ -39,12 +41,31 @@ const queryClient = new QueryClient({
 })
 
 const App: React.FC = () => {
-  const { initializeAuth, isLoading } = useAuthStore()
+  const { initializeAuth, isLoading, user } = useAuthStore()
+  const { showOnboarding, setShowOnboarding } = useUIStore()
 
   // Initialize authentication on app start
   React.useEffect(() => {
     initializeAuth()
   }, [initializeAuth])
+
+  // Show onboarding for new users
+  React.useEffect(() => {
+    if (user && !user.preferences?.onboarding_completed) {
+      setShowOnboarding(true)
+    }
+  }, [user, setShowOnboarding])
+
+  const handleOnboardingComplete = (preferences: any) => {
+    // Save preferences to user profile
+    // This would typically call an API to update user preferences
+    console.log('Onboarding completed with preferences:', preferences)
+    setShowOnboarding(false)
+  }
+
+  const handleOnboardingSkip = () => {
+    setShowOnboarding(false)
+  }
 
   // Show loading spinner while checking authentication
   if (isLoading) {
@@ -93,6 +114,14 @@ const App: React.FC = () => {
 
           {/* Global components */}
           <NotificationSystem />
+          
+          {/* Onboarding Wizard */}
+          {showOnboarding && (
+            <OnboardingWizard 
+              onComplete={handleOnboardingComplete}
+              onSkip={handleOnboardingSkip}
+            />
+          )}
         </div>
       </Router>
 

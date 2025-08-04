@@ -21,6 +21,9 @@ interface UIState {
   // Mobile
   isMobile: boolean
   
+  // Onboarding
+  showOnboarding: boolean
+  
   // Actions
   toggleSidebar: () => void
   setSidebarOpen: (open: boolean) => void
@@ -37,6 +40,8 @@ interface UIState {
   
   setTheme: (theme: 'light' | 'dark' | 'system') => void
   setIsMobile: (isMobile: boolean) => void
+  
+  setShowOnboarding: (show: boolean) => void
 }
 
 export const useUIStore = create<UIState>((set, get) => ({
@@ -48,6 +53,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   modalStack: [],
   theme: 'light',
   isMobile: false,
+  showOnboarding: false,
 
   // Navigation actions
   toggleSidebar: () => {
@@ -149,6 +155,11 @@ export const useUIStore = create<UIState>((set, get) => ({
     if (isMobile) {
       set({ sidebarOpen: false })
     }
+  },
+
+  // Onboarding actions
+  setShowOnboarding: (show: boolean) => {
+    set({ showOnboarding: show })
   }
 }))
 
