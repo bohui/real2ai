@@ -8,13 +8,12 @@ version = "1.0.0"
 description = "Real2.AI - Australian Real Estate AI Assistant Backend"
 authors = [{name = "Real2.AI Team", email = "team@real2.ai"}]
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
 ]
@@ -31,6 +30,7 @@ dependencies = [
     "pydantic-settings==2.4.0",
     # AI and ML
     "openai==1.86.0",
+    "google-generativeai==0.8.3",
     "langchain==0.3.27",
     "langchain-openai==0.3.28",
     "langchain-community==0.3.27",
@@ -42,11 +42,16 @@ dependencies = [
     "PyPDF2==3.0.1",
     "python-docx==1.1.0",
     "unstructured==0.18.11",
+    "PyMuPDF==1.24.13",
+    "Pillow==10.4.0",
     # Utilities
     "python-dotenv==1.0.0",
     "redis==5.0.1",
     "websockets==12.0",
     "email-validator==2.2.0",
+    # Additional dependencies for scripts and testing
+    "requests==2.31.0",
+    "asyncpg==0.29.0",
     # Monitoring and logging
     "structlog==23.2.0",
     "sentry-sdk[fastapi]==1.38.0",
@@ -54,9 +59,9 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "pytest==7.4.3",
-    "pytest-asyncio==0.21.1",
-    "pytest-cov==6.2.1",
+    "pytest>=7.4,<8.0",
+    "pytest-asyncio>=0.21,<1.0",
+    "pytest-cov>=4.1,<5.0",
     "pytest-html==4.1.1",
     "pytest-xdist==3.5.0",
     "pytest-mock==3.12.0",
@@ -65,14 +70,14 @@ dev = [
     "flake8==6.1.0",
     "mypy==1.7.1",
     "pre-commit==3.6.0",
-    "coverage[toml]==7.3.2",
+    "coverage[toml]>=7.5,<8.0",
 ]
 test = [
-    "pytest==7.4.3",
-    "pytest-asyncio==0.21.1",
-    "pytest-cov==6.2.1",
+    "pytest>=7.4,<8.0",
+    "pytest-asyncio>=0.21,<1.0",
+    "pytest-cov>=4.1,<5.0",
     "pytest-mock==3.12.0",
-    "httpx==0.24.1",
+    "httpx>=0.26,<0.28",
     "requests-mock==1.11.0",
     "factory-boy==3.3.0",
     "faker==20.1.0",
@@ -96,18 +101,23 @@ addopts = [
     "--strict-markers",
     "--strict-config",
     "--cov=app",
-    "--cov-report=term-missing",
+    "--cov-report=term-missing:skip-covered",
     "--cov-report=html:htmlcov",
-    "--cov-report=xml",
+    "--cov-report=xml:coverage.xml",
     "--cov-fail-under=80",
+    "--durations=10",
+    "--maxfail=3",
 ]
 markers = [
-    "unit: Unit tests",
-    "integration: Integration tests",
-    "slow: Slow running tests",
-    "auth: Authentication tests",
+    "unit: Unit tests - fast, isolated",
+    "integration: Integration tests - external dependencies",
+    "e2e: End-to-end tests - full system",
+    "slow: Slow running tests (>1s)",
+    "auth: Authentication and authorization tests",
     "api: API endpoint tests",
-    "database: Database tests",
+    "database: Database interaction tests",
+    "ai: AI/ML model tests",
+    "contract: Contract analysis tests",
 ]
 filterwarnings = [
     "ignore::UserWarning",
@@ -142,7 +152,7 @@ exclude_lines = [
 
 [tool.black]
 line-length = 88
-target-version = ['py39', 'py310', 'py311']
+target-version = ['py310', 'py311', 'py312']
 include = '\\.pyi?$'
 extend-exclude = '''
 /(
@@ -166,7 +176,7 @@ known_first_party = ["app"]
 known_third_party = ["fastapi", "supabase", "openai", "langchain"]
 
 [tool.mypy]
-python_version = "3.9"
+python_version = "3.10"
 check_untyped_defs = true
 disallow_any_generics = true
 disallow_incomplete_defs = true

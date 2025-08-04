@@ -12,6 +12,7 @@ import os
 from typing import Optional, Dict, Any, List
 import asyncio
 import logging
+import time
 from datetime import datetime, timezone
 
 # Configure logging
@@ -121,7 +122,7 @@ async def health_check():
 
 
 @app.post("/api/auth/register")
-async def register_user(user_data: UserRegistrationRequest):
+async def register_user(user_data: UserRegistrationRequest, db_client=Depends(get_database_client)):
     """Register a new user"""
     try:
         # Create user in Supabase
@@ -161,13 +162,16 @@ async def register_user(user_data: UserRegistrationRequest):
         else:
             raise HTTPException(status_code=400, detail="Registration failed")
 
+    except HTTPException:
+        # Re-raise HTTPExceptions (validation errors) without modification
+        raise
     except Exception as e:
         logger.error(f"Registration error: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail="Registration failed")
 
 
 @app.post("/api/auth/login")
-async def login_user(login_data: UserLoginRequest):
+async def login_user(login_data: UserLoginRequest, db_client=Depends(get_database_client)):
     """Authenticate user"""
     try:
         auth_result = db_client.auth.sign_in_with_password(
@@ -191,9 +195,12 @@ async def login_user(login_data: UserLoginRequest):
         else:
             raise HTTPException(status_code=401, detail="Invalid credentials")
 
+    except HTTPException:
+        # Re-raise HTTPExceptions (validation errors) without modification
+        raise
     except Exception as e:
         logger.error(f"Login error: {str(e)}")
-        raise HTTPException(status_code=401, detail="Authentication failed")
+        raise HTTPException(status_code=401, detail="Invalid credentials")
 
 
 # Document Management Endpoints
@@ -259,13 +266,16 @@ async def upload_document(
             processing_time=0.0,
         )
 
+    except HTTPException:
+        # Re-raise HTTPExceptions (validation errors) without modification
+        raise
     except Exception as e:
         logger.error(f"Document upload error: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.get("/api/documents/{document_id}")
-async def get_document(document_id: str, user: User = Depends(get_current_user)):
+async def get_document(document_id: str, user: User = Depends(get_current_user), db_client=Depends(get_database_client)):
     """Get document details"""
 
     try:
@@ -282,9 +292,12 @@ async def get_document(document_id: str, user: User = Depends(get_current_user))
 
         return result.data[0]
 
+    except HTTPException:
+        # Re-raise HTTPExceptions (validation errors) without modification
+        raise
     except Exception as e:
         logger.error(f"Get document error: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # Contract Analysis Endpoints
@@ -295,6 +308,7 @@ async def start_contract_analysis(
     request: ContractAnalysisRequest,
     background_tasks: BackgroundTasks,
     user: User = Depends(get_current_user),
+    db_client=Depends(get_database_client),
 ):
     """Start contract analysis"""
 
@@ -362,14 +376,17 @@ async def start_contract_analysis(
             estimated_completion_minutes=2,
         )
 
+    except HTTPException:
+        # Re-raise HTTPExceptions (validation errors) without modification
+        raise
     except Exception as e:
         logger.error(f"Contract analysis error: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.get("/api/contracts/{contract_id}/analysis")
 async def get_contract_analysis(
-    contract_id: str, user: User = Depends(get_current_user)
+    contract_id: str, user: User = Depends(get_current_user), db_client=Depends(get_database_client)
 ):
     """Get contract analysis results"""
 
@@ -418,20 +435,23 @@ async def get_contract_analysis(
             "created_at": analysis["created_at"],
         }
 
+    except HTTPException:
+        # Re-raise HTTPExceptions (validation errors) without modification
+        raise
     except Exception as e:
         logger.error(f"Get analysis error: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.get("/api/contracts/{contract_id}/report")
 async def download_analysis_report(
-    contract_id: str, format: str = "pdf", user: User = Depends(get_current_user)
+    contract_id: str, format: str = "pdf", user: User = Depends(get_current_user), db_client=Depends(get_database_client)
 ):
     """Download analysis report"""
 
     try:
         # Get analysis data
-        analysis_data = await get_contract_analysis(contract_id, user)
+        analysis_data = await get_contract_analysis(contract_id, user, db_client)
 
         if format == "pdf":
             # Generate PDF report (would implement with reportlab or similar)
@@ -454,14 +474,14 @@ async def download_analysis_report(
 @app.get("/api/users/profile")
 async def get_user_profile(user: User = Depends(get_current_user)):
     """Get user profile"""
-    return user.dict()
+    return user.model_dump()
 
 
 # Onboarding Management Endpoints
 
 
 @app.get("/api/users/onboarding/status", response_model=OnboardingStatusResponse)
-async def get_onboarding_status(user: User = Depends(get_current_user)):
+async def get_onboarding_status(user: User = Depends(get_current_user), db_client=Depends(get_database_client)):
     """Get user onboarding status"""
     try:
         profile_result = (
@@ -481,15 +501,19 @@ async def get_onboarding_status(user: User = Depends(get_current_user)):
             onboarding_preferences=profile.get("onboarding_preferences", {})
         )
         
+    except HTTPException:
+        # Re-raise HTTPExceptions (validation errors) without modification
+        raise
     except Exception as e:
         logger.error(f"Get onboarding status error: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.post("/api/users/onboarding/complete")
 async def complete_onboarding(
     request: OnboardingCompleteRequest,
-    user: User = Depends(get_current_user)
+    user: User = Depends(get_current_user),
+    db_client=Depends(get_database_client)
 ):
     """Complete user onboarding and save preferences"""
     try:
@@ -508,7 +532,7 @@ async def complete_onboarding(
         update_data = {
             "onboarding_completed": True,
             "onboarding_completed_at": datetime.now(timezone.utc).isoformat(),
-            "onboarding_preferences": request.onboarding_preferences.dict(exclude_unset=True),
+            "onboarding_preferences": request.onboarding_preferences.model_dump(exclude_unset=True),
             "updated_at": datetime.now(timezone.utc).isoformat()
         }
         
@@ -521,7 +545,7 @@ async def complete_onboarding(
             "credits_used": 0,
             "credits_remaining": user.credits_remaining,
             "resource_used": "onboarding",
-            "metadata": {"preferences": request.onboarding_preferences.dict(exclude_unset=True)}
+            "metadata": {"preferences": request.onboarding_preferences.model_dump(exclude_unset=True)}
         }).execute()
         
         return {
@@ -530,20 +554,24 @@ async def complete_onboarding(
             "preferences_saved": True
         }
         
+    except HTTPException:
+        # Re-raise HTTPExceptions (validation errors) without modification
+        raise
     except Exception as e:
         logger.error(f"Complete onboarding error: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.put("/api/users/onboarding/preferences")
 async def update_onboarding_preferences(
     preferences: OnboardingPreferencesRequest,
-    user: User = Depends(get_current_user)
+    user: User = Depends(get_current_user),
+    db_client=Depends(get_database_client)
 ):
     """Update user onboarding preferences"""
     try:
         update_data = {
-            "onboarding_preferences": preferences.dict(exclude_unset=True),
+            "onboarding_preferences": preferences.model_dump(exclude_unset=True),
             "updated_at": datetime.now(timezone.utc).isoformat()
         }
         
@@ -551,14 +579,17 @@ async def update_onboarding_preferences(
         
         return {"message": "Onboarding preferences updated successfully"}
         
+    except HTTPException:
+        # Re-raise HTTPExceptions (validation errors) without modification
+        raise
     except Exception as e:
         logger.error(f"Update onboarding preferences error: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.put("/api/users/preferences")
 async def update_user_preferences(
-    preferences: Dict[str, Any], user: User = Depends(get_current_user)
+    preferences: Dict[str, Any], user: User = Depends(get_current_user), db_client=Depends(get_database_client)
 ):
     """Update user preferences"""
     try:
@@ -573,7 +604,7 @@ async def update_user_preferences(
 
 
 @app.get("/api/users/usage-stats")
-async def get_usage_stats(user: User = Depends(get_current_user)):
+async def get_usage_stats(user: User = Depends(get_current_user), db_client=Depends(get_database_client)):
     """Get user usage statistics"""
 
     try:
@@ -623,7 +654,429 @@ async def websocket_endpoint(websocket, contract_id: str):
         await websocket_manager.disconnect(websocket, contract_id)
 
 
+@app.post("/api/documents/{document_id}/reprocess-ocr")
+async def reprocess_document_with_ocr(
+    document_id: str,
+    background_tasks: BackgroundTasks,
+    processing_options: Optional[Dict[str, Any]] = None,
+    user: User = Depends(get_current_user),
+    db_client=Depends(get_database_client)
+):
+    """Reprocess document using enhanced OCR for better text extraction"""
+    
+    try:
+        # Verify document ownership
+        doc_result = (
+            db_client.table("documents")
+            .select("*")
+            .eq("id", document_id)
+            .eq("user_id", user.id)
+            .execute()
+        )
+        
+        if not doc_result.data:
+            raise HTTPException(status_code=404, detail="Document not found")
+            
+        document = doc_result.data[0]
+        
+        # Check if OCR is available
+        ocr_capabilities = await document_service.get_ocr_capabilities()
+        if not ocr_capabilities["service_available"]:
+            raise HTTPException(
+                status_code=503, 
+                detail="OCR service not available"
+            )
+        
+        # Get user profile for context
+        user_result = (
+            db_client.table("profiles").select("*").eq("id", user.id).execute()
+        )
+        user_profile = user_result.data[0] if user_result.data else {}
+        
+        # Create contract context
+        contract_context = {
+            "australian_state": user_profile.get("australian_state", "NSW"),
+            "contract_type": "purchase_agreement",
+            "user_type": user_profile.get("user_type", "buyer"),
+            "document_id": document_id,
+            "filename": document["filename"]
+        }
+        
+        # Enhanced processing options
+        enhanced_options = {
+            "priority": user_profile.get("subscription_status") in ["premium", "enterprise"],
+            "enhanced_quality": True,
+            "detailed_analysis": processing_options and processing_options.get("detailed_analysis", False) if processing_options else False,
+            "contract_specific": True
+        }
+        
+        # Use enhanced background processing
+        background_tasks.add_task(
+            enhanced_reprocess_document_with_ocr_background,
+            document_id,
+            user.id,
+            document,
+            contract_context,
+            enhanced_options
+        )
+        
+        return {
+            "message": "Enhanced OCR processing started",
+            "document_id": document_id,
+            "estimated_completion_minutes": 3 if enhanced_options["priority"] else 5,
+            "processing_features": [
+                "gemini_2.5_pro_ocr",
+                "contract_analysis",
+                "australian_context",
+                "quality_enhancement"
+            ]
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Enhanced OCR reprocessing error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@app.get("/api/ocr/capabilities")
+async def get_ocr_capabilities():
+    """Get comprehensive OCR service capabilities and status"""
+    try:
+        capabilities = await document_service.get_ocr_capabilities()
+        
+        # Enhanced capabilities with Gemini 2.5 Pro features
+        enhanced_capabilities = {
+            **capabilities,
+            "gemini_features": {
+                "multimodal_processing": True,
+                "contract_analysis": True,
+                "australian_specific": True,
+                "structured_output": True,
+                "batch_processing": True,
+                "priority_queue": True
+            },
+            "processing_tiers": {
+                "standard": {
+                    "queue_time": "1-3 minutes",
+                    "processing_time": "2-5 minutes",
+                    "features": ["basic_ocr", "contract_detection"]
+                },
+                "priority": {
+                    "queue_time": "< 30 seconds", 
+                    "processing_time": "1-3 minutes",
+                    "features": ["enhanced_ocr", "detailed_analysis", "quality_boost"]
+                }
+            },
+            "api_health": await document_service.gemini_ocr.health_check() if hasattr(document_service, 'gemini_ocr') and document_service.gemini_ocr else {"status": "unavailable"}
+        }
+        
+        return enhanced_capabilities
+        
+    except Exception as e:
+        logger.error(f"OCR capabilities error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/documents/batch-ocr")
+async def batch_process_ocr(
+    document_ids: List[str],
+    background_tasks: BackgroundTasks,
+    batch_options: Optional[Dict[str, Any]] = None,
+    user: User = Depends(get_current_user),
+    db_client=Depends(get_database_client)
+):
+    """Batch process multiple documents with OCR"""
+    
+    try:
+        # Validate document ownership
+        verified_docs = []
+        for doc_id in document_ids:
+            doc_result = (
+                db_client.table("documents")
+                .select("id, filename, file_type")
+                .eq("id", doc_id)
+                .eq("user_id", user.id)
+                .execute()
+            )
+            
+            if doc_result.data:
+                verified_docs.append(doc_result.data[0])
+        
+        if not verified_docs:
+            raise HTTPException(status_code=404, detail="No valid documents found")
+        
+        # Check OCR availability
+        ocr_capabilities = await document_service.get_ocr_capabilities()
+        if not ocr_capabilities["service_available"]:
+            raise HTTPException(
+                status_code=503,
+                detail="OCR service not available"
+            )
+        
+        # Get user profile
+        user_result = (
+            db_client.table("profiles").select("*").eq("id", user.id).execute()
+        )
+        user_profile = user_result.data[0] if user_result.data else {}
+        
+        # Create batch context
+        batch_context = {
+            "australian_state": user_profile.get("australian_state", "NSW"),
+            "contract_type": batch_options.get("contract_type", "purchase_agreement") if batch_options else "purchase_agreement",
+            "user_type": user_profile.get("user_type", "buyer"),
+            "batch_id": f"batch_{user.id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        }
+        
+        # Enhanced batch processing options
+        processing_options = {
+            "priority": user_profile.get("subscription_status") in ["premium", "enterprise"],
+            "parallel_processing": len(verified_docs) > 1,
+            "contract_analysis": batch_options.get("include_analysis", True) if batch_options else True,
+            "quality_enhancement": True
+        }
+        
+        # Start batch processing
+        batch_id = batch_context["batch_id"]
+        
+        background_tasks.add_task(
+            batch_ocr_processing_background,
+            [doc["id"] for doc in verified_docs],
+            user.id,
+            batch_context,
+            processing_options
+        )
+        
+        return {
+            "message": "Batch OCR processing started",
+            "batch_id": batch_id,
+            "documents_queued": len(verified_docs),
+            "estimated_completion_minutes": min(30, len(verified_docs) * 3),
+            "processing_features": [
+                "gemini_2.5_pro_ocr",
+                "batch_optimization",
+                "contract_analysis",
+                "parallel_processing" if processing_options["parallel_processing"] else "sequential_processing"
+            ]
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Batch OCR processing error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@app.get("/api/documents/{document_id}/ocr-status")
+async def get_ocr_status(
+    document_id: str,
+    user: User = Depends(get_current_user),
+    db_client=Depends(get_database_client)
+):
+    """Get detailed OCR processing status for a document"""
+    
+    try:
+        # Verify document ownership
+        doc_result = (
+            db_client.table("documents")
+            .select("*")
+            .eq("id", document_id)
+            .eq("user_id", user.id)
+            .execute()
+        )
+        
+        if not doc_result.data:
+            raise HTTPException(status_code=404, detail="Document not found")
+            
+        document = doc_result.data[0]
+        processing_results = document.get("processing_results", {})
+        
+        # Determine processing status
+        status = document.get("status", "unknown")
+        
+        if status in ["queued_for_ocr", "processing_ocr", "reprocessing_ocr"]:
+            # Check if we have task ID for detailed status
+            task_id = processing_results.get("task_id")
+            task_status = "unknown"
+            
+            if task_id:
+                # Here you could check Celery task status
+                # For now, provide estimated status
+                task_status = "processing"
+        
+        # Calculate processing metrics
+        metrics = {
+            "extraction_confidence": processing_results.get("extraction_confidence", 0.0),
+            "character_count": processing_results.get("character_count", 0),
+            "word_count": processing_results.get("word_count", 0),
+            "extraction_method": processing_results.get("extraction_method", "unknown"),
+            "processing_time": processing_results.get("processing_time", 0)
+        }
+        
+        return {
+            "document_id": document_id,
+            "filename": document["filename"],
+            "status": status,
+            "processing_metrics": metrics,
+            "ocr_features_used": processing_results.get("processing_details", {}).get("enhancement_applied", []),
+            "last_updated": document.get("updated_at"),
+            "supports_reprocessing": status in ["processed", "failed", "ocr_failed"]
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"OCR status check error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@app.get("/api/ocr/queue-status")
+async def get_ocr_queue_status(user: User = Depends(get_current_user)):
+    """Get current OCR processing queue status"""
+    
+    try:
+        # This would integrate with Celery to get real queue status
+        # For now, return estimated status
+        
+        queue_status = {
+            "queue_position": 0,  # Would be calculated from Celery
+            "estimated_wait_time_minutes": 2,
+            "active_workers": 3,  # Would be from Celery inspect
+            "queue_length": 5,    # Would be from Celery
+            "user_priority": "standard" if user.subscription_status == "free" else "priority",
+            "processing_capacity": {
+                "documents_per_hour": 20,
+                "average_processing_time_minutes": 3
+            }
+        }
+        
+        return queue_status
+        
+    except Exception as e:
+        logger.error(f"Queue status error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
 # Background Tasks
+
+
+async def enhanced_reprocess_document_with_ocr_background(
+    document_id: str,
+    user_id: str,
+    document: Dict[str, Any],
+    contract_context: Dict[str, Any],
+    processing_options: Dict[str, Any]
+):
+    """Background task for OCR reprocessing"""
+    
+    try:
+        # Update document status
+        db_client.table("documents").update({
+            "status": "reprocessing_ocr"
+        }).eq("id", document_id).execute()
+        
+        # Send WebSocket notification
+        await websocket_manager.send_message(
+            document_id,
+            {
+                "event_type": "ocr_reprocessing_started",
+                "data": {"document_id": document_id}
+            }
+        )
+        
+        # Get user profile for context
+        user_result = (
+            db_client.table("profiles").select("*").eq("id", user_id).execute()
+        )
+        user_profile = user_result.data[0] if user_result.data else {}
+        
+        # Create contract context
+        contract_context = {
+            "australian_state": user_profile.get("australian_state", "NSW"),
+            "contract_type": "purchase_agreement",
+            "user_type": user_profile.get("user_type", "buyer")
+        }
+        
+        # Enhanced OCR extraction with priority handling
+        start_time = time.time()
+        
+        # Send progress update
+        await websocket_manager.send_message(
+            document_id,
+            {
+                "event_type": "ocr_progress",
+                "data": {
+                    "document_id": document_id,
+                    "progress_percent": 10,
+                    "current_step": "initializing_gemini_ocr",
+                    "step_description": "Initializing Gemini 2.5 Pro OCR service"
+                }
+            }
+        )
+        
+        # Enhanced OCR with contract-specific optimizations
+        extraction_result = await document_service.extract_text_with_ocr(
+            document["storage_path"],
+            document["file_type"],
+            contract_context=contract_context
+        )
+        
+        processing_time = time.time() - start_time
+        
+        # Enhanced result with performance metrics
+        extraction_result["processing_details"] = {
+            **extraction_result.get("processing_details", {}),
+            "processing_time_seconds": processing_time,
+            "priority_processing": processing_options.get("priority", False),
+            "enhancement_level": "premium" if processing_options.get("detailed_analysis") else "standard",
+            "contract_context_applied": bool(contract_context),
+            "gemini_model_used": "gemini-2.5-pro"
+        }
+        
+        # Update document with OCR results
+        db_client.table("documents").update({
+            "status": "processed",
+            "processing_results": extraction_result
+        }).eq("id", document_id).execute()
+        
+        # Send enhanced completion notification
+        await websocket_manager.send_message(
+            document_id,
+            {
+                "event_type": "ocr_reprocessing_completed",
+                "data": {
+                    "document_id": document_id,
+                    "extraction_confidence": extraction_result.get("extraction_confidence", 0.0),
+                    "character_count": extraction_result.get("character_count", 0),
+                    "word_count": extraction_result.get("word_count", 0),
+                    "extraction_method": extraction_result.get("extraction_method", "unknown"),
+                    "processing_time_seconds": processing_time,
+                    "contract_terms_detected": extraction_result.get("processing_details", {}).get("contract_terms_found", 0),
+                    "enhancement_applied": extraction_result.get("processing_details", {}).get("enhancement_applied", []),
+                    "quality_score": extraction_result.get("extraction_confidence", 0.0)
+                }
+            }
+        )
+        
+        logger.info(f"OCR reprocessing completed for document {document_id}")
+        
+    except Exception as e:
+        logger.error(f"OCR reprocessing failed for {document_id}: {str(e)}")
+        
+        # Update status to failed
+        db_client.table("documents").update({
+            "status": "ocr_failed",
+            "processing_results": {"error": str(e)}
+        }).eq("id", document_id).execute()
+        
+        # Send error notification
+        await websocket_manager.send_message(
+            document_id,
+            {
+                "event_type": "ocr_reprocessing_failed",
+                "data": {"document_id": document_id, "error_message": str(e)}
+            }
+        )
 
 
 async def process_document_background(
@@ -652,9 +1105,17 @@ async def process_document_background(
 
         document = doc_result.data[0]
 
-        # Extract text from document
+        # Extract text from document with contract context
+        contract_context = {
+            "australian_state": australian_state.value,
+            "contract_type": contract_type.value,
+            "user_type": "buyer"  # Could be derived from user profile
+        }
+        
         extraction_result = await document_service.extract_text(
-            document["storage_path"], document["file_type"]
+            document["storage_path"], 
+            document["file_type"],
+            contract_context=contract_context
         )
 
         # Update document with extraction results
@@ -765,13 +1226,31 @@ async def analyze_contract_background(
         # Get processed document content
         processing_results = document.get("processing_results", {})
         extracted_text = processing_results.get("extracted_text", "")
+        extraction_confidence = processing_results.get("extraction_confidence", 0.0)
 
-        if not extracted_text:
-            # If no extracted text, try to extract it now
+        if not extracted_text or extraction_confidence < 0.5:
+            # If no extracted text or low confidence, try enhanced extraction
+            contract_context = {
+                "australian_state": user_profile.get("australian_state", "NSW"),
+                "contract_type": "purchase_agreement",
+                "user_type": user_profile.get("user_type", "buyer")
+            }
+            
+            # Use OCR if confidence is low or text is missing
+            force_ocr = extraction_confidence < 0.5
             extraction_result = await document_service.extract_text(
-                document["storage_path"], document["file_type"]
+                document["storage_path"], 
+                document["file_type"],
+                contract_context=contract_context,
+                force_ocr=force_ocr
             )
             extracted_text = extraction_result.get("extracted_text", "")
+            
+            # Update document with improved extraction results
+            if extraction_result.get("extraction_confidence", 0) > extraction_confidence:
+                db_client.table("documents").update({
+                    "processing_results": extraction_result
+                }).eq("id", document["id"]).execute()
 
         # Add document data to state
         initial_state["document_data"] = {
@@ -862,6 +1341,228 @@ async def analyze_contract_background(
                 "event_type": "analysis_failed",
                 "data": {"contract_id": contract_id, "error_message": str(e)},
             },
+        )
+
+
+async def batch_ocr_processing_background(
+    document_ids: List[str],
+    user_id: str,
+    batch_context: Dict[str, Any],
+    processing_options: Dict[str, Any]
+):
+    """Background task for batch OCR processing with intelligent optimization"""
+    
+    batch_id = batch_context["batch_id"]
+    total_docs = len(document_ids)
+    processed_docs = 0
+    start_time = time.time()
+    
+    try:
+        logger.info(f"Starting batch OCR processing for {total_docs} documents")
+        
+        # Initialize batch processing
+        await websocket_manager.send_message(
+            batch_id,
+            {
+                "event_type": "batch_ocr_started",
+                "data": {
+                    "batch_id": batch_id,
+                    "total_documents": total_docs,
+                    "processing_mode": "parallel" if processing_options["parallel_processing"] else "sequential"
+                }
+            }
+        )
+        
+        # Process documents with intelligent batching
+        if processing_options["parallel_processing"] and total_docs > 1:
+            # Parallel processing for multiple documents
+            semaphore = asyncio.Semaphore(3)  # Limit concurrent processing
+            
+            async def process_single_doc(doc_id: str, index: int):
+                nonlocal processed_docs
+                async with semaphore:
+                    try:
+                        # Get document details
+                        doc_result = (
+                            db_client.table("documents")
+                            .select("*")
+                            .eq("id", doc_id)
+                            .execute()
+                        )
+                        
+                        if not doc_result.data:
+                            logger.warning(f"Document {doc_id} not found in batch processing")
+                            return
+                        
+                        document = doc_result.data[0]
+                        
+                        # Update document status
+                        db_client.table("documents").update({
+                            "status": "processing_ocr"
+                        }).eq("id", doc_id).execute()
+                        
+                        # Send progress update
+                        await websocket_manager.send_message(
+                            batch_id,
+                            {
+                                "event_type": "batch_document_progress",
+                                "data": {
+                                    "batch_id": batch_id,
+                                    "document_id": doc_id,
+                                    "document_index": index + 1,
+                                    "total_documents": total_docs,
+                                    "status": "processing"
+                                }
+                            }
+                        )
+                        
+                        # Process with OCR
+                        extraction_result = await document_service.extract_text_with_ocr(
+                            document["storage_path"],
+                            document["file_type"],
+                            contract_context=batch_context
+                        )
+                        
+                        # Update document with results
+                        db_client.table("documents").update({
+                            "status": "processed",
+                            "processing_results": extraction_result
+                        }).eq("id", doc_id).execute()
+                        
+                        processed_docs += 1
+                        
+                        # Send document completion update
+                        await websocket_manager.send_message(
+                            batch_id,
+                            {
+                                "event_type": "batch_document_completed",
+                                "data": {
+                                    "batch_id": batch_id,
+                                    "document_id": doc_id,
+                                    "document_index": index + 1,
+                                    "processed_count": processed_docs,
+                                    "total_documents": total_docs,
+                                    "extraction_confidence": extraction_result.get("extraction_confidence", 0.0),
+                                    "character_count": extraction_result.get("character_count", 0)
+                                }
+                            }
+                        )
+                        
+                    except Exception as e:
+                        logger.error(f"Failed to process document {doc_id} in batch: {str(e)}")
+                        
+                        # Update document status to failed
+                        db_client.table("documents").update({
+                            "status": "ocr_failed",
+                            "processing_results": {"error": str(e)}
+                        }).eq("id", doc_id).execute()
+                        
+                        # Send error notification
+                        await websocket_manager.send_message(
+                            batch_id,
+                            {
+                                "event_type": "batch_document_failed",
+                                "data": {
+                                    "batch_id": batch_id,
+                                    "document_id": doc_id,
+                                    "error_message": str(e)
+                                }
+                            }
+                        )
+            
+            # Execute parallel processing
+            tasks = [process_single_doc(doc_id, i) for i, doc_id in enumerate(document_ids)]
+            await asyncio.gather(*tasks, return_exceptions=True)
+            
+        else:
+            # Sequential processing
+            for i, doc_id in enumerate(document_ids):
+                try:
+                    # Get document details
+                    doc_result = (
+                        db_client.table("documents")
+                        .select("*")
+                        .eq("id", doc_id)
+                        .execute()
+                    )
+                    
+                    if not doc_result.data:
+                        continue
+                    
+                    document = doc_result.data[0]
+                    
+                    # Update document status
+                    db_client.table("documents").update({
+                        "status": "processing_ocr"
+                    }).eq("id", doc_id).execute()
+                    
+                    # Process with OCR
+                    extraction_result = await document_service.extract_text_with_ocr(
+                        document["storage_path"],
+                        document["file_type"],
+                        contract_context=batch_context
+                    )
+                    
+                    # Update document with results
+                    db_client.table("documents").update({
+                        "status": "processed",
+                        "processing_results": extraction_result
+                    }).eq("id", doc_id).execute()
+                    
+                    processed_docs += 1
+                    
+                    # Send progress update
+                    await websocket_manager.send_message(
+                        batch_id,
+                        {
+                            "event_type": "batch_progress",
+                            "data": {
+                                "batch_id": batch_id,
+                                "processed_count": processed_docs,
+                                "total_documents": total_docs,
+                                "progress_percent": int((processed_docs / total_docs) * 100)
+                            }
+                        }
+                    )
+                    
+                except Exception as e:
+                    logger.error(f"Failed to process document {doc_id}: {str(e)}")
+                    continue
+        
+        processing_time = time.time() - start_time
+        
+        # Send batch completion notification
+        await websocket_manager.send_message(
+            batch_id,
+            {
+                "event_type": "batch_ocr_completed",
+                "data": {
+                    "batch_id": batch_id,
+                    "processed_documents": processed_docs,
+                    "total_documents": total_docs,
+                    "processing_time_seconds": processing_time,
+                    "success_rate": (processed_docs / total_docs) * 100 if total_docs > 0 else 0
+                }
+            }
+        )
+        
+        logger.info(f"Batch OCR processing completed: {processed_docs}/{total_docs} documents")
+        
+    except Exception as e:
+        logger.error(f"Batch OCR processing failed: {str(e)}")
+        
+        # Send batch error notification
+        await websocket_manager.send_message(
+            batch_id,
+            {
+                "event_type": "batch_ocr_failed",
+                "data": {
+                    "batch_id": batch_id,
+                    "error_message": str(e),
+                    "processed_documents": processed_docs,
+                    "total_documents": total_docs
+                }
+            }
         )
 
 

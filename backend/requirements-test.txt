@@ -5,12 +5,12 @@
 pytest==7.4.3
 pytest-asyncio==0.21.1
 pytest-mock==3.12.0
-pytest-cov==4.1.0
+pytest-cov>=4.1,<5.0
 pytest-html==4.1.1
 pytest-xdist==3.5.0
 
 # HTTP testing
-httpx==0.25.2
+httpx>=0.26,<0.30
 requests-mock==1.11.0
 
 # Factory and fake data
@@ -28,4 +28,4 @@ freezegun==1.2.2
 responses==0.24.1
 
 # Coverage reporting
-coverage[toml]==7.3.2
+coverage[toml]>=7.5,<8.0

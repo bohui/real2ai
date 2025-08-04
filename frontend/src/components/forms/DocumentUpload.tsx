@@ -176,14 +176,14 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({
             )
           )
 
-          const response = {
+          const uploadResponse = {
             document_id: documentId,
             filename: file.name,
             upload_status: 'uploaded'
           }
           
           if (onUploadComplete) {
-            onUploadComplete(response)
+            onUploadComplete(uploadResponse)
           }
 
           addNotification({

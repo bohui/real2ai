@@ -19,6 +19,7 @@ from unstructured.partition.auto import partition
 from app.core.config import get_settings
 from app.core.database import get_database_client
 from app.models.contract_state import ContractType
+from app.services.gemini_ocr_service import GeminiOCRService
 
 logger = logging.getLogger(__name__)
 
@@ -30,12 +31,22 @@ class DocumentService:
         self.settings = get_settings()
         self.db_client = get_database_client()
         self.storage_bucket = "documents"
+        self.gemini_ocr = GeminiOCRService()
+        self.ocr_enabled = True  # Can be configured via settings
 
     async def initialize(self):
         """Initialize document service"""
         try:
             # Ensure storage bucket exists
             await self._ensure_bucket_exists()
+            
+            # Initialize Gemini OCR service
+            if self.ocr_enabled:
+                ocr_success = await self.gemini_ocr.initialize()
+                if not ocr_success:
+                    logger.warning("Gemini OCR initialization failed, falling back to traditional methods")
+                    self.ocr_enabled = False
+            
             logger.info("Document service initialized")
         except Exception as e:
             logger.error(f"Failed to initialize document service: {str(e)}")
@@ -139,35 +150,119 @@ class DocumentService:
             logger.error(f"Error retrieving file: {str(e)}")
             raise HTTPException(status_code=500, detail="Could not retrieve file")
 
-    async def extract_text(self, storage_path: str, file_type: str) -> Dict[str, Any]:
-        """Extract text from document"""
+    async def extract_text(
+        self, 
+        storage_path: str, 
+        file_type: str, 
+        contract_context: Optional[Dict[str, Any]] = None,
+        force_ocr: bool = False
+    ) -> Dict[str, Any]:
+        """Extract text from document with intelligent OCR fallback"""
 
         try:
             # Get file content
             file_content = await self.get_file_content(storage_path)
+            filename = Path(storage_path).name
 
-            # Extract text based on file type
-            if file_type == "pdf":
-                extracted_text = await self._extract_pdf_text(file_content)
-            elif file_type in ["doc", "docx"]:
-                extracted_text = await self._extract_word_text(file_content)
+            # Determine extraction strategy with enhanced logic
+            use_gemini_ocr = (
+                self.ocr_enabled and 
+                hasattr(self.gemini_ocr, 'model') and 
+                self.gemini_ocr.model and
+                (force_ocr or file_type.lower() in self.gemini_ocr.supported_formats)
+            )
+            
+            # Smart OCR decision based on file characteristics
+            if not force_ocr and file_type.lower() == "pdf":
+                # Quick scan to determine if OCR is needed
+                try:
+                    from io import BytesIO
+                    import PyPDF2
+                    pdf_file = BytesIO(file_content)
+                    pdf_reader = PyPDF2.PdfReader(pdf_file)
+                    
+                    # Check if PDF has extractable text
+                    sample_text = ""
+                    for i, page in enumerate(pdf_reader.pages[:3]):  # Check first 3 pages
+                        sample_text += page.extract_text()
+                        if len(sample_text) > 100:  # Has reasonable text
+                            break
+                    
+                    # If very little text extracted, prefer OCR
+                    if len(sample_text.strip()) < 50:
+                        use_gemini_ocr = self.ocr_enabled and hasattr(self.gemini_ocr, 'model') and self.gemini_ocr.model
+                        logger.info(f"PDF appears to be scanned, preferring OCR for {filename}")
+                        
+                except Exception as e:
+                    logger.debug(f"PDF text check failed, proceeding with extraction strategy: {e}")
+
+            primary_result = None
+            fallback_result = None
+
+            # Try primary extraction method
+            if use_gemini_ocr and (force_ocr or file_type.lower() in ["pdf"] or file_type.lower() in ["png", "jpg", "jpeg", "webp", "gif", "bmp", "tiff"]):
+                # Use Gemini OCR for PDFs (especially scanned) and images
+                try:
+                    primary_result = await self.gemini_ocr.extract_text_from_document(
+                        file_content, file_type, filename, contract_context
+                    )
+                    logger.info(f"Gemini OCR extraction successful for {filename}")
+                except Exception as ocr_error:
+                    logger.warning(f"Gemini OCR failed for {filename}: {str(ocr_error)}")
+                    primary_result = None
+
+            # Fallback to traditional methods if OCR failed or not applicable
+            if not primary_result or primary_result.get("extraction_confidence", 0) < 0.3:
+                if file_type == "pdf":
+                    extracted_text = await self._extract_pdf_text(file_content)
+                    extraction_method = "pypdf2"
+                elif file_type in ["doc", "docx"]:
+                    extracted_text = await self._extract_word_text(file_content)
+                    extraction_method = "python_docx"
+                else:
+                    extracted_text = await self._extract_with_unstructured(file_content)
+                    extraction_method = "unstructured"
+
+                fallback_result = {
+                    "extracted_text": extracted_text,
+                    "extraction_method": extraction_method,
+                    "extraction_confidence": self._estimate_extraction_confidence(extracted_text),
+                    "character_count": len(extracted_text),
+                    "word_count": len(extracted_text.split()),
+                    "extraction_timestamp": datetime.utcnow().isoformat(),
+                }
+
+            # Choose best result
+            if primary_result and fallback_result:
+                # Compare results and choose the better one
+                if primary_result.get("extraction_confidence", 0) >= fallback_result.get("extraction_confidence", 0):
+                    final_result = primary_result
+                    final_result["fallback_available"] = True
+                    final_result["fallback_method"] = fallback_result["extraction_method"]
+                else:
+                    final_result = fallback_result
+                    final_result["ocr_attempted"] = True
+                    final_result["ocr_confidence"] = primary_result.get("extraction_confidence", 0)
+            elif primary_result:
+                final_result = primary_result
+            elif fallback_result:
+                final_result = fallback_result
             else:
-                # Fallback to unstructured
-                extracted_text = await self._extract_with_unstructured(file_content)
+                # Both methods failed
+                final_result = {
+                    "extracted_text": "",
+                    "extraction_method": "all_methods_failed",
+                    "extraction_confidence": 0.0,
+                    "character_count": 0,
+                    "word_count": 0,
+                    "extraction_timestamp": datetime.utcnow().isoformat(),
+                    "error": "All extraction methods failed"
+                }
 
-            return {
-                "extracted_text": extracted_text,
-                "extraction_method": f"{file_type}_parser",
-                "extraction_confidence": self._estimate_extraction_confidence(
-                    extracted_text
-                ),
-                "character_count": len(extracted_text),
-                "word_count": len(extracted_text.split()),
-                "extraction_timestamp": datetime.utcnow().isoformat(),
-            }
+            return final_result
 
         except Exception as e:
-            logger.error(f"Text extraction error: {str(e)}")
+            logger.error(f"Text extraction error for {storage_path}: {str(e)}")
             return {
                 "extracted_text": "",
                 "extraction_method": "failed",
@@ -278,6 +373,34 @@ class DocumentService:
                 confidence += 0.1
 
         return min(1.0, confidence)
+
+    async def extract_text_with_ocr(
+        self, 
+        storage_path: str, 
+        file_type: str,
+        contract_context: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """Force OCR extraction for better quality on scanned documents"""
+        return await self.extract_text(storage_path, file_type, contract_context, force_ocr=True)
+
+    async def get_ocr_capabilities(self) -> Dict[str, Any]:
+        """Get OCR service capabilities"""
+        if self.ocr_enabled and self.gemini_ocr.model:
+            return await self.gemini_ocr.get_processing_capabilities()
+        else:
+            return {
+                "service_available": False,
+                "reason": "Gemini OCR not configured or disabled"
+            }
+
+    def requires_ocr(self, file_type: str, extraction_confidence: float) -> bool:
+        """Determine if document would benefit from OCR processing"""
+        # Recommend OCR for low confidence PDF extractions or image files
+        if file_type.lower() in ["png", "jpg", "jpeg", "webp", "gif", "bmp", "tiff"]:
+            return True
+        if file_type.lower() == "pdf" and extraction_confidence < 0.6:
+            return True
+        return False
 
     async def delete_file(self, storage_path: str) -> bool:
         """Delete file from storage"""

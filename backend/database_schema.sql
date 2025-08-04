@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS documents (
     storage_path TEXT NOT NULL,
     file_type TEXT NOT NULL,
     file_size BIGINT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'uploaded' CHECK (status IN ('uploaded', 'processing', 'processed', 'failed')),
+    status TEXT NOT NULL DEFAULT 'uploaded' CHECK (status IN ('uploaded', 'processing', 'processed', 'failed', 'queued_for_ocr', 'processing_ocr', 'reprocessing_ocr', 'ocr_failed')),
     processing_results JSONB DEFAULT '{}',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -59,6 +59,50 @@ CREATE TABLE IF NOT EXISTS contract_analyses (
     confidence_score DECIMAL(3,2) DEFAULT 0.0 CHECK (confidence_score >= 0.0 AND confidence_score <= 1.0),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- OCR processing logs table
+CREATE TABLE IF NOT EXISTS ocr_processing_logs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    document_id UUID REFERENCES documents(id) ON DELETE CASCADE NOT NULL,
+    user_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+    task_id TEXT,
+    processing_method TEXT NOT NULL DEFAULT 'gemini_2.5_pro',
+    processing_options JSONB DEFAULT '{}',
+    contract_context JSONB DEFAULT '{}',
+    extraction_confidence DECIMAL(3,2) DEFAULT 0.0,
+    character_count INTEGER DEFAULT 0,
+    word_count INTEGER DEFAULT 0,
+    processing_time_seconds DECIMAL(10,3) DEFAULT 0.0,
+    cost_estimate_usd DECIMAL(8,4) DEFAULT 0.0,
+    gemini_features_used JSONB DEFAULT '{}',
+    contract_elements_found JSONB DEFAULT '{}',
+    quality_metrics JSONB DEFAULT '{}',
+    error_details JSONB DEFAULT '{}',
+    status TEXT NOT NULL CHECK (status IN ('queued', 'processing', 'completed', 'failed')),
+    started_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    completed_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Batch processing logs table
+CREATE TABLE IF NOT EXISTS batch_processing_logs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    batch_id TEXT NOT NULL UNIQUE,
+    user_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+    document_ids JSONB NOT NULL,
+    batch_options JSONB DEFAULT '{}',
+    processing_options JSONB DEFAULT '{}',
+    total_documents INTEGER NOT NULL,
+    completed_documents INTEGER DEFAULT 0,
+    failed_documents INTEGER DEFAULT 0,
+    total_cost_usd DECIMAL(10,4) DEFAULT 0.0,
+    average_confidence DECIMAL(3,2) DEFAULT 0.0,
+    total_processing_time_seconds DECIMAL(10,3) DEFAULT 0.0,
+    status TEXT NOT NULL CHECK (status IN ('queued', 'processing', 'completed', 'failed', 'partially_failed')),
+    started_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    completed_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- Usage logs table for tracking and billing
@@ -126,6 +170,13 @@ CREATE INDEX IF NOT EXISTS idx_contract_analyses_contract_id ON contract_analyse
 CREATE INDEX IF NOT EXISTS idx_contract_analyses_status ON contract_analyses(status);
 CREATE INDEX IF NOT EXISTS idx_usage_logs_user_id ON usage_logs(user_id);
 CREATE INDEX IF NOT EXISTS idx_usage_logs_timestamp ON usage_logs(timestamp);
+CREATE INDEX IF NOT EXISTS idx_ocr_logs_document_id ON ocr_processing_logs(document_id);
+CREATE INDEX IF NOT EXISTS idx_ocr_logs_user_id ON ocr_processing_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_ocr_logs_status ON ocr_processing_logs(status);
+CREATE INDEX IF NOT EXISTS idx_ocr_logs_started_at ON ocr_processing_logs(started_at);
+CREATE INDEX IF NOT EXISTS idx_batch_logs_batch_id ON batch_processing_logs(batch_id);
+CREATE INDEX IF NOT EXISTS idx_batch_logs_user_id ON batch_processing_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_batch_logs_status ON batch_processing_logs(status);
 CREATE INDEX IF NOT EXISTS idx_property_data_address ON property_data(address, suburb, state);
 
 -- Row Level Security Policies

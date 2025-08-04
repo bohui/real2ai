@@ -15,14 +15,43 @@ import { ContractAnalysisResult, RiskLevel } from '@/types'
 import { getRiskLevelColor, getRiskLevelIcon, cn } from '@/utils'
 
 interface RiskAssessmentProps {
-  analysis: ContractAnalysisResult
+  riskAssessment: ContractAnalysisResult['risk_assessment']
+  loading?: boolean
   className?: string
 }
 
-const RiskAssessment: React.FC<RiskAssessmentProps> = ({ analysis, className }) => {
+const RiskAssessment: React.FC<RiskAssessmentProps> = ({ riskAssessment, loading, className }) => {
   const [expandedRisk, setExpandedRisk] = React.useState<string | null>(null)
   
-  const riskAssessment = analysis.risk_assessment
+  if (loading) {
+    return (
+      <Card className={className}>
+        <CardHeader>
+          <CardTitle>Risk Assessment</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="animate-pulse space-y-4">
+            <div className="h-4 bg-neutral-200 rounded w-3/4"></div>
+            <div className="h-4 bg-neutral-200 rounded w-1/2"></div>
+            <div className="h-4 bg-neutral-200 rounded w-2/3"></div>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+  
+  if (!riskAssessment) {
+    return (
+      <Card className={className}>
+        <CardHeader>
+          <CardTitle>Risk Assessment</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-neutral-500">No risk assessment available</p>
+        </CardContent>
+      </Card>
+    )
+  }
   const riskFactors = riskAssessment?.risk_factors || []
   
   // Group risks by severity

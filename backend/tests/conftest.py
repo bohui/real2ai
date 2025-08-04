@@ -1,134 +1,279 @@
 """
-Test configuration and fixtures for Real2.AI backend tests
+Test configuration and fixtures for Real2.AI backend tests.
+Provides environment setup, database fixtures, and common test utilities.
 """
 
-import pytest
 import asyncio
-from typing import Generator, AsyncGenerator
-try:
-    from httpx import AsyncClient
-except ImportError:
-    AsyncClient = None
+import os
+from typing import AsyncGenerator, Generator
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+import pytest_asyncio
 from fastapi.testclient import TestClient
-from unittest.mock import MagicMock, AsyncMock
+from httpx import AsyncClient, ASGITransport
+
+# Set test environment variables before importing app
+os.environ["ENVIRONMENT"] = "test"
+os.environ["TESTING"] = "true"
+os.environ["SUPABASE_URL"] = "https://test.supabase.co"
+os.environ["SUPABASE_KEY"] = "test-key"
+os.environ["OPENAI_API_KEY"] = "test-openai-key"
 
 from app.main import app
-from app.core.database import get_database_client
-from app.core.auth import get_current_user
 from app.core.config import get_settings
 
 
-# Test configuration
-@pytest.fixture
-def test_settings():
-    """Override settings for testing"""
-    from app.core.config import Settings
-    return Settings(
-        environment="testing",
-        database_url="sqlite:///test.db",
-        openai_api_key="test-key",
-        supabase_url="http://localhost:54321",
-        supabase_anon_key="test-anon-key",
-        supabase_service_key="test-service-key",
-        jwt_secret="test-jwt-secret",
-        max_file_size=10 * 1024 * 1024,  # 10MB for testing
-        allowed_file_types="pdf,doc,docx,txt"
-    )
+@pytest.fixture(scope="session")
+def event_loop() -> Generator[asyncio.AbstractEventLoop, None, None]:
+    """Create an instance of the default event loop for the test session."""
+    loop = asyncio.get_event_loop_policy().new_event_loop()
+    yield loop
+    loop.close()
+
+
+@pytest.fixture(scope="session")
+def settings():
+    """Get test settings."""
+    return get_settings()
 
 
 @pytest.fixture
-def mock_db_client():
-    """Mock database client for testing"""
+def client(test_user, mock_db_client, test_settings) -> Generator[TestClient, None, None]:
+    """Create a test client for FastAPI app with auth override."""
+    from app.core.auth import get_current_user
+    from app.core.database import get_database_client
+    from app.core.config import get_settings
+    from app.services.document_service import DocumentService
+    from unittest.mock import patch
+    import app.main
+    
+    # Override dependencies for testing
+    def override_get_current_user():
+        return test_user
+    
+    def override_get_database_client():
+        return mock_db_client
+    
+    def override_get_settings():
+        return test_settings
+    
+    from app.main import app as fastapi_app
+    fastapi_app.dependency_overrides[get_current_user] = override_get_current_user
+    fastapi_app.dependency_overrides[get_database_client] = override_get_database_client
+    fastapi_app.dependency_overrides[get_settings] = override_get_settings
+    
+    # Mock global db_client used in background tasks  
+    import app.main
+    with patch.object(app.main, 'db_client', mock_db_client):
+        # Mock document service
+        with patch.object(DocumentService, 'upload_file', new_callable=AsyncMock) as mock_upload:
+            mock_upload.return_value = {
+                "document_id": "test-doc-id",
+                "storage_path": "documents/test-user-id/test-doc-id.pdf"
+            }
+            
+            test_client = TestClient(fastapi_app)
+            yield test_client
+    
+    # Clean up overrides
+    fastapi_app.dependency_overrides.clear()
+    test_client.close()
+
+
+@pytest_asyncio.fixture
+async def async_client() -> AsyncGenerator[AsyncClient, None]:
+    """Create an async test client for FastAPI app."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        yield ac
+
+
+@pytest.fixture
+def mock_supabase_client():
+    """Mock Supabase client for testing."""
     mock_client = MagicMock()
     
-    # Mock auth methods
-    mock_client.auth.sign_up = MagicMock()
-    mock_client.auth.sign_in_with_password = MagicMock()
+    # Mock auth
+    mock_client.auth.get_user.return_value = MagicMock(
+        user=MagicMock(id="test-user-id", email="test@example.com")
+    )
     
-    # Mock table methods
-    mock_table = MagicMock()
-    mock_table.insert = MagicMock(return_value=mock_table)
-    mock_table.select = MagicMock(return_value=mock_table)
-    mock_table.update = MagicMock(return_value=mock_table)
-    mock_table.delete = MagicMock(return_value=mock_table)
-    mock_table.eq = MagicMock(return_value=mock_table)
-    mock_table.execute = MagicMock()
+    # Mock storage
+    mock_client.storage.from_.return_value = MagicMock()
     
-    mock_client.table = MagicMock(return_value=mock_table)
-    mock_client.initialize = AsyncMock()
-    mock_client.close = AsyncMock()
+    # Mock database queries
+    mock_select = MagicMock()
+    mock_select.execute.return_value = MagicMock(
+        data=[{"id": 1, "name": "test"}],
+        error=None
+    )
+    mock_client.table.return_value.select.return_value = mock_select
     
     return mock_client
 
 
 @pytest.fixture
-def mock_user():
-    """Mock authenticated user for testing"""
-    from app.core.auth import User
-    from app.models.contract_state import AustralianState
+def mock_openai_client():
+    """Mock OpenAI client for testing."""
+    mock_client = AsyncMock()
     
-    return User(
-        id="test-user-id",
-        email="test@example.com",
-        australian_state=AustralianState.NSW,
-        user_type="buyer",
-        subscription_status="free",
-        credits_remaining=5,
-        preferences={},
-        onboarding_completed=True
+    # Mock chat completions
+    mock_client.chat.completions.create = AsyncMock(
+        return_value=MagicMock(
+            choices=[
+                MagicMock(
+                    message=MagicMock(
+                        content="Mock AI response",
+                        role="assistant"
+                    )
+                )
+            ]
+        )
     )
+    
+    return mock_client
 
 
 @pytest.fixture
-def override_dependencies(mock_db_client, mock_user, test_settings):
-    """Override FastAPI dependencies for testing"""
+def sample_contract_data():
+    """Sample contract data for testing."""
+    return {
+        "id": "test-contract-id",
+        "document_id": "test-doc-id",
+        "contract_type": "purchase_agreement",
+        "australian_state": "NSW",
+        "user_id": "test-user-id",
+        "created_at": "2024-01-01T00:00:00Z"
+    }
+
+
+@pytest.fixture
+def sample_risk_assessment():
+    """Sample risk assessment data for testing."""
+    return {
+        "overall_score": 3.5,
+        "risk_factors": [
+            {
+                "category": "financial",
+                "severity": "medium",
+                "description": "Settlement period shorter than recommended",
+                "impact": "Potential difficulty securing finance"
+            },
+            {
+                "category": "legal",
+                "severity": "low", 
+                "description": "Standard contract terms",
+                "impact": "Minimal legal risk"
+            }
+        ],
+        "recommendations": [
+            "Seek pre-approval for finance",
+            "Consider extending settlement period"
+        ]
+    }
+
+
+@pytest.fixture(autouse=True)
+def setup_test_environment(monkeypatch):
+    """Set up test environment variables automatically for all tests."""
+    test_env_vars = {
+        "ENVIRONMENT": "test",
+        "TESTING": "true",
+        "LOG_LEVEL": "DEBUG",
+        "SUPABASE_URL": "https://test.supabase.co",
+        "SUPABASE_KEY": "test-key",
+        "OPENAI_API_KEY": "test-openai-key",
+        "REDIS_URL": "redis://localhost:6379/1",  # Use test DB
+    }
     
-    async def get_test_db():
-        return mock_db_client
-    
-    async def get_test_user():
-        return mock_user
-    
-    def get_test_settings():
-        return test_settings
-    
-    app.dependency_overrides[get_database_client] = get_test_db
-    app.dependency_overrides[get_current_user] = get_test_user
-    app.dependency_overrides[get_settings] = get_test_settings
-    
+    for key, value in test_env_vars.items():
+        monkeypatch.setenv(key, value)
+
+
+@pytest.fixture
+def mock_redis_client():
+    """Mock Redis client for caching tests."""
+    mock_client = AsyncMock()
+    mock_client.get.return_value = None
+    mock_client.set.return_value = True
+    mock_client.delete.return_value = 1
+    mock_client.exists.return_value = False
+    return mock_client
+
+
+# Performance test fixtures
+@pytest.fixture
+def performance_threshold():
+    """Performance thresholds for different operations."""
+    return {
+        "api_response": 0.2,  # 200ms
+        "ai_analysis": 5.0,   # 5 seconds
+        "file_upload": 1.0,   # 1 second
+        "database_query": 0.1  # 100ms
+    }
+
+
+# Database fixtures for integration tests
+@pytest.fixture
+def clean_database():
+    """Clean database state for integration tests."""
+    # This would typically clean test database tables
+    # Implementation depends on your database setup
     yield
+    # Cleanup after test
+
+
+# Authentication fixtures
+@pytest.fixture
+def auth_headers():
+    """Authentication headers for API tests."""
+    return {
+        "Authorization": "Bearer test-jwt-token",
+        "Content-Type": "application/json"
+    }
+
+
+@pytest.fixture
+def mock_db_client():
+    """Mock database client for testing."""
+    mock_client = MagicMock()
     
-    # Clear overrides after test
-    app.dependency_overrides.clear()
-
-
-@pytest.fixture
-def client(override_dependencies) -> Generator[TestClient, None, None]:
-    """Create test client with dependency overrides"""
-    with TestClient(app) as test_client:
-        yield test_client
-
-
-@pytest.fixture
-async def async_client(override_dependencies):
-    """Create async test client with dependency overrides"""
-    if AsyncClient is None:
-        pytest.skip("AsyncClient not available")
-    async with AsyncClient(app=app, base_url="http://test") as async_test_client:
-        yield async_test_client
+    # Mock table operations
+    mock_table = MagicMock()
+    mock_table.select.return_value = mock_table
+    mock_table.eq.return_value = mock_table
+    mock_table.insert.return_value = mock_table
+    mock_table.update.return_value = mock_table
+    mock_table.execute.return_value = MagicMock(data=[], error=None)
+    mock_client.table.return_value = mock_table
+    
+    # Mock auth operations
+    mock_client.auth.get_user.return_value = MagicMock(
+        user=MagicMock(id="test-user-id", email="test@example.com")
+    )
+    mock_client.auth.sign_up.return_value = MagicMock(
+        user=MagicMock(id="test-user-id", email="test@example.com")
+    )
+    mock_client.auth.sign_in_with_password.return_value = MagicMock(
+        user=MagicMock(id="test-user-id", email="test@example.com"),
+        session=MagicMock(access_token="test-token", refresh_token="test-refresh")
+    )
+    
+    return mock_client
 
 
 @pytest.fixture
 def sample_document_data():
-    """Sample document data for testing"""
+    """Sample document data for testing."""
     return {
         "id": "test-doc-id",
         "user_id": "test-user-id",
         "filename": "test-contract.pdf",
-        "file_type": "pdf",
-        "file_size": 1024000,
-        "status": "uploaded",
         "storage_path": "documents/test-user-id/test-doc-id.pdf",
+        "file_type": "pdf",
+        "file_size": 1024,
+        "status": "uploaded",
         "processing_results": {
             "extracted_text": "Sample contract text",
             "extraction_confidence": 0.95,
@@ -139,83 +284,85 @@ def sample_document_data():
 
 
 @pytest.fixture
-def sample_contract_data():
-    """Sample contract data for testing"""
+def sample_onboarding_preferences():
+    """Sample onboarding preferences for testing."""
     return {
-        "id": "test-contract-id",
-        "document_id": "test-doc-id",
-        "contract_type": "purchase_agreement",
-        "australian_state": "NSW",
-        "user_id": "test-user-id"
+        "practice_area": "property",
+        "jurisdiction": "nsw",
+        "firm_size": "small",
+        "experience_level": "intermediate",
+        "notification_preferences": {
+            "email_alerts": True,
+            "contract_updates": False
+        }
     }
 
 
 @pytest.fixture
 def sample_analysis_data():
-    """Sample analysis data for testing"""
+    """Sample analysis data for testing."""
     return {
         "id": "test-analysis-id",
         "contract_id": "test-contract-id",
-        "agent_version": "1.0",
         "status": "completed",
         "analysis_result": {
             "contract_terms": {
-                "purchase_price": 500000,
-                "deposit": 50000,
-                "settlement_date": "2024-03-15"
+                "parties": ["John Buyer", "Jane Seller"],
+                "property_address": "123 Test Street, Sydney NSW 2000",
+                "purchase_price": 850000,
+                "settlement_date": "2024-12-01"
             },
             "risk_assessment": {
-                "overall_risk_score": 3,
-                "risk_factors": [
-                    {
-                        "factor": "Short settlement period",
-                        "severity": "medium",
-                        "description": "Settlement period is shorter than recommended"
-                    }
-                ]
+                "overall_risk_score": 3.5,
+                "risk_factors": []
             },
             "compliance_check": {
                 "state_compliance": True,
                 "compliance_issues": [],
                 "cooling_off_compliance": True
             },
-            "recommendations": [
-                {
-                    "priority": "high",
-                    "category": "legal",
-                    "recommendation": "Review settlement date with conveyancer",
-                    "action_required": True
-                }
-            ]
+            "recommendations": []
         },
         "risk_score": 3,
-        "processing_time": 45.2
+        "processing_time": 120.5,
+        "created_at": "2024-01-01T00:00:00Z"
     }
 
 
 @pytest.fixture
-def sample_onboarding_preferences():
-    """Sample onboarding preferences for testing"""
-    return {
-        "practice_area": "property",
-        "jurisdiction": "nsw",
-        "firm_size": "small",
-        "primary_contract_types": ["Purchase Agreements", "Lease Agreements"]
-    }
+def test_settings():
+    """Test-specific settings."""
+    settings = get_settings()
+    settings.max_file_size = 5 * 1024 * 1024  # 5MB
+    settings.allowed_file_types = "pdf,doc,docx"  # Set the actual property
+    return settings
 
 
-# Event loop fixture for async tests
-@pytest.fixture(scope="session")
-def event_loop():
-    """Create an instance of the default event loop for the test session."""
-    loop = asyncio.get_event_loop_policy().new_event_loop()
-    yield loop
-    loop.close()
-
-
-# Async test marker
-def pytest_configure(config):
-    """Configure pytest with custom markers"""
-    config.addinivalue_line(
-        "markers", "asyncio: mark test as an async test"
+@pytest.fixture
+def test_user():
+    """Test user data."""
+    from app.core.auth import User
+    return User(
+        id="test-user-id",
+        email="test@real2ai.com",
+        australian_state="NSW",
+        user_type="lawyer",
+        subscription_status="free",
+        credits_remaining=5,
+        preferences={"practice_area": "property"}
     )
+
+
+@pytest.fixture
+def mock_user():
+    """Mock user for testing."""
+    from unittest.mock import MagicMock
+    user = MagicMock()
+    user.id = "test-user-id"
+    user.email = "test@real2ai.com"
+    user.australian_state = "NSW"
+    user.user_type = "lawyer"
+    user.subscription_status = "free"
+    user.credits_remaining = 5
+    user.preferences = {"practice_area": "property"}
+    return user

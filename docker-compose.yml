@@ -76,10 +76,11 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: real2ai-celery-worker
-    command: celery -A app.core.celery worker --loglevel=info
+    command: celery -A app.core.celery worker --loglevel=info --concurrency=4
     environment:
       - ENVIRONMENT=development
       - PYTHONPATH=/app
+      - C_FORCE_ROOT=1
     env_file:
       - .env
     volumes:
@@ -91,6 +92,72 @@ services:
     networks:
       - real2ai-network
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 1G
+
+  # Dedicated OCR Worker for Gemini Processing
+  celery-ocr-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: real2ai-celery-ocr-worker
+    command: celery -A app.core.celery worker --loglevel=info --queues=ocr_queue,priority_queue --concurrency=2
+    environment:
+      - ENVIRONMENT=development
+      - PYTHONPATH=/app
+      - C_FORCE_ROOT=1
+      - WORKER_TYPE=ocr_specialist
+    env_file:
+      - .env
+    volumes:
+      - ./backend:/app
+      - backend_data:/app/data
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - real2ai-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 4G  # More memory for OCR processing
+        reservations:
+          memory: 2G
+
+  # Batch Processing Worker
+  celery-batch-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: real2ai-celery-batch-worker
+    command: celery -A app.core.celery worker --loglevel=info --queues=batch_queue --concurrency=1
+    environment:
+      - ENVIRONMENT=development
+      - PYTHONPATH=/app
+      - C_FORCE_ROOT=1
+      - WORKER_TYPE=batch_processor
+    env_file:
+      - .env
+    volumes:
+      - ./backend:/app
+      - backend_data:/app/data
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - real2ai-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 3G
+        reservations:
+          memory: 1.5G
 
   # Celery Beat for Scheduled Tasks
   celery-beat:
