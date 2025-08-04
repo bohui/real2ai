@@ -19,8 +19,8 @@ classifiers = [
 ]
 dependencies = [
     # Core Framework
-    "fastapi==0.104.1",
-    "uvicorn[standard]==0.24.0",
+    "fastapi>=0.109.0",
+    "uvicorn[standard]>=0.27.0",
     "python-multipart==0.0.6",
     # Database and ORM
     "supabase==2.15.2",
@@ -30,7 +30,7 @@ dependencies = [
     "pydantic-settings==2.4.0",
     # AI and ML
     "openai==1.86.0",
-    "google-generativeai==0.8.3",
+    "google-genai>=1.28.0",
     "langchain==0.3.27",
     "langchain-openai==0.3.28",
     "langchain-community==0.3.27",
@@ -47,7 +47,7 @@ dependencies = [
     # Utilities
     "python-dotenv==1.0.0",
     "redis==5.0.1",
-    "websockets==12.0",
+    "websockets>=13.0.0",
     "email-validator==2.2.0",
     # Additional dependencies for scripts and testing
     "requests==2.31.0",

@@ -8,7 +8,7 @@ from typing import Optional
 from pydantic import BaseModel
 from fastapi import HTTPException, status, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from supabase import Client
+from supabase import Client, create_client
 from app.core.config import get_settings
 from app.core.database import get_database_client
 
@@ -41,9 +41,11 @@ def verify_token(token: str) -> TokenData:
     settings = get_settings()
     
     try:
-        # Use Supabase client to verify the token
-        db_client = get_database_client()
-        supabase_client: Client = db_client.client
+        # Create direct Supabase client for token verification
+        supabase_client = create_client(
+            settings.supabase_url,
+            settings.supabase_anon_key
+        )
         
         # Verify the token using Supabase's built-in verification
         user = supabase_client.auth.get_user(token)
@@ -96,6 +98,11 @@ async def get_current_user(
         
         # Get user profile from database
         db_client = get_database_client()
+        
+        # Ensure database client is initialized
+        if not hasattr(db_client, '_client') or db_client._client is None:
+            await db_client.initialize()
+            
         result = db_client.table("profiles").select("*").eq("id", token_data.user_id).execute()
         
         if not result.data:
