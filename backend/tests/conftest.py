@@ -63,11 +63,9 @@ def client(test_user, mock_db_client, test_settings) -> Generator[TestClient, No
     fastapi_app.dependency_overrides[get_database_client] = override_get_database_client
     fastapi_app.dependency_overrides[get_settings] = override_get_settings
     
-    # Mock global db_client used in background tasks  
+    # Mock global db_client used in main module
     import app.main
-    import app.tasks.background_tasks
-    with patch.object(app.main, 'db_client', mock_db_client), \
-         patch.object(app.tasks.background_tasks, 'db_client', mock_db_client):
+    with patch.object(app.main, 'db_client', mock_db_client):
         # Mock document service
         with patch.object(DocumentService, 'upload_file', new_callable=AsyncMock) as mock_upload:
             mock_upload.return_value = {
@@ -240,6 +238,17 @@ def auth_headers():
 def mock_db_client():
     """Mock database client for testing."""
     mock_client = MagicMock()
+    
+    # Mock the _client attribute to simulate initialized state
+    mock_client._client = MagicMock()
+    
+    # Mock the initialize method to prevent real database connection
+    async def mock_initialize():
+        """Mock initialization that succeeds without connecting"""
+        mock_client._client = MagicMock()
+        return True
+    
+    mock_client.initialize = mock_initialize
     
     # Mock table operations
     mock_table = MagicMock()

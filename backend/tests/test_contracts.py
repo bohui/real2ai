@@ -4,7 +4,7 @@ Test contract analysis endpoints
 
 import pytest
 from fastapi.testclient import TestClient
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, AsyncMock
 
 
 @pytest.mark.api
@@ -13,21 +13,37 @@ class TestContractAnalysis:
     
     def test_start_contract_analysis_success(self, client: TestClient, mock_db_client, sample_document_data):
         """Test successful contract analysis start"""
+        # Create separate mock chains for each table
+        mock_documents_table = MagicMock()
+        mock_contracts_table = MagicMock()
+        mock_analyses_table = MagicMock()
+        
+        # Set up the return values for each table
+        def get_table(table_name):
+            if table_name == "documents":
+                return mock_documents_table
+            elif table_name == "contracts":
+                return mock_contracts_table
+            elif table_name == "contract_analyses":
+                return mock_analyses_table
+            return MagicMock()
+        
+        mock_db_client.table.side_effect = get_table
+        
         # Mock document fetch
-        mock_db_client.table.return_value.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
+        mock_documents_table.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
             data=[sample_document_data]
         )
         
-        # Mock contract and analysis creation
+        # Mock contract creation
         contract_data = {"id": "test-contract-id"}
-        analysis_data = {"id": "test-analysis-id"}
-        
-        mock_db_client.table.return_value.insert.return_value.execute.return_value = MagicMock(
+        mock_contracts_table.insert.return_value.execute.return_value = MagicMock(
             data=[contract_data]
         )
         
-        # Second call for analysis creation
-        mock_db_client.table.return_value.insert.return_value.execute.return_value = MagicMock(
+        # Mock analysis creation
+        analysis_data = {"id": "test-analysis-id"}
+        mock_analyses_table.insert.return_value.execute.return_value = MagicMock(
             data=[analysis_data]
         )
         
@@ -41,14 +57,16 @@ class TestContractAnalysis:
             }
         }
         
-        response = client.post("/api/contracts/analyze", json=request_data)
+        # Mock the background task to prevent actual execution
+        with patch('app.tasks.background_tasks.analyze_contract_background', new_callable=AsyncMock) as mock_bg_task:
+            response = client.post("/api/contracts/analyze", json=request_data)
         
-        assert response.status_code == 200
-        data = response.json()
-        assert data["contract_id"] == "test-contract-id"
-        assert data["analysis_id"] == "test-analysis-id"
-        assert data["status"] == "pending"
-        assert data["estimated_completion_minutes"] == 2
+            assert response.status_code == 200
+            data = response.json()
+            assert data["contract_id"] == "test-contract-id"
+            assert data["analysis_id"] == "test-analysis-id"
+            assert data["status"] == "pending"
+            assert data["estimated_completion_minutes"] == 2
     
     def test_start_contract_analysis_no_credits(self, client: TestClient):
         """Test contract analysis with no credits remaining"""
@@ -106,16 +124,35 @@ class TestContractAnalysis:
     
     def test_start_contract_analysis_minimal_options(self, client: TestClient, mock_db_client, sample_document_data):
         """Test contract analysis with minimal options"""
+        # Create separate mock chains for each table
+        mock_documents_table = MagicMock()
+        mock_contracts_table = MagicMock()
+        mock_analyses_table = MagicMock()
+        
+        # Set up the return values for each table
+        def get_table(table_name):
+            if table_name == "documents":
+                return mock_documents_table
+            elif table_name == "contracts":
+                return mock_contracts_table
+            elif table_name == "contract_analyses":
+                return mock_analyses_table
+            return MagicMock()
+        
+        mock_db_client.table.side_effect = get_table
+        
         # Mock document fetch
-        mock_db_client.table.return_value.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
+        mock_documents_table.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
             data=[sample_document_data]
         )
         
-        # Mock contract and analysis creation
-        mock_db_client.table.return_value.insert.return_value.execute.return_value = MagicMock(
+        # Mock contract creation
+        mock_contracts_table.insert.return_value.execute.return_value = MagicMock(
             data=[{"id": "test-contract-id"}]
         )
-        mock_db_client.table.return_value.insert.return_value.execute.return_value = MagicMock(
+        
+        # Mock analysis creation
+        mock_analyses_table.insert.return_value.execute.return_value = MagicMock(
             data=[{"id": "test-analysis-id"}]
         )
         
@@ -124,11 +161,13 @@ class TestContractAnalysis:
             # No analysis_options provided - should use defaults
         }
         
-        response = client.post("/api/contracts/analyze", json=request_data)
-        
-        assert response.status_code == 200
-        data = response.json()
-        assert data["status"] == "pending"
+        # Mock the background task to prevent actual execution
+        with patch('app.tasks.background_tasks.analyze_contract_background', new_callable=AsyncMock) as mock_bg_task:
+            response = client.post("/api/contracts/analyze", json=request_data)
+            
+            assert response.status_code == 200
+            data = response.json()
+            assert data["status"] == "pending"
 
 
 @pytest.mark.api
@@ -137,20 +176,37 @@ class TestGetContractAnalysis:
     
     def test_get_contract_analysis_success(self, client: TestClient, mock_db_client, sample_analysis_data, sample_contract_data, sample_document_data):
         """Test successful contract analysis retrieval"""
+        # Create separate mock chains for each table query
+        mock_analyses_table = MagicMock()
+        mock_contracts_table = MagicMock()
+        mock_documents_table = MagicMock()
+        
+        # Set up the return values for each table
+        def get_table(table_name):
+            if table_name == "contract_analyses":
+                return mock_analyses_table
+            elif table_name == "contracts":
+                return mock_contracts_table
+            elif table_name == "documents":
+                return mock_documents_table
+            return MagicMock()
+        
+        mock_db_client.table.side_effect = get_table
+        
         # Mock analysis fetch
-        mock_db_client.table.return_value.select.return_value.eq.return_value.execute.return_value = MagicMock(
+        mock_analyses_table.select.return_value.eq.return_value.execute.return_value = MagicMock(
             data=[sample_analysis_data]
         )
         
-        # Mock contract fetch for ownership verification
-        mock_contract_response = MagicMock(data=[sample_contract_data])
-        mock_document_response = MagicMock(data=[sample_document_data])
+        # Mock contract fetch
+        mock_contracts_table.select.return_value.eq.return_value.execute.return_value = MagicMock(
+            data=[sample_contract_data]
+        )
         
-        # Chain mock calls for contract and document verification
-        mock_db_client.table.return_value.select.return_value.eq.return_value.execute.side_effect = [
-            mock_contract_response,  # First call for contract
-            mock_document_response   # Second call for document ownership
-        ]
+        # Mock document fetch with user verification
+        mock_documents_table.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
+            data=[sample_document_data]
+        )
         
         response = client.get("/api/contracts/test-contract-id/analysis")
         

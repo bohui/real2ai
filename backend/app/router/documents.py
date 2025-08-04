@@ -67,6 +67,11 @@ async def upload_document(
         }
 
         db_client = get_database_client()
+        
+        # Ensure database client is initialized
+        if not hasattr(db_client, '_client') or db_client._client is None:
+            await db_client.initialize()
+            
         db_client.table("documents").insert(document_data).execute()
 
         # Start background processing

@@ -16,26 +16,30 @@ class TestDocumentUpload:
         """Test successful document upload"""
         # DocumentService.upload_file is already mocked in conftest.py
         
-        # Mock database insertion
-        mock_db_client.table.return_value.insert.return_value.execute.return_value = None
+        # Mock database insertion - it needs to return a result object
+        mock_db_client.table.return_value.insert.return_value.execute.return_value = MagicMock(
+            data=[{"id": "test-doc-id"}]
+        )
         
         # Create test file
         test_file = BytesIO(b"fake pdf content")
         
-        response = client.post(
-            "/api/documents/upload",
-            files={"file": ("test-contract.pdf", test_file, "application/pdf")},
-            data={
-                "contract_type": "purchase_agreement",
-                "australian_state": "NSW"
-            }
-        )
-        
-        assert response.status_code == 200
-        data = response.json()
-        assert data["document_id"] == "test-doc-id"
-        assert data["filename"] == "test-contract.pdf"
-        assert data["upload_status"] == "uploaded"
+        # Mock the background task to prevent actual execution
+        with patch('app.tasks.background_tasks.process_document_background', new_callable=AsyncMock) as mock_bg_task:
+            response = client.post(
+                "/api/documents/upload",
+                files={"file": ("test-contract.pdf", test_file, "application/pdf")},
+                data={
+                    "contract_type": "purchase_agreement",
+                    "australian_state": "NSW"
+                }
+            )
+            
+            assert response.status_code == 200
+            data = response.json()
+            assert data["document_id"] == "test-doc-id"
+            assert data["filename"] == "test-contract.pdf"
+            assert data["upload_status"] == "uploaded"
     
     def test_upload_document_invalid_file_type(self, client: TestClient):
         """Test document upload with invalid file type"""

@@ -17,7 +17,6 @@ from app.services.websocket_service import WebSocketManager
 logger = logging.getLogger(__name__)
 
 # Initialize services
-db_client = get_database_client()
 document_service = DocumentService()
 websocket_manager = WebSocketManager()
 
@@ -31,6 +30,11 @@ async def process_document_background(
     """Background task for document processing"""
 
     try:
+        # Get database client
+        db_client = get_database_client()
+        if not hasattr(db_client, '_client') or db_client._client is None:
+            await db_client.initialize()
+            
         # Update document status
         db_client.table("documents").update({"status": "processing"}).eq(
             "id", document_id
@@ -118,6 +122,11 @@ async def analyze_contract_background(
     )
 
     try:
+        # Get database client
+        db_client = get_database_client()
+        if not hasattr(db_client, '_client') or db_client._client is None:
+            await db_client.initialize()
+            
         # Update analysis status
         db_client.table("contract_analyses").update({"status": "processing"}).eq(
             "id", analysis_id

@@ -22,6 +22,10 @@ async def start_contract_analysis(
     """Start contract analysis"""
 
     try:
+        # Ensure database client is initialized
+        if not hasattr(db_client, '_client') or db_client._client is None:
+            await db_client.initialize()
+            
         # Check user credits
         if user.credits_remaining <= 0 and user.subscription_status == "free":
             raise HTTPException(
@@ -101,6 +105,10 @@ async def get_contract_analysis(
     """Get contract analysis results"""
 
     try:
+        # Ensure database client is initialized
+        if not hasattr(db_client, '_client') or db_client._client is None:
+            await db_client.initialize()
+            
         # Get analysis results
         result = (
             db_client.table("contract_analyses")
