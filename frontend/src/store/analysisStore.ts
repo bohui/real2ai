@@ -36,6 +36,7 @@ interface AnalysisState {
   setAnalysisResult: (result: ContractAnalysisResult) => void
   clearCurrentAnalysis: () => void
   addRecentAnalysis: (analysis: ContractAnalysisResult) => void
+  deleteAnalysis: (contractId: string) => Promise<void>
   setError: (error: string | null) => void
 }
 
@@ -193,6 +194,18 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
       .slice(0, 10) // Keep only 10 most recent
     
     set({ recentAnalyses: updated })
+  },
+
+  deleteAnalysis: async (contractId: string) => {
+    try {
+      await apiService.deleteAnalysis(contractId)
+      const recent = get().recentAnalyses
+      const updated = recent.filter(a => a.contract_id !== contractId)
+      set({ recentAnalyses: updated })
+    } catch (error: any) {
+      console.error('Failed to delete analysis:', error)
+      throw error
+    }
   },
 
   setError: (error: string | null) => {

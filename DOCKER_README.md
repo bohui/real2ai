@@ -38,9 +38,6 @@ SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_ANON_KEY=your-supabase-anon-key
 SUPABASE_SERVICE_KEY=your-supabase-service-key
 
-# Required: JWT Secret
-JWT_SECRET_KEY=your-secure-jwt-secret-key
-
 # Optional: Other API keys
 STRIPE_SECRET_KEY=sk_test_your_stripe_key
 STRIPE_PUBLISHABLE_KEY=pk_test_your_stripe_key

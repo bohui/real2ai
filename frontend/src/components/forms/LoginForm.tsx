@@ -1,75 +1,83 @@
-import React from 'react'
-import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
-import { z } from 'zod'
-import { Link } from 'react-router-dom'
-import { Mail, Lock, AlertCircle } from 'lucide-react'
-import { motion } from 'framer-motion'
+import React from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { Link } from "react-router-dom";
+import { Mail, Lock, AlertCircle } from "lucide-react";
+import { motion } from "framer-motion";
 
-import Button from '@/components/ui/Button'
-import Input from '@/components/ui/Input'
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card'
-import { useAuthStore } from '@/store/authStore'
-import { useUIStore } from '@/store/uiStore'
-import { UserLoginRequest } from '@/types'
+import Button from "@/components/ui/Button";
+import Input from "@/components/ui/Input";
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+} from "@/components/ui/Card";
+import { useAuthStore } from "@/store/authStore";
+import { useUIStore } from "@/store/uiStore";
 
 const loginSchema = z.object({
   email: z
     .string()
-    .min(1, 'Email is required')
-    .email('Please enter a valid email address'),
+    .min(1, "Email is required")
+    .email("Please enter a valid email address"),
   password: z
     .string()
-    .min(1, 'Password is required')
-    .min(8, 'Password must be at least 8 characters')
-})
+    .min(1, "Password is required")
+    .min(8, "Password must be at least 8 characters"),
+});
 
-type LoginFormData = z.infer<typeof loginSchema>
+type LoginFormData = z.infer<typeof loginSchema>;
 
 interface LoginFormProps {
-  onSuccess?: () => void
-  redirectTo?: string
+  onSuccess?: () => void;
+  redirectTo?: string;
 }
 
-const LoginForm: React.FC<LoginFormProps> = ({ onSuccess, redirectTo = '/dashboard' }) => {
-  const { login, isLoading, error } = useAuthStore()
-  const { addNotification } = useUIStore()
-  
+const LoginForm: React.FC<LoginFormProps> = ({
+  onSuccess,
+  redirectTo = "/dashboard",
+}) => {
+  const { login, isLoading, error } = useAuthStore();
+  const { addNotification } = useUIStore();
+
   const {
     register,
     handleSubmit,
-    formState: { errors, isSubmitting }
+    formState: { errors, isSubmitting },
   } = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
-    mode: 'onBlur'
-  })
+    mode: "onBlur",
+  });
 
   const onSubmit = async (data: LoginFormData) => {
     try {
-      await login(data)
-      
+      await login(data);
+
       addNotification({
-        type: 'success',
-        title: 'Welcome back!',
-        message: 'You have been successfully logged in.'
-      })
-      
+        type: "success",
+        title: "Welcome back!",
+        message: "You have been successfully logged in.",
+      });
+
       if (onSuccess) {
-        onSuccess()
+        onSuccess();
       } else {
-        window.location.href = redirectTo
+        window.location.href = redirectTo;
       }
     } catch (err) {
       // Error is already handled in the store
       addNotification({
-        type: 'error',
-        title: 'Login failed',
-        message: 'Please check your credentials and try again.'
-      })
+        type: "error",
+        title: "Login failed",
+        message: "Please check your credentials and try again.",
+      });
     }
-  }
+  };
 
-  const isProcessing = isLoading || isSubmitting
+  const isProcessing = isLoading || isSubmitting;
 
   return (
     <motion.div
@@ -114,7 +122,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSuccess, redirectTo = '/dashboa
               leftIcon={<Mail className="w-5 h-5" />}
               error={errors.email?.message}
               disabled={isProcessing}
-              {...register('email')}
+              {...register("email")}
             />
 
             <Input
@@ -126,7 +134,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSuccess, redirectTo = '/dashboa
               showPasswordToggle
               error={errors.password?.message}
               disabled={isProcessing}
-              {...register('password')}
+              {...register("password")}
             />
 
             <div className="flex items-center justify-between">
@@ -159,7 +167,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSuccess, redirectTo = '/dashboa
 
           <div className="mt-6 text-center">
             <p className="text-sm text-neutral-600">
-              Don't have an account?{' '}
+              Don't have an account?{" "}
               <Link
                 to="/register"
                 className="font-medium text-primary-600 hover:text-primary-700"
@@ -178,10 +186,12 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSuccess, redirectTo = '/dashboa
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => handleSubmit(onSubmit)({
-                  email: 'demo@real2.ai',
-                  password: 'demo123456'
-                })}
+                onClick={() =>
+                  onSubmit({
+                    email: "demo@real2.ai",
+                    password: "demo123456",
+                  })
+                }
                 disabled={isProcessing}
               >
                 Demo Login
@@ -193,18 +203,21 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSuccess, redirectTo = '/dashboa
 
       <div className="mt-8 text-center text-xs text-neutral-500">
         <p>
-          By signing in, you agree to our{' '}
+          By signing in, you agree to our{" "}
           <Link to="/terms" className="text-primary-600 hover:text-primary-700">
             Terms of Service
-          </Link>{' '}
-          and{' '}
-          <Link to="/privacy" className="text-primary-600 hover:text-primary-700">
+          </Link>{" "}
+          and{" "}
+          <Link
+            to="/privacy"
+            className="text-primary-600 hover:text-primary-700"
+          >
             Privacy Policy
           </Link>
         </p>
       </div>
     </motion.div>
-  )
-}
+  );
+};
 
-export default LoginForm
+export default LoginForm;

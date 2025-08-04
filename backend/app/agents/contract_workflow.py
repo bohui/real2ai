@@ -4,7 +4,7 @@ LangGraph Contract Analysis Workflow for Real2.AI
 
 from typing import Dict, Any, Optional, List
 from langgraph.graph import StateGraph
-from langchain_community.chat_models import ChatOpenAI
+from langchain_openai import ChatOpenAI
 from langchain.schema import HumanMessage, SystemMessage
 import json
 import time

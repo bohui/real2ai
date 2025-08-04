@@ -1,30 +1,32 @@
-import React from 'react'
-import { useParams } from 'react-router-dom'
-import { motion } from 'framer-motion'
-import { ArrowLeft, Download, Share, FileText } from 'lucide-react'
+import React from "react";
+import { useParams } from "react-router-dom";
+import { motion } from "framer-motion";
+import { ArrowLeft, Download, Share, FileText } from "lucide-react";
 
-import Button from '@/components/ui/Button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
-import DocumentUpload from '@/components/forms/DocumentUpload'
-import AnalysisProgress from '@/components/analysis/AnalysisProgress'
-import RiskAssessment from '@/components/analysis/RiskAssessment'
-import ComplianceCheck from '@/components/analysis/ComplianceCheck'
-import { useAnalysisStore } from '@/store/analysisStore'
-import { useUIStore } from '@/store/uiStore'
-import { cn } from '@/utils'
+import Button from "@/components/ui/Button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
+import DocumentUpload from "@/components/forms/DocumentUpload";
+import AnalysisProgress from "@/components/analysis/AnalysisProgress";
+import RiskAssessment from "@/components/analysis/RiskAssessment";
+import ComplianceCheck from "@/components/analysis/ComplianceCheck";
+import { useAnalysisStore } from "@/store/analysisStore";
+import { useUIStore } from "@/store/uiStore";
+import { cn } from "@/utils";
 
 const AnalysisPage: React.FC = () => {
-  const { contractId } = useParams()
-  const { 
-    currentAnalysis, 
+  const { contractId } = useParams();
+  const {
+    currentAnalysis,
     currentDocument,
-    isAnalyzing, 
-    startAnalysis, 
-    clearCurrentAnalysis 
-  } = useAnalysisStore()
-  const { addNotification } = useUIStore()
+    isAnalyzing,
+    startAnalysis,
+    clearCurrentAnalysis,
+  } = useAnalysisStore();
+  const { addNotification } = useUIStore();
 
-  const [activeTab, setActiveTab] = React.useState<'overview' | 'risks' | 'compliance'>('overview')
+  const [activeTab, setActiveTab] = React.useState<
+    "overview" | "risks" | "compliance"
+  >("overview");
 
   // Handle document upload completion
   const handleUploadComplete = async (documentId: string) => {
@@ -35,54 +37,55 @@ const AnalysisPage: React.FC = () => {
           include_financial_analysis: true,
           include_risk_assessment: true,
           include_compliance_check: true,
-          include_recommendations: true
-        }
-      })
-      
+          include_recommendations: true,
+        },
+      });
+
       addNotification({
-        type: 'info',
-        title: 'Analysis started',
-        message: 'Your contract is being analyzed. This may take a few minutes.'
-      })
+        type: "info",
+        title: "Analysis started",
+        message:
+          "Your contract is being analyzed. This may take a few minutes.",
+      });
     } catch (error) {
-      console.error('Failed to start analysis:', error)
+      console.error("Failed to start analysis:", error);
     }
-  }
+  };
 
   // Handle report download
   const handleDownloadReport = async () => {
-    if (!currentAnalysis) return
-    
+    if (!currentAnalysis) return;
+
     try {
       // Implementation would call API to generate and download report
       addNotification({
-        type: 'info',
-        title: 'Generating report',
-        message: 'Your analysis report is being prepared for download.'
-      })
+        type: "info",
+        title: "Generating report",
+        message: "Your analysis report is being prepared for download.",
+      });
     } catch (error) {
       addNotification({
-        type: 'error',
-        title: 'Download failed',
-        message: 'Unable to generate report. Please try again.'
-      })
+        type: "error",
+        title: "Download failed",
+        message: "Unable to generate report. Please try again.",
+      });
     }
-  }
+  };
 
   // Tab configuration
   const tabs = [
-    { key: 'overview', label: 'Overview', count: null },
-    { 
-      key: 'risks', 
-      label: 'Risk Assessment', 
-      count: currentAnalysis?.risk_assessment?.risk_factors?.length || 0 
+    { key: "overview", label: "Overview", count: null },
+    {
+      key: "risks",
+      label: "Risk Assessment",
+      count: currentAnalysis?.risk_assessment?.risk_factors?.length || 0,
     },
-    { 
-      key: 'compliance', 
-      label: 'Compliance Check', 
-      count: currentAnalysis?.compliance_check?.compliance_issues?.length || 0 
-    }
-  ] as const
+    {
+      key: "compliance",
+      label: "Compliance Check",
+      count: currentAnalysis?.compliance_check?.compliance_issues?.length || 0,
+    },
+  ] as const;
 
   return (
     <div className="max-w-7xl mx-auto space-y-8">
@@ -93,10 +96,9 @@ const AnalysisPage: React.FC = () => {
             Contract Analysis
           </h1>
           <p className="text-neutral-600 mt-1">
-            {currentDocument 
+            {currentDocument
               ? `Analyzing: ${currentDocument.filename}`
-              : 'Upload a contract document to get started'
-            }
+              : "Upload a contract document to get started"}
           </p>
         </div>
 
@@ -106,11 +108,13 @@ const AnalysisPage: React.FC = () => {
               <Button
                 variant="outline"
                 leftIcon={<Share className="w-4 h-4" />}
-                onClick={() => addNotification({
-                  type: 'info',
-                  title: 'Share feature',
-                  message: 'Share functionality coming soon!'
-                })}
+                onClick={() =>
+                  addNotification({
+                    type: "info",
+                    title: "Share feature",
+                    message: "Share functionality coming soon!",
+                  })
+                }
               >
                 Share
               </Button>
@@ -123,7 +127,7 @@ const AnalysisPage: React.FC = () => {
               </Button>
             </>
           )}
-          
+
           {(currentDocument || currentAnalysis) && (
             <Button
               variant="ghost"
@@ -151,7 +155,7 @@ const AnalysisPage: React.FC = () => {
           {/* Left Column - Progress & Navigation */}
           <div className="space-y-6">
             <AnalysisProgress />
-            
+
             {/* Navigation Tabs (Mobile) */}
             {currentAnalysis && (
               <Card className="lg:hidden">
@@ -162,10 +166,10 @@ const AnalysisPage: React.FC = () => {
                         key={tab.key}
                         onClick={() => setActiveTab(tab.key)}
                         className={cn(
-                          'flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors',
+                          "flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors",
                           activeTab === tab.key
-                            ? 'bg-primary-100 text-primary-700'
-                            : 'text-neutral-600 hover:text-neutral-900'
+                            ? "bg-primary-100 text-primary-700"
+                            : "text-neutral-600 hover:text-neutral-900"
                         )}
                       >
                         {tab.label}
@@ -195,10 +199,10 @@ const AnalysisPage: React.FC = () => {
                           key={tab.key}
                           onClick={() => setActiveTab(tab.key)}
                           className={cn(
-                            'whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors',
+                            "whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors",
                             activeTab === tab.key
-                              ? 'border-primary-500 text-primary-600'
-                              : 'border-transparent text-neutral-500 hover:text-neutral-700 hover:border-neutral-300'
+                              ? "border-primary-500 text-primary-600"
+                              : "border-transparent text-neutral-500 hover:text-neutral-700 hover:border-neutral-300"
                           )}
                         >
                           {tab.label}
@@ -220,7 +224,7 @@ const AnalysisPage: React.FC = () => {
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ duration: 0.3 }}
                 >
-                  {activeTab === 'overview' && (
+                  {activeTab === "overview" && (
                     <div className="space-y-6">
                       {/* Executive Summary */}
                       <Card>
@@ -231,31 +235,55 @@ const AnalysisPage: React.FC = () => {
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                             <div className="text-center">
                               <div className="text-2xl font-bold text-primary-600">
-                                {currentAnalysis.executive_summary.overall_risk_score.toFixed(1)}
+                                {currentAnalysis.executive_summary.overall_risk_score.toFixed(
+                                  1
+                                )}
                               </div>
-                              <div className="text-sm text-neutral-500">Risk Score</div>
+                              <div className="text-sm text-neutral-500">
+                                Risk Score
+                              </div>
                             </div>
                             <div className="text-center">
-                              <div className={cn(
-                                "text-2xl font-bold",
-                                currentAnalysis.executive_summary.compliance_status === 'compliant'
-                                  ? 'text-success-600' : 'text-danger-600'
-                              )}>
-                                {currentAnalysis.executive_summary.compliance_status === 'compliant' ? '✓' : '✗'}
+                              <div
+                                className={cn(
+                                  "text-2xl font-bold",
+                                  currentAnalysis.executive_summary
+                                    .compliance_status === "compliant"
+                                    ? "text-success-600"
+                                    : "text-danger-600"
+                                )}
+                              >
+                                {currentAnalysis.executive_summary
+                                  .compliance_status === "compliant"
+                                  ? "✓"
+                                  : "✗"}
                               </div>
-                              <div className="text-sm text-neutral-500">Compliance</div>
+                              <div className="text-sm text-neutral-500">
+                                Compliance
+                              </div>
                             </div>
                             <div className="text-center">
                               <div className="text-2xl font-bold text-warning-600">
-                                {currentAnalysis.executive_summary.total_recommendations}
+                                {
+                                  currentAnalysis.executive_summary
+                                    .total_recommendations
+                                }
                               </div>
-                              <div className="text-sm text-neutral-500">Recommendations</div>
+                              <div className="text-sm text-neutral-500">
+                                Recommendations
+                              </div>
                             </div>
                             <div className="text-center">
                               <div className="text-2xl font-bold text-neutral-600">
-                                {Math.round(currentAnalysis.executive_summary.confidence_level * 100)}%
+                                {Math.round(
+                                  currentAnalysis.executive_summary
+                                    .confidence_level * 100
+                                )}
+                                %
                               </div>
-                              <div className="text-sm text-neutral-500">Confidence</div>
+                              <div className="text-sm text-neutral-500">
+                                Confidence
+                              </div>
                             </div>
                           </div>
                         </CardContent>
@@ -269,22 +297,35 @@ const AnalysisPage: React.FC = () => {
                           </CardHeader>
                           <CardContent>
                             <div className="space-y-4">
-                              {currentAnalysis.recommendations.slice(0, 3).map((rec, index) => (
-                                <div key={index} className="flex items-start gap-3 p-3 bg-neutral-50 rounded-lg">
-                                  <div className={cn(
-                                    'w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold',
-                                    rec.priority === 'critical' ? 'bg-danger-100 text-danger-700' :
-                                    rec.priority === 'high' ? 'bg-warning-100 text-warning-700' :
-                                    'bg-primary-100 text-primary-700'
-                                  )}>
-                                    {index + 1}
+                              {currentAnalysis.recommendations
+                                .slice(0, 3)
+                                .map((rec, index) => (
+                                  <div
+                                    key={index}
+                                    className="flex items-start gap-3 p-3 bg-neutral-50 rounded-lg"
+                                  >
+                                    <div
+                                      className={cn(
+                                        "w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold",
+                                        rec.priority === "critical"
+                                          ? "bg-danger-100 text-danger-700"
+                                          : rec.priority === "high"
+                                          ? "bg-warning-100 text-warning-700"
+                                          : "bg-primary-100 text-primary-700"
+                                      )}
+                                    >
+                                      {index + 1}
+                                    </div>
+                                    <div className="flex-1">
+                                      <p className="font-medium text-neutral-900">
+                                        {rec.recommendation}
+                                      </p>
+                                      <p className="text-sm text-neutral-600 mt-1">
+                                        {rec.australian_context}
+                                      </p>
+                                    </div>
                                   </div>
-                                  <div className="flex-1">
-                                    <p className="font-medium text-neutral-900">{rec.recommendation}</p>
-                                    <p className="text-sm text-neutral-600 mt-1">{rec.australian_context}</p>
-                                  </div>
-                                </div>
-                              ))}
+                                ))}
                             </div>
                           </CardContent>
                         </Card>
@@ -292,11 +333,11 @@ const AnalysisPage: React.FC = () => {
                     </div>
                   )}
 
-                  {activeTab === 'risks' && (
+                  {activeTab === "risks" && (
                     <RiskAssessment analysis={currentAnalysis} />
                   )}
 
-                  {activeTab === 'compliance' && (
+                  {activeTab === "compliance" && (
                     <ComplianceCheck analysis={currentAnalysis} />
                   )}
                 </motion.div>
@@ -309,7 +350,8 @@ const AnalysisPage: React.FC = () => {
                     Analysis in Progress
                   </h3>
                   <p className="text-neutral-500">
-                    Please wait while we analyze your contract. This typically takes 2-3 minutes.
+                    Please wait while we analyze your contract. This typically
+                    takes 2-3 minutes.
                   </p>
                 </CardContent>
               </Card>
@@ -321,7 +363,8 @@ const AnalysisPage: React.FC = () => {
                     Ready for Analysis
                   </h3>
                   <p className="text-neutral-500">
-                    Your document has been uploaded successfully. Analysis will begin shortly.
+                    Your document has been uploaded successfully. Analysis will
+                    begin shortly.
                   </p>
                 </CardContent>
               </Card>
@@ -330,7 +373,7 @@ const AnalysisPage: React.FC = () => {
         </div>
       )}
     </div>
-  )
-}
+  );
+};
 
-export default AnalysisPage
+export default AnalysisPage;

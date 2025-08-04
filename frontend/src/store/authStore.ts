@@ -15,7 +15,9 @@ interface AuthState {
   logout: () => void
   clearError: () => void
   updateUser: (user: Partial<User>) => void
+  updateProfile: (userData: Partial<User>) => Promise<void>
   refreshUser: () => Promise<void>
+  initializeAuth: () => void
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -89,6 +91,16 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
+      updateProfile: async (userData: Partial<User>) => {
+        try {
+          const updatedUser = await apiService.updateProfile(userData)
+          set({ user: updatedUser })
+        } catch (error: any) {
+          console.error('Failed to update profile:', error)
+          throw error
+        }
+      },
+
       refreshUser: async () => {
         if (!get().isAuthenticated) return
         
@@ -99,6 +111,20 @@ export const useAuthStore = create<AuthState>()(
           console.error('Failed to refresh user:', error)
           // Don't set error for background refresh failures
         }
+      },
+
+      initializeAuth: () => {
+        set({ isLoading: true })
+        
+        // Check if user is already authenticated
+        const { user, isAuthenticated } = get()
+        
+        if (isAuthenticated && user) {
+          // Refresh user data in background
+          get().refreshUser()
+        }
+        
+        set({ isLoading: false })
       }
     }),
     {

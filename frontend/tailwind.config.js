@@ -1,4 +1,5 @@
-/** @type {import('tailwindcss').Config} */
+import { Config } from 'tailwindcss'
+
 export default {
   content: [
     "./index.html",
@@ -133,9 +134,4 @@ export default {
       }
     },
   },
-  plugins: [
-    require('@tailwindcss/forms'),
-    require('@tailwindcss/typography'),
-    require('@tailwindcss/aspect-ratio'),
-  ],
-}
+} satisfies Config

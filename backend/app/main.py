@@ -122,7 +122,7 @@ async def register_user(user_data: UserRegistrationRequest):
     """Register a new user"""
     try:
         # Create user in Supabase
-        user_result = await db_client.auth.sign_up(
+        user_result = db_client.auth.sign_up(
             {
                 "email": user_data.email,
                 "password": user_data.password,
@@ -146,7 +146,7 @@ async def register_user(user_data: UserRegistrationRequest):
                 "credits_remaining": 1,  # First contract free
             }
 
-            await db_client.table("profiles").insert(profile_data).execute()
+            db_client.table("profiles").insert(profile_data).execute()
 
             return {
                 "user_id": user_result.user.id,
@@ -165,14 +165,14 @@ async def register_user(user_data: UserRegistrationRequest):
 async def login_user(login_data: UserLoginRequest):
     """Authenticate user"""
     try:
-        auth_result = await db_client.auth.sign_in_with_password(
+        auth_result = db_client.auth.sign_in_with_password(
             {"email": login_data.email, "password": login_data.password}
         )
 
         if auth_result.user and auth_result.session:
             # Get user profile
             profile_result = (
-                await db_client.table("profiles")
+                db_client.table("profiles")
                 .select("*")
                 .eq("id", auth_result.user.id)
                 .execute()
@@ -235,7 +235,7 @@ async def upload_document(
             "status": "uploaded",
         }
 
-        await db_client.table("documents").insert(document_data).execute()
+        db_client.table("documents").insert(document_data).execute()
 
         # Start background processing
         background_tasks.add_task(
@@ -265,7 +265,7 @@ async def get_document(document_id: str, user: User = Depends(get_current_user))
 
     try:
         result = (
-            await db_client.table("documents")
+            db_client.table("documents")
             .select("*")
             .eq("id", document_id)
             .eq("user_id", user.id)
@@ -303,7 +303,7 @@ async def start_contract_analysis(
 
         # Get document
         doc_result = (
-            await db_client.table("documents")
+            db_client.table("documents")
             .select("*")
             .eq("id", request.document_id)
             .eq("user_id", user.id)
@@ -324,7 +324,7 @@ async def start_contract_analysis(
         }
 
         contract_result = (
-            await db_client.table("contracts").insert(contract_data).execute()
+            db_client.table("contracts").insert(contract_data).execute()
         )
         contract_id = contract_result.data[0]["id"]
 
@@ -336,7 +336,7 @@ async def start_contract_analysis(
         }
 
         analysis_result = (
-            await db_client.table("contract_analyses").insert(analysis_data).execute()
+            db_client.table("contract_analyses").insert(analysis_data).execute()
         )
         analysis_id = analysis_result.data[0]["id"]
 
@@ -371,7 +371,7 @@ async def get_contract_analysis(
     try:
         # Get analysis results
         result = (
-            await db_client.table("contract_analyses")
+            db_client.table("contract_analyses")
             .select("*")
             .eq("contract_id", contract_id)
             .execute()
@@ -384,7 +384,7 @@ async def get_contract_analysis(
 
         # Verify user owns this contract
         contract_result = (
-            await db_client.table("contracts")
+            db_client.table("contracts")
             .select("*")
             .eq("id", contract_id)
             .execute()
@@ -394,7 +394,7 @@ async def get_contract_analysis(
 
         contract = contract_result.data[0]
         doc_result = (
-            await db_client.table("documents")
+            db_client.table("documents")
             .select("*")
             .eq("id", contract["document_id"])
             .eq("user_id", user.id)
@@ -459,7 +459,7 @@ async def update_user_preferences(
     """Update user preferences"""
 
     try:
-        await db_client.table("profiles").update({"preferences": preferences}).eq(
+        db_client.table("profiles").update({"preferences": preferences}).eq(
             "id", user.id
         ).execute()
         return {"message": "Preferences updated successfully"}
@@ -476,7 +476,7 @@ async def get_usage_stats(user: User = Depends(get_current_user)):
     try:
         # Get usage logs
         usage_result = (
-            await db_client.table("usage_logs")
+            db_client.table("usage_logs")
             .select("*")
             .eq("user_id", user.id)
             .order("timestamp", desc=True)
@@ -486,7 +486,7 @@ async def get_usage_stats(user: User = Depends(get_current_user)):
 
         # Get contract count
         contracts_result = (
-            await db_client.from_("documents")
+            db_client.from_("documents")
             .select("count", count="exact")
             .eq("user_id", user.id)
             .execute()
@@ -533,13 +533,13 @@ async def process_document_background(
 
     try:
         # Update document status
-        await db_client.table("documents").update({"status": "processing"}).eq(
+        db_client.table("documents").update({"status": "processing"}).eq(
             "id", document_id
         ).execute()
 
         # Get document metadata
         doc_result = (
-            await db_client.table("documents")
+            db_client.table("documents")
             .select("*")
             .eq("id", document_id)
             .execute()
@@ -555,7 +555,7 @@ async def process_document_background(
         )
 
         # Update document with extraction results
-        await db_client.table("documents").update(
+        db_client.table("documents").update(
             {"status": "processed", "processing_results": extraction_result}
         ).eq("id", document_id).execute()
 
@@ -579,7 +579,7 @@ async def process_document_background(
 
     except Exception as e:
         logger.error(f"Document processing failed for {document_id}: {str(e)}")
-        await db_client.table("documents").update(
+        db_client.table("documents").update(
             {"status": "failed", "processing_results": {"error": str(e)}}
         ).eq("id", document_id).execute()
 
@@ -604,7 +604,7 @@ async def analyze_contract_background(
 
     try:
         # Update analysis status
-        await db_client.table("contract_analyses").update({"status": "processing"}).eq(
+        db_client.table("contract_analyses").update({"status": "processing"}).eq(
             "id", analysis_id
         ).execute()
 
@@ -645,7 +645,7 @@ async def analyze_contract_background(
 
         # Get user profile for context
         user_result = (
-            await db_client.table("profiles").select("*").eq("id", user_id).execute()
+            db_client.table("profiles").select("*").eq("id", user_id).execute()
         )
         user_profile = user_result.data[0] if user_result.data else {}
 
@@ -685,7 +685,7 @@ async def analyze_contract_background(
         # Update analysis results
         analysis_result = final_state.get("analysis_results", {})
 
-        await db_client.table("contract_analyses").update(
+        db_client.table("contract_analyses").update(
             {
                 "status": "completed",
                 "analysis_result": analysis_result,
@@ -699,12 +699,12 @@ async def analyze_contract_background(
         # Deduct user credit
         if user_profile.get("subscription_status") == "free":
             new_credits = max(0, user_profile.get("credits_remaining", 0) - 1)
-            await db_client.table("profiles").update(
+            db_client.table("profiles").update(
                 {"credits_remaining": new_credits}
             ).eq("id", user_id).execute()
 
         # Log usage
-        await db_client.table("usage_logs").insert(
+        db_client.table("usage_logs").insert(
             {
                 "user_id": user_id,
                 "action_type": "contract_analysis",
@@ -748,7 +748,7 @@ async def analyze_contract_background(
         logger.error(f"Contract analysis failed for {analysis_id}: {str(e)}")
 
         # Update analysis status to failed
-        await db_client.table("contract_analyses").update({"status": "failed"}).eq(
+        db_client.table("contract_analyses").update({"status": "failed"}).eq(
             "id", analysis_id
         ).execute()
 

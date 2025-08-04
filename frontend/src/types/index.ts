@@ -13,6 +13,9 @@ export type SubscriptionStatus = 'free' | 'basic' | 'premium' | 'enterprise'
 export interface User {
   id: string
   email: string
+  full_name?: string
+  phone_number?: string
+  organization?: string
   australian_state: AustralianState
   user_type: UserType
   subscription_status: SubscriptionStatus
@@ -141,6 +144,7 @@ export interface ContractAnalysisResult {
   analysis_timestamp: string
   user_id: string
   australian_state: AustralianState
+  analysis_status: 'pending' | 'processing' | 'completed' | 'failed'
   contract_terms: Record<string, any>
   risk_assessment: {
     overall_risk_score: number
@@ -160,6 +164,9 @@ export interface ContractAnalysisResult {
     confidence_level: number
   }
 }
+
+// Alias for backward compatibility
+export type ContractAnalysis = ContractAnalysisResult
 
 // WebSocket Types
 export interface WebSocketMessage {

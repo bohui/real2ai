@@ -1,28 +1,27 @@
-import React from 'react'
-import { Link } from 'react-router-dom'
-import { 
-  Menu, 
-  Bell, 
-  Search, 
-  Settings, 
+import React from "react";
+import { Link } from "react-router-dom";
+import {
+  Menu,
+  Bell,
+  Search,
+  Settings,
   LogOut,
   User,
   CreditCard,
-  HelpCircle
-} from 'lucide-react'
-import { Menu as HeadlessMenu } from '@headlessui/react'
-import { motion } from 'framer-motion'
+  HelpCircle,
+} from "lucide-react";
+import { Menu as HeadlessMenu } from "@headlessui/react";
 
-import Button from '@/components/ui/Button'
-import { useAuthStore } from '@/store/authStore'
-import { useUIStore } from '@/store/uiStore'
-import { cn } from '@/utils'
+import Button from "@/components/ui/Button";
+import { useAuthStore } from "@/store/authStore";
+import { useUIStore } from "@/store/uiStore";
+import { cn } from "@/utils";
 
 const Header: React.FC = () => {
-  const { user, logout } = useAuthStore()
-  const { toggleSidebar, notifications } = useUIStore()
+  const { user, logout } = useAuthStore();
+  const { toggleSidebar, notifications } = useUIStore();
 
-  const unreadCount = notifications.filter(n => n.type === 'info').length
+  const unreadCount = notifications.filter((n) => n.type === "info").length;
 
   return (
     <header className="bg-white shadow-sm border-b border-neutral-200">
@@ -69,7 +68,7 @@ const Header: React.FC = () => {
                 <Bell className="w-5 h-5" />
                 {unreadCount > 0 && (
                   <span className="absolute -top-1 -right-1 w-4 h-4 bg-danger-500 text-white text-xs rounded-full flex items-center justify-center">
-                    {unreadCount > 9 ? '9+' : unreadCount}
+                    {unreadCount > 9 ? "9+" : unreadCount}
                   </span>
                 )}
               </Button>
@@ -88,7 +87,7 @@ const Header: React.FC = () => {
                 </div>
                 <div className="hidden md:block text-left">
                   <div className="text-sm font-medium text-neutral-900">
-                    {user?.email.split('@')[0]}
+                    {user?.email.split("@")[0]}
                   </div>
                   <div className="text-xs text-neutral-500 capitalize">
                     {user?.user_type}
@@ -112,8 +111,10 @@ const Header: React.FC = () => {
                       <Link
                         to="/app/settings"
                         className={cn(
-                          'flex items-center gap-3 px-3 py-2 text-sm',
-                          active ? 'bg-neutral-50 text-neutral-900' : 'text-neutral-700'
+                          "flex items-center gap-3 px-3 py-2 text-sm",
+                          active
+                            ? "bg-neutral-50 text-neutral-900"
+                            : "text-neutral-700"
                         )}
                       >
                         <User className="w-4 h-4" />
@@ -127,8 +128,10 @@ const Header: React.FC = () => {
                       <Link
                         to="/app/billing"
                         className={cn(
-                          'flex items-center gap-3 px-3 py-2 text-sm',
-                          active ? 'bg-neutral-50 text-neutral-900' : 'text-neutral-700'
+                          "flex items-center gap-3 px-3 py-2 text-sm",
+                          active
+                            ? "bg-neutral-50 text-neutral-900"
+                            : "text-neutral-700"
                         )}
                       >
                         <CreditCard className="w-4 h-4" />
@@ -142,8 +145,10 @@ const Header: React.FC = () => {
                       <Link
                         to="/app/settings"
                         className={cn(
-                          'flex items-center gap-3 px-3 py-2 text-sm',
-                          active ? 'bg-neutral-50 text-neutral-900' : 'text-neutral-700'
+                          "flex items-center gap-3 px-3 py-2 text-sm",
+                          active
+                            ? "bg-neutral-50 text-neutral-900"
+                            : "text-neutral-700"
                         )}
                       >
                         <Settings className="w-4 h-4" />
@@ -159,8 +164,10 @@ const Header: React.FC = () => {
                       <button
                         onClick={logout}
                         className={cn(
-                          'w-full flex items-center gap-3 px-3 py-2 text-sm',
-                          active ? 'bg-neutral-50 text-danger-600' : 'text-danger-600'
+                          "w-full flex items-center gap-3 px-3 py-2 text-sm",
+                          active
+                            ? "bg-neutral-50 text-danger-600"
+                            : "text-danger-600"
                         )}
                       >
                         <LogOut className="w-4 h-4" />
@@ -175,7 +182,7 @@ const Header: React.FC = () => {
         </div>
       </div>
     </header>
-  )
-}
+  );
+};
 
-export default Header
+export default Header;

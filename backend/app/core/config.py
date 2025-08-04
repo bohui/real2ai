@@ -37,11 +37,6 @@ class Settings(BaseSettings):
     # Redis Cache
     redis_url: str = "redis://localhost:6379"
 
-    # Security
-    jwt_secret_key: str
-    jwt_algorithm: str = "HS256"
-    jwt_expiration_hours: int = 24
-
     # File Storage
     max_file_size: int = 52428800  # 50MB
     allowed_file_types: str = "pdf,doc,docx"
@@ -63,8 +58,9 @@ class Settings(BaseSettings):
         return self.allowed_file_types
 
     class Config:
-        env_file = ".env"
+        env_file = [".env", ".env.local", "env.local"]
         case_sensitive = False
+        extra = "ignore"  # Ignore extra fields like old JWT settings
 
 
 _settings: Optional[Settings] = None
