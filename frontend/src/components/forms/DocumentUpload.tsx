@@ -18,7 +18,7 @@ import Button from '@/components/ui/Button'
 import Select from '@/components/ui/Select'
 import Input from '@/components/ui/Input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
-import { useAnalysisStore } from '@/store/analysisStore'
+import { apiService } from '@/services/api'
 import { useAuthStore } from '@/store/authStore'
 import { useUIStore } from '@/store/uiStore'
 import { ContractType, AustralianState } from '@/types'
@@ -39,22 +39,26 @@ const uploadSchema = z.object({
 type UploadFormData = z.infer<typeof uploadSchema>
 
 interface DocumentUploadProps {
-  onUploadComplete?: (documentId: string) => void
+  onUploadComplete?: (response: any) => void
+  onUploadError?: (error: Error) => void
   maxFiles?: number
   className?: string
 }
 
 const ALLOWED_FILE_TYPES = ['pdf', 'doc', 'docx']
-const MAX_FILE_SIZE_MB = 50
+const MAX_FILE_SIZE_MB = 10
 
 const DocumentUpload: React.FC<DocumentUploadProps> = ({
   onUploadComplete,
+  onUploadError,
   maxFiles = 1,
   className
 }) => {
   const { user } = useAuthStore()
-  const { uploadDocument, isUploading, uploadProgress } = useAnalysisStore()
   const { addNotification } = useUIStore()
+  
+  const [isUploading, setIsUploading] = React.useState(false)
+  const [uploadProgress, setUploadProgress] = React.useState(0)
   
   const [selectedFiles, setSelectedFiles] = React.useState<File[]>([])
   const [uploadedFiles, setUploadedFiles] = React.useState<Array<{
@@ -63,6 +67,7 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({
     status: 'uploading' | 'completed' | 'error'
     error?: string
   }>>([])
+  const [uploadSuccess, setUploadSuccess] = React.useState(false)
 
   const {
     control,
@@ -96,8 +101,12 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({
         addNotification({
           type: 'error',
           title: 'File rejected',
-          message: `${file.name}: ${errorMessages}`
+          message: errorMessages.includes('file-too-large') ? 'File size too large' : errorMessages.includes('file-invalid-type') ? 'File type not supported' : `${file.name}: ${errorMessages}`
         })
+        
+        if (onUploadError) {
+          onUploadError(new Error(errorMessages))
+        }
       })
     }
 
@@ -123,6 +132,12 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({
   const removeFile = (index: number) => {
     setSelectedFiles(prev => prev.filter((_, i) => i !== index))
   }
+  
+  const resetUpload = () => {
+    setSelectedFiles([])
+    setUploadedFiles([])
+    setUploadSuccess(false)
+  }
 
   const onSubmit = async (data: UploadFormData) => {
     if (selectedFiles.length === 0) {
@@ -135,6 +150,9 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({
     }
 
     try {
+      setIsUploading(true)
+      setUploadProgress(0)
+      
       for (const file of selectedFiles) {
         setUploadedFiles(prev => [
           ...prev,
@@ -142,11 +160,13 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({
         ])
 
         try {
-          const documentId = await uploadDocument(
+          const response = await apiService.uploadDocument(
             file, 
             data.contract_type, 
             data.australian_state
           )
+          
+          const documentId = response.document_id
 
           setUploadedFiles(prev => 
             prev.map(item => 
@@ -156,8 +176,14 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({
             )
           )
 
+          const response = {
+            document_id: documentId,
+            filename: file.name,
+            upload_status: 'uploaded'
+          }
+          
           if (onUploadComplete) {
-            onUploadComplete(documentId)
+            onUploadComplete(response)
           }
 
           addNotification({
@@ -165,6 +191,8 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({
             title: 'Upload successful',
             message: `${file.name} has been uploaded and is ready for analysis.`
           })
+          
+          setUploadSuccess(true)
 
         } catch (error) {
           setUploadedFiles(prev => 
@@ -174,6 +202,10 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({
                 : item
             )
           )
+          
+          if (onUploadError) {
+            onUploadError(error as Error)
+          }
         }
       }
 
@@ -438,8 +470,30 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({
           </CardContent>
         </Card>
       )}
+      
+      {/* Upload Success State */}
+      {uploadSuccess && (
+        <Card>
+          <CardContent className="text-center py-8">
+            <CheckCircle className="w-12 h-12 text-success-600 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-neutral-900 mb-2">
+              Upload Successful
+            </h3>
+            <p className="text-neutral-600 mb-4">
+              Your contract has been uploaded and is ready for analysis.
+            </p>
+            <Button
+              variant="outline"
+              onClick={resetUpload}
+            >
+              Upload Another
+            </Button>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }
 
-export default DocumentUpload
+export { DocumentUpload };
+export default DocumentUpload;

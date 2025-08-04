@@ -22,7 +22,7 @@ const loginSchema = z.object({
   email: z
     .string()
     .min(1, "Email is required")
-    .email("Please enter a valid email address"),
+    .email("Invalid email address"),
   password: z
     .string()
     .min(1, "Password is required")
@@ -113,7 +113,7 @@ const LoginForm: React.FC<LoginFormProps> = ({
             </motion.div>
           )}
 
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+          <form onSubmit={handleSubmit(onSubmit)} role="form" aria-label="Sign in" className="space-y-6">
             <Input
               label="Email address"
               type="email"
@@ -141,12 +141,13 @@ const LoginForm: React.FC<LoginFormProps> = ({
               <label className="flex items-center gap-2">
                 <input
                   type="checkbox"
+                  aria-label="Remember me"
                   className="rounded border-neutral-300 text-primary-600 focus:ring-primary-500"
                 />
                 <span className="text-sm text-neutral-600">Remember me</span>
               </label>
               <Link
-                to="/forgot-password"
+                to="/auth/forgot-password"
                 className="text-sm text-primary-600 hover:text-primary-700 font-medium"
               >
                 Forgot password?
@@ -169,10 +170,10 @@ const LoginForm: React.FC<LoginFormProps> = ({
             <p className="text-sm text-neutral-600">
               Don't have an account?{" "}
               <Link
-                to="/register"
+                to="/auth/register"
                 className="font-medium text-primary-600 hover:text-primary-700"
               >
-                Sign up for free
+                Sign up
               </Link>
             </p>
           </div>
@@ -220,4 +221,5 @@ const LoginForm: React.FC<LoginFormProps> = ({
   );
 };
 
+export { LoginForm };
 export default LoginForm;

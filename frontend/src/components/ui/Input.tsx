@@ -10,6 +10,7 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   rightIcon?: React.ReactNode
   showPasswordToggle?: boolean
   containerClassName?: string
+  size?: 'sm' | 'md' | 'lg'
 }
 
 const Input = React.forwardRef<HTMLInputElement, InputProps>(
@@ -24,7 +25,10 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
       rightIcon,
       showPasswordToggle = false,
       type = 'text',
+      size = 'md',
       id,
+      required,
+      disabled,
       ...props
     },
     ref
@@ -43,17 +47,24 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
       }
     }, [type, showPassword, showPasswordToggle])
 
+    const sizeClasses = {
+      sm: 'h-8 px-3 py-1.5 text-sm',
+      md: 'h-10 px-3 py-2.5 text-sm',
+      lg: 'h-12 px-4 py-3 text-base'
+    }
+
     const baseClasses = [
-      'block w-full rounded-lg border-0 py-2.5 px-3',
+      'block w-full rounded-lg border-0',
+      sizeClasses[size],
       'text-neutral-900 shadow-sm ring-1 ring-inset',
       'placeholder:text-neutral-400',
       'focus:ring-2 focus:ring-inset',
       'transition-all duration-200',
-      'disabled:cursor-not-allowed disabled:bg-neutral-50 disabled:text-neutral-500'
-    ].join(' ')
+      disabled && 'cursor-not-allowed opacity-50 bg-neutral-50 text-neutral-500'
+    ].filter(Boolean).join(' ')
 
     const stateClasses = hasError
-      ? 'ring-danger-300 focus:ring-danger-500'
+      ? 'ring-red-300 focus:ring-red-500 border-red-500'
       : 'ring-neutral-300 focus:ring-primary-500'
 
     const paddingClasses = cn(
@@ -68,7 +79,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
             htmlFor={inputId}
             className="block text-sm font-medium text-neutral-700"
           >
-            {label}
+            {label}{required && ' *'}
           </label>
         )}
         
@@ -91,6 +102,8 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
               className
             )}
             ref={ref}
+            required={required}
+            disabled={disabled}
             aria-invalid={hasError}
             aria-describedby={
               error ? `${inputId}-error` : 
@@ -126,18 +139,18 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
         {error && (
           <div 
             id={`${inputId}-error`}
-            className="flex items-center gap-1.5 text-sm text-danger-600"
+            className="flex items-center gap-1.5 text-sm"
             role="alert"
           >
-            <AlertCircle className="w-4 h-4" aria-hidden="true" />
-            <span>{error}</span>
+            <AlertCircle className="w-4 h-4 text-red-600" aria-hidden="true" />
+            <span className="text-red-600">{error}</span>
           </div>
         )}
         
         {helpText && !error && (
           <p 
             id={`${inputId}-help`}
-            className="text-sm text-neutral-500"
+            className="text-sm text-neutral-600"
           >
             {helpText}
           </p>
@@ -149,4 +162,6 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
 
 Input.displayName = 'Input'
 
+// Export both named and default for compatibility
+export { Input }
 export default Input

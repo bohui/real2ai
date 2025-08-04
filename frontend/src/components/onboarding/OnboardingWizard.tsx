@@ -448,4 +448,5 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete, onSkip 
   )
 }
 
-export default OnboardingWizard
+export { OnboardingWizard };
+export default OnboardingWizard;

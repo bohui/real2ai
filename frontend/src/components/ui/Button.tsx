@@ -3,7 +3,7 @@ import { cn } from '@/utils'
 import { Loader2 } from 'lucide-react'
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger' | 'success' | 'warning' | 'premium'
+  variant?: 'primary' | 'secondary' | 'destructive' | 'outline' | 'ghost' | 'success' | 'warning' | 'premium'
   size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl'
   loading?: boolean
   loadingText?: string
@@ -13,6 +13,7 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   elevated?: boolean
   rounded?: boolean
   gradient?: boolean
+  as?: React.ElementType
 }
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
@@ -31,6 +32,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       gradient = false,
       disabled,
       children,
+      as: Component = 'button',
       ...props
     },
     ref
@@ -53,11 +55,16 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         'active:from-primary-800 active:to-primary-900'
       ].join(' '),
       secondary: [
-        gradient ? 'bg-gradient-to-r from-secondary-500 to-secondary-600' : 'bg-secondary-500',
-        'text-white shadow-soft',
-        'hover:from-secondary-600 hover:to-secondary-700 hover:shadow-warning',
-        'focus:ring-secondary-500/50',
-        'active:from-secondary-700 active:to-secondary-800'
+        'bg-neutral-200 text-neutral-900',
+        'hover:bg-neutral-300',
+        'focus:ring-neutral-500/50',
+        'active:bg-neutral-400'
+      ].join(' '),
+      destructive: [
+        'bg-red-600 text-white',
+        'hover:bg-red-700',
+        'focus:ring-red-500/50',
+        'active:bg-red-800'
       ].join(' '),
       success: [
         gradient ? 'bg-gradient-to-r from-success-500 to-success-600' : 'bg-success-500',
@@ -73,13 +80,6 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         'focus:ring-warning-500/50',
         'active:from-warning-700 active:to-warning-800'
       ].join(' '),
-      danger: [
-        gradient ? 'bg-gradient-to-r from-danger-500 to-danger-600' : 'bg-danger-500',
-        'text-white shadow-soft',
-        'hover:from-danger-600 hover:to-danger-700 hover:shadow-danger',
-        'focus:ring-danger-500/50',
-        'active:from-danger-700 active:to-danger-800'
-      ].join(' '),
       premium: [
         'bg-gradient-to-r from-accent-500 via-primary-600 to-accent-500',
         'text-white shadow-large',
@@ -88,7 +88,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         'active:from-accent-700 active:via-primary-800 active:to-accent-700'
       ].join(' '),
       outline: [
-        'border-2 border-neutral-300 bg-white text-neutral-700 shadow-soft',
+        'border border-neutral-300 bg-white text-neutral-700 shadow-soft',
         'hover:border-primary-400 hover:bg-primary-50 hover:text-primary-700',
         'focus:ring-primary-500/50 focus:border-primary-500',
         'active:bg-primary-100 active:border-primary-600'
@@ -102,17 +102,17 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     }
 
     const sizeClasses = {
-      xs: `px-2.5 py-1.5 text-xs gap-1 ${rounded ? 'rounded-full' : 'rounded-md'}`,
-      sm: `px-3 py-2 text-sm gap-1.5 ${rounded ? 'rounded-full' : 'rounded-lg'}`,
-      md: `px-4 py-2.5 text-sm gap-2 ${rounded ? 'rounded-full' : 'rounded-lg'}`,
-      lg: `px-6 py-3 text-base gap-2.5 ${rounded ? 'rounded-full' : 'rounded-xl'}`,
-      xl: `px-8 py-4 text-lg gap-3 ${rounded ? 'rounded-full' : 'rounded-xl'}`
+      xs: `h-7 px-2.5 py-1.5 text-xs gap-1 ${rounded ? 'rounded-full' : 'rounded-md'}`,
+      sm: `h-8 px-3 py-2 text-sm gap-1.5 ${rounded ? 'rounded-full' : 'rounded-lg'}`,
+      md: `h-10 px-4 py-2.5 text-sm gap-2 ${rounded ? 'rounded-full' : 'rounded-lg'}`,
+      lg: `h-12 px-6 py-3 text-base gap-2.5 ${rounded ? 'rounded-full' : 'rounded-xl'}`,
+      xl: `h-14 px-8 py-4 text-lg gap-3 ${rounded ? 'rounded-full' : 'rounded-xl'}`
     }
 
     const isDisabled = disabled || loading
 
     return (
-      <button
+      <Component
         className={cn(
           baseClasses,
           variantClasses[variant],
@@ -123,6 +123,8 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         )}
         disabled={isDisabled}
         ref={ref}
+        aria-disabled={isDisabled}
+        onClick={loading ? undefined : props.onClick}
         {...props}
       >
         {loading && (
@@ -141,11 +143,13 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
             {rightIcon}
           </span>
         )}
-      </button>
+      </Component>
     )
   }
 )
 
 Button.displayName = 'Button'
 
+// Export both named and default for compatibility
+export { Button }
 export default Button

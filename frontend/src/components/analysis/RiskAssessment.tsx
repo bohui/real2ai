@@ -235,4 +235,5 @@ const RiskAssessment: React.FC<RiskAssessmentProps> = ({ analysis, className }) 
   )
 }
 
-export default RiskAssessment
+export { RiskAssessment };
+export default RiskAssessment;
