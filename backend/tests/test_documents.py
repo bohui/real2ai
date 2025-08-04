@@ -12,14 +12,9 @@ from io import BytesIO
 class TestDocumentUpload:
     """Test document upload functionality"""
     
-    @patch('app.services.document_service.DocumentService.upload_file')
-    def test_upload_document_success(self, mock_upload_file, client: TestClient, mock_db_client):
+    def test_upload_document_success(self, client: TestClient, mock_db_client):
         """Test successful document upload"""
-        # Mock document service response
-        mock_upload_file.return_value = {
-            "document_id": "test-doc-id",
-            "storage_path": "documents/test-user-id/test-doc-id.pdf"
-        }
+        # DocumentService.upload_file is already mocked in conftest.py
         
         # Mock database insertion
         mock_db_client.table.return_value.insert.return_value.execute.return_value = None

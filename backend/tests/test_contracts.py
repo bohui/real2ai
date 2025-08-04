@@ -50,24 +50,41 @@ class TestContractAnalysis:
         assert data["status"] == "pending"
         assert data["estimated_completion_minutes"] == 2
     
-    def test_start_contract_analysis_no_credits(self, client: TestClient, mock_user):
+    def test_start_contract_analysis_no_credits(self, client: TestClient):
         """Test contract analysis with no credits remaining"""
-        # Override mock user to have no credits
-        mock_user.credits_remaining = 0
-        mock_user.subscription_status = "free"
+        # Override the dependency to return a user with no credits
+        from app.core.auth import get_current_user, User
+        from app.main import app as fastapi_app
         
-        request_data = {
-            "document_id": "test-doc-id",
-            "analysis_options": {
-                "include_financial_analysis": True
+        def no_credits_user():
+            return User(
+                id="test-user-id",
+                email="test@real2ai.com",
+                australian_state="NSW",
+                user_type="lawyer",
+                subscription_status="free",
+                credits_remaining=0,  # No credits
+                preferences={}
+            )
+        
+        fastapi_app.dependency_overrides[get_current_user] = no_credits_user
+        
+        try:
+            request_data = {
+                "document_id": "test-doc-id",
+                "analysis_options": {
+                    "include_financial_analysis": True
+                }
             }
-        }
-        
-        response = client.post("/api/contracts/analyze", json=request_data)
-        
-        assert response.status_code == 402
-        data = response.json()
-        assert "No credits remaining" in data["detail"]
+            
+            response = client.post("/api/contracts/analyze", json=request_data)
+            
+            assert response.status_code == 402
+            data = response.json()
+            assert "No credits remaining" in data["detail"]
+        finally:
+            # Clean up - this will be overridden again by the client fixture anyway
+            pass
     
     def test_start_contract_analysis_document_not_found(self, client: TestClient, mock_db_client):
         """Test contract analysis with nonexistent document"""
@@ -160,16 +177,16 @@ class TestGetContractAnalysis:
     
     def test_get_contract_analysis_unauthorized(self, client: TestClient, mock_db_client, sample_analysis_data, sample_contract_data):
         """Test get analysis when user doesn't own contract"""
-        # Mock analysis fetch
-        mock_db_client.table.return_value.select.return_value.eq.return_value.execute.return_value = MagicMock(
-            data=[sample_analysis_data]
-        )
-        
-        # Mock contract fetch but no document ownership
+        # Mock the 3 database calls in order:
+        # 1. Get analysis (succeeds)
+        # 2. Get contract (succeeds) 
+        # 3. Get document with user filter (fails - no access)
+        mock_analysis_response = MagicMock(data=[sample_analysis_data])
         mock_contract_response = MagicMock(data=[sample_contract_data])
         mock_document_response = MagicMock(data=[])  # No document found for this user
         
         mock_db_client.table.return_value.select.return_value.eq.return_value.execute.side_effect = [
+            mock_analysis_response,
             mock_contract_response,
             mock_document_response
         ]
@@ -185,8 +202,8 @@ class TestGetContractAnalysis:
 class TestAnalysisReports:
     """Test analysis report functionality"""
     
-    @patch('app.main.get_contract_analysis')
-    @patch('app.main.generate_pdf_report')
+    @patch('app.router.contracts.get_contract_analysis')
+    @patch('app.tasks.background_tasks.generate_pdf_report')
     def test_download_analysis_report_pdf(self, mock_generate_pdf, mock_get_analysis, client: TestClient, sample_analysis_data):
         """Test PDF report download"""
         # Mock get_contract_analysis
@@ -202,7 +219,7 @@ class TestAnalysisReports:
         assert "download_url" in data
         assert "/report.pdf" in data["download_url"]
     
-    @patch('app.main.get_contract_analysis')
+    @patch('app.router.contracts.get_contract_analysis')
     def test_download_analysis_report_json(self, mock_get_analysis, client: TestClient, sample_analysis_data):
         """Test JSON report download"""
         mock_get_analysis.return_value = sample_analysis_data

@@ -65,7 +65,9 @@ def client(test_user, mock_db_client, test_settings) -> Generator[TestClient, No
     
     # Mock global db_client used in background tasks  
     import app.main
-    with patch.object(app.main, 'db_client', mock_db_client):
+    import app.tasks.background_tasks
+    with patch.object(app.main, 'db_client', mock_db_client), \
+         patch.object(app.tasks.background_tasks, 'db_client', mock_db_client):
         # Mock document service
         with patch.object(DocumentService, 'upload_file', new_callable=AsyncMock) as mock_upload:
             mock_upload.return_value = {

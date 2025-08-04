@@ -70,7 +70,7 @@ async def upload_document(
         db_client.table("documents").insert(document_data).execute()
 
         # Start background processing
-        from app.main import process_document_background
+        from app.tasks.background_tasks import process_document_background
         background_tasks.add_task(
             process_document_background,
             upload_result["document_id"],
@@ -178,7 +178,7 @@ async def reprocess_document_with_ocr(
         }
         
         # Use enhanced background processing
-        from app.main import enhanced_reprocess_document_with_ocr_background
+        from app.tasks.background_tasks import enhanced_reprocess_document_with_ocr_background
         background_tasks.add_task(
             enhanced_reprocess_document_with_ocr_background,
             document_id,
@@ -269,7 +269,7 @@ async def batch_process_ocr(
         # Start batch processing
         batch_id = batch_context["batch_id"]
         
-        from app.main import batch_ocr_processing_background
+        from app.tasks.background_tasks import batch_ocr_processing_background
         background_tasks.add_task(
             batch_ocr_processing_background,
             [doc["id"] for doc in verified_docs],

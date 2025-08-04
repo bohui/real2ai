@@ -69,7 +69,7 @@ async def start_contract_analysis(
         analysis_id = analysis_result.data[0]["id"]
 
         # Start background analysis
-        from app.main import analyze_contract_background
+        from app.tasks.background_tasks import analyze_contract_background
         background_tasks.add_task(
             analyze_contract_background,
             contract_id,
@@ -165,7 +165,7 @@ async def download_analysis_report(
 
         if format == "pdf":
             # Generate PDF report (would implement with reportlab or similar)
-            from app.main import generate_pdf_report
+            from app.tasks.background_tasks import generate_pdf_report
             pdf_content = await generate_pdf_report(analysis_data)
             return JSONResponse(
                 content={"download_url": f"/api/contracts/{contract_id}/report.pdf"},

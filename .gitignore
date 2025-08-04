@@ -58,3 +58,10 @@ logs/
 tmp/
 temp/
 .env
+
+# test
+frontend/coverage/
+backend/.coverage
+
+# secrects
+gcp_key.json

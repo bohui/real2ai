@@ -90,4 +90,4 @@ async def login_user(login_data: UserLoginRequest, db_client=Depends(get_databas
         raise
     except Exception as e:
         logger.error(f"Login error: {str(e)}")
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+        raise HTTPException(status_code=401, detail="Authentication failed")

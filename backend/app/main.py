@@ -44,7 +44,12 @@ app = FastAPI(
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "https://real2.ai", "https://*.real2.ai"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://localhost:3100",
+        "https://real2.ai",
+        "https://*.real2.ai",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -105,13 +110,13 @@ async def shutdown_event():
     logger.info("Real2.AI API shutdown complete")
 
 
-# Import background tasks (these would be moved to a separate module in production)
-from app.main_old import (
+# Import background tasks
+from app.tasks.background_tasks import (
     process_document_background,
     analyze_contract_background,
     enhanced_reprocess_document_with_ocr_background,
     batch_ocr_processing_background,
-    generate_pdf_report
+    generate_pdf_report,
 )
 
 
