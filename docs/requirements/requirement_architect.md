@@ -152,7 +152,7 @@ Real2.AI is a specialized AI-powered platform for the Australian real estate mar
 
 #### AI/ML Stack
 - **Agent Orchestration**: LangGraph
-- **Document Processing**: Unstructured.io + PyPDF2
+- **Document Processing**: Unstructured.io + pypdf
 - **Embeddings**: OpenAI text-embedding-3-large
 - **Vector Database**: PostgreSQL pgvector (Phase 1-2)
 - **Future Graph DB**: Neo4j (Phase 3+)

@@ -96,7 +96,7 @@ Real2.AI is a comprehensive Australian Real Estate AI Assistant platform designe
 - **Backend**: FastAPI 0.104.1 with Python 3.9+
 - **AI/ML**: OpenAI GPT-4, LangChain 0.0.335, LangGraph 0.0.26
 - **Database**: Supabase PostgreSQL with pgvector
-- **Document Processing**: PyPDF2, python-docx, unstructured
+- **Document Processing**:pypdf, python-docx, unstructured
 - **Authentication**: JWT with Supabase Auth
 - **Real-time**: WebSocket connections
 - **Storage**: Supabase Storage for documents

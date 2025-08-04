@@ -4,19 +4,19 @@ Configuration for Google Gemini client.
 
 from dataclasses import dataclass
 from typing import Optional, Dict, Any
-from pydantic import BaseSettings
+from pydantic_settings import BaseSettings
 
 from ..base.client import ClientConfig
 
 
-@dataclass
+@dataclass(kw_only=True)
 class GeminiClientConfig(ClientConfig):
     """Configuration for Google Gemini client."""
 
     # Gemini API settings
     api_key: Optional[str] = None
     model_name: str = "gemini-2.5-pro"
-    
+
     # Service role authentication settings
     use_service_account: bool = True
     credentials_path: Optional[str] = None
@@ -57,7 +57,7 @@ class GeminiSettings(BaseSettings):
 
     gemini_api_key: Optional[str] = None
     gemini_model_name: str = "gemini-2.5-pro"
-    
+
     # Service role authentication settings
     gemini_use_service_account: bool = True
     gemini_credentials_path: Optional[str] = None

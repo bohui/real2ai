@@ -66,10 +66,16 @@ const App: React.FC = () => {
           setOnboardingChecked(true)
         } catch (error) {
           console.error('Failed to check onboarding status:', error)
-          // If error checking status, show onboarding to be safe
-          setShowOnboarding(true)
+          // Only show onboarding for authenticated users, even on error
+          if (user) {
+            setShowOnboarding(true)
+          }
           setOnboardingChecked(true)
         }
+      } else if (!user && onboardingChecked) {
+        // Reset onboarding check when user logs out
+        setOnboardingChecked(false)
+        setShowOnboarding(false)
       }
     }
 

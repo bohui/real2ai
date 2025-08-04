@@ -12,7 +12,7 @@ from pathlib import Path
 import mimetypes
 
 from fastapi import UploadFile, HTTPException
-import PyPDF2
+import pypdf
 from docx import Document
 from unstructured.partition.auto import partition
 
@@ -181,10 +181,10 @@ class DocumentService:
                 # Quick scan to determine if OCR is needed
                 try:
                     from io import BytesIO
-                    import PyPDF2
+                    import pypdf
 
                     pdf_file = BytesIO(file_content)
-                    pdf_reader = PyPDF2.PdfReader(pdf_file)
+                    pdf_reader = pypdf.PdfReader(pdf_file)
 
                     # Check if PDF has extractable text
                     sample_text = ""
@@ -240,7 +240,7 @@ class DocumentService:
             ):
                 if file_type == "pdf":
                     extracted_text = await self._extract_pdf_text(file_content)
-                    extraction_method = "pypdf2"
+                    extraction_method = "pypdf"
                 elif file_type in ["doc", "docx"]:
                     extracted_text = await self._extract_word_text(file_content)
                     extraction_method = "python_docx"
@@ -310,7 +310,7 @@ class DocumentService:
             from io import BytesIO
 
             pdf_file = BytesIO(file_content)
-            pdf_reader = PyPDF2.PdfReader(pdf_file)
+            pdf_reader = pypdf.PdfReader(pdf_file)
 
             text_parts = []
             for page in pdf_reader.pages:
