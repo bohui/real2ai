@@ -157,8 +157,8 @@ const App: React.FC = () => {
           {/* Global components */}
           <NotificationSystem />
           
-          {/* Onboarding Wizard */}
-          {showOnboarding && (
+          {/* Onboarding Wizard - Only show for authenticated users */}
+          {showOnboarding && user && (
             <OnboardingWizard 
               onComplete={handleOnboardingComplete}
               onSkip={handleOnboardingSkip}
