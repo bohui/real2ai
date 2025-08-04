@@ -12,7 +12,7 @@ import os
 from typing import Optional, Dict, Any, List
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -37,6 +37,9 @@ from app.api.models import (
     DocumentUploadResponse,
     UserRegistrationRequest,
     UserLoginRequest,
+    OnboardingStatusResponse,
+    OnboardingPreferencesRequest,
+    OnboardingCompleteRequest,
 )
 
 # Initialize FastAPI app
@@ -108,7 +111,7 @@ async def health_check():
     """Health check endpoint"""
     return {
         "status": "healthy",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "version": "1.0.0",
         "environment": settings.environment,
     }
@@ -144,6 +147,8 @@ async def register_user(user_data: UserRegistrationRequest):
                 "user_type": user_data.user_type,
                 "subscription_status": "free",
                 "credits_remaining": 1,  # First contract free
+                "onboarding_completed": False,
+                "onboarding_preferences": {}
             }
 
             db_client.table("profiles").insert(profile_data).execute()
@@ -452,12 +457,110 @@ async def get_user_profile(user: User = Depends(get_current_user)):
     return user.dict()
 
 
+# Onboarding Management Endpoints
+
+
+@app.get("/api/users/onboarding/status", response_model=OnboardingStatusResponse)
+async def get_onboarding_status(user: User = Depends(get_current_user)):
+    """Get user onboarding status"""
+    try:
+        profile_result = (
+            db_client.table("profiles")
+            .select("onboarding_completed", "onboarding_completed_at", "onboarding_preferences")
+            .eq("id", user.id)
+            .execute()
+        )
+        
+        if not profile_result.data:
+            raise HTTPException(status_code=404, detail="User profile not found")
+            
+        profile = profile_result.data[0]
+        return OnboardingStatusResponse(
+            onboarding_completed=profile.get("onboarding_completed", False),
+            onboarding_completed_at=profile.get("onboarding_completed_at"),
+            onboarding_preferences=profile.get("onboarding_preferences", {})
+        )
+        
+    except Exception as e:
+        logger.error(f"Get onboarding status error: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/users/onboarding/complete")
+async def complete_onboarding(
+    request: OnboardingCompleteRequest,
+    user: User = Depends(get_current_user)
+):
+    """Complete user onboarding and save preferences"""
+    try:
+        # Check if already completed
+        profile_result = (
+            db_client.table("profiles")
+            .select("onboarding_completed")
+            .eq("id", user.id)
+            .execute()
+        )
+        
+        if profile_result.data and profile_result.data[0].get("onboarding_completed", False):
+            return {"message": "Onboarding already completed", "skip_onboarding": True}
+        
+        # Update profile with onboarding completion
+        update_data = {
+            "onboarding_completed": True,
+            "onboarding_completed_at": datetime.now(timezone.utc).isoformat(),
+            "onboarding_preferences": request.onboarding_preferences.dict(exclude_unset=True),
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }
+        
+        db_client.table("profiles").update(update_data).eq("id", user.id).execute()
+        
+        # Log onboarding completion
+        db_client.table("usage_logs").insert({
+            "user_id": user.id,
+            "action_type": "onboarding_completed",
+            "credits_used": 0,
+            "credits_remaining": user.credits_remaining,
+            "resource_used": "onboarding",
+            "metadata": {"preferences": request.onboarding_preferences.dict(exclude_unset=True)}
+        }).execute()
+        
+        return {
+            "message": "Onboarding completed successfully",
+            "skip_onboarding": False,
+            "preferences_saved": True
+        }
+        
+    except Exception as e:
+        logger.error(f"Complete onboarding error: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.put("/api/users/onboarding/preferences")
+async def update_onboarding_preferences(
+    preferences: OnboardingPreferencesRequest,
+    user: User = Depends(get_current_user)
+):
+    """Update user onboarding preferences"""
+    try:
+        update_data = {
+            "onboarding_preferences": preferences.dict(exclude_unset=True),
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }
+        
+        db_client.table("profiles").update(update_data).eq("id", user.id).execute()
+        
+        return {"message": "Onboarding preferences updated successfully"}
+        
+    except Exception as e:
+        logger.error(f"Update onboarding preferences error: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @app.put("/api/users/preferences")
 async def update_user_preferences(
     preferences: Dict[str, Any], user: User = Depends(get_current_user)
 ):
     """Update user preferences"""
-
     try:
         db_client.table("profiles").update({"preferences": preferences}).eq(
             "id", user.id

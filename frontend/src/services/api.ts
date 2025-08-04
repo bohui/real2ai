@@ -118,6 +118,41 @@ class ApiService {
     await this.client.put("/api/users/preferences", preferences);
   }
 
+  // Onboarding endpoints
+  async getOnboardingStatus(): Promise<{
+    onboarding_completed: boolean;
+    onboarding_completed_at?: string;
+    onboarding_preferences: Record<string, any>;
+  }> {
+    const response = await this.client.get("/api/users/onboarding/status");
+    return response.data;
+  }
+
+  async completeOnboarding(preferences: {
+    practice_area?: string;
+    jurisdiction?: string;
+    firm_size?: string;
+    primary_contract_types?: string[];
+  }): Promise<{
+    message: string;
+    skip_onboarding: boolean;
+    preferences_saved?: boolean;
+  }> {
+    const response = await this.client.post("/api/users/onboarding/complete", {
+      onboarding_preferences: preferences
+    });
+    return response.data;
+  }
+
+  async updateOnboardingPreferences(preferences: {
+    practice_area?: string;
+    jurisdiction?: string;
+    firm_size?: string;
+    primary_contract_types?: string[];
+  }): Promise<void> {
+    await this.client.put("/api/users/onboarding/preferences", preferences);
+  }
+
   async getUserStats(): Promise<UsageStats> {
     const response = await this.client.get<UsageStats>(
       "/api/users/usage-stats"

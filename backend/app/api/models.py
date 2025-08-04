@@ -3,8 +3,8 @@ API request/response models for Real2.AI
 """
 
 from typing import Dict, List, Any, Optional
-from pydantic import BaseModel, EmailStr, validator
-from datetime import datetime
+from pydantic import BaseModel, EmailStr, field_validator
+from datetime import datetime, timezone
 
 from app.models.contract_state import AustralianState, ContractType, RiskLevel
 
@@ -18,13 +18,15 @@ class UserRegistrationRequest(BaseModel):
     australian_state: AustralianState
     user_type: str = "buyer"  # buyer, investor, agent
     
-    @validator('password')
+    @field_validator('password')
+    @classmethod
     def validate_password(cls, v):
         if len(v) < 8:
             raise ValueError('Password must be at least 8 characters long')
         return v
     
-    @validator('user_type')
+    @field_validator('user_type')
+    @classmethod
     def validate_user_type(cls, v):
         if v not in ['buyer', 'investor', 'agent']:
             raise ValueError('User type must be buyer, investor, or agent')
@@ -46,6 +48,9 @@ class UserResponse(BaseModel):
     subscription_status: str = "free"
     credits_remaining: int = 0
     preferences: Dict[str, Any] = {}
+    onboarding_completed: bool = False
+    onboarding_completed_at: Optional[datetime] = None
+    onboarding_preferences: Dict[str, Any] = {}
     created_at: Optional[datetime] = None
 
 
@@ -219,7 +224,7 @@ class ErrorResponse(BaseModel):
     error: str
     detail: Optional[str] = None
     error_code: Optional[str] = None
-    timestamp: datetime = datetime.utcnow()
+    timestamp: datetime = datetime.now(timezone.utc)
 
 
 class ValidationError(BaseModel):
@@ -234,7 +239,7 @@ class ValidationErrorResponse(BaseModel):
     error: str = "Validation Error"
     detail: str
     validation_errors: List[ValidationError]
-    timestamp: datetime = datetime.utcnow()
+    timestamp: datetime = datetime.now(timezone.utc)
 
 
 # WebSocket Models
@@ -255,12 +260,57 @@ class WebSocketProgressUpdate(BaseModel):
     estimated_time_remaining: Optional[int] = None
 
 
+# Onboarding Models
+
+class OnboardingStatusResponse(BaseModel):
+    """Onboarding status response"""
+    onboarding_completed: bool
+    onboarding_completed_at: Optional[datetime] = None
+    onboarding_preferences: Dict[str, Any] = {}
+
+
+class OnboardingPreferencesRequest(BaseModel):
+    """Onboarding preferences update request"""
+    practice_area: Optional[str] = None
+    jurisdiction: Optional[str] = None
+    firm_size: Optional[str] = None
+    primary_contract_types: List[str] = []
+    
+    @field_validator('jurisdiction')
+    @classmethod
+    def validate_jurisdiction(cls, v):
+        if v and v not in ['nsw', 'vic', 'qld', 'wa', 'sa', 'tas', 'act', 'nt']:
+            raise ValueError('Invalid jurisdiction')
+        return v
+    
+    @field_validator('practice_area')
+    @classmethod
+    def validate_practice_area(cls, v):
+        valid_areas = ['property', 'commercial', 'employment', 'corporate', 'litigation', 'family', 'other']
+        if v and v not in valid_areas:
+            raise ValueError('Invalid practice area')
+        return v
+    
+    @field_validator('firm_size')
+    @classmethod
+    def validate_firm_size(cls, v):
+        valid_sizes = ['solo', 'small', 'medium', 'large', 'inhouse']
+        if v and v not in valid_sizes:
+            raise ValueError('Invalid firm size')
+        return v
+
+
+class OnboardingCompleteRequest(BaseModel):
+    """Complete onboarding request"""
+    onboarding_preferences: OnboardingPreferencesRequest
+
+
 # Health Check Models
 
 class HealthCheckResponse(BaseModel):
     """Health check response"""
     status: str = "healthy"
-    timestamp: datetime = datetime.utcnow()
+    timestamp: datetime = datetime.now(timezone.utc)
     version: str = "1.0.0"
     environment: str
     services: Dict[str, str] = {}

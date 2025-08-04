@@ -21,6 +21,9 @@ export interface User {
   subscription_status: SubscriptionStatus
   credits_remaining: number
   preferences: Record<string, any>
+  onboarding_completed: boolean
+  onboarding_completed_at?: string
+  onboarding_preferences: Record<string, any>
   created_at?: string
 }
 

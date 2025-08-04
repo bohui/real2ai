@@ -23,6 +23,7 @@ import OnboardingWizard from '@/components/onboarding/OnboardingWizard'
 // Hooks and stores
 import { useAuthStore } from '@/store/authStore'
 import { useUIStore } from '@/store/uiStore'
+import apiService from '@/services/api'
 
 // Create a client
 const queryClient = new QueryClient({
@@ -43,24 +44,59 @@ const queryClient = new QueryClient({
 const App: React.FC = () => {
   const { initializeAuth, isLoading, user } = useAuthStore()
   const { showOnboarding, setShowOnboarding } = useUIStore()
+  const [onboardingChecked, setOnboardingChecked] = React.useState(false)
 
   // Initialize authentication on app start
   React.useEffect(() => {
     initializeAuth()
   }, [initializeAuth])
 
-  // Show onboarding for new users
+  // Check onboarding status for authenticated users
   React.useEffect(() => {
-    if (user && !user.preferences?.onboarding_completed) {
-      setShowOnboarding(true)
+    const checkOnboardingStatus = async () => {
+      if (user && !onboardingChecked) {
+        try {
+          const onboardingStatus = await apiService.getOnboardingStatus()
+          
+          // Show onboarding if not completed
+          if (!onboardingStatus.onboarding_completed) {
+            setShowOnboarding(true)
+          }
+          
+          setOnboardingChecked(true)
+        } catch (error) {
+          console.error('Failed to check onboarding status:', error)
+          // If error checking status, show onboarding to be safe
+          setShowOnboarding(true)
+          setOnboardingChecked(true)
+        }
+      }
     }
-  }, [user, setShowOnboarding])
 
-  const handleOnboardingComplete = (preferences: any) => {
-    // Save preferences to user profile
-    // This would typically call an API to update user preferences
-    console.log('Onboarding completed with preferences:', preferences)
-    setShowOnboarding(false)
+    checkOnboardingStatus()
+  }, [user, onboardingChecked, setShowOnboarding])
+
+  const handleOnboardingComplete = async (preferences: any) => {
+    try {
+      const result = await apiService.completeOnboarding({
+        practice_area: preferences.practiceArea,
+        jurisdiction: preferences.jurisdiction,
+        firm_size: preferences.firmSize,
+        primary_contract_types: preferences.primaryContractTypes
+      })
+      
+      console.log('Onboarding completed:', result.message)
+      setShowOnboarding(false)
+      
+      // If user was already onboarded, don't show again
+      if (result.skip_onboarding) {
+        console.log('User already completed onboarding')
+      }
+    } catch (error) {
+      console.error('Failed to complete onboarding:', error)
+      // Still hide onboarding to prevent blocking the user
+      setShowOnboarding(false)
+    }
   }
 
   const handleOnboardingSkip = () => {
