@@ -12,82 +12,87 @@ from ..base.client import ClientConfig
 @dataclass
 class GeminiClientConfig(ClientConfig):
     """Configuration for Google Gemini client."""
-    
+
     # Gemini API settings
-    api_key: str
+    api_key: Optional[str] = None
     model_name: str = "gemini-2.5-pro"
-    
+
     # Safety settings
     harm_block_threshold: str = "BLOCK_NONE"
-    
+
     # OCR specific settings
     max_file_size: int = 50 * 1024 * 1024  # 50MB
     supported_formats: set = None
     ocr_confidence_threshold: float = 0.7
-    
+
     # Performance settings
     processing_timeout: int = 120
     rate_limit_rpm: Optional[int] = 60
-    
+
     # Enhancement settings
     enable_image_enhancement: bool = True
     enable_text_enhancement: bool = True
-    
+
     def __post_init__(self):
         if self.supported_formats is None:
-            self.supported_formats = {"pdf", "png", "jpg", "jpeg", "webp", "gif", "bmp", "tiff"}
+            self.supported_formats = {
+                "pdf",
+                "png",
+                "jpg",
+                "jpeg",
+                "webp",
+                "gif",
+                "bmp",
+                "tiff",
+            }
 
 
 class GeminiSettings(BaseSettings):
     """Pydantic settings for Gemini configuration from environment."""
-    
+
     gemini_api_key: str
     gemini_model_name: str = "gemini-2.5-pro"
-    
+
     # Safety settings
     gemini_harm_block_threshold: str = "BLOCK_NONE"
-    
+
     # OCR settings
     gemini_max_file_size_mb: int = 50
     gemini_ocr_confidence_threshold: float = 0.7
     gemini_processing_timeout: int = 120
     gemini_rate_limit_rpm: Optional[int] = 60
-    
+
     # Enhancement settings
     gemini_enable_image_enhancement: bool = True
     gemini_enable_text_enhancement: bool = True
-    
+
     # Base client settings
     gemini_max_retries: int = 3
     gemini_backoff_factor: float = 2.0
     gemini_circuit_breaker_enabled: bool = True
     gemini_failure_threshold: int = 5
     gemini_circuit_timeout: int = 300  # 5 minutes for AI services
-    
+
     class Config:
         env_file = [".env", ".env.local"]
         case_sensitive = False
-    
+
     def to_client_config(self) -> GeminiClientConfig:
         """Convert to GeminiClientConfig."""
         return GeminiClientConfig(
             # API settings
             api_key=self.gemini_api_key,
             model_name=self.gemini_model_name,
-            
             # Safety settings
             harm_block_threshold=self.gemini_harm_block_threshold,
-            
             # OCR settings
             max_file_size=self.gemini_max_file_size_mb * 1024 * 1024,
             ocr_confidence_threshold=self.gemini_ocr_confidence_threshold,
             processing_timeout=self.gemini_processing_timeout,
             rate_limit_rpm=self.gemini_rate_limit_rpm,
-            
             # Enhancement settings
             enable_image_enhancement=self.gemini_enable_image_enhancement,
             enable_text_enhancement=self.gemini_enable_text_enhancement,
-            
             # Base client settings
             timeout=self.gemini_processing_timeout,
             max_retries=self.gemini_max_retries,

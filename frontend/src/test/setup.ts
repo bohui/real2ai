@@ -183,18 +183,7 @@ vi.mock('react-router-dom', async () => {
   }
 })
 
-// Mock ProtectedRoute component
-vi.mock('@/components/auth/ProtectedRoute', () => ({
-  default: ({ children, requiredRole, fallbackPath }: { 
-    children: React.ReactNode, 
-    requiredRole?: string, 
-    fallbackPath?: string 
-  }) => React.createElement('div', { 
-    'data-testid': 'protected-route', 
-    'data-role': requiredRole, 
-    'data-fallback': fallbackPath 
-  }, children)
-}))
+// Note: ProtectedRoute is not globally mocked to allow proper unit testing
 
 // Mock Layout components
 vi.mock('@/components/layout/Layout', () => ({

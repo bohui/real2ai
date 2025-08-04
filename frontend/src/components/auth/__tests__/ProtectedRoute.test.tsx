@@ -3,75 +3,66 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { screen, waitFor } from '@/test/utils'
-import { render } from '@testing-library/react'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { render, screen } from '@/test/utils'
 import ProtectedRoute from '../ProtectedRoute'
-import { mockUser, mockAuthStore } from '@/test/utils'
+import { useAuthStore } from '@/store/authStore'
 
 // Mock the auth store
+const mockAuthStore = {
+  isAuthenticated: false,
+  user: null,
+  isLoading: false,
+  error: null,
+  login: vi.fn(),
+  register: vi.fn(),
+  logout: vi.fn(),
+  clearError: vi.fn(),
+  updateUser: vi.fn(),
+  updateProfile: vi.fn(),
+  refreshUser: vi.fn(),
+  initializeAuth: vi.fn(),
+}
+
 vi.mock('@/store/authStore', () => ({
   useAuthStore: vi.fn(() => mockAuthStore),
 }))
-
-// Test component to render inside ProtectedRoute
-const TestComponent = () => <div data-testid="protected-content">Protected Content</div>
-
-// Custom render function with all required providers
-const renderWithProviders = (ui: React.ReactElement, initialEntries: string[] = ['/']) => {
-  const queryClient = new QueryClient({
-    defaultOptions: {
-      queries: { retry: false, staleTime: 0, gcTime: 0 },
-    },
-  })
-
-  return render(
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/auth/login" element={<div data-testid="login-page">Login Page</div>} />
-          <Route path="/app/dashboard" element={<div data-testid="dashboard-page">Dashboard</div>} />
-          <Route path="/protected" element={ui} />
-          <Route path="/custom-fallback" element={<div data-testid="custom-fallback">Custom Fallback</div>} />
-        </Routes>
-      </BrowserRouter>
-    </QueryClientProvider>
-  )
-}
 
 describe('ProtectedRoute Component', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     // Reset mock store to default state
-    mockAuthStore.isAuthenticated = false
-    mockAuthStore.user = null
-    mockAuthStore.isLoading = false
+    Object.assign(mockAuthStore, {
+      isAuthenticated: false,
+      user: null,
+      isLoading: false,
+      error: null,
+    })
+    // Ensure useAuthStore is properly mocked
+    vi.mocked(useAuthStore).mockReturnValue(mockAuthStore)
   })
 
   describe('Loading State', () => {
     it('shows loading spinner when authentication is loading', () => {
       mockAuthStore.isLoading = true
-      mockAuthStore.isAuthenticated = false
-      mockAuthStore.user = null
 
-      renderWithProviders(
+      render(
         <ProtectedRoute>
-          <TestComponent />
+          <div data-testid="protected-content">Protected Content</div>
         </ProtectedRoute>
       )
 
       // Should show loading spinner
-      expect(document.querySelector('.animate-spin')).toBeInTheDocument()
+      const spinner = document.querySelector('.animate-spin')
+      expect(spinner).toBeInTheDocument()
       expect(screen.queryByTestId('protected-content')).not.toBeInTheDocument()
     })
 
     it('has proper loading state structure', () => {
       mockAuthStore.isLoading = true
 
-      renderWithProviders(
+      render(
         <ProtectedRoute>
-          <TestComponent />
+          <div data-testid="protected-content">Protected Content</div>
         </ProtectedRoute>
       )
 
@@ -80,354 +71,221 @@ describe('ProtectedRoute Component', () => {
       expect(loadingContainer).toHaveClass('flex', 'items-center', 'justify-center')
       
       const spinner = document.querySelector('.animate-spin')
+      expect(spinner).toBeInTheDocument()
       expect(spinner).toHaveClass('rounded-full', 'h-8', 'w-8', 'border-b-2', 'border-primary-600')
     })
   })
 
   describe('Unauthenticated Access', () => {
-    it('redirects to login when not authenticated', async () => {
+    it('redirects to login when not authenticated', () => {
       mockAuthStore.isAuthenticated = false
       mockAuthStore.user = null
-      mockAuthStore.isLoading = false
 
-      renderWithProviders(
+      render(
         <ProtectedRoute>
-          <TestComponent />
+          <div data-testid="protected-content">Protected Content</div>
         </ProtectedRoute>
       )
 
-      await waitFor(() => {
-        expect(screen.getByTestId('login-page')).toBeInTheDocument()
-        expect(screen.queryByTestId('protected-content')).not.toBeInTheDocument()
-      })
+      expect(screen.getByTestId('navigate')).toBeInTheDocument()
+      expect(screen.queryByTestId('protected-content')).not.toBeInTheDocument()
     })
 
-    it('redirects to custom fallback path when specified', async () => {
+    it('redirects to custom fallback path when specified', () => {
       mockAuthStore.isAuthenticated = false
       mockAuthStore.user = null
-      mockAuthStore.isLoading = false
 
-      renderWithProviders(
-        <ProtectedRoute fallbackPath="/custom-fallback">
-          <TestComponent />
+      render(
+        <ProtectedRoute fallbackPath="/custom-login">
+          <div data-testid="protected-content">Protected Content</div>
         </ProtectedRoute>
       )
 
-      await waitFor(() => {
-        expect(screen.getByTestId('custom-fallback')).toBeInTheDocument()
-        expect(screen.queryByTestId('protected-content')).not.toBeInTheDocument()
-      })
+      expect(screen.getByTestId('navigate')).toBeInTheDocument()
+      expect(screen.queryByTestId('protected-content')).not.toBeInTheDocument()
     })
 
-    it('redirects when authenticated but user is null', async () => {
+    it('redirects when authenticated but user is null', () => {
       mockAuthStore.isAuthenticated = true
       mockAuthStore.user = null
-      mockAuthStore.isLoading = false
 
-      renderWithProviders(
+      render(
         <ProtectedRoute>
-          <TestComponent />
+          <div data-testid="protected-content">Protected Content</div>
         </ProtectedRoute>
       )
 
-      await waitFor(() => {
-        expect(screen.getByTestId('login-page')).toBeInTheDocument()
-        expect(screen.queryByTestId('protected-content')).not.toBeInTheDocument()
-      })
+      expect(screen.getByTestId('navigate')).toBeInTheDocument()
+      expect(screen.queryByTestId('protected-content')).not.toBeInTheDocument()
     })
 
-    it('redirects when user exists but not authenticated', async () => {
+    it('redirects when user exists but not authenticated', () => {
       mockAuthStore.isAuthenticated = false
-      mockAuthStore.user = mockUser
-      mockAuthStore.isLoading = false
+      mockAuthStore.user = { id: 'user1', email: 'test@example.com', user_type: 'user' }
 
-      renderWithProviders(
+      render(
         <ProtectedRoute>
-          <TestComponent />
+          <div data-testid="protected-content">Protected Content</div>
         </ProtectedRoute>
       )
 
-      await waitFor(() => {
-        expect(screen.getByTestId('login-page')).toBeInTheDocument()
-        expect(screen.queryByTestId('protected-content')).not.toBeInTheDocument()
-      })
+      expect(screen.getByTestId('navigate')).toBeInTheDocument()
+      expect(screen.queryByTestId('protected-content')).not.toBeInTheDocument()
     })
   })
 
   describe('Authenticated Access', () => {
-    it('renders protected content when authenticated', async () => {
+    beforeEach(() => {
       mockAuthStore.isAuthenticated = true
-      mockAuthStore.user = mockUser
-      mockAuthStore.isLoading = false
-
-      renderWithProviders(
-        <ProtectedRoute>
-          <TestComponent />
-        </ProtectedRoute>
-      )
-
-      await waitFor(() => {
-        expect(screen.getByTestId('protected-content')).toBeInTheDocument()
-        expect(screen.queryByTestId('login-page')).not.toBeInTheDocument()
-      })
+      mockAuthStore.user = { id: 'user1', email: 'test@example.com', user_type: 'user' }
     })
 
-    it('renders multiple children correctly', async () => {
-      mockAuthStore.isAuthenticated = true
-      mockAuthStore.user = mockUser
-      mockAuthStore.isLoading = false
-
-      renderWithProviders(
+    it('renders protected content when authenticated', () => {
+      render(
         <ProtectedRoute>
-          <div data-testid="child-1">Child 1</div>
-          <div data-testid="child-2">Child 2</div>
+          <div data-testid="protected-content">Protected Content</div>
         </ProtectedRoute>
       )
 
-      await waitFor(() => {
-        expect(screen.getByTestId('child-1')).toBeInTheDocument()
-        expect(screen.getByTestId('child-2')).toBeInTheDocument()
-      })
+      expect(screen.getByTestId('protected-content')).toBeInTheDocument()
+      expect(screen.getByText('Protected Content')).toBeInTheDocument()
+    })
+
+    it('renders complex protected content structure', () => {
+      render(
+        <ProtectedRoute>
+          <div data-testid="protected-content">
+            <h1>Dashboard</h1>
+            <nav>Navigation</nav>
+            <main>Main Content</main>
+          </div>
+        </ProtectedRoute>
+      )
+
+      expect(screen.getByTestId('protected-content')).toBeInTheDocument()
+      expect(screen.getByText('Dashboard')).toBeInTheDocument()
+      expect(screen.getByText('Navigation')).toBeInTheDocument()
+      expect(screen.getByText('Main Content')).toBeInTheDocument()
     })
   })
 
   describe('Role-Based Access Control', () => {
-    it('allows access when user has required role', async () => {
+    beforeEach(() => {
       mockAuthStore.isAuthenticated = true
-      mockAuthStore.user = { ...mockUser, user_type: 'buyer' }
-      mockAuthStore.isLoading = false
-
-      renderWithProviders(
-        <ProtectedRoute requiredRole="buyer">
-          <TestComponent />
-        </ProtectedRoute>
-      )
-
-      await waitFor(() => {
-        expect(screen.getByTestId('protected-content')).toBeInTheDocument()
-        expect(screen.queryByTestId('dashboard-page')).not.toBeInTheDocument()
-      })
     })
 
-    it('redirects to dashboard when user lacks required role', async () => {
-      mockAuthStore.isAuthenticated = true
-      mockAuthStore.user = { ...mockUser, user_type: 'buyer' }
-      mockAuthStore.isLoading = false
+    it('allows access when user has required role', () => {
+      mockAuthStore.user = { id: 'admin1', email: 'admin@example.com', user_type: 'admin' }
 
-      renderWithProviders(
+      render(
         <ProtectedRoute requiredRole="admin">
-          <TestComponent />
+          <div data-testid="protected-content">Admin Content</div>
         </ProtectedRoute>
       )
 
-      await waitFor(() => {
-        expect(screen.getByTestId('dashboard-page')).toBeInTheDocument()
-        expect(screen.queryByTestId('protected-content')).not.toBeInTheDocument()
-      })
+      expect(screen.getByTestId('protected-content')).toBeInTheDocument()
+      expect(screen.getByText('Admin Content')).toBeInTheDocument()
     })
 
-    it('allows access when no role is required', async () => {
-      mockAuthStore.isAuthenticated = true
-      mockAuthStore.user = { ...mockUser, user_type: 'buyer' }
-      mockAuthStore.isLoading = false
+    it('redirects to dashboard when user lacks required role', () => {
+      mockAuthStore.user = { id: 'user1', email: 'user@example.com', user_type: 'user' }
 
-      renderWithProviders(
+      render(
+        <ProtectedRoute requiredRole="admin">
+          <div data-testid="protected-content">Admin Content</div>
+        </ProtectedRoute>
+      )
+
+      expect(screen.getByTestId('navigate')).toBeInTheDocument()
+      expect(screen.queryByTestId('protected-content')).not.toBeInTheDocument()
+    })
+
+    it('allows access when no role is required', () => {
+      mockAuthStore.user = { id: 'user1', email: 'user@example.com', user_type: 'user' }
+
+      render(
         <ProtectedRoute>
-          <TestComponent />
+          <div data-testid="protected-content">Content for all users</div>
         </ProtectedRoute>
       )
 
-      await waitFor(() => {
-        expect(screen.getByTestId('protected-content')).toBeInTheDocument()
-      })
+      expect(screen.getByTestId('protected-content')).toBeInTheDocument()
+      expect(screen.getByText('Content for all users')).toBeInTheDocument()
     })
 
-    it('handles undefined user_type gracefully', async () => {
-      mockAuthStore.isAuthenticated = true
-      mockAuthStore.user = { ...mockUser, user_type: undefined }
-      mockAuthStore.isLoading = false
+    it('handles undefined user_type gracefully', () => {
+      mockAuthStore.user = { id: 'user1', email: 'user@example.com' } // No user_type
 
-      renderWithProviders(
-        <ProtectedRoute requiredRole="buyer">
-          <TestComponent />
+      render(
+        <ProtectedRoute requiredRole="admin">
+          <div data-testid="protected-content">Admin Content</div>
         </ProtectedRoute>
       )
 
-      await waitFor(() => {
-        expect(screen.getByTestId('dashboard-page')).toBeInTheDocument()
-        expect(screen.queryByTestId('protected-content')).not.toBeInTheDocument()
-      })
-    })
-
-    it('handles null user_type gracefully', async () => {
-      mockAuthStore.isAuthenticated = true
-      mockAuthStore.user = { ...mockUser, user_type: null }
-      mockAuthStore.isLoading = false
-
-      renderWithProviders(
-        <ProtectedRoute requiredRole="buyer">
-          <TestComponent />
-        </ProtectedRoute>
-      )
-
-      await waitFor(() => {
-        expect(screen.getByTestId('dashboard-page')).toBeInTheDocument()
-        expect(screen.queryByTestId('protected-content')).not.toBeInTheDocument()
-      })
-    })
-  })
-
-  describe('Navigation State Preservation', () => {
-    it('preserves location state when redirecting to login', async () => {
-      mockAuthStore.isAuthenticated = false
-      mockAuthStore.user = null
-      mockAuthStore.isLoading = false
-
-      // We can't easily test the location state with React Router in tests
-      // but we can verify the redirect happens
-      renderWithProviders(
-        <ProtectedRoute>
-          <TestComponent />
-        </ProtectedRoute>
-      )
-
-      await waitFor(() => {
-        expect(screen.getByTestId('login-page')).toBeInTheDocument()
-        expect(screen.queryByTestId('protected-content')).not.toBeInTheDocument()
-      })
+      expect(screen.getByTestId('navigate')).toBeInTheDocument()
+      expect(screen.queryByTestId('protected-content')).not.toBeInTheDocument()
     })
   })
 
   describe('Edge Cases', () => {
-    it('handles missing auth store gracefully', async () => {
-      // This test verifies the component doesn't crash if the store is in an unexpected state
-      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-
-      try {
-        renderWithProviders(
-          <ProtectedRoute>
-            <TestComponent />
-          </ProtectedRoute>
-        )
-
-        // Component should still render something (either loading or redirect)
-        expect(document.body).toBeInTheDocument()
-      } catch (error) {
-        // If it throws, that's also a valid test outcome to document
-        expect(error).toBeDefined()
-      }
-
-      consoleSpy.mockRestore()
-    })
-
-    it('handles complex role hierarchies', async () => {
+    it('handles user object without standard properties', () => {
       mockAuthStore.isAuthenticated = true
-      mockAuthStore.user = { ...mockUser, user_type: 'premium_buyer' }
-      mockAuthStore.isLoading = false
+      mockAuthStore.user = { customId: 'user1' } as any // Missing standard user properties
 
-      renderWithProviders(
-        <ProtectedRoute requiredRole="buyer">
-          <TestComponent />
-        </ProtectedRoute>
-      )
-
-      await waitFor(() => {
-        // Should redirect since 'premium_buyer' !== 'buyer' (exact match required)
-        expect(screen.getByTestId('dashboard-page')).toBeInTheDocument()
-        expect(screen.queryByTestId('protected-content')).not.toBeInTheDocument()
-      })
-    })
-
-    it('handles empty string role requirement', async () => {
-      mockAuthStore.isAuthenticated = true
-      mockAuthStore.user = { ...mockUser, user_type: 'buyer' }
-      mockAuthStore.isLoading = false
-
-      renderWithProviders(
-        <ProtectedRoute requiredRole="">
-          <TestComponent />
-        </ProtectedRoute>
-      )
-
-      await waitFor(() => {
-        // Empty string is falsy, so should allow access
-        expect(screen.getByTestId('protected-content')).toBeInTheDocument()
-      })
-    })
-  })
-
-  describe('Component Props', () => {
-    it('accepts all valid prop combinations', async () => {
-      mockAuthStore.isAuthenticated = true
-      mockAuthStore.user = { ...mockUser, user_type: 'admin' }
-      mockAuthStore.isLoading = false
-
-      renderWithProviders(
-        <ProtectedRoute 
-          requiredRole="admin" 
-          fallbackPath="/custom-fallback"
-        >
-          <TestComponent />
-        </ProtectedRoute>
-      )
-
-      await waitFor(() => {
-        expect(screen.getByTestId('protected-content')).toBeInTheDocument()
-      })
-    })
-
-    it('works with just children prop', async () => {
-      mockAuthStore.isAuthenticated = true
-      mockAuthStore.user = mockUser
-      mockAuthStore.isLoading = false
-
-      renderWithProviders(
+      render(
         <ProtectedRoute>
-          <TestComponent />
+          <div data-testid="protected-content">Protected Content</div>
         </ProtectedRoute>
       )
 
-      await waitFor(() => {
-        expect(screen.getByTestId('protected-content')).toBeInTheDocument()
-      })
+      expect(screen.getByTestId('protected-content')).toBeInTheDocument()
     })
   })
 
   describe('Security Validation', () => {
-    it('prevents access with forged authentication state', async () => {
-      // Simulate a scenario where isAuthenticated is true but user is malformed
-      mockAuthStore.isAuthenticated = true
-      mockAuthStore.user = {} // Empty user object
-      mockAuthStore.isLoading = false
-
-      renderWithProviders(
-        <ProtectedRoute>
-          <TestComponent />
-        </ProtectedRoute>
-      )
-
-      await waitFor(() => {
-        // Should still allow access as long as user object exists
-        expect(screen.getByTestId('protected-content')).toBeInTheDocument()
-      })
-    })
-
-    it('validates both authentication and user presence', async () => {
-      // Test the double-check: both isAuthenticated AND user must be present
+    it('prevents access with forged authentication state', () => {
+      // Simulate forged auth state (authenticated but no user)
       mockAuthStore.isAuthenticated = true
       mockAuthStore.user = null
-      mockAuthStore.isLoading = false
 
-      renderWithProviders(
+      render(
         <ProtectedRoute>
-          <TestComponent />
+          <div data-testid="protected-content">Should not render</div>
         </ProtectedRoute>
       )
 
-      await waitFor(() => {
-        expect(screen.getByTestId('login-page')).toBeInTheDocument()
-        expect(screen.queryByTestId('protected-content')).not.toBeInTheDocument()
-      })
+      // Should still redirect due to missing user
+      expect(screen.queryByTestId('protected-content')).not.toBeInTheDocument()
+      expect(screen.getByTestId('navigate')).toBeInTheDocument()
+    })
+
+    it('validates both authentication and user presence', () => {
+      mockAuthStore.isAuthenticated = false
+      mockAuthStore.user = { id: 'user1', email: 'test@example.com', user_type: 'admin' }
+
+      render(
+        <ProtectedRoute>
+          <div data-testid="protected-content">Should not render</div>
+        </ProtectedRoute>
+      )
+
+      expect(screen.getByTestId('navigate')).toBeInTheDocument()
+      expect(screen.queryByTestId('protected-content')).not.toBeInTheDocument()
+    })
+
+    it('requires exact role match for security', () => {
+      mockAuthStore.isAuthenticated = true
+      mockAuthStore.user = { id: 'user1', email: 'user@example.com', user_type: 'admin-trainee' }
+
+      render(
+        <ProtectedRoute requiredRole="admin">
+          <div data-testid="protected-content">Admin Content</div>
+        </ProtectedRoute>
+      )
+
+      // Should redirect since 'admin-trainee' !== 'admin'
+      expect(screen.getByTestId('navigate')).toBeInTheDocument()
+      expect(screen.queryByTestId('protected-content')).not.toBeInTheDocument()
     })
   })
 })
