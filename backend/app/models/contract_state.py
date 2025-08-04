@@ -3,41 +3,10 @@ LangGraph State Models for Real2.AI Contract Analysis
 """
 
 from typing import TypedDict, Optional, Dict, List, Any
-from enum import Enum
 from datetime import datetime
 import uuid
 
-
-class AustralianState(str, Enum):
-    NSW = "NSW"
-    VIC = "VIC"
-    QLD = "QLD"
-    SA = "SA"
-    WA = "WA"
-    TAS = "TAS"
-    NT = "NT"
-    ACT = "ACT"
-
-
-class ContractType(str, Enum):
-    PURCHASE_AGREEMENT = "purchase_agreement"
-    LEASE_AGREEMENT = "lease_agreement"
-    OFF_PLAN = "off_plan"
-    AUCTION = "auction"
-
-
-class ProcessingStatus(str, Enum):
-    PENDING = "pending"
-    PROCESSING = "processing"
-    COMPLETED = "completed"
-    FAILED = "failed"
-
-
-class RiskLevel(str, Enum):
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
-    CRITICAL = "critical"
+from app.model.enums import AustralianState, ContractType, ProcessingStatus, RiskLevel
 
 
 class RealEstateAgentState(TypedDict):

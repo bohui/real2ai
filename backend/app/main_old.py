@@ -105,8 +105,8 @@ async def shutdown_event():
     logger.info("Real2.AI API shutdown complete")
 
 
-# Import background tasks (these would be moved to a separate module in production)
-from app.main_old import (
+# Import background tasks (these would be moved to a separate module)
+from app.main import (
     process_document_background,
     analyze_contract_background,
     enhanced_reprocess_document_with_ocr_background,
