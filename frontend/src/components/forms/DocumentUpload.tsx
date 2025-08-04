@@ -1,231 +1,251 @@
-import React, { useCallback } from 'react'
-import { useDropzone } from 'react-dropzone'
-import { useForm, Controller } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
-import { z } from 'zod'
-import { motion, AnimatePresence } from 'framer-motion'
-import { 
-  Upload, 
-  FileText, 
-  X, 
-  CheckCircle, 
+import React, { useCallback } from "react";
+import { useDropzone } from "react-dropzone";
+import { useForm, Controller } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  Upload,
+  FileText,
+  X,
+  CheckCircle,
   AlertCircle,
   Eye,
-  Trash2
-} from 'lucide-react'
+  Trash2,
+} from "lucide-react";
 
-import Button from '@/components/ui/Button'
-import Select from '@/components/ui/Select'
-import Input from '@/components/ui/Input'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
-import { apiService } from '@/services/api'
-import { useAuthStore } from '@/store/authStore'
-import { useUIStore } from '@/store/uiStore'
-import { ContractType, AustralianState } from '@/types'
-import { 
-  formatFileSize, 
-  validateFileType, 
+import Button from "@/components/ui/Button";
+import Select from "@/components/ui/Select";
+import Input from "@/components/ui/Input";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
+import { apiService } from "@/services/api";
+import { useAuthStore } from "@/store/authStore";
+import { useUIStore } from "@/store/uiStore";
+import { ContractType, AustralianState } from "@/types";
+import {
+  formatFileSize,
+  validateFileType,
   validateFileSize,
   australianStates,
-  cn 
-} from '@/utils'
+  cn,
+} from "@/utils";
 
 const uploadSchema = z.object({
-  contract_type: z.enum(['purchase_agreement', 'lease_agreement', 'off_plan', 'auction']),
-  australian_state: z.enum(['NSW', 'VIC', 'QLD', 'SA', 'WA', 'TAS', 'NT', 'ACT']),
-  user_notes: z.string().optional()
-})
+  contract_type: z.enum([
+    "purchase_agreement",
+    "lease_agreement",
+    "off_plan",
+    "auction",
+  ]),
+  australian_state: z.enum([
+    "NSW",
+    "VIC",
+    "QLD",
+    "SA",
+    "WA",
+    "TAS",
+    "NT",
+    "ACT",
+  ]),
+  user_notes: z.string().optional(),
+});
 
-type UploadFormData = z.infer<typeof uploadSchema>
+type UploadFormData = z.infer<typeof uploadSchema>;
 
 interface DocumentUploadProps {
-  onUploadComplete?: (response: any) => void
-  onUploadError?: (error: Error) => void
-  maxFiles?: number
-  className?: string
+  onUploadComplete?: (documentId: string) => void;
+  onUploadError?: (error: Error) => void;
+  maxFiles?: number;
+  className?: string;
 }
 
-const ALLOWED_FILE_TYPES = ['pdf', 'doc', 'docx']
-const MAX_FILE_SIZE_MB = 10
+const ALLOWED_FILE_TYPES = ["pdf", "doc", "docx"];
+const MAX_FILE_SIZE_MB = 10;
 
 const DocumentUpload: React.FC<DocumentUploadProps> = ({
   onUploadComplete,
   onUploadError,
   maxFiles = 1,
-  className
+  className,
 }) => {
-  const { user } = useAuthStore()
-  const { addNotification } = useUIStore()
-  
-  const [isUploading, setIsUploading] = React.useState(false)
-  const [uploadProgress, setUploadProgress] = React.useState(0)
-  
-  const [selectedFiles, setSelectedFiles] = React.useState<File[]>([])
-  const [uploadedFiles, setUploadedFiles] = React.useState<Array<{
-    file: File
-    documentId?: string
-    status: 'uploading' | 'completed' | 'error'
-    error?: string
-  }>>([])
-  const [uploadSuccess, setUploadSuccess] = React.useState(false)
+  const { user } = useAuthStore();
+  const { addNotification } = useUIStore();
+
+  const [isUploading, setIsUploading] = React.useState(false);
+  const [uploadProgress, setUploadProgress] = React.useState(0);
+
+  const [selectedFiles, setSelectedFiles] = React.useState<File[]>([]);
+  const [uploadedFiles, setUploadedFiles] = React.useState<
+    Array<{
+      file: File;
+      documentId?: string;
+      status: "uploading" | "completed" | "error";
+      error?: string;
+    }>
+  >([]);
+  const [uploadSuccess, setUploadSuccess] = React.useState(false);
 
   const {
     control,
     handleSubmit,
     formState: { errors },
-    watch
+    watch,
   } = useForm<UploadFormData>({
     resolver: zodResolver(uploadSchema),
     defaultValues: {
-      contract_type: 'purchase_agreement',
-      australian_state: user?.australian_state || 'NSW',
-      user_notes: ''
-    }
-  })
+      contract_type: "purchase_agreement",
+      australian_state: user?.australian_state || "NSW",
+      user_notes: "",
+    },
+  });
 
-  const onDrop = useCallback((acceptedFiles: File[], rejectedFiles: any[]) => {
-    // Handle rejected files
-    if (rejectedFiles.length > 0) {
-      rejectedFiles.forEach(({ file, errors }) => {
-        const errorMessages = errors.map((e: any) => {
-          switch (e.code) {
-            case 'file-too-large':
-              return `File is too large. Maximum size is ${MAX_FILE_SIZE_MB}MB.`
-            case 'file-invalid-type':
-              return `Invalid file type. Allowed types: ${ALLOWED_FILE_TYPES.join(', ')}.`
-            default:
-              return e.message
+  const onDrop = useCallback(
+    (acceptedFiles: File[], rejectedFiles: any[]) => {
+      // Handle rejected files
+      if (rejectedFiles.length > 0) {
+        rejectedFiles.forEach(({ file, errors }) => {
+          const errorMessages = errors
+            .map((e: any) => {
+              switch (e.code) {
+                case "file-too-large":
+                  return `File is too large. Maximum size is ${MAX_FILE_SIZE_MB}MB.`;
+                case "file-invalid-type":
+                  return `Invalid file type. Allowed types: ${ALLOWED_FILE_TYPES.join(
+                    ", "
+                  )}.`;
+                default:
+                  return e.message;
+              }
+            })
+            .join(" ");
+
+          addNotification({
+            type: "error",
+            title: "File rejected",
+            message: errorMessages.includes("file-too-large")
+              ? "File size too large"
+              : errorMessages.includes("file-invalid-type")
+              ? "File type not supported"
+              : `${file.name}: ${errorMessages}`,
+          });
+
+          if (onUploadError) {
+            onUploadError(new Error(errorMessages));
           }
-        }).join(' ')
-        
-        addNotification({
-          type: 'error',
-          title: 'File rejected',
-          message: errorMessages.includes('file-too-large') ? 'File size too large' : errorMessages.includes('file-invalid-type') ? 'File type not supported' : `${file.name}: ${errorMessages}`
-        })
-        
-        if (onUploadError) {
-          onUploadError(new Error(errorMessages))
-        }
-      })
-    }
+        });
+      }
 
-    // Handle accepted files
-    if (acceptedFiles.length > 0) {
-      const newFiles = acceptedFiles.slice(0, maxFiles - selectedFiles.length)
-      setSelectedFiles(prev => [...prev, ...newFiles])
-    }
-  }, [selectedFiles, maxFiles, addNotification])
+      // Handle accepted files
+      if (acceptedFiles.length > 0) {
+        const newFiles = acceptedFiles.slice(
+          0,
+          maxFiles - selectedFiles.length
+        );
+        setSelectedFiles((prev) => [...prev, ...newFiles]);
+      }
+    },
+    [selectedFiles, maxFiles, addNotification]
+  );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: {
-      'application/pdf': ['.pdf'],
-      'application/msword': ['.doc'],
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx']
+      "application/pdf": [".pdf"],
+      "application/msword": [".doc"],
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+        [".docx"],
     },
     maxSize: MAX_FILE_SIZE_MB * 1024 * 1024,
     multiple: maxFiles > 1,
-    disabled: isUploading
-  })
+    disabled: isUploading,
+  });
 
   const removeFile = (index: number) => {
-    setSelectedFiles(prev => prev.filter((_, i) => i !== index))
-  }
-  
+    setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
   const resetUpload = () => {
-    setSelectedFiles([])
-    setUploadedFiles([])
-    setUploadSuccess(false)
-  }
+    setSelectedFiles([]);
+    setUploadedFiles([]);
+    setUploadSuccess(false);
+  };
 
   const onSubmit = async (data: UploadFormData) => {
     if (selectedFiles.length === 0) {
       addNotification({
-        type: 'warning',
-        title: 'No files selected',
-        message: 'Please select at least one file to upload.'
-      })
-      return
+        type: "warning",
+        title: "No files selected",
+        message: "Please select at least one file to upload.",
+      });
+      return;
     }
 
     try {
-      setIsUploading(true)
-      setUploadProgress(0)
-      
+      setIsUploading(true);
+      setUploadProgress(0);
+
       for (const file of selectedFiles) {
-        setUploadedFiles(prev => [
-          ...prev,
-          { file, status: 'uploading' }
-        ])
+        setUploadedFiles((prev) => [...prev, { file, status: "uploading" }]);
 
         try {
           const response = await apiService.uploadDocument(
-            file, 
-            data.contract_type, 
+            file,
+            data.contract_type,
             data.australian_state
-          )
-          
-          const documentId = response.document_id
+          );
 
-          setUploadedFiles(prev => 
-            prev.map(item => 
-              item.file === file 
-                ? { ...item, documentId, status: 'completed' }
+          const documentId = response.document_id;
+
+          setUploadedFiles((prev) =>
+            prev.map((item) =>
+              item.file === file
+                ? { ...item, documentId, status: "completed" }
                 : item
             )
-          )
+          );
 
-          const uploadResponse = {
-            document_id: documentId,
-            filename: file.name,
-            upload_status: 'uploaded'
-          }
-          
           if (onUploadComplete) {
-            onUploadComplete(uploadResponse)
+            onUploadComplete(documentId);
           }
 
           addNotification({
-            type: 'success',
-            title: 'Upload successful',
-            message: `${file.name} has been uploaded and is ready for analysis.`
-          })
-          
-          setUploadSuccess(true)
+            type: "success",
+            title: "Upload successful",
+            message: `${file.name} has been uploaded and is ready for analysis.`,
+          });
 
+          setUploadSuccess(true);
         } catch (error) {
-          setUploadedFiles(prev => 
-            prev.map(item => 
-              item.file === file 
-                ? { ...item, status: 'error', error: String(error) }
+          setUploadedFiles((prev) =>
+            prev.map((item) =>
+              item.file === file
+                ? { ...item, status: "error", error: String(error) }
                 : item
             )
-          )
-          
+          );
+
           if (onUploadError) {
-            onUploadError(error as Error)
+            onUploadError(error as Error);
           }
         }
       }
 
       // Clear selected files after upload
-      setSelectedFiles([])
-
+      setSelectedFiles([]);
     } catch (error) {
-      console.error('Upload error:', error)
+      console.error("Upload error:", error);
     }
-  }
+  };
 
   const contractTypeOptions = [
-    { value: 'purchase_agreement', label: 'Purchase Agreement' },
-    { value: 'lease_agreement', label: 'Lease Agreement' },
-    { value: 'off_plan', label: 'Off the Plan Contract' },
-    { value: 'auction', label: 'Auction Contract' }
-  ]
+    { value: "purchase_agreement", label: "Purchase Agreement" },
+    { value: "lease_agreement", label: "Lease Agreement" },
+    { value: "off_plan", label: "Off the Plan Contract" },
+    { value: "auction", label: "Auction Contract" },
+  ];
 
   return (
-    <div className={cn('space-y-6', className)}>
+    <div className={cn("space-y-6", className)}>
       {/* Upload Form */}
       <Card>
         <CardHeader>
@@ -244,7 +264,7 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({
                     error={errors.contract_type?.message}
                     {...field}
                   >
-                    {contractTypeOptions.map(option => (
+                    {contractTypeOptions.map((option) => (
                       <option key={option.value} value={option.value}>
                         {option.label}
                       </option>
@@ -262,7 +282,7 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({
                     error={errors.australian_state?.message}
                     {...field}
                   >
-                    {australianStates.map(state => (
+                    {australianStates.map((state) => (
                       <option key={state.value} value={state.value}>
                         {state.fullName}
                       </option>
@@ -276,32 +296,31 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({
             <div
               {...getRootProps()}
               className={cn(
-                'border-2 border-dashed rounded-xl p-8 text-center transition-all duration-200 cursor-pointer',
+                "border-2 border-dashed rounded-xl p-8 text-center transition-all duration-200 cursor-pointer",
                 isDragActive
-                  ? 'border-primary-500 bg-primary-50'
-                  : 'border-neutral-300 hover:border-primary-400 hover:bg-neutral-50',
-                isUploading && 'pointer-events-none opacity-50'
+                  ? "border-primary-500 bg-primary-50"
+                  : "border-neutral-300 hover:border-primary-400 hover:bg-neutral-50",
+                isUploading && "pointer-events-none opacity-50"
               )}
             >
               <input {...getInputProps()} />
-              
+
               <div className="space-y-4">
                 <div className="mx-auto w-16 h-16 bg-primary-100 rounded-full flex items-center justify-center">
                   <Upload className="w-8 h-8 text-primary-600" />
                 </div>
-                
+
                 <div>
                   <p className="text-lg font-medium text-neutral-900">
                     {isDragActive
-                      ? 'Drop your files here'
-                      : 'Drag & drop your contract files'
-                    }
+                      ? "Drop your files here"
+                      : "Drag & drop your contract files"}
                   </p>
                   <p className="text-sm text-neutral-500 mt-1">
                     or click to browse your computer
                   </p>
                 </div>
-                
+
                 <div className="text-xs text-neutral-400 space-y-1">
                   <p>Supported formats: PDF, DOC, DOCX</p>
                   <p>Maximum file size: {MAX_FILE_SIZE_MB}MB</p>
@@ -315,14 +334,14 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({
               {selectedFiles.length > 0 && (
                 <motion.div
                   initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
+                  animate={{ opacity: 1, height: "auto" }}
                   exit={{ opacity: 0, height: 0 }}
                   className="space-y-3"
                 >
                   <h4 className="text-sm font-medium text-neutral-700">
                     Selected Files ({selectedFiles.length})
                   </h4>
-                  
+
                   {selectedFiles.map((file, index) => (
                     <motion.div
                       key={`${file.name}-${index}`}
@@ -342,7 +361,7 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({
                           </p>
                         </div>
                       </div>
-                      
+
                       <Button
                         type="button"
                         variant="ghost"
@@ -441,23 +460,23 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({
                       </p>
                     </div>
                   </div>
-                  
+
                   <div className="flex items-center gap-2">
-                    {item.status === 'uploading' && (
+                    {item.status === "uploading" && (
                       <div className="flex items-center gap-2 text-primary-600">
                         <div className="w-4 h-4 border-2 border-primary-600 border-t-transparent rounded-full animate-spin" />
                         <span className="text-xs">Uploading...</span>
                       </div>
                     )}
-                    
-                    {item.status === 'completed' && (
+
+                    {item.status === "completed" && (
                       <div className="flex items-center gap-2 text-success-600">
                         <CheckCircle className="w-4 h-4" />
                         <span className="text-xs">Complete</span>
                       </div>
                     )}
-                    
-                    {item.status === 'error' && (
+
+                    {item.status === "error" && (
                       <div className="flex items-center gap-2 text-danger-600">
                         <AlertCircle className="w-4 h-4" />
                         <span className="text-xs">Error</span>
@@ -470,7 +489,7 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({
           </CardContent>
         </Card>
       )}
-      
+
       {/* Upload Success State */}
       {uploadSuccess && (
         <Card>
@@ -482,18 +501,15 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({
             <p className="text-neutral-600 mb-4">
               Your contract has been uploaded and is ready for analysis.
             </p>
-            <Button
-              variant="outline"
-              onClick={resetUpload}
-            >
+            <Button variant="outline" onClick={resetUpload}>
               Upload Another
             </Button>
           </CardContent>
         </Card>
       )}
     </div>
-  )
-}
+  );
+};
 
 export { DocumentUpload };
 export default DocumentUpload;

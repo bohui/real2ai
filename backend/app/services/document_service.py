@@ -97,9 +97,11 @@ class DocumentService:
                 },
             )
 
-            if result.get("error"):
+            # Check if upload was successful
+            # The result is an UploadResponse object, not a dictionary
+            if hasattr(result, "error") and result.error:
                 raise HTTPException(
-                    status_code=500, detail=f"File upload failed: {result['error']}"
+                    status_code=500, detail=f"File upload failed: {result.error}"
                 )
 
             return {
@@ -443,7 +445,9 @@ class DocumentService:
             storage = self.db_client.storage()
             result = storage.from_(self.storage_bucket).remove([storage_path])
 
-            return not result.get("error")
+            # Check if deletion was successful
+            # The result is an object, not a dictionary
+            return not (hasattr(result, "error") and result.error)
 
         except Exception as e:
             logger.error(f"File deletion error: {str(e)}")
@@ -457,12 +461,22 @@ class DocumentService:
                 storage_path, expires_in
             )
 
-            if result.get("error"):
+            # Check if URL generation was successful
+            # The result is an object, not a dictionary
+            if hasattr(result, "error") and result.error:
                 raise HTTPException(
                     status_code=500, detail="Could not generate file URL"
                 )
 
-            return result["signedURL"]
+            # Access the signed URL from the result object
+            if hasattr(result, "signedURL"):
+                return result.signedURL
+            elif hasattr(result, "signed_url"):
+                return result.signed_url
+            else:
+                raise HTTPException(
+                    status_code=500, detail="Could not generate file URL"
+                )
 
         except Exception as e:
             logger.error(f"URL generation error: {str(e)}")

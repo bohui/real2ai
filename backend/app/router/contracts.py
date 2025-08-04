@@ -63,6 +63,7 @@ async def start_contract_analysis(
         # Create analysis record
         analysis_data = {
             "contract_id": contract_id,
+            "user_id": user.id,
             "agent_version": "1.0",
             "status": "pending",
         }

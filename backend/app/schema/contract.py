@@ -9,6 +9,7 @@ from app.model.enums import AustralianState, RiskLevel
 
 class AnalysisOptions(BaseModel):
     """Contract analysis options"""
+
     include_financial_analysis: bool = True
     include_risk_assessment: bool = True
     include_compliance_check: bool = True
@@ -18,6 +19,7 @@ class AnalysisOptions(BaseModel):
 
 class ContractAnalysisRequest(BaseModel):
     """Contract analysis request"""
+
     document_id: str
     analysis_options: AnalysisOptions = AnalysisOptions()
     user_notes: Optional[str] = None
@@ -25,6 +27,7 @@ class ContractAnalysisRequest(BaseModel):
 
 class ContractAnalysisResponse(BaseModel):
     """Contract analysis response"""
+
     contract_id: str
     analysis_id: str
     status: str = "pending"
@@ -33,6 +36,7 @@ class ContractAnalysisResponse(BaseModel):
 
 class RiskFactorResponse(BaseModel):
     """Risk factor in analysis response"""
+
     factor: str
     severity: RiskLevel
     description: str
@@ -44,6 +48,7 @@ class RiskFactorResponse(BaseModel):
 
 class RecommendationResponse(BaseModel):
     """Recommendation in analysis response"""
+
     priority: RiskLevel
     category: str  # legal, financial, practical
     recommendation: str
@@ -55,6 +60,7 @@ class RecommendationResponse(BaseModel):
 
 class StampDutyResponse(BaseModel):
     """Stamp duty calculation response"""
+
     state: AustralianState
     purchase_price: float
     base_duty: float
@@ -68,6 +74,7 @@ class StampDutyResponse(BaseModel):
 
 class ComplianceCheckResponse(BaseModel):
     """Compliance check response"""
+
     state_compliance: bool
     compliance_issues: List[str]
     cooling_off_compliance: bool
@@ -80,30 +87,32 @@ class ComplianceCheckResponse(BaseModel):
 
 class ContractAnalysisResult(BaseModel):
     """Complete contract analysis result"""
+
     contract_id: str
     analysis_id: str
     analysis_timestamp: datetime
     user_id: str
     australian_state: AustralianState
-    
+
     # Analysis Results
     contract_terms: Dict[str, Any]
     risk_assessment: Dict[str, Any]
     compliance_check: ComplianceCheckResponse
     recommendations: List[RecommendationResponse]
-    
+
     # Analysis Metadata
     confidence_scores: Dict[str, float]
     overall_confidence: float
     processing_time: float
     analysis_version: str
-    
+
     # Summary
     executive_summary: Dict[str, Any]
 
 
 class StampDutyCalculationRequest(BaseModel):
     """Stamp duty calculation request"""
+
     purchase_price: float
     state: AustralianState
     is_first_home_buyer: bool = False
@@ -113,6 +122,7 @@ class StampDutyCalculationRequest(BaseModel):
 
 class PropertyFinancialSummary(BaseModel):
     """Property financial summary"""
+
     purchase_price: float
     stamp_duty: StampDutyResponse
     legal_costs: Optional[float] = None
@@ -123,6 +133,7 @@ class PropertyFinancialSummary(BaseModel):
 
 class WebSocketProgressUpdate(BaseModel):
     """WebSocket progress update"""
+
     contract_id: str
     current_step: str
     progress_percent: int
@@ -132,6 +143,7 @@ class WebSocketProgressUpdate(BaseModel):
 
 class ContractAnalysisFromOCR(BaseModel):
     """Contract analysis results from OCR extraction"""
+
     document_id: str
     ocr_confidence: float
     contract_elements: Dict[str, List[str]]
