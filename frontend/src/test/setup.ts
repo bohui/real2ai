@@ -4,6 +4,7 @@
 
 import '@testing-library/jest-dom'
 import { vi } from 'vitest'
+import React from 'react'
 
 // Mock window.matchMedia
 Object.defineProperty(window, 'matchMedia', {
@@ -41,16 +42,6 @@ global.fetch = vi.fn()
 vi.spyOn(console, 'warn').mockImplementation(() => {})
 vi.spyOn(console, 'error').mockImplementation(() => {})
 
-// Mock router
-vi.mock('react-router-dom', async () => {
-  const actual = await vi.importActual('react-router-dom')
-  return {
-    ...actual,
-    useNavigate: () => vi.fn(),
-    useLocation: () => ({ pathname: '/', search: '', hash: '', state: null }),
-    useParams: () => ({}),
-  }
-})
 
 // Mock stores
 vi.mock('@/store/authStore', () => ({
@@ -88,32 +79,137 @@ vi.mock('@/store/analysisStore', () => ({
     uploadDocument: vi.fn(),
     contracts: [],
     analyses: {},
+    recentAnalyses: [], // Add missing recentAnalyses array
+    isAnalyzing: false,
     getContract: vi.fn(),
     getAnalysis: vi.fn(),
     startAnalysis: vi.fn(),
+    clearContracts: vi.fn(),
+    setAnalysisProgress: vi.fn(),
   }))
 }))
 
-// Mock API service
+// Mock API service with proper exports and default resolved values
+const mockApiMethods = {
+  uploadDocument: vi.fn().mockResolvedValue({ 
+    id: 'test-doc-id', 
+    filename: 'test.pdf',
+    status: 'uploaded'
+  }),
+  login: vi.fn().mockResolvedValue({ 
+    user: { id: 'test-user', email: 'test@example.com' },
+    token: 'test-token'
+  }),
+  register: vi.fn().mockResolvedValue({ 
+    user: { id: 'test-user', email: 'test@example.com' },
+    token: 'test-token'
+  }),
+  logout: vi.fn().mockResolvedValue({ message: 'Logged out successfully' }),
+  getCurrentUser: vi.fn().mockResolvedValue({ 
+    id: 'test-user', 
+    email: 'test@example.com' 
+  }),
+  getOnboardingStatus: vi.fn().mockResolvedValue({
+    onboarding_completed: false,
+    onboarding_preferences: {}
+  }),
+  completeOnboarding: vi.fn().mockResolvedValue({
+    message: 'Onboarding completed successfully',
+    skip_onboarding: false
+  }),
+  updateProfile: vi.fn().mockResolvedValue({ message: 'Profile updated' }),
+  updateOnboardingPreferences: vi.fn().mockResolvedValue({ message: 'Preferences updated' }),
+  startAnalysis: vi.fn().mockResolvedValue({ 
+    analysis_id: 'test-analysis-id',
+    status: 'started'
+  }),
+  getAnalysisResult: vi.fn().mockResolvedValue({
+    analysis_id: 'test-analysis-id',
+    status: 'completed',
+    result: {}
+  }),
+  deleteAnalysis: vi.fn().mockResolvedValue({ message: 'Analysis deleted' }),
+  downloadReport: vi.fn().mockResolvedValue(new Blob(['test'], { type: 'application/pdf' })),
+  getUserStats: vi.fn().mockResolvedValue({
+    analyses_count: 5,
+    credits_used: 10,
+    credits_remaining: 90
+  }),
+  getDocument: vi.fn().mockResolvedValue({
+    id: 'test-doc-id',
+    filename: 'test.pdf',
+    content: 'test content'
+  }),
+  updateUserPreferences: vi.fn().mockResolvedValue({ message: 'Preferences updated' }),
+  healthCheck: vi.fn().mockResolvedValue({ status: 'healthy' }),
+  handleError: vi.fn((error) => error.message || 'Unknown error'),
+  setToken: vi.fn(),
+  clearToken: vi.fn(),
+}
+
 vi.mock('@/services/api', () => ({
-  default: {
-    uploadDocument: vi.fn(),
-    login: vi.fn(),
-    register: vi.fn(),
-    logout: vi.fn(),
-    getCurrentUser: vi.fn(),
-    getOnboardingStatus: vi.fn(),
-    completeOnboarding: vi.fn(),
-    updateProfile: vi.fn(),
-    startContractAnalysis: vi.fn(),
-    getContractAnalysis: vi.fn(),
-  },
-  apiService: {
-    uploadDocument: vi.fn(),
-    login: vi.fn(),
-    register: vi.fn(),
-    logout: vi.fn(),
-    getCurrentUser: vi.fn(),
-    handleError: vi.fn((error) => error.message || 'Unknown error'),
+  default: mockApiMethods,
+  apiService: mockApiMethods,
+}))
+
+// Mock React Router components
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual('react-router-dom')
+  return {
+    ...actual,
+    useNavigate: () => vi.fn(),
+    useLocation: () => ({ pathname: '/', search: '', hash: '', state: null }),
+    useParams: () => ({}),
+    Navigate: ({ children }: { children?: React.ReactNode }) => React.createElement('div', { 'data-testid': 'navigate' }, children),
+    Outlet: () => React.createElement('div', { 'data-testid': 'outlet' }, 'Outlet Content'),
   }
+})
+
+// Mock ProtectedRoute component
+vi.mock('@/components/auth/ProtectedRoute', () => ({
+  default: ({ children, requiredRole, fallbackPath }: { 
+    children: React.ReactNode, 
+    requiredRole?: string, 
+    fallbackPath?: string 
+  }) => React.createElement('div', { 
+    'data-testid': 'protected-route', 
+    'data-role': requiredRole, 
+    'data-fallback': fallbackPath 
+  }, children)
+}))
+
+// Mock Layout components
+vi.mock('@/components/layout/Layout', () => ({
+  default: () => React.createElement('div', { 'data-testid': 'main-layout' }, [
+    React.createElement('div', { key: 'sidebar', 'data-testid': 'sidebar' }, 'Sidebar'),
+    React.createElement('div', { key: 'header', 'data-testid': 'header' }, 'Header'),
+    React.createElement('div', { key: 'main', 'data-testid': 'main-content' }, 
+      React.createElement('div', { 'data-testid': 'outlet' }, 'Main Content')
+    )
+  ])
+}))
+
+vi.mock('@/components/layout/AuthLayout', () => ({
+  default: () => React.createElement('div', { 'data-testid': 'auth-layout' },
+    React.createElement('div', { 'data-testid': 'outlet' }, 'Auth Content')
+  )
+}))
+
+// Mock Sidebar and Header components
+vi.mock('@/components/layout/Sidebar', () => ({
+  default: () => React.createElement('div', { 'data-testid': 'sidebar' }, 'Sidebar Mock')
+}))
+
+vi.mock('@/components/layout/Header', () => ({
+  default: () => React.createElement('div', { 'data-testid': 'header' }, 'Header Mock')
+}))
+
+// Mock framer-motion to avoid animation issues in tests
+vi.mock('framer-motion', () => ({
+  motion: {
+    div: ({ children, ...props }: any) => React.createElement('div', props, children),
+    span: ({ children, ...props }: any) => React.createElement('span', props, children),
+    button: ({ children, ...props }: any) => React.createElement('button', props, children),
+  },
+  AnimatePresence: ({ children }: { children: React.ReactNode }) => children,
 }))

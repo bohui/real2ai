@@ -8,31 +8,165 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter } from 'react-router-dom'
 import { vi } from 'vitest'
 
-// Create a custom render function that includes providers
-const AllTheProviders: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const queryClient = new QueryClient({
-    defaultOptions: {
-      queries: {
-        retry: false,
-        staleTime: 0,
-        gcTime: 0,
-      },
-    },
-  })
+// Mock store states for different test scenarios
+export interface TestStoreConfig {
+  auth?: {
+    user?: any
+    isAuthenticated?: boolean
+    isLoading?: boolean
+    error?: string | null
+  }
+  ui?: {
+    showOnboarding?: boolean
+    notifications?: any[]
+    sidebarOpen?: boolean
+    isMobile?: boolean
+  }
+  analysis?: {
+    isUploading?: boolean
+    uploadProgress?: number
+    contracts?: any[]
+    analyses?: Record<string, any>
+    recentAnalyses?: any[]
+    isAnalyzing?: boolean
+  }
+}
 
-  return (
-    <QueryClientProvider client={queryClient}>
+// Create context-specific providers
+const createTestProviders = (includeRouter: boolean = true) => {
+  const TestProviders: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: {
+          retry: false,
+          staleTime: 0,
+          gcTime: 0,
+        },
+      },
+    })
+
+    const content = includeRouter ? (
       <BrowserRouter>
         {children}
       </BrowserRouter>
-    </QueryClientProvider>
-  )
+    ) : children
+
+    return (
+      <QueryClientProvider client={queryClient}>
+        {content}
+      </QueryClientProvider>
+    )
+  }
+  return TestProviders
 }
+
+// Default provider (with router for components that need it)
+const AllTheProviders = createTestProviders(true)
+
+// Provider for App component (no router since App includes its own)
+const AppProvider = createTestProviders(false)
 
 const customRender = (
   ui: React.ReactElement,
   options?: Omit<RenderOptions, 'wrapper'>
 ) => render(ui, { wrapper: AllTheProviders, ...options })
+
+// Special render function for App component
+export const renderApp = (
+  ui: React.ReactElement,
+  options?: Omit<RenderOptions, 'wrapper'>
+) => render(ui, { wrapper: AppProvider, ...options })
+
+// Helper functions to configure mock stores before rendering
+export const configureAuthenticatedState = (userOverrides: Partial<typeof mockUser> = {}) => {
+  mockAuthStore.user = { ...mockUser, ...userOverrides }
+  mockAuthStore.isAuthenticated = true
+  mockAuthStore.isLoading = false
+  mockAuthStore.error = null
+  mockUIStore.showOnboarding = false
+  mockUIStore.notifications = []
+}
+
+export const configureUnauthenticatedState = () => {
+  mockAuthStore.user = null
+  mockAuthStore.isAuthenticated = false
+  mockAuthStore.isLoading = false
+  mockAuthStore.error = null
+  mockUIStore.showOnboarding = false
+  mockUIStore.notifications = []
+}
+
+export const configureOnboardingState = (userOverrides: Partial<typeof mockUser> = {}) => {
+  mockAuthStore.user = { 
+    ...mockUser, 
+    onboarding_completed: false,
+    onboarding_completed_at: null,
+    ...userOverrides 
+  }
+  mockAuthStore.isAuthenticated = true
+  mockAuthStore.isLoading = false
+  mockAuthStore.error = null
+  mockUIStore.showOnboarding = true
+  mockUIStore.notifications = []
+}
+
+export const configureLoadingState = () => {
+  mockAuthStore.user = null
+  mockAuthStore.isAuthenticated = false
+  mockAuthStore.isLoading = true
+  mockAuthStore.error = null
+}
+
+export const configureErrorState = (error: string = 'Test error') => {
+  mockAuthStore.user = null
+  mockAuthStore.isAuthenticated = false
+  mockAuthStore.isLoading = false
+  mockAuthStore.error = error
+}
+
+// Specialized render functions for different app states
+export const renderAuthenticated = (
+  ui: React.ReactElement,
+  userOverrides: Partial<typeof mockUser> = {},
+  options?: Omit<RenderOptions, 'wrapper'>
+) => {
+  configureAuthenticatedState(userOverrides)
+  return customRender(ui, options)
+}
+
+export const renderUnauthenticated = (
+  ui: React.ReactElement,
+  options?: Omit<RenderOptions, 'wrapper'>
+) => {
+  configureUnauthenticatedState()
+  return customRender(ui, options)
+}
+
+export const renderOnboarding = (
+  ui: React.ReactElement,
+  userOverrides: Partial<typeof mockUser> = {},
+  options?: Omit<RenderOptions, 'wrapper'>
+) => {
+  configureOnboardingState(userOverrides)
+  return customRender(ui, options)
+}
+
+export const renderLoading = (
+  ui: React.ReactElement,
+  options?: Omit<RenderOptions, 'wrapper'>
+) => {
+  configureLoadingState()
+  return customRender(ui, options)
+}
+
+export const renderWithError = (
+  ui: React.ReactElement,
+  error: string = 'Test error',
+  options?: Omit<RenderOptions, 'wrapper'>
+) => {
+  configureErrorState(error)
+  return customRender(ui, options)
+}
 
 export * from '@testing-library/react'
 export { customRender as render }
@@ -48,12 +182,17 @@ export const mockApiService = {
   updateOnboardingPreferences: vi.fn(),
   uploadDocument: vi.fn(),
   getDocument: vi.fn(),
-  startContractAnalysis: vi.fn(),
-  getContractAnalysis: vi.fn(),
+  startAnalysis: vi.fn(),
+  getAnalysisResult: vi.fn(),
+  deleteAnalysis: vi.fn(),
   downloadReport: vi.fn(),
-  getUserProfile: vi.fn(),
+  updateProfile: vi.fn(),
   updateUserPreferences: vi.fn(),
-  getUsageStats: vi.fn(),
+  getUserStats: vi.fn(),
+  healthCheck: vi.fn(),
+  handleError: vi.fn((error) => error.message || 'Unknown error'),
+  setToken: vi.fn(),
+  clearToken: vi.fn(),
 }
 
 // Mock auth store
@@ -61,8 +200,14 @@ export const mockAuthStore = {
   user: null,
   isAuthenticated: false,
   isLoading: false,
+  error: null,
   login: vi.fn(),
+  register: vi.fn(),
   logout: vi.fn(),
+  clearError: vi.fn(),
+  updateUser: vi.fn(),
+  updateProfile: vi.fn(),
+  refreshUser: vi.fn(),
   initializeAuth: vi.fn(),
   setUser: vi.fn(),
 }
@@ -75,6 +220,22 @@ export const mockUIStore = {
   addNotification: vi.fn(),
   removeNotification: vi.fn(),
   clearNotifications: vi.fn(),
+}
+
+// Mock analysis store
+export const mockAnalysisStore = {
+  isUploading: false,
+  uploadProgress: 0,
+  uploadDocument: vi.fn(),
+  contracts: [],
+  analyses: {},
+  recentAnalyses: [],
+  isAnalyzing: false,
+  getContract: vi.fn(),
+  getAnalysis: vi.fn(),
+  startAnalysis: vi.fn(),
+  clearContracts: vi.fn(),
+  setAnalysisProgress: vi.fn(),
 }
 
 // Test data
