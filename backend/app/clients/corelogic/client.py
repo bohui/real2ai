@@ -312,26 +312,32 @@ class CoreLogicClient(BaseClient, RealEstateAPIOperations):
     async def get_property_valuation(self, address: str, 
                                    property_details: Dict[str, Any] = None) -> Dict[str, Any]:
         """
-        Get property valuation estimate.
+        Get property valuation estimate with enhanced validation and error handling.
         This is CoreLogic's primary strength.
         """
+        if not property_details:
+            property_details = {}
+            
+        # Enhanced address validation
+        if not address or not address.strip():
+            raise InvalidPropertyAddressError("Address cannot be empty")
+            
+        cleaned_address = self._clean_and_validate_address(address)
+        
         valuation_type = property_details.get("valuation_type", self.config.default_valuation_type)
         
         if not self.config.is_feature_enabled(f"{valuation_type}_valuation" if valuation_type != "avm" else "avm"):
             raise ClientError(f"Valuation type '{valuation_type}' not available in current tier")
         
-        endpoint = f"valuations/{valuation_type}"
+        # Pre-validation: Check cost budget
         estimated_cost = self.config.get_operation_cost(f"{valuation_type}_valuation")
+        if not await self._check_budget_availability(estimated_cost):
+            raise CoreLogicBudgetExceededError(f"Insufficient budget for {valuation_type} valuation (${estimated_cost:.2f})")
         
-        valuation_request = {
-            "address": address,
-            "property_type": property_details.get("property_type", "house"),
-            "bedrooms": property_details.get("bedrooms"),
-            "bathrooms": property_details.get("bathrooms"),
-            "land_area": property_details.get("land_area"),
-            "building_area": property_details.get("building_area"),
-            "additional_features": property_details.get("features", [])
-        }
+        endpoint = f"valuations/{valuation_type}"
+        
+        # Enhanced valuation request with validation
+        valuation_request = self._build_valuation_request(cleaned_address, property_details, valuation_type)
         
         try:
             response = await self._make_request(
@@ -343,14 +349,35 @@ class CoreLogicClient(BaseClient, RealEstateAPIOperations):
                 timeout=aiohttp.ClientTimeout(total=self.config.valuation_timeout)
             )
             
-            # Validate valuation response
-            if not self._validate_valuation_response(response):
-                raise CoreLogicValuationError("Valuation response failed validation")
+            # Enhanced validation of response
+            validation_result = self._validate_valuation_response(response, valuation_type)
+            if not validation_result["is_valid"]:
+                raise CoreLogicValuationError(f"Valuation response validation failed: {validation_result['reason']}")
             
-            return self._transform_valuation_response(response, valuation_type)
+            # Transform and enhance response
+            transformed_response = self._transform_valuation_response(response, valuation_type)
+            
+            # Add quality assessment
+            transformed_response["quality_assessment"] = self._assess_valuation_quality(response, valuation_type)
+            
+            # Add cost tracking information
+            transformed_response["cost_information"] = {
+                "estimated_cost": estimated_cost,
+                "actual_cost": response.get("api_cost", estimated_cost),
+                "valuation_type": valuation_type,
+                "service_tier": self.config.service_tier
+            }
+            
+            return transformed_response
         
+        except CoreLogicValuationError:
+            raise
+        except CoreLogicBudgetExceededError:
+            raise
         except Exception as e:
             self.logger.error(f"Property valuation failed for {address}: {e}")
+            if isinstance(e, (ClientAuthenticationError, ClientRateLimitError)):
+                raise
             raise CoreLogicValuationError(f"Valuation failed: {e}")
     
     async def get_market_analytics(self, location: Dict[str, str], 
@@ -655,7 +682,168 @@ class CoreLogicClient(BaseClient, RealEstateAPIOperations):
             return self._rate_limit_manager.get_cost_summary()
         return {"error": "Rate limit manager not initialized"}
     
-    # Helper methods for data transformation
+    # Helper methods for data transformation and validation
+    
+    def _clean_and_validate_address(self, address: str) -> str:
+        """Clean and validate address for CoreLogic API requirements."""
+        if not address:
+            raise InvalidPropertyAddressError("Address cannot be empty")
+        
+        # Remove extra whitespace and normalize
+        cleaned = " ".join(address.strip().split())
+        
+        # Australian address validation
+        if len(cleaned) < 10:
+            raise InvalidPropertyAddressError("Address appears to be too short for a valid Australian address")
+        
+        # Check for Australian state
+        australian_states = ["NSW", "VIC", "QLD", "WA", "SA", "TAS", "ACT", "NT"]
+        has_state = any(state in cleaned.upper() for state in australian_states)
+        
+        if not has_state:
+            self.logger.warning(f"Address '{cleaned}' does not contain a recognizable Australian state")
+        
+        # Basic postcode validation (Australian postcodes are 4 digits)
+        import re
+        postcode_match = re.search(r'\b\d{4}\b', cleaned)
+        if not postcode_match:
+            self.logger.warning(f"Address '{cleaned}' does not contain a valid 4-digit postcode")
+        
+        return cleaned
+    
+    def _build_valuation_request(self, address: str, property_details: Dict[str, Any], valuation_type: str) -> Dict[str, Any]:
+        """Build enhanced valuation request with validation."""
+        request = {
+            "address": address,
+            "property_type": property_details.get("property_type", "house"),
+            "valuation_type": valuation_type
+        }
+        
+        # Add optional property characteristics if provided
+        if property_details.get("bedrooms") is not None:
+            request["bedrooms"] = max(0, int(property_details["bedrooms"]))
+        
+        if property_details.get("bathrooms") is not None:
+            request["bathrooms"] = max(0, float(property_details["bathrooms"]))
+        
+        if property_details.get("land_area") is not None:
+            request["land_area"] = max(0, float(property_details["land_area"]))
+        
+        if property_details.get("building_area") is not None:
+            request["building_area"] = max(0, float(property_details["building_area"]))
+        
+        if property_details.get("car_spaces") is not None:
+            request["car_spaces"] = max(0, int(property_details["car_spaces"]))
+        
+        # Add features if provided
+        features = property_details.get("features", [])
+        if features and isinstance(features, list):
+            request["additional_features"] = features
+        
+        # Add valuation preferences for professional valuations
+        if valuation_type in ["desktop", "professional"]:
+            request["valuation_preferences"] = {
+                "include_comparable_analysis": True,
+                "include_market_trends": True,
+                "include_risk_assessment": property_details.get("include_risk_assessment", False)
+            }
+        
+        return request
+    
+    async def _check_budget_availability(self, estimated_cost: float) -> bool:
+        """Check if budget is available for the requested operation."""
+        if not self.config.cost_management["enable_cost_tracking"]:
+            return True
+        
+        if not self._rate_limit_manager:
+            return True
+        
+        cost_summary = self._rate_limit_manager.get_cost_summary()
+        daily_spent = cost_summary.get("daily_spent", 0.0)
+        monthly_spent = cost_summary.get("monthly_spent", 0.0)
+        
+        daily_limit = self.config.cost_management["daily_budget_limit"]
+        monthly_limit = self.config.cost_management["monthly_budget_limit"]
+        
+        # Check if operation would exceed limits
+        if daily_spent + estimated_cost > daily_limit:
+            self.logger.warning(f"Operation would exceed daily budget limit: ${daily_spent + estimated_cost:.2f} > ${daily_limit:.2f}")
+            return False
+        
+        if monthly_spent + estimated_cost > monthly_limit:
+            self.logger.warning(f"Operation would exceed monthly budget limit: ${monthly_spent + estimated_cost:.2f} > ${monthly_limit:.2f}")
+            return False
+        
+        return True
+    
+    def _assess_valuation_quality(self, response: Dict[str, Any], valuation_type: str) -> Dict[str, Any]:
+        """Assess the quality of the valuation response."""
+        quality_factors = []
+        overall_score = 0.0
+        warnings = []
+        
+        # Confidence score assessment
+        confidence = response.get("confidence_score", 0.0)
+        if confidence >= 0.8:
+            quality_factors.append(("high_confidence", 0.3))
+        elif confidence >= 0.6:
+            quality_factors.append(("medium_confidence", 0.2))
+        else:
+            quality_factors.append(("low_confidence", 0.1))
+            warnings.append(f"Low confidence score: {confidence:.1%}")
+        
+        # Comparables assessment
+        comparables_count = response.get("comparables_count", 0)
+        if comparables_count >= 5:
+            quality_factors.append(("sufficient_comparables", 0.25))
+        elif comparables_count >= 3:
+            quality_factors.append(("adequate_comparables", 0.15))
+        else:
+            quality_factors.append(("limited_comparables", 0.05))
+            warnings.append(f"Limited comparable sales data: {comparables_count} comparables")
+        
+        # Market data currency
+        market_conditions = response.get("market_conditions", {})
+        data_age_days = market_conditions.get("data_age_days", 0)
+        if data_age_days <= 30:
+            quality_factors.append(("current_market_data", 0.2))
+        elif data_age_days <= 90:
+            quality_factors.append(("recent_market_data", 0.15))
+        else:
+            quality_factors.append(("dated_market_data", 0.05))
+            warnings.append(f"Market data is {data_age_days} days old")
+        
+        # Valuation type quality multiplier
+        type_multipliers = {
+            "avm": 0.7,
+            "desktop": 0.85,
+            "professional": 1.0
+        }
+        type_multiplier = type_multipliers.get(valuation_type, 0.7)
+        
+        # Calculate overall score
+        base_score = sum(score for _, score in quality_factors)
+        overall_score = min(1.0, base_score * type_multiplier)
+        
+        # Determine quality rating
+        if overall_score >= 0.8:
+            quality_rating = "high"
+        elif overall_score >= 0.6:
+            quality_rating = "medium"
+        else:
+            quality_rating = "low"
+            warnings.append("Overall valuation quality is low - consider additional validation")
+        
+        return {
+            "quality_score": round(overall_score, 2),
+            "quality_rating": quality_rating,
+            "confidence_score": confidence,
+            "comparables_count": comparables_count,
+            "market_data_age_days": data_age_days,
+            "valuation_type": valuation_type,
+            "quality_factors": [factor for factor, _ in quality_factors],
+            "warnings": warnings
+        }
     
     def _transform_search_params(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Transform search parameters to CoreLogic format."""
@@ -732,18 +920,82 @@ class CoreLogicClient(BaseClient, RealEstateAPIOperations):
             }
         }
     
-    def _validate_valuation_response(self, response: Dict[str, Any]) -> bool:
-        """Validate CoreLogic valuation response."""
-        if not response.get("valuation_amount"):
-            return False
+    def _validate_valuation_response(self, response: Dict[str, Any], valuation_type: str = None) -> Dict[str, Any]:
+        """Enhanced validation of CoreLogic valuation response."""
+        validation_result = {
+            "is_valid": True,
+            "reason": "",
+            "warnings": []
+        }
         
+        # Check for valuation amount
+        if not response.get("valuation_amount"):
+            validation_result["is_valid"] = False
+            validation_result["reason"] = "Missing valuation amount in response"
+            return validation_result
+        
+        valuation_amount = response.get("valuation_amount", 0)
+        if valuation_amount <= 0:
+            validation_result["is_valid"] = False
+            validation_result["reason"] = f"Invalid valuation amount: {valuation_amount}"
+            return validation_result
+        
+        # Validate confidence score if required
         confidence = response.get("confidence_score", 0)
         min_confidence = self.config.data_quality_settings.get("min_confidence_score", 0.6)
         
         if self.config.data_quality_settings.get("require_valuation_confidence", True):
-            return confidence >= min_confidence
+            if confidence < min_confidence:
+                validation_result["is_valid"] = False
+                validation_result["reason"] = f"Confidence score {confidence:.1%} below minimum {min_confidence:.1%}"
+                return validation_result
         
-        return True
+        # Validate valuation range if present
+        value_range = response.get("value_range", {})
+        if value_range:
+            range_low = value_range.get("low", 0)
+            range_high = value_range.get("high", 0)
+            
+            if range_low > 0 and range_high > 0:
+                if range_low >= range_high:
+                    validation_result["warnings"].append("Invalid value range: low >= high")
+                
+                # Check if valuation is within reasonable range
+                range_width = (range_high - range_low) / valuation_amount
+                if range_width > 0.5:  # Range wider than 50% of valuation
+                    validation_result["warnings"].append(f"Wide valuation range: {range_width:.1%} of valuation")
+        
+        # Validate comparables data if present
+        comparables_count = response.get("comparables_count", 0)
+        min_comparables = self.config.data_quality_settings.get("min_comparable_count", 3)
+        
+        if comparables_count < min_comparables:
+            validation_result["warnings"].append(f"Limited comparable data: {comparables_count} < {min_comparables}")
+        
+        # Validate market conditions data
+        market_conditions = response.get("market_conditions", {})
+        if market_conditions:
+            data_age_days = market_conditions.get("data_age_days", 0)
+            if data_age_days > 180:  # 6 months
+                validation_result["warnings"].append(f"Market data is {data_age_days} days old")
+        
+        # Valuation type specific validation
+        if valuation_type:
+            if valuation_type in ["desktop", "professional"]:
+                # Higher-tier valuations should have more detailed data
+                if not response.get("methodology"):
+                    validation_result["warnings"].append(f"{valuation_type} valuation missing methodology details")
+                
+                if not response.get("risk_factors"):
+                    validation_result["warnings"].append(f"{valuation_type} valuation missing risk factor analysis")
+        
+        # Reasonable valuation amount validation (Australian property market)
+        if valuation_amount < 50000:
+            validation_result["warnings"].append(f"Unusually low valuation amount: ${valuation_amount:,.0f}")
+        elif valuation_amount > 50000000:  # $50M
+            validation_result["warnings"].append(f"Unusually high valuation amount: ${valuation_amount:,.0f}")
+        
+        return validation_result
     
     def _transform_valuation_response(self, response: Dict[str, Any], 
                                     valuation_type: str) -> Dict[str, Any]:
