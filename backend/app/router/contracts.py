@@ -246,3 +246,72 @@ async def download_analysis_report(
     except Exception as e:
         logger.error(f"Report download error: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.delete("/{contract_id}")
+async def delete_contract_analysis(
+    contract_id: str,
+    user: User = Depends(get_current_user),
+    db_client=Depends(get_database_client),
+):
+    """Delete contract analysis and related data"""
+    
+    try:
+        # Ensure database client is initialized
+        if not hasattr(db_client, "_client") or db_client._client is None:
+            await db_client.initialize()
+
+        # Verify user owns this contract
+        contract_result = (
+            db_client.table("contracts")
+            .select("*")
+            .eq("id", contract_id)
+            .execute()
+        )
+        
+        if not contract_result.data:
+            raise HTTPException(status_code=404, detail="Contract not found")
+            
+        contract = contract_result.data[0]
+        
+        # Verify ownership through document
+        doc_result = (
+            db_client.table("documents")
+            .select("user_id")
+            .eq("id", contract["document_id"])
+            .execute()
+        )
+        
+        if not doc_result.data or doc_result.data[0]["user_id"] != user.id:
+            raise HTTPException(status_code=403, detail="Access denied")
+        
+        # Delete contract analyses first (foreign key constraint)
+        analyses_result = (
+            db_client.table("contract_analyses")
+            .delete()
+            .eq("contract_id", contract_id)
+            .execute()
+        )
+        
+        # Delete the contract
+        contract_delete_result = (
+            db_client.table("contracts")
+            .delete()
+            .eq("id", contract_id)
+            .execute()
+        )
+        
+        if not contract_delete_result.data:
+            raise HTTPException(status_code=404, detail="Contract not found or already deleted")
+        
+        return {
+            "message": "Contract analysis deleted successfully",
+            "contract_id": contract_id,
+            "analyses_deleted": len(analyses_result.data) if analyses_result.data else 0
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Delete contract error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")

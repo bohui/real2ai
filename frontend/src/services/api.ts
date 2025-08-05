@@ -214,8 +214,10 @@ class ApiService {
   }
 
   async getAnalysisResult(contractId: string): Promise<ContractAnalysisResult> {
-    const response = await this.client.get<any>(
-      `/api/contracts/${contractId}/analysis`
+    const response = await this.retryRequest(
+      () => this.client.get<any>(`/api/contracts/${contractId}/analysis`),
+      3, // max retries
+      1000 // initial delay
     );
     
     // Transform API response to match frontend expectations
@@ -265,7 +267,11 @@ class ApiService {
   }
 
   async deleteAnalysis(contractId: string): Promise<void> {
-    await this.client.delete(`/api/contracts/${contractId}`);
+    await this.retryRequest(
+      () => this.client.delete(`/api/contracts/${contractId}`),
+      2, // fewer retries for delete operations
+      1000
+    );
   }
 
   async downloadReport(
@@ -284,19 +290,81 @@ class ApiService {
     return response.data;
   }
 
-  // Generic error handler
+  // Enhanced error handler with retry logic
   handleError(error: AxiosError): string {
     if (error.response) {
       // Server responded with error status
       const data = error.response.data as any;
-      return data?.detail || data?.message || "Server error occurred";
+      const status = error.response.status;
+      
+      // Handle specific status codes
+      switch (status) {
+        case 400:
+          return data?.detail || "Invalid request. Please check your input.";
+        case 401:
+          return "Authentication required. Please log in again.";
+        case 403:
+          return "Access denied. You don't have permission for this action.";
+        case 404:
+          return data?.detail || "The requested resource was not found.";
+        case 409:
+          return data?.detail || "Conflict with existing data.";
+        case 422:
+          return data?.detail || "Validation error. Please check your input.";
+        case 429:
+          return "Rate limit exceeded. Please try again later.";
+        case 500:
+          return "Server error. Please try again later.";
+        case 502:
+        case 503:
+        case 504:
+          return "Service temporarily unavailable. Please try again later.";
+        default:
+          return data?.detail || data?.message || `Server error (${status})`;
+      }
     } else if (error.request) {
       // Request made but no response received
+      if (error.code === 'ECONNABORTED') {
+        return "Request timeout. Please try again.";
+      }
       return "Network error - please check your connection";
     } else {
       // Something else happened
       return error.message || "An unexpected error occurred";
     }
+  }
+
+  // Add retry mechanism for failed requests
+  private async retryRequest<T>(
+    requestFn: () => Promise<T>,
+    maxRetries: number = 3,
+    delay: number = 1000
+  ): Promise<T> {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        return await requestFn();
+      } catch (error) {
+        if (attempt === maxRetries) {
+          throw error;
+        }
+        
+        // Check if error is retryable
+        const axiosError = error as AxiosError;
+        const shouldRetry = 
+          !axiosError.response || 
+          axiosError.response.status >= 500 ||
+          axiosError.response.status === 408 ||
+          axiosError.response.status === 429;
+          
+        if (!shouldRetry) {
+          throw error;
+        }
+        
+        // Wait before retry with exponential backoff
+        await new Promise(resolve => setTimeout(resolve, delay * attempt));
+      }
+    }
+    throw new Error("Max retries exceeded");
   }
 }
 

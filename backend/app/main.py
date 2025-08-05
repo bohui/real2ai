@@ -101,17 +101,41 @@ app = FastAPI(
 )
 
 # Configure CORS
+# Get allowed origins from environment variable or use defaults
+allowed_origins = os.getenv(
+    "ALLOWED_ORIGINS",
+    "http://localhost:3000,http://localhost:3100,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:3100,http://127.0.0.1:5173"
+).split(",")
+
+# Add production origins if configured
+if os.getenv("ENVIRONMENT") == "production":
+    production_origins = [
+        "https://real2.ai",
+        "https://www.real2.ai",
+        "https://app.real2.ai"
+    ]
+    allowed_origins.extend(production_origins)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://localhost:3100",
-        "https://real2.ai",
-        "https://*.real2.ai",
-    ],
+    allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=[
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Origin",
+        "User-Agent",
+        "DNT",
+        "Cache-Control",
+        "X-Mx-ReqToken",
+        "Keep-Alive",
+        "X-Requested-With",
+        "If-Modified-Since",
+    ],
+    expose_headers=["Content-Length", "Content-Type", "Authorization"],
+    max_age=3600,  # Cache preflight responses for 1 hour
 )
 
 
