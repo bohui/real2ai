@@ -1,5 +1,5 @@
 """
-Advanced Contract Analysis Service for Real2.AI
+Contract Analysis Service V2 - Refactored to use GeminiClient
 AI-powered contract analysis with specialized Australian real estate focus
 """
 
@@ -13,10 +13,17 @@ from enum import Enum
 import json
 import re
 
+from fastapi import HTTPException
+
 from app.core.config import get_settings
-from app.clients.factory import get_gemini_client
-from app.clients.base.exceptions import ClientError, ClientAuthenticationError
 from app.models.contract_state import AustralianState, ContractType
+from app.clients import get_gemini_client
+from app.core.langsmith_config import langsmith_trace, langsmith_session, log_trace_info
+from app.clients.base.exceptions import (
+    ClientError,
+    ClientConnectionError,
+    ClientQuotaExceededError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -53,24 +60,11 @@ class ContractAnalysisConfig:
 
 
 class ContractAnalysisService:
-    """Advanced AI-powered contract analysis service"""
+    """Advanced AI-powered contract analysis service using GeminiClient"""
 
     def __init__(self):
         self.settings = get_settings()
-        self._gemini_client = None
-
-    async def _get_gemini_client(self):
-        """Get initialized Gemini client."""
-        if self._gemini_client is None:
-            try:
-                self._gemini_client = await get_gemini_client()
-                logger.info("Gemini client initialized for contract analysis")
-            except (ClientError, ClientAuthenticationError) as e:
-                logger.warning(
-                    f"Gemini client not available for contract analysis: {e}"
-                )
-                self._gemini_client = None
-        return self._gemini_client
+        self.gemini_client = None
 
         # Australian state-specific regulations
         self.state_regulations = {
@@ -90,744 +84,626 @@ class ContractAnalysisService:
                 "stamp_duty_threshold": 25000,
                 "first_home_buyer_threshold": 750000,
                 "foreign_buyer_surcharge": 0.075,
-                "mandatory_searches": [
-                    "title_search",
-                    "planning_certificate",
-                    "building_permit_search",
-                ],
+                "mandatory_searches": ["title_search", "planning_certificate"],
             },
             AustralianState.QLD: {
                 "cooling_off_period_days": 5,
-                "stamp_duty_threshold": 20000,
+                "stamp_duty_threshold": 10000,
                 "first_home_buyer_threshold": 550000,
                 "foreign_buyer_surcharge": 0.075,
-                "mandatory_searches": [
-                    "title_search",
-                    "planning_certificate",
-                    "building_certificate",
+                "mandatory_searches": ["title_search", "body_corporate_search"],
+            },
+            AustralianState.SA: {
+                "cooling_off_period_days": 2,
+                "stamp_duty_threshold": 12000,
+                "first_home_buyer_threshold": 600000,
+                "foreign_buyer_surcharge": 0.07,
+                "mandatory_searches": ["title_search", "planning_certificate"],
+            },
+            AustralianState.WA: {
+                "cooling_off_period_days": 0,  # No cooling off in WA
+                "stamp_duty_threshold": 25000,
+                "first_home_buyer_threshold": 550000,
+                "foreign_buyer_surcharge": 0.075,
+                "mandatory_searches": ["title_search", "property_information_report"],
+            },
+            AustralianState.TAS: {
+                "cooling_off_period_days": 3,
+                "stamp_duty_threshold": 3000,
+                "first_home_buyer_threshold": 600000,
+                "foreign_buyer_surcharge": 0.08,
+                "mandatory_searches": ["title_search", "planning_certificate"],
+            },
+            AustralianState.NT: {
+                "cooling_off_period_days": 4,
+                "stamp_duty_threshold": 0,
+                "first_home_buyer_threshold": 650000,
+                "foreign_buyer_surcharge": 0.015,
+                "mandatory_searches": ["title_search"],
+            },
+            AustralianState.ACT: {
+                "cooling_off_period_days": 5,
+                "stamp_duty_threshold": 0,
+                "first_home_buyer_threshold": 750000,
+                "foreign_buyer_surcharge": 0.075,
+                "mandatory_searches": ["title_search", "planning_certificate"],
+            },
+        }
+
+        # Contract type specific requirements
+        self.contract_requirements = {
+            ContractType.SALE_OF_LAND: {
+                "mandatory_clauses": [
+                    "purchase_price",
+                    "settlement_date",
+                    "deposit_amount",
+                    "cooling_off_period",
+                ],
+                "recommended_clauses": [
+                    "finance_clause",
+                    "building_inspection",
+                    "pest_inspection",
                 ],
             },
-            # Add other states as needed
+            ContractType.OFF_THE_PLAN: {
+                "mandatory_clauses": [
+                    "purchase_price",
+                    "completion_date",
+                    "deposit_structure",
+                    "sunset_clause",
+                ],
+                "recommended_clauses": ["material_changes", "defects_liability"],
+            },
+            ContractType.AUCTION: {
+                "mandatory_clauses": [
+                    "purchase_price",
+                    "auction_date",
+                    "deposit_amount",
+                    "settlement_terms",
+                ],
+                "recommended_clauses": ["vendor_bid_declaration"],
+            },
         }
 
-        # Contract analysis patterns
-        self.analysis_patterns = {
-            "purchase_price": r"(?:purchase\s+price|sale\s+price|price).*?[\$\s]*([0-9,]+)(?:\.00)?",
-            "deposit": r"(?:deposit).*?[\$\s]*([0-9,]+)(?:\.00)?",
-            "settlement_date": r"(?:settlement|completion).*?(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}|\d{1,2}\s+(?:days?|weeks?|months?))",
-            "cooling_off": r"(?:cooling[-\s]off|rescission).*?(\d+)\s*(?:business\s+)?days?",
-            "finance_clause": r"(?:subject\s+to|conditional\s+on).*?(?:finance|loan|mortgage)",
-            "building_inspection": r"(?:subject\s+to|conditional\s+on).*?(?:building|structural)\s+(?:inspection|report)",
-            "pest_inspection": r"(?:subject\s+to|conditional\s+on).*?(?:pest|termite)\s+(?:inspection|report)",
-        }
-
-        # Risk assessment criteria
-        self.risk_factors = {
-            "high_risk": [
-                "no_cooling_off_period",
-                "unconditional_contract",
-                "price_above_market_value",
-                "complex_special_conditions",
-                "disputed_boundaries",
-                "heritage_restrictions",
-            ],
-            "medium_risk": [
-                "short_settlement_period",
-                "finance_pre_approval_required",
-                "strata_building",
-                "leasehold_property",
-                "rural_property",
-            ],
-            "low_risk": [
-                "standard_cooling_off",
-                "building_inspection_included",
-                "pest_inspection_included",
-                "clear_title",
-                "established_property",
-            ],
-        }
-
-    async def analyze_contract_comprehensive(
-        self,
-        extracted_text: str,
-        config: ContractAnalysisConfig,
-        user_preferences: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
-        """Perform comprehensive contract analysis with AI enhancement"""
-
-        if not self.model:
-            return await self._fallback_analysis(extracted_text, config)
-
-        start_time = time.time()
-
+    async def initialize(self):
+        """Initialize contract analysis service with GeminiClient"""
         try:
-            # Step 1: Extract structured data
-            logger.info("Starting structured data extraction...")
-            structured_data = await self._extract_structured_data(
-                extracted_text, config
-            )
+            # Get initialized Gemini client from factory
+            self.gemini_client = await get_gemini_client()
 
-            # Step 2: Perform risk assessment
-            logger.info("Performing risk assessment...")
-            risk_assessment = await self._perform_risk_assessment(
-                extracted_text, structured_data, config
-            )
-
-            # Step 3: Check compliance
-            logger.info("Checking Australian compliance...")
-            compliance_analysis = self._check_australian_compliance(
-                structured_data, config.australian_state
-            )
-
-            # Step 4: Financial analysis
-            financial_analysis = {}
-            if config.include_financial_analysis:
-                logger.info("Performing financial analysis...")
-                financial_analysis = await self._perform_financial_analysis(
-                    structured_data, config, user_preferences
+            # Verify client is available
+            if not self.gemini_client:
+                raise ClientConnectionError(
+                    "Failed to get Gemini client",
+                    client_name="ContractAnalysisService",
                 )
 
-            # Step 5: Generate recommendations
-            logger.info("Generating recommendations...")
-            recommendations = await self._generate_ai_recommendations(
-                structured_data, risk_assessment, compliance_analysis, config
+            logger.info("Contract Analysis Service V2 initialized with GeminiClient")
+
+        except ClientConnectionError as e:
+            logger.error(f"Failed to connect to Gemini service: {e}")
+            raise HTTPException(
+                status_code=503, detail="AI analysis service unavailable"
+            )
+        except Exception as e:
+            logger.error(f"Failed to initialize contract analysis service: {str(e)}")
+            raise
+
+    @langsmith_trace(
+        name="contract_analysis_service_analyze_contract", run_type="chain"
+    )
+    async def analyze_contract(
+        self,
+        contract_text: str,
+        config: ContractAnalysisConfig,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Analyze contract text using AI with Australian-specific legal framework
+
+        Args:
+            contract_text: The extracted contract text
+            config: Analysis configuration
+            metadata: Additional metadata about the contract
+
+        Returns:
+            Dict containing comprehensive contract analysis
+        """
+
+        if not self.gemini_client:
+            raise HTTPException(
+                status_code=503, detail="AI analysis service not initialized"
             )
 
-            # Step 6: Quality assessment
-            analysis_quality = self._assess_analysis_quality(
-                extracted_text, structured_data, risk_assessment
+        try:
+            log_trace_info(
+                "contract_analysis_service_analyze_contract",
+                contract_length=len(contract_text),
+                state=config.state.value if config.state else None,
+                contract_type=(
+                    config.contract_type.value if config.contract_type else None
+                ),
+                analysis_type=(
+                    config.analysis_type.value if config.analysis_type else None
+                ),
+            )
+            start_time = time.time()
+
+            # Prepare analysis prompt
+            analysis_prompt = self._create_analysis_prompt(
+                contract_text, config, metadata
             )
 
-            processing_time = time.time() - start_time
+            # Use Gemini client for analysis
+            try:
+                ai_response = await self.gemini_client.generate_content(
+                    prompt=analysis_prompt,
+                    temperature=0.2,  # Lower temperature for more consistent analysis
+                    max_tokens=4000,
+                )
+            except ClientQuotaExceededError:
+                raise HTTPException(
+                    status_code=429,
+                    detail="AI analysis quota exceeded. Please try again later.",
+                )
+            except ClientError as e:
+                logger.error(f"Gemini client error during analysis: {e}")
+                raise HTTPException(
+                    status_code=500, detail=f"AI analysis failed: {str(e)}"
+                )
+
+            # Parse AI response
+            analysis_result = self._parse_ai_response(ai_response, config)
+
+            # Add compliance checks
+            compliance_result = self._check_compliance(analysis_result, config)
+
+            # Add risk assessment
+            risk_assessment = self._assess_risks(analysis_result, config)
+
+            # Calculate financial implications
+            financial_analysis = self._analyze_financial_terms(analysis_result, config)
+
+            # Get authentication method from client
+            auth_method = "unknown"
+            try:
+                client_health = await self.gemini_client.health_check()
+                auth_method = client_health.get("authentication", {}).get(
+                    "method", "unknown"
+                )
+            except Exception:
+                pass
 
             return {
-                "analysis_id": f"analysis_{int(time.time() * 1000)}",
-                "analysis_timestamp": datetime.now(UTC).isoformat(),
-                "processing_time_seconds": processing_time,
-                "config": config.__dict__,
-                "structured_data": structured_data,
+                "contract_summary": analysis_result.get("summary", {}),
+                "key_terms": analysis_result.get("key_terms", {}),
+                "parties": analysis_result.get("parties", {}),
+                "property_details": analysis_result.get("property_details", {}),
+                "financial_terms": financial_analysis,
+                "compliance_check": compliance_result,
                 "risk_assessment": risk_assessment,
-                "compliance_analysis": compliance_analysis,
-                "financial_analysis": financial_analysis,
-                "recommendations": recommendations,
-                "analysis_quality": analysis_quality,
-                "ai_confidence": self._calculate_overall_confidence(
-                    structured_data, risk_assessment, analysis_quality
+                "recommendations": self._generate_recommendations(
+                    analysis_result, compliance_result, risk_assessment
                 ),
-                "next_steps": self._generate_next_steps(
-                    recommendations, risk_assessment
-                ),
+                "analysis_metadata": {
+                    "analysis_timestamp": datetime.now(UTC).isoformat(),
+                    "analysis_duration_seconds": time.time() - start_time,
+                    "contract_type": config.contract_type.value,
+                    "australian_state": config.australian_state.value,
+                    "analysis_depth": config.analysis_depth.value,
+                    "ai_model": "gemini",
+                    "authentication_method": auth_method,
+                    "service": "ContractAnalysisService",
+                },
             }
 
+        except HTTPException:
+            raise
         except Exception as e:
-            logger.error(f"Contract analysis failed: {str(e)}")
-            return {
-                "analysis_id": f"failed_{int(time.time() * 1000)}",
-                "analysis_timestamp": datetime.now(UTC).isoformat(),
-                "error": str(e),
-                "fallback_analysis": await self._fallback_analysis(
-                    extracted_text, config
-                ),
-            }
-
-    async def _extract_structured_data(
-        self, text: str, config: ContractAnalysisConfig
-    ) -> Dict[str, Any]:
-        """Extract structured data using AI-powered analysis"""
-
-        prompt = self._create_extraction_prompt(text, config)
-
-        try:
-            gemini_client = await self._get_gemini_client()
-            if not gemini_client:
-                logger.warning(
-                    "Gemini client unavailable, using pattern-based extraction"
-                )
-                return self._extract_with_patterns(text)
-
-            response = await gemini_client.generate_content(prompt)
-
-            # Parse the AI response
-            ai_extracted = self._parse_ai_extraction_response(response)
-
-            # Enhance with pattern-based extraction
-            pattern_extracted = self._extract_with_patterns(text)
-
-            # Combine and validate results
-            combined_data = self._combine_extraction_results(
-                ai_extracted, pattern_extracted
+            logger.error(f"Contract analysis error: {str(e)}")
+            raise HTTPException(
+                status_code=500, detail=f"Contract analysis failed: {str(e)}"
             )
 
-            return combined_data
+    def _create_analysis_prompt(
+        self,
+        contract_text: str,
+        config: ContractAnalysisConfig,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        """Create a comprehensive prompt for contract analysis"""
 
-        except Exception as e:
-            logger.error(f"AI extraction failed, falling back to patterns: {str(e)}")
-            return self._extract_with_patterns(text)
+        state_info = self.state_regulations.get(config.australian_state, {})
+        contract_reqs = self.contract_requirements.get(config.contract_type, {})
 
-    async def _perform_risk_assessment(
-        self, text: str, structured_data: Dict[str, Any], config: ContractAnalysisConfig
+        prompt = f"""
+You are an expert Australian real estate lawyer specializing in {config.australian_state.value} property law.
+
+Analyze the following {config.contract_type.value} contract and provide a comprehensive analysis.
+
+Contract Text:
+{contract_text[:15000]}  # Limit to prevent token overflow
+
+Analysis Requirements:
+1. **Contract Summary**: Provide a clear, concise summary of the contract
+2. **Key Terms Extraction**: Extract and categorize all important terms
+3. **Party Information**: Identify all parties and their roles
+4. **Property Details**: Extract all property-related information
+5. **Financial Terms**: Identify all financial obligations and terms
+6. **Legal Compliance**: Check compliance with {config.australian_state.value} regulations
+7. **Risk Identification**: Identify potential risks and issues
+8. **Missing Elements**: Identify any missing mandatory clauses
+
+State-Specific Information:
+- Cooling-off period: {state_info.get('cooling_off_period_days', 'N/A')} days
+- Stamp duty threshold: ${state_info.get('stamp_duty_threshold', 'N/A')}
+- First home buyer threshold: ${state_info.get('first_home_buyer_threshold', 'N/A')}
+- Foreign buyer surcharge: {state_info.get('foreign_buyer_surcharge', 0) * 100}%
+- Mandatory searches: {', '.join(state_info.get('mandatory_searches', []))}
+
+Contract Type Requirements:
+- Mandatory clauses: {', '.join(contract_reqs.get('mandatory_clauses', []))}
+- Recommended clauses: {', '.join(contract_reqs.get('recommended_clauses', []))}
+
+Provide your analysis in a structured JSON format with the following sections:
+- summary: Brief overview of the contract
+- key_terms: Dictionary of important terms and their values
+- parties: Information about vendor, purchaser, and other parties
+- property_details: Address, title, and other property information
+- financial_terms: Purchase price, deposit, and payment structure
+- compliance_issues: List of any compliance problems found
+- risks: List of identified risks with severity levels
+- missing_clauses: List of missing mandatory or recommended clauses
+- recommendations: Specific recommendations for the buyer/seller
+
+Focus Areas: {', '.join([area.value for area in config.focus_areas])}
+"""
+
+        if metadata:
+            prompt += f"\n\nAdditional Context: {json.dumps(metadata)}"
+
+        return prompt
+
+    def _parse_ai_response(
+        self, ai_response: str, config: ContractAnalysisConfig
     ) -> Dict[str, Any]:
-        """Perform comprehensive risk assessment"""
-
-        # AI-powered risk analysis
-        risk_prompt = self._create_risk_assessment_prompt(text, structured_data, config)
+        """Parse and structure the AI response"""
 
         try:
-            gemini_client = await self._get_gemini_client()
-            if not gemini_client:
-                logger.warning(
-                    "Gemini client unavailable, using rule-based risk assessment"
-                )
-                return self._assess_risks_rule_based(structured_data, config)
-
-            response = await gemini_client.generate_content(risk_prompt)
-
-            ai_risks = self._parse_risk_assessment_response(response)
-
+            # Try to extract JSON from the response
+            json_match = re.search(r"\{[\s\S]*\}", ai_response)
+            if json_match:
+                return json.loads(json_match.group())
         except Exception as e:
-            logger.error(f"AI risk assessment failed: {str(e)}")
-            ai_risks = {"ai_analysis_failed": True}
+            logger.warning(f"Failed to parse AI response as JSON: {e}")
 
-        # Rule-based risk assessment
-        rule_based_risks = self._assess_risks_rule_based(structured_data, config)
+        # Fallback: Create structured response from text
+        return self._extract_structured_data(ai_response)
 
-        # Combine risk assessments
-        combined_risks = {
-            "overall_risk_score": max(
-                ai_risks.get("overall_risk_score", 5.0),
-                rule_based_risks.get("overall_risk_score", 5.0),
-            ),
-            "ai_identified_risks": ai_risks.get("risk_factors", []),
-            "rule_based_risks": rule_based_risks.get("risk_factors", []),
-            "risk_categories": {
-                "legal": ai_risks.get("legal_risks", [])
-                + rule_based_risks.get("legal_risks", []),
-                "financial": ai_risks.get("financial_risks", [])
-                + rule_based_risks.get("financial_risks", []),
-                "practical": ai_risks.get("practical_risks", [])
-                + rule_based_risks.get("practical_risks", []),
-            },
-            "mitigation_strategies": ai_risks.get("mitigation_strategies", []),
+    def _extract_structured_data(self, text: str) -> Dict[str, Any]:
+        """Extract structured data from unstructured text response"""
+
+        result = {
+            "summary": "",
+            "key_terms": {},
+            "parties": {},
+            "property_details": {},
+            "financial_terms": {},
+            "compliance_issues": [],
+            "risks": [],
+            "missing_clauses": [],
         }
 
-        return combined_risks
+        # Extract sections using pattern matching
+        sections = text.split("\n\n")
 
-    def _check_australian_compliance(
-        self, structured_data: Dict[str, Any], state: AustralianState
+        for section in sections:
+            section_lower = section.lower()
+
+            if "summary" in section_lower:
+                result["summary"] = section
+            elif "purchase price" in section_lower or "price" in section_lower:
+                # Extract price
+                price_match = re.search(r"\$[\d,]+", section)
+                if price_match:
+                    result["key_terms"]["purchase_price"] = price_match.group()
+            elif "vendor" in section_lower or "seller" in section_lower:
+                result["parties"]["vendor"] = section
+            elif "purchaser" in section_lower or "buyer" in section_lower:
+                result["parties"]["purchaser"] = section
+            elif "property" in section_lower or "address" in section_lower:
+                result["property_details"]["description"] = section
+            elif "risk" in section_lower:
+                result["risks"].append(section)
+            elif "compliance" in section_lower:
+                result["compliance_issues"].append(section)
+
+        return result
+
+    def _check_compliance(
+        self, analysis_result: Dict[str, Any], config: ContractAnalysisConfig
     ) -> Dict[str, Any]:
-        """Check compliance with Australian real estate laws"""
+        """Check contract compliance with state regulations"""
 
-        state_regs = self.state_regulations.get(state, {})
         compliance_issues = []
-        warnings = []
+        state_regs = self.state_regulations.get(config.australian_state, {})
+        contract_reqs = self.contract_requirements.get(config.contract_type, {})
 
-        # Check cooling-off period
-        cooling_off_days = structured_data.get("cooling_off_period", 0)
-        required_cooling_off = state_regs.get("cooling_off_period_days", 5)
+        # Check mandatory clauses
+        missing_mandatory = []
+        for clause in contract_reqs.get("mandatory_clauses", []):
+            if clause not in analysis_result.get("key_terms", {}):
+                missing_mandatory.append(clause)
 
-        if cooling_off_days < required_cooling_off:
+        if missing_mandatory:
             compliance_issues.append(
-                f"Cooling-off period ({cooling_off_days} days) is less than required "
-                f"{required_cooling_off} days for {state.value}"
-            )
-
-        # Check mandatory searches
-        mandatory_searches = state_regs.get("mandatory_searches", [])
-        contract_searches = structured_data.get("required_searches", [])
-
-        missing_searches = [s for s in mandatory_searches if s not in contract_searches]
-        if missing_searches:
-            warnings.extend(
-                [
-                    f"Consider including {search.replace('_', ' ')}"
-                    for search in missing_searches
-                ]
-            )
-
-        # Check stamp duty implications
-        purchase_price = structured_data.get("purchase_price", 0)
-        stamp_duty_threshold = state_regs.get("stamp_duty_threshold", 25000)
-
-        if purchase_price > stamp_duty_threshold:
-            stamp_duty_estimate = self._calculate_stamp_duty(purchase_price, state)
-            warnings.append(f"Estimated stamp duty: ${stamp_duty_estimate:,.2f}")
-
-        return {
-            "state": state.value,
-            "compliant": len(compliance_issues) == 0,
-            "compliance_issues": compliance_issues,
-            "warnings": warnings,
-            "state_specific_requirements": state_regs,
-            "compliance_score": max(0, 10 - len(compliance_issues) * 2 - len(warnings)),
-        }
-
-    async def _perform_financial_analysis(
-        self,
-        structured_data: Dict[str, Any],
-        config: ContractAnalysisConfig,
-        user_preferences: Optional[Dict[str, Any]],
-    ) -> Dict[str, Any]:
-        """Perform comprehensive financial analysis"""
-
-        purchase_price = structured_data.get("purchase_price", 0)
-        deposit = structured_data.get("deposit", 0)
-
-        if purchase_price == 0:
-            return {"error": "Purchase price not identified in contract"}
-
-        # Calculate various costs
-        stamp_duty = self._calculate_stamp_duty(purchase_price, config.australian_state)
-        legal_fees = purchase_price * 0.001  # Estimate 0.1%
-        inspection_costs = 800  # Typical building + pest inspection
-        loan_costs = (
-            purchase_price * 0.005
-            if user_preferences and user_preferences.get("requires_finance")
-            else 0
-        )
-
-        total_upfront_costs = (
-            deposit + stamp_duty + legal_fees + inspection_costs + loan_costs
-        )
-
-        # Market analysis (would integrate with property APIs in production)
-        market_analysis = {
-            "estimated_market_value": purchase_price,  # Placeholder
-            "price_per_sqm": 0,  # Would calculate if property size available
-            "market_trend": "stable",  # Would get from market data
-            "comparable_sales": [],  # Would fetch recent sales
-        }
-
-        # Risk indicators
-        financial_risks = []
-        if deposit < purchase_price * 0.1:
-            financial_risks.append("Low deposit may indicate higher financial risk")
-
-        if purchase_price > user_preferences.get("budget_max", float("inf")):
-            financial_risks.append("Purchase price exceeds stated budget")
-
-        return {
-            "purchase_price": purchase_price,
-            "deposit": deposit,
-            "deposit_percentage": (
-                (deposit / purchase_price * 100) if purchase_price > 0 else 0
-            ),
-            "estimated_costs": {
-                "stamp_duty": stamp_duty,
-                "legal_fees": legal_fees,
-                "inspection_costs": inspection_costs,
-                "loan_costs": loan_costs,
-                "total_upfront": total_upfront_costs,
-            },
-            "market_analysis": market_analysis,
-            "financial_risks": financial_risks,
-            "affordability_assessment": self._assess_affordability(
-                total_upfront_costs, purchase_price, user_preferences
-            ),
-        }
-
-    async def _generate_ai_recommendations(
-        self,
-        structured_data: Dict[str, Any],
-        risk_assessment: Dict[str, Any],
-        compliance_analysis: Dict[str, Any],
-        config: ContractAnalysisConfig,
-    ) -> List[Dict[str, Any]]:
-        """Generate AI-powered recommendations"""
-
-        prompt = self._create_recommendations_prompt(
-            structured_data, risk_assessment, compliance_analysis, config
-        )
-
-        try:
-            gemini_client = await self._get_gemini_client()
-            if not gemini_client:
-                logger.warning(
-                    "Gemini client unavailable, using rule-based recommendations"
-                )
-                return self._generate_rule_based_recommendations(
-                    risk_assessment, compliance_analysis
-                )
-
-            response = await gemini_client.generate_content(prompt)
-
-            ai_recommendations = self._parse_recommendations_response(response)
-
-        except Exception as e:
-            logger.error(f"AI recommendations failed: {str(e)}")
-            ai_recommendations = []
-
-        # Add rule-based recommendations
-        rule_recommendations = self._generate_rule_based_recommendations(
-            risk_assessment, compliance_analysis
-        )
-
-        # Combine and prioritize
-        all_recommendations = ai_recommendations + rule_recommendations
-
-        # Remove duplicates and prioritize
-        return self._prioritize_recommendations(all_recommendations)
-
-    # Helper methods for various analysis tasks
-
-    def _create_extraction_prompt(
-        self, text: str, config: ContractAnalysisConfig
-    ) -> str:
-        """Create AI prompt for structured data extraction"""
-        return f"""
-        You are an expert Australian property lawyer specializing in {config.australian_state.value} real estate contracts.
-        
-        Extract key information from this contract text and return it as JSON:
-        
-        CONTRACT TEXT:
-        {text[:8000]}  # Limit text length for API
-        
-        Extract the following information:
-        {{
-            "parties": {{
-                "vendor": "vendor name and details",
-                "purchaser": "purchaser name and details"
-            }},
-            "property": {{
-                "address": "full property address",
-                "lot_plan": "lot and plan details if available",
-                "property_type": "house/unit/land/commercial"
-            }},
-            "financial": {{
-                "purchase_price": number,
-                "deposit": number,
-                "deposit_percentage": number
-            }},
-            "settlement": {{
-                "settlement_date": "date or period",
-                "settlement_period": "number of days"
-            }},
-            "conditions": {{
-                "cooling_off_period": number of business days,
-                "finance_clause": true/false,
-                "building_inspection": true/false,
-                "pest_inspection": true/false,
-                "special_conditions": ["list of special conditions"]
-            }},
-            "legal": {{
-                "governing_law": "{config.australian_state.value}",
-                "contract_type": "{config.contract_type.value}",
-                "vendor_solicitor": "if mentioned",
-                "purchaser_solicitor": "if mentioned"
-            }}
-        }}
-        
-        Focus on accuracy and extract only information clearly stated in the contract.
-        Return ONLY the JSON, no additional text.
-        """
-
-    def _create_risk_assessment_prompt(
-        self, text: str, structured_data: Dict, config: ContractAnalysisConfig
-    ) -> str:
-        """Create AI prompt for risk assessment"""
-        return f"""
-        You are an expert Australian property lawyer performing risk assessment for a {config.australian_state.value} property contract.
-        
-        CONTRACT DETAILS:
-        {json.dumps(structured_data, indent=2)}
-        
-        Perform a comprehensive risk assessment and return as JSON:
-        {{
-            "overall_risk_score": number from 1-10 (10 being highest risk),
-            "risk_factors": [
-                {{
-                    "risk": "description of risk",
-                    "severity": "low/medium/high/critical",
-                    "category": "legal/financial/practical",
-                    "likelihood": "low/medium/high",
-                    "impact": "description of potential impact"
-                }}
-            ],
-            "legal_risks": ["specific legal risks"],
-            "financial_risks": ["specific financial risks"], 
-            "practical_risks": ["specific practical risks"],
-            "mitigation_strategies": ["recommended actions to reduce risks"]
-        }}
-        
-        Consider {config.australian_state.value}-specific regulations and common property law issues.
-        Return ONLY the JSON, no additional text.
-        """
-
-    def _create_recommendations_prompt(
-        self,
-        structured_data: Dict,
-        risk_assessment: Dict,
-        compliance_analysis: Dict,
-        config: ContractAnalysisConfig,
-    ) -> str:
-        """Create AI prompt for generating recommendations"""
-        return f"""
-        You are an expert Australian property advisor providing actionable recommendations.
-        
-        ANALYSIS SUMMARY:
-        Contract Data: {json.dumps(structured_data, indent=2)[:2000]}
-        Risk Assessment: {json.dumps(risk_assessment, indent=2)[:2000]}
-        Compliance Status: {json.dumps(compliance_analysis, indent=2)[:1000]}
-        State: {config.australian_state.value}
-        
-        Provide specific, actionable recommendations as JSON:
-        {{
-            "recommendations": [
-                {{
-                    "priority": "critical/high/medium/low",
-                    "category": "legal/financial/practical",
-                    "title": "Brief recommendation title",
-                    "description": "Detailed recommendation",
-                    "action_required": true/false,
-                    "timeline": "immediate/before_settlement/after_settlement",
-                    "estimated_cost": number or null,
-                    "australian_context": "state-specific context"
-                }}
-            ]
-        }}
-        
-        Focus on practical, actionable advice specific to {config.australian_state.value} property law.
-        Return ONLY the JSON, no additional text.
-        """
-
-    # Utility methods for parsing, calculations, and analysis
-
-    def _parse_ai_extraction_response(self, response: str) -> Dict[str, Any]:
-        """Parse AI extraction response"""
-        try:
-            # Clean up response and extract JSON
-            json_start = response.find("{")
-            json_end = response.rfind("}") + 1
-            if json_start >= 0 and json_end > json_start:
-                json_str = response[json_start:json_end]
-                return json.loads(json_str)
-        except Exception as e:
-            logger.error(f"Failed to parse AI extraction response: {str(e)}")
-
-        return {}
-
-    def _extract_with_patterns(self, text: str) -> Dict[str, Any]:
-        """Extract data using regex patterns"""
-        extracted = {}
-
-        for field, pattern in self.analysis_patterns.items():
-            match = re.search(pattern, text, re.IGNORECASE | re.MULTILINE)
-            if match:
-                if field in ["purchase_price", "deposit"]:
-                    # Extract numeric value
-                    numeric_str = match.group(1).replace(",", "")
-                    try:
-                        extracted[field] = float(numeric_str)
-                    except ValueError:
-                        pass
-                elif field == "cooling_off":
-                    try:
-                        extracted["cooling_off_period"] = int(match.group(1))
-                    except ValueError:
-                        pass
-                else:
-                    extracted[field] = (
-                        match.group(1) if match.group(1) else match.group(0)
-                    )
-
-        return extracted
-
-    def _combine_extraction_results(
-        self, ai_data: Dict, pattern_data: Dict
-    ) -> Dict[str, Any]:
-        """Combine AI and pattern-based extraction results"""
-        combined = {}
-
-        # Start with AI data as it's typically more comprehensive
-        if ai_data:
-            combined.update(ai_data)
-
-        # Fill in missing fields with pattern data
-        for key, value in pattern_data.items():
-            if key not in combined or not combined[key]:
-                combined[key] = value
-
-        return combined
-
-    def _calculate_stamp_duty(
-        self, purchase_price: float, state: AustralianState
-    ) -> float:
-        """Calculate stamp duty (simplified calculation)"""
-        # This is a simplified calculation - production would use exact state formulas
-        if state == AustralianState.NSW:
-            if purchase_price <= 25000:
-                return purchase_price * 0.0125
-            elif purchase_price <= 130000:
-                return 1.25 * ((purchase_price - 25000) / 1000) + 312.5
-            else:
-                return purchase_price * 0.045  # Simplified for high values
-        elif state == AustralianState.VIC:
-            return purchase_price * 0.055  # Simplified VIC calculation
-        else:
-            return purchase_price * 0.05  # Generic calculation
-
-    def _assess_affordability(
-        self,
-        upfront_costs: float,
-        purchase_price: float,
-        user_preferences: Optional[Dict],
-    ) -> Dict[str, Any]:
-        """Assess affordability based on user preferences"""
-        if not user_preferences:
-            return {"assessment": "insufficient_data"}
-
-        budget = user_preferences.get("budget_max", 0)
-        income = user_preferences.get("annual_income", 0)
-
-        affordability_ratio = purchase_price / income if income > 0 else float("inf")
-
-        return {
-            "within_budget": purchase_price <= budget,
-            "affordability_ratio": affordability_ratio,
-            "recommendation": (
-                "affordable" if affordability_ratio <= 6 else "challenging"
-            ),
-        }
-
-    # Additional helper methods would be implemented here...
-
-    async def _fallback_analysis(
-        self, text: str, config: ContractAnalysisConfig
-    ) -> Dict[str, Any]:
-        """Fallback analysis when AI is not available"""
-        pattern_data = self._extract_with_patterns(text)
-
-        return {
-            "method": "pattern_based_fallback",
-            "extracted_data": pattern_data,
-            "analysis_limited": True,
-            "recommendation": "Consider professional legal review due to limited analysis capabilities",
-        }
-
-    def _assess_risks_rule_based(
-        self, data: Dict, config: ContractAnalysisConfig
-    ) -> Dict[str, Any]:
-        """Rule-based risk assessment fallback"""
-        risks = []
-        risk_score = 0
-
-        # Check for high-risk indicators
-        if not data.get("cooling_off_period"):
-            risks.append("No cooling-off period identified")
-            risk_score += 3
-
-        if not data.get("finance_clause"):
-            risks.append("No finance clause protection")
-            risk_score += 2
-
-        return {"overall_risk_score": min(10, risk_score), "risk_factors": risks}
-
-    def _parse_risk_assessment_response(self, response: str) -> Dict[str, Any]:
-        """Parse AI risk assessment response"""
-        return self._parse_ai_extraction_response(response)
-
-    def _parse_recommendations_response(self, response: str) -> List[Dict[str, Any]]:
-        """Parse AI recommendations response"""
-        parsed = self._parse_ai_extraction_response(response)
-        return parsed.get("recommendations", [])
-
-    def _generate_rule_based_recommendations(
-        self, risk_assessment: Dict, compliance_analysis: Dict
-    ) -> List[Dict[str, Any]]:
-        """Generate rule-based recommendations"""
-        recommendations = []
-
-        if not compliance_analysis.get("compliant", True):
-            recommendations.append(
                 {
-                    "priority": "high",
-                    "category": "legal",
-                    "title": "Address compliance issues",
-                    "description": "Contract has compliance issues that need attention",
-                    "action_required": True,
-                    "timeline": "immediate",
+                    "issue": "Missing mandatory clauses",
+                    "severity": "high",
+                    "details": missing_mandatory,
+                    "recommendation": f"Add missing clauses: {', '.join(missing_mandatory)}",
                 }
             )
 
-        return recommendations
-
-    def _prioritize_recommendations(
-        self, recommendations: List[Dict[str, Any]]
-    ) -> List[Dict[str, Any]]:
-        """Prioritize and deduplicate recommendations"""
-        priority_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
-
-        # Remove duplicates based on title
-        seen_titles = set()
-        unique_recommendations = []
-        for rec in recommendations:
-            title = rec.get("title", "")
-            if title not in seen_titles:
-                seen_titles.add(title)
-                unique_recommendations.append(rec)
-
-        # Sort by priority
-        return sorted(
-            unique_recommendations,
-            key=lambda x: priority_order.get(x.get("priority", "low"), 3),
-        )
-
-    def _assess_analysis_quality(
-        self, text: str, structured_data: Dict, risk_assessment: Dict
-    ) -> Dict[str, Any]:
-        """Assess the quality of the analysis performed"""
-        quality_score = 0.5  # Base score
-
-        # Check completeness of extraction
-        key_fields = ["purchase_price", "deposit", "settlement_date"]
-        extracted_fields = sum(1 for field in key_fields if structured_data.get(field))
-        completeness = extracted_fields / len(key_fields)
-        quality_score += completeness * 0.3
-
-        # Check risk assessment depth
-        risk_factors = len(risk_assessment.get("risk_factors", []))
-        if risk_factors >= 3:
-            quality_score += 0.2
+        # Check cooling-off period
+        if state_regs.get("cooling_off_period_days", 0) > 0:
+            cooling_off = analysis_result.get("key_terms", {}).get("cooling_off_period")
+            if not cooling_off:
+                compliance_issues.append(
+                    {
+                        "issue": "No cooling-off period specified",
+                        "severity": "high",
+                        "details": f"Required: {state_regs['cooling_off_period_days']} days",
+                        "recommendation": "Add standard cooling-off period clause",
+                    }
+                )
 
         return {
-            "overall_quality_score": min(1.0, quality_score),
-            "completeness_score": completeness,
-            "analysis_depth": "comprehensive" if quality_score > 0.8 else "standard",
-            "data_extraction_confidence": min(1.0, extracted_fields / 10),
+            "compliant": len(compliance_issues) == 0,
+            "issues": compliance_issues,
+            "checked_regulations": list(state_regs.keys()),
+            "state": config.australian_state.value,
         }
 
-    def _calculate_overall_confidence(
-        self, structured_data: Dict, risk_assessment: Dict, quality: Dict
-    ) -> float:
-        """Calculate overall analysis confidence"""
-        return min(
-            1.0,
-            quality.get("overall_quality_score", 0.5) * 0.7
-            + len(structured_data) / 20 * 0.3,
+    def _assess_risks(
+        self, analysis_result: Dict[str, Any], config: ContractAnalysisConfig
+    ) -> Dict[str, Any]:
+        """Assess risks in the contract"""
+
+        risks = []
+        risk_score = 0
+
+        # Check for sunset clause in off-the-plan
+        if config.contract_type == ContractType.OFF_THE_PLAN:
+            sunset_clause = analysis_result.get("key_terms", {}).get("sunset_clause")
+            if not sunset_clause:
+                risks.append(
+                    {
+                        "risk": "No sunset clause",
+                        "severity": "high",
+                        "impact": "Developer can delay indefinitely",
+                        "mitigation": "Negotiate sunset clause with reasonable timeframe",
+                    }
+                )
+                risk_score += 30
+
+        # Check finance clause
+        finance_clause = analysis_result.get("key_terms", {}).get("finance_clause")
+        if not finance_clause and config.contract_type != ContractType.AUCTION:
+            risks.append(
+                {
+                    "risk": "No finance clause",
+                    "severity": "medium",
+                    "impact": "Risk of losing deposit if finance not approved",
+                    "mitigation": "Add finance clause with specific conditions",
+                }
+            )
+            risk_score += 20
+
+        # Add identified risks from AI analysis
+        for risk in analysis_result.get("risks", []):
+            risks.append(
+                {
+                    "risk": risk,
+                    "severity": "medium",
+                    "impact": "Review required",
+                    "mitigation": "Seek legal advice",
+                }
+            )
+            risk_score += 15
+
+        return {
+            "overall_risk_level": self._calculate_risk_level(risk_score),
+            "risk_score": risk_score,
+            "identified_risks": risks,
+            "risk_count": len(risks),
+        }
+
+    def _calculate_risk_level(self, score: int) -> str:
+        """Calculate overall risk level based on score"""
+        if score >= 70:
+            return "high"
+        elif score >= 40:
+            return "medium"
+        elif score >= 20:
+            return "low"
+        else:
+            return "minimal"
+
+    def _analyze_financial_terms(
+        self, analysis_result: Dict[str, Any], config: ContractAnalysisConfig
+    ) -> Dict[str, Any]:
+        """Analyze financial terms and implications"""
+
+        financial_terms = {}
+        key_terms = analysis_result.get("key_terms", {})
+
+        # Extract purchase price
+        purchase_price = key_terms.get("purchase_price", "0")
+        if isinstance(purchase_price, str):
+            # Extract numeric value
+            price_match = re.search(r"[\d,]+", purchase_price.replace("$", ""))
+            if price_match:
+                purchase_price = float(price_match.group().replace(",", ""))
+            else:
+                purchase_price = 0
+
+        financial_terms["purchase_price"] = purchase_price
+
+        # Calculate stamp duty (simplified)
+        state_regs = self.state_regulations.get(config.australian_state, {})
+        if purchase_price > state_regs.get("stamp_duty_threshold", 0):
+            # Simplified stamp duty calculation (actual rates are more complex)
+            stamp_duty_rate = 0.055  # Average rate
+            financial_terms["estimated_stamp_duty"] = purchase_price * stamp_duty_rate
+        else:
+            financial_terms["estimated_stamp_duty"] = 0
+
+        # Extract deposit
+        deposit = key_terms.get("deposit_amount", "10%")
+        if isinstance(deposit, str) and "%" in deposit:
+            deposit_percent = float(deposit.replace("%", "")) / 100
+            financial_terms["deposit_amount"] = purchase_price * deposit_percent
+        else:
+            financial_terms["deposit_amount"] = deposit
+
+        # Total upfront costs
+        financial_terms["total_upfront_costs"] = (
+            financial_terms.get("deposit_amount", 0)
+            + financial_terms.get("estimated_stamp_duty", 0)
+            + 5000  # Estimated legal and other fees
         )
 
-    def _generate_next_steps(
-        self, recommendations: List[Dict], risk_assessment: Dict
-    ) -> List[str]:
-        """Generate next steps based on analysis"""
-        next_steps = []
+        return financial_terms
 
-        # Get immediate actions
-        immediate_actions = [
-            rec["title"]
-            for rec in recommendations
-            if rec.get("timeline") == "immediate" or rec.get("priority") == "critical"
-        ]
+    def _generate_recommendations(
+        self,
+        analysis_result: Dict[str, Any],
+        compliance_result: Dict[str, Any],
+        risk_assessment: Dict[str, Any],
+    ) -> List[Dict[str, Any]]:
+        """Generate actionable recommendations"""
 
-        if immediate_actions:
-            next_steps.extend(immediate_actions)
-        else:
-            next_steps.append("Review the detailed analysis and recommendations")
+        recommendations = []
 
-        # Add risk-based next steps
-        risk_score = risk_assessment.get("overall_risk_score", 5)
-        if risk_score >= 7:
-            next_steps.append(
-                "Consider seeking professional legal advice due to high risk factors"
+        # Compliance recommendations
+        if not compliance_result["compliant"]:
+            recommendations.append(
+                {
+                    "priority": "high",
+                    "category": "compliance",
+                    "recommendation": "Address compliance issues before proceeding",
+                    "details": compliance_result["issues"],
+                }
             )
 
-        return next_steps[:5]  # Limit to 5 next steps
+        # Risk recommendations
+        if risk_assessment["overall_risk_level"] in ["high", "medium"]:
+            recommendations.append(
+                {
+                    "priority": "high",
+                    "category": "risk",
+                    "recommendation": "Review identified risks with legal counsel",
+                    "details": risk_assessment["identified_risks"],
+                }
+            )
+
+        # Missing clause recommendations
+        missing_clauses = analysis_result.get("missing_clauses", [])
+        if missing_clauses:
+            recommendations.append(
+                {
+                    "priority": "medium",
+                    "category": "contract_terms",
+                    "recommendation": "Consider adding recommended clauses",
+                    "details": missing_clauses,
+                }
+            )
+
+        # General recommendations
+        recommendations.extend(
+            [
+                {
+                    "priority": "medium",
+                    "category": "due_diligence",
+                    "recommendation": "Complete all mandatory property searches",
+                    "details": "Ensure title search, planning certificates are obtained",
+                },
+                {
+                    "priority": "low",
+                    "category": "professional_advice",
+                    "recommendation": "Review contract with qualified conveyancer",
+                    "details": "Professional review recommended for all property transactions",
+                },
+            ]
+        )
+
+        return recommendations
+
+    async def generate_contract_summary(
+        self, contract_text: str, config: ContractAnalysisConfig
+    ) -> str:
+        """Generate a plain English summary of the contract"""
+
+        if not self.gemini_client:
+            raise HTTPException(status_code=503, detail="AI service not initialized")
+
+        prompt = f"""
+Provide a clear, plain English summary of this {config.contract_type.value} contract 
+for {config.australian_state.value}. The summary should be suitable for a property buyer 
+with no legal background.
+
+Contract Text:
+{contract_text[:10000]}
+
+Include:
+1. What is being sold and where
+2. How much it costs
+3. When settlement happens
+4. Key conditions and requirements
+5. Important dates and deadlines
+6. What the buyer needs to do next
+
+Keep the summary under 500 words and use simple language.
+"""
+
+        try:
+            summary = await self.gemini_client.generate_content(
+                prompt=prompt,
+                temperature=0.3,
+                max_tokens=1000,
+            )
+            return summary
+        except ClientError as e:
+            logger.error(f"Summary generation failed: {e}")
+            return "Summary generation failed. Please review the full analysis."
+
+    async def health_check(self) -> Dict[str, Any]:
+        """Check health of contract analysis service"""
+
+        health_status = {
+            "service": "ContractAnalysisService",
+            "status": "healthy",
+            "timestamp": datetime.now(UTC).isoformat(),
+        }
+
+        # Check Gemini client
+        if self.gemini_client:
+            try:
+                gemini_health = await self.gemini_client.health_check()
+                health_status["gemini_status"] = gemini_health.get("status", "unknown")
+                health_status["authentication_method"] = gemini_health.get(
+                    "authentication", {}
+                ).get("method", "unknown")
+            except Exception as e:
+                health_status["gemini_status"] = "error"
+                health_status["status"] = "degraded"
+                health_status["error"] = str(e)
+        else:
+            health_status["gemini_status"] = "not_initialized"
+            health_status["status"] = "degraded"
+
+        # Check configuration
+        health_status["states_configured"] = len(self.state_regulations)
+        health_status["contract_types_configured"] = len(self.contract_requirements)
+
+        return health_status

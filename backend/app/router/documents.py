@@ -10,10 +10,20 @@ from app.core.config import get_settings
 from app.model.enums import ContractType, AustralianState
 from app.services.document_service import DocumentService
 from app.services.websocket_service import WebSocketManager
-from app.schema.document import DocumentUploadResponse, ReportGenerationRequest, ReportResponse
+from app.schema.document import (
+    DocumentUploadResponse,
+    ReportGenerationRequest,
+    ReportResponse,
+)
 from app.schema.ocr import (
-    OCRProcessingRequest, OCRProcessingResponse, BatchOCRRequest, BatchOCRResponse,
-    OCRStatusResponse, OCRCapabilitiesResponse, EnhancedOCRCapabilities, OCRQueueStatus
+    OCRProcessingRequest,
+    OCRProcessingResponse,
+    BatchOCRRequest,
+    BatchOCRResponse,
+    OCRStatusResponse,
+    OCRCapabilitiesResponse,
+    EnhancedOCRCapabilities,
+    OCRQueueStatus,
 )
 
 logger = logging.getLogger(__name__)
@@ -52,9 +62,9 @@ async def upload_document(
 
         # Get database client first
         db_client = get_database_client()
-        
+
         # Ensure database client is initialized
-        if not hasattr(db_client, '_client') or db_client._client is None:
+        if not hasattr(db_client, "_client") or db_client._client is None:
             await db_client.initialize()
 
         # Upload to Supabase Storage (this includes validation)
@@ -69,8 +79,7 @@ async def upload_document(
         except Exception as verification_error:
             logger.error(f"File upload verification failed: {str(verification_error)}")
             raise HTTPException(
-                status_code=500, 
-                detail="File upload failed - please try again"
+                status_code=500, detail="File upload failed - please try again"
             )
 
         # Store document metadata in database only after successful upload verification
@@ -92,18 +101,22 @@ async def upload_document(
             logger.error(f"Database insert failed: {str(db_error)}")
             try:
                 storage = db_client.storage()
-                storage.from_(document_service.storage_bucket).remove([upload_result["storage_path"]])
-                logger.info(f"Cleaned up orphaned file: {upload_result['storage_path']}")
+                storage.from_(document_service.storage_bucket).remove(
+                    [upload_result["storage_path"]]
+                )
+                logger.info(
+                    f"Cleaned up orphaned file: {upload_result['storage_path']}"
+                )
             except Exception as cleanup_error:
                 logger.warning(f"Failed to cleanup orphaned file: {str(cleanup_error)}")
-            
+
             raise HTTPException(
-                status_code=500, 
-                detail="Failed to save document metadata"
+                status_code=500, detail="Failed to save document metadata"
             )
 
         # Start background processing via Celery
         from app.tasks.background_tasks import process_document_background
+
         task = process_document_background.delay(
             upload_result["document_id"],
             user.id,
@@ -128,7 +141,11 @@ async def upload_document(
 
 
 @router.get("/{document_id}")
-async def get_document(document_id: str, user: User = Depends(get_current_user), db_client=Depends(get_database_client)):
+async def get_document(
+    document_id: str,
+    user: User = Depends(get_current_user),
+    db_client=Depends(get_database_client),
+):
     """Get document details"""
 
     try:
@@ -159,10 +176,10 @@ async def reprocess_document_with_ocr(
     background_tasks: BackgroundTasks,
     processing_options: Optional[Dict[str, Any]] = None,
     user: User = Depends(get_current_user),
-    db_client=Depends(get_database_client)
+    db_client=Depends(get_database_client),
 ):
     """Reprocess document using enhanced OCR for better text extraction"""
-    
+
     try:
         # Verify document ownership
         doc_result = (
@@ -172,53 +189,55 @@ async def reprocess_document_with_ocr(
             .eq("user_id", user.id)
             .execute()
         )
-        
+
         if not doc_result.data:
             raise HTTPException(status_code=404, detail="Document not found")
-            
+
         document = doc_result.data[0]
-        
+
         # Check if OCR is available
         ocr_capabilities = await document_service.get_ocr_capabilities()
         if not ocr_capabilities["service_available"]:
-            raise HTTPException(
-                status_code=503, 
-                detail="OCR service not available"
-            )
-        
+            raise HTTPException(status_code=503, detail="OCR service not available")
+
         # Get user profile for context
         user_result = (
             db_client.table("profiles").select("*").eq("id", user.id).execute()
         )
         user_profile = user_result.data[0] if user_result.data else {}
-        
+
         # Create contract context
         contract_context = {
             "australian_state": user_profile.get("australian_state", "NSW"),
             "contract_type": "purchase_agreement",
             "user_type": user_profile.get("user_type", "buyer"),
             "document_id": document_id,
-            "filename": document["filename"]
+            "filename": document["filename"],
         }
-        
+
         # Enhanced processing options
         enhanced_options = {
-            "priority": user_profile.get("subscription_status") in ["premium", "enterprise"],
+            "priority": user_profile.get("subscription_status")
+            in ["premium", "enterprise"],
             "enhanced_quality": True,
-            "detailed_analysis": processing_options and processing_options.get("detailed_analysis", False) if processing_options else False,
-            "contract_specific": True
+            "detailed_analysis": (
+                processing_options
+                and processing_options.get("detailed_analysis", False)
+                if processing_options
+                else False
+            ),
+            "contract_specific": True,
         }
-        
+
         # Use enhanced background processing via Celery
-        from app.tasks.background_tasks import enhanced_reprocess_document_with_ocr_background
-        task = enhanced_reprocess_document_with_ocr_background.delay(
-            document_id,
-            user.id,
-            document,
-            contract_context,
-            enhanced_options
+        from app.tasks.background_tasks import (
+            enhanced_reprocess_document_with_ocr_background,
         )
-        
+
+        task = enhanced_reprocess_document_with_ocr_background.delay(
+            document_id, user.id, document, contract_context, enhanced_options
+        )
+
         return {
             "message": "Enhanced OCR processing started",
             "document_id": document_id,
@@ -227,10 +246,10 @@ async def reprocess_document_with_ocr(
                 "gemini_2.5_pro_ocr",
                 "contract_analysis",
                 "australian_context",
-                "quality_enhancement"
-            ]
+                "quality_enhancement",
+            ],
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -244,10 +263,10 @@ async def batch_process_ocr(
     background_tasks: BackgroundTasks,
     batch_options: Optional[Dict[str, Any]] = None,
     user: User = Depends(get_current_user),
-    db_client=Depends(get_database_client)
+    db_client=Depends(get_database_client),
 ):
     """Batch process multiple documents with OCR"""
-    
+
     try:
         # Validate document ownership
         verified_docs = []
@@ -259,55 +278,61 @@ async def batch_process_ocr(
                 .eq("user_id", user.id)
                 .execute()
             )
-            
+
             if doc_result.data:
                 verified_docs.append(doc_result.data[0])
-        
+
         if not verified_docs:
             raise HTTPException(status_code=404, detail="No valid documents found")
-        
+
         # Check OCR availability
         ocr_capabilities = await document_service.get_ocr_capabilities()
         if not ocr_capabilities["service_available"]:
-            raise HTTPException(
-                status_code=503,
-                detail="OCR service not available"
-            )
-        
+            raise HTTPException(status_code=503, detail="OCR service not available")
+
         # Get user profile
         user_result = (
             db_client.table("profiles").select("*").eq("id", user.id).execute()
         )
         user_profile = user_result.data[0] if user_result.data else {}
-        
+
         # Create batch context
         from datetime import datetime
+
         batch_context = {
             "australian_state": user_profile.get("australian_state", "NSW"),
-            "contract_type": batch_options.get("contract_type", "purchase_agreement") if batch_options else "purchase_agreement",
+            "contract_type": (
+                batch_options.get("contract_type", "purchase_agreement")
+                if batch_options
+                else "purchase_agreement"
+            ),
             "user_type": user_profile.get("user_type", "buyer"),
-            "batch_id": f"batch_{user.id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            "batch_id": f"batch_{user.id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
         }
-        
+
         # Enhanced batch processing options
         processing_options = {
-            "priority": user_profile.get("subscription_status") in ["premium", "enterprise"],
+            "priority": user_profile.get("subscription_status")
+            in ["premium", "enterprise"],
             "parallel_processing": len(verified_docs) > 1,
-            "contract_analysis": batch_options.get("include_analysis", True) if batch_options else True,
-            "quality_enhancement": True
+            "contract_analysis": (
+                batch_options.get("include_analysis", True) if batch_options else True
+            ),
+            "quality_enhancement": True,
         }
-        
+
         # Start batch processing
         batch_id = batch_context["batch_id"]
-        
+
         from app.tasks.background_tasks import batch_ocr_processing_background
+
         task = batch_ocr_processing_background.delay(
             [doc["id"] for doc in verified_docs],
             user.id,
             batch_context,
-            processing_options
+            processing_options,
         )
-        
+
         return {
             "message": "Batch OCR processing started",
             "batch_id": batch_id,
@@ -317,10 +342,14 @@ async def batch_process_ocr(
                 "gemini_2.5_pro_ocr",
                 "batch_optimization",
                 "contract_analysis",
-                "parallel_processing" if processing_options["parallel_processing"] else "sequential_processing"
-            ]
+                (
+                    "parallel_processing"
+                    if processing_options["parallel_processing"]
+                    else "sequential_processing"
+                ),
+            ],
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -332,10 +361,10 @@ async def batch_process_ocr(
 async def get_ocr_status(
     document_id: str,
     user: User = Depends(get_current_user),
-    db_client=Depends(get_database_client)
+    db_client=Depends(get_database_client),
 ):
     """Get detailed OCR processing status for a document"""
-    
+
     try:
         # Verify document ownership
         doc_result = (
@@ -345,45 +374,49 @@ async def get_ocr_status(
             .eq("user_id", user.id)
             .execute()
         )
-        
+
         if not doc_result.data:
             raise HTTPException(status_code=404, detail="Document not found")
-            
+
         document = doc_result.data[0]
         processing_results = document.get("processing_results", {})
-        
+
         # Determine processing status
         status = document.get("status", "unknown")
-        
+
         if status in ["queued_for_ocr", "processing_ocr", "reprocessing_ocr"]:
             # Check if we have task ID for detailed status
             task_id = processing_results.get("task_id")
             task_status = "unknown"
-            
+
             if task_id:
                 # Here you could check Celery task status
                 # For now, provide estimated status
                 task_status = "processing"
-        
+
         # Calculate processing metrics
         metrics = {
-            "extraction_confidence": processing_results.get("extraction_confidence", 0.0),
+            "extraction_confidence": processing_results.get(
+                "extraction_confidence", 0.0
+            ),
             "character_count": processing_results.get("character_count", 0),
             "word_count": processing_results.get("word_count", 0),
             "extraction_method": processing_results.get("extraction_method", "unknown"),
-            "processing_time": processing_results.get("processing_time", 0)
+            "processing_time": processing_results.get("processing_time", 0),
         }
-        
+
         return {
             "document_id": document_id,
             "filename": document["filename"],
             "status": status,
             "processing_metrics": metrics,
-            "ocr_features_used": processing_results.get("processing_details", {}).get("enhancement_applied", []),
+            "ocr_features_used": processing_results.get("processing_details", {}).get(
+                "enhancement_applied", []
+            ),
             "last_updated": document.get("updated_at"),
-            "supports_reprocessing": status in ["processed", "failed", "ocr_failed"]
+            "supports_reprocessing": status in ["processed", "failed", "ocr_failed"],
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:

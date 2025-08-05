@@ -1,41 +1,38 @@
 """
-Gemini 2.5 Pro OCR Service for Real2.AI
-Advanced OCR capabilities for contract document processing
+Gemini OCR Service V2 - Refactored to use GeminiClient
+Provides OCR capabilities for contract document processing using proper client architecture
 """
 
-import os
-import asyncio
 import logging
-from typing import Dict, Any, Optional, List, BinaryIO
+from typing import Dict, Any, Optional, List
 from datetime import datetime, UTC
 from pathlib import Path
-import base64
-import tempfile
 
 from fastapi import HTTPException
-import fitz  # PyMuPDF for PDF handling
-from PIL import Image
-import io
 
 from app.core.config import get_settings
-from app.clients.factory import get_gemini_client
-from app.clients.base.exceptions import ClientError, ClientAuthenticationError
 from app.models.contract_state import ProcessingStatus
 from app.services.ocr_performance_service import (
     OCRPerformanceService,
     ProcessingPriority,
+)
+from app.clients import get_gemini_client
+from app.clients.base.exceptions import (
+    ClientError,
+    ClientConnectionError,
+    ClientQuotaExceededError,
 )
 
 logger = logging.getLogger(__name__)
 
 
 class GeminiOCRService:
-    """Advanced OCR service using Gemini 2.5 Pro for contract document processing"""
+    """Advanced OCR service using GeminiClient for contract document processing"""
 
     def __init__(self):
         self.settings = get_settings()
-        self.model_name = "gemini-2.5-pro"
-        self.max_file_size = 50 * 1024 * 1024  # 50MB limit for Gemini
+        self.gemini_client = None
+        self.max_file_size = 50 * 1024 * 1024  # 50MB limit
         self.supported_formats = {
             "pdf",
             "png",
@@ -49,9 +46,6 @@ class GeminiOCRService:
 
         # Performance optimization service
         self.performance_service = OCRPerformanceService()
-
-        # Gemini client
-        self._gemini_client = None
 
         # Advanced processing options
         self.processing_profiles = {
@@ -72,46 +66,39 @@ class GeminiOCRService:
             },
         }
 
-    async def _get_gemini_client(self):
-        """Get initialized Gemini client."""
-        if self._gemini_client is None:
-            try:
-                self._gemini_client = await get_gemini_client()
-                logger.info("Gemini client initialized for OCR service")
-            except (ClientError, ClientAuthenticationError) as e:
-                logger.warning(f"Gemini client not available for OCR: {e}")
-                self._gemini_client = None
-        return self._gemini_client
-
     async def initialize(self):
-        """Initialize Gemini OCR service with performance optimization"""
+        """Initialize Gemini OCR service using GeminiClient"""
         try:
-            gemini_client = await self._get_gemini_client()
-            if gemini_client:
-                # Test client connection
-                health_status = await gemini_client.health_check()
-                if health_status.get("status") == "healthy":
-                    logger.info("Gemini OCR service initialized successfully")
+            # Get initialized Gemini client from factory
+            self.gemini_client = await get_gemini_client()
 
-                    # Initialize performance service
-                    await self.performance_service.initialize()
-                    logger.info("OCR Performance optimization enabled")
-                else:
-                    logger.warning("Gemini API connection test failed")
+            # Check if OCR functionality is available
+            if hasattr(self.gemini_client, "ocr") and self.gemini_client.ocr:
+                logger.info(
+                    "Gemini OCR service initialized successfully with GeminiClient"
+                )
+
+                # Initialize performance service
+                await self.performance_service.initialize()
+                logger.info("OCR Performance optimization enabled")
+
+                return True
             else:
-                logger.warning("Gemini OCR service not available - API key missing")
+                logger.warning("GeminiClient does not have OCR capabilities")
+                return False
+
+        except ClientConnectionError as e:
+            logger.error(f"Failed to connect to Gemini service: {e}")
+            raise HTTPException(
+                status_code=503,
+                detail="Gemini OCR service unavailable - connection failed",
+            )
         except Exception as e:
             logger.error(f"Failed to initialize Gemini OCR service: {str(e)}")
-            raise
-
-    async def _test_api_connection(self) -> bool:
-        """Test Gemini API connection"""
-        try:
-            response = self.model.generate_content("Test connection")
-            return bool(response.text)
-        except Exception as e:
-            logger.error(f"Gemini API connection test failed: {str(e)}")
-            return False
+            raise HTTPException(
+                status_code=503,
+                detail=f"Gemini OCR service initialization failed: {str(e)}",
+            )
 
     async def extract_text_from_document(
         self,
@@ -119,8 +106,11 @@ class GeminiOCRService:
         file_type: str,
         filename: str,
         contract_context: Optional[Dict[str, Any]] = None,
+        user_id: Optional[str] = None,
+        priority: ProcessingPriority = ProcessingPriority.STANDARD,
+        enable_optimization: bool = True,
     ) -> Dict[str, Any]:
-        """Extract text from document using Gemini 2.5 Pro OCR with AI optimization
+        """Extract text from document using GeminiClient's OCR capabilities
 
         Args:
             file_content: Raw file bytes
@@ -134,41 +124,68 @@ class GeminiOCRService:
         Returns:
             Dict containing extracted text, confidence, and metadata
         """
-        if not self.model:
+        if not self.gemini_client:
             raise HTTPException(
-                status_code=503,
-                detail="Gemini OCR service not available - API key not configured",
+                status_code=503, detail="Gemini OCR service not initialized"
             )
 
         try:
-            # Validate file size
-            if len(file_content) > self.max_file_size:
-                raise HTTPException(
-                    status_code=413,
-                    detail=f"File too large for OCR. Maximum size: {self.max_file_size / 1024 / 1024}MB",
+            # Validate file
+            self._validate_file(file_content, file_type)
+
+            # Select processing profile based on priority
+            profile = self._select_processing_profile(priority, len(file_content))
+
+            # Prepare contract context for OCR
+            ocr_context = self._prepare_ocr_context(contract_context, profile)
+
+            # Use GeminiClient's OCR functionality
+            try:
+                result = await self.gemini_client.extract_text(
+                    content=file_content,
+                    content_type=f"application/{file_type.lower()}",
+                    contract_context=ocr_context,
+                    processing_profile=profile,
                 )
 
-            # Validate file format
-            if file_type.lower() not in self.supported_formats:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Unsupported file format for OCR: {file_type}",
+                # Add performance metrics if enabled
+                if enable_optimization and self.performance_service:
+                    await self._track_performance_metrics(
+                        user_id=user_id,
+                        file_size=len(file_content),
+                        processing_time=result.get("processing_time", 0),
+                        confidence=result.get("extraction_confidence", 0),
+                        priority=priority,
+                    )
+
+                # Enhance result with service-level metadata
+                result.update(
+                    {
+                        "service": "GeminiOCRService",
+                        "processing_profile": profile,
+                        "file_processed": filename,
+                        "optimization_enabled": enable_optimization,
+                    }
                 )
 
-            # Process based on file type
-            if file_type.lower() == "pdf":
-                return await self._extract_from_pdf(
-                    file_content, filename, contract_context
+                return result
+
+            except ClientQuotaExceededError as e:
+                logger.error(f"Gemini quota exceeded: {e}")
+                raise HTTPException(
+                    status_code=429,
+                    detail="OCR quota exceeded. Please try again later.",
                 )
-            else:
-                return await self._extract_from_image(
-                    file_content, file_type, filename, contract_context
+            except ClientError as e:
+                logger.error(f"Gemini client error during OCR: {e}")
+                raise HTTPException(
+                    status_code=500, detail=f"OCR processing failed: {str(e)}"
                 )
 
         except HTTPException:
             raise
         except Exception as e:
-            logger.error(f"Gemini OCR extraction failed for {filename}: {str(e)}")
+            logger.error(f"Unexpected error during OCR extraction: {str(e)}")
             return {
                 "extracted_text": "",
                 "extraction_method": "gemini_ocr_failed",
@@ -183,422 +200,80 @@ class GeminiOCRService:
                 },
             }
 
-    async def _extract_from_pdf(
+    async def analyze_document(
         self,
-        pdf_content: bytes,
-        filename: str,
-        contract_context: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
-        """Extract text from PDF using Gemini OCR"""
-
-        try:
-            # Open PDF with PyMuPDF
-            pdf_document = fitz.open(stream=pdf_content, filetype="pdf")
-
-            # Check if PDF has extractable text first
-            has_text = False
-            for page_num in range(
-                min(3, pdf_document.page_count)
-            ):  # Check first 3 pages
-                page = pdf_document[page_num]
-                if page.get_text().strip():
-                    has_text = True
-                    break
-
-            extracted_pages = []
-            total_confidence = 0.0
-            processing_details = {
-                "total_pages": pdf_document.page_count,
-                "pages_processed": 0,
-                "has_native_text": has_text,
-                "processing_method": "hybrid" if has_text else "ocr_only",
-            }
-
-            # Process each page
-            for page_num in range(pdf_document.page_count):
-                page = pdf_document[page_num]
-
-                # Try extracting native text first
-                native_text = page.get_text().strip()
-
-                if native_text and len(native_text) > 50:  # Good native text extraction
-                    page_result = {
-                        "page_number": page_num + 1,
-                        "text": native_text,
-                        "extraction_method": "native_pdf",
-                        "confidence": 0.95,
-                    }
-                else:
-                    # Use OCR for this page
-                    page_result = await self._ocr_pdf_page(
-                        page, page_num + 1, contract_context
-                    )
-
-                extracted_pages.append(page_result)
-                total_confidence += page_result["confidence"]
-                processing_details["pages_processed"] += 1
-
-            pdf_document.close()
-
-            # Combine all extracted text
-            combined_text = "\n\n".join(
-                [page["text"] for page in extracted_pages if page["text"]]
-            )
-            average_confidence = (
-                total_confidence / len(extracted_pages) if extracted_pages else 0.0
-            )
-
-            # Enhance with contract-specific post-processing
-            enhanced_result = await self._enhance_contract_text(
-                combined_text, contract_context
-            )
-
-            return {
-                "extracted_text": enhanced_result["text"],
-                "extraction_method": "gemini_ocr_hybrid",
-                "extraction_confidence": min(
-                    0.95, average_confidence * enhanced_result["enhancement_factor"]
-                ),
-                "character_count": len(enhanced_result["text"]),
-                "word_count": len(enhanced_result["text"].split()),
-                "extraction_timestamp": datetime.now(UTC).isoformat(),
-                "file_processed": filename,
-                "processing_details": {
-                    **processing_details,
-                    "pages_data": extracted_pages,
-                    "enhancement_applied": enhanced_result["enhancements_applied"],
-                    "contract_terms_found": enhanced_result["contract_terms_count"],
-                },
-            }
-
-        except Exception as e:
-            logger.error(f"PDF OCR processing failed for {filename}: {str(e)}")
-            raise
-
-    async def _ocr_pdf_page(
-        self, page, page_number: int, contract_context: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
-        """OCR a single PDF page using Gemini"""
-
-        try:
-            # Convert page to image
-            pix = page.get_pixmap(
-                matrix=fitz.Matrix(2.0, 2.0)
-            )  # 2x scale for better OCR
-            img_data = pix.tobytes("png")
-
-            # Create contract-specific OCR prompt
-            prompt = self._create_ocr_prompt(contract_context, page_number)
-
-            # Send to Gemini for OCR
-            image_part = {
-                "mime_type": "image/png",
-                "data": base64.b64encode(img_data).decode("utf-8"),
-            }
-
-            response = await asyncio.get_event_loop().run_in_executor(
-                None, lambda: self.model.generate_content([prompt, image_part])
-            )
-
-            extracted_text = response.text if response.text else ""
-
-            # Calculate confidence based on text quality
-            confidence = self._calculate_ocr_confidence(extracted_text, page_number)
-
-            return {
-                "page_number": page_number,
-                "text": extracted_text,
-                "extraction_method": "gemini_ocr",
-                "confidence": confidence,
-            }
-
-        except Exception as e:
-            logger.error(f"OCR failed for page {page_number}: {str(e)}")
-            return {
-                "page_number": page_number,
-                "text": "",
-                "extraction_method": "gemini_ocr_failed",
-                "confidence": 0.0,
-                "error": str(e),
-            }
-
-    async def _extract_from_image(
-        self,
-        image_content: bytes,
+        file_content: bytes,
         file_type: str,
         filename: str,
         contract_context: Optional[Dict[str, Any]] = None,
+        analysis_options: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        """Extract text from image using Gemini OCR"""
+        """Analyze document content using GeminiClient's analysis capabilities
+
+        Args:
+            file_content: Raw file bytes
+            file_type: File extension
+            filename: Original filename
+            contract_context: Additional context
+            analysis_options: Analysis configuration options
+
+        Returns:
+            Dict containing analysis results
+        """
+        if not self.gemini_client:
+            raise HTTPException(
+                status_code=503, detail="Gemini OCR service not initialized"
+            )
 
         try:
-            # Validate and potentially enhance image
-            enhanced_image = await self._preprocess_image(image_content, file_type)
+            # Validate file
+            self._validate_file(file_content, file_type)
 
-            # Create contract-specific OCR prompt
-            prompt = self._create_ocr_prompt(contract_context, 1, is_single_image=True)
-
-            # Prepare image for Gemini
-            image_part = {
-                "mime_type": f"image/{file_type.lower()}",
-                "data": base64.b64encode(enhanced_image).decode("utf-8"),
-            }
-
-            # Send to Gemini for OCR
-            response = await asyncio.get_event_loop().run_in_executor(
-                None, lambda: self.model.generate_content([prompt, image_part])
+            # Use GeminiClient's document analysis
+            result = await self.gemini_client.analyze_document(
+                content=file_content,
+                content_type=f"application/{file_type.lower()}",
+                contract_context=contract_context,
+                analysis_options=analysis_options,
             )
 
-            extracted_text = response.text if response.text else ""
-
-            # Enhance with contract-specific post-processing
-            enhanced_result = await self._enhance_contract_text(
-                extracted_text, contract_context
+            # Add service metadata
+            result.update(
+                {
+                    "service": "GeminiOCRService",
+                    "file_processed": filename,
+                    "analysis_timestamp": datetime.now(UTC).isoformat(),
+                }
             )
 
-            # Calculate confidence
-            confidence = self._calculate_ocr_confidence(
-                enhanced_result["text"], 1, is_single_image=True
+            return result
+
+        except ClientError as e:
+            logger.error(f"Document analysis failed: {e}")
+            raise HTTPException(
+                status_code=500, detail=f"Document analysis failed: {str(e)}"
             )
 
-            return {
-                "extracted_text": enhanced_result["text"],
-                "extraction_method": "gemini_ocr_image",
-                "extraction_confidence": confidence
-                * enhanced_result["enhancement_factor"],
-                "character_count": len(enhanced_result["text"]),
-                "word_count": len(enhanced_result["text"].split()),
-                "extraction_timestamp": datetime.now(UTC).isoformat(),
-                "file_processed": filename,
-                "processing_details": {
-                    "image_enhanced": True,
-                    "enhancement_applied": enhanced_result["enhancements_applied"],
-                    "contract_terms_found": enhanced_result["contract_terms_count"],
-                    "file_type": file_type,
-                },
-            }
+    def _validate_file(self, file_content: bytes, file_type: str):
+        """Validate file size and format"""
+        # Check file size
+        if len(file_content) > self.max_file_size:
+            raise HTTPException(
+                status_code=413,
+                detail=f"File too large for OCR. Maximum size: {self.max_file_size / 1024 / 1024}MB",
+            )
 
-        except Exception as e:
-            logger.error(f"Image OCR processing failed for {filename}: {str(e)}")
-            raise
+        # Check file format
+        if file_type.lower() not in self.supported_formats:
+            raise HTTPException(
+                status_code=400, detail=f"Unsupported file format for OCR: {file_type}"
+            )
 
-    async def _preprocess_image(self, image_content: bytes, file_type: str) -> bytes:
-        """Preprocess image for better OCR results"""
-        try:
-            # Open image with PIL
-            image = Image.open(io.BytesIO(image_content))
-
-            # Convert to RGB if necessary
-            if image.mode != "RGB":
-                image = image.convert("RGB")
-
-            # Enhance image quality for OCR
-            # Resize if too small (OCR works better on larger images)
-            width, height = image.size
-            if width < 1000 or height < 1000:
-                scale_factor = max(1000 / width, 1000 / height)
-                new_width = int(width * scale_factor)
-                new_height = int(height * scale_factor)
-                image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
-
-            # Save enhanced image
-            output_buffer = io.BytesIO()
-            image.save(output_buffer, format="PNG", optimize=True)
-            return output_buffer.getvalue()
-
-        except Exception as e:
-            logger.warning(f"Image preprocessing failed, using original: {str(e)}")
-            return image_content
-
-    def _create_ocr_prompt(
-        self,
-        contract_context: Optional[Dict[str, Any]],
-        page_number: int,
-        is_single_image: bool = False,
-    ) -> str:
-        """Create optimized OCR prompt for contract documents"""
-
-        base_prompt = """
-You are an expert OCR system specialized in extracting text from Australian real estate contracts and legal documents.
-
-Please extract ALL text from this document image with the highest accuracy possible. Pay special attention to:
-
-1. **Contract Details**: Purchase price, settlement dates, deposit amounts, property addresses
-2. **Party Information**: Vendor and purchaser names, contact details
-3. **Legal Terms**: Cooling-off periods, special conditions, finance clauses
-4. **Fine Print**: Small text, footnotes, and signature blocks
-5. **Formatting**: Preserve spacing, line breaks, and paragraph structure where possible
-
-**Instructions:**
-- Extract every word, number, and symbol visible in the image
-- Maintain the original document structure and formatting
-- If text is unclear, provide your best interpretation in [brackets]
-- Include all headers, subheadings, and section numbers
-- Preserve tables and lists with appropriate formatting
-- Don't add any explanations or comments - just the extracted text
-
-**Australian Context:** This is likely an Australian real estate contract, so pay attention to:
-- Australian state abbreviations (NSW, VIC, QLD, SA, WA, TAS, NT, ACT)
-- Australian currency ($AUD)
-- Legal terminology specific to Australian property law
-- Australian address formats and postcodes
-"""
-
-        if contract_context:
-            if contract_context.get("australian_state"):
-                base_prompt += f"\n- This contract is from {contract_context['australian_state']}, Australia"
-
-            if contract_context.get("contract_type"):
-                base_prompt += (
-                    f"\n- Expected contract type: {contract_context['contract_type']}"
-                )
-
-        if not is_single_image:
-            base_prompt += f"\n\n**Page Context:** This is page {page_number} of a multi-page document."
-
-        base_prompt += "\n\nExtracted text:"
-
-        return base_prompt
-
-    async def _enhance_contract_text(
-        self, raw_text: str, contract_context: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
-        """Post-process OCR text with contract-specific enhancements"""
-
-        if not raw_text.strip():
-            return {
-                "text": raw_text,
-                "enhancement_factor": 1.0,
-                "enhancements_applied": [],
-                "contract_terms_count": 0,
-            }
-
-        enhanced_text = raw_text
-        enhancements_applied = []
-
-        # Common OCR corrections for contract documents
-        ocr_corrections = {
-            # Currency corrections
-            r"\$\s*(\d)": r"$\1",  # Fix spacing in currency
-            r"(\d),(\d{3})": r"\1,\2",  # Fix comma in numbers
-            # Date corrections
-            r"(\d{1,2})/(\d{1,2})/(\d{4})": r"\1/\2/\3",  # Standardize dates
-            # Australian state corrections
-            r"\bN\.?S\.?W\.?\b": "NSW",
-            r"\bV\.?I\.?C\.?\b": "VIC",
-            r"\bQ\.?L\.?D\.?\b": "QLD",
-            r"\bS\.?A\.?\b": "SA",
-            r"\bW\.?A\.?\b": "WA",
-            r"\bT\.?A\.?S\.?\b": "TAS",
-            r"\bN\.?T\.?\b": "NT",
-            r"\bA\.?C\.?T\.?\b": "ACT",
-        }
-
-        import re
-
-        for pattern, replacement in ocr_corrections.items():
-            if re.search(pattern, enhanced_text):
-                enhanced_text = re.sub(pattern, replacement, enhanced_text)
-                enhancements_applied.append(f"corrected_pattern_{pattern[:20]}")
-
-        # Count contract-specific terms
-        contract_terms = [
-            "purchase price",
-            "settlement",
-            "deposit",
-            "vendor",
-            "purchaser",
-            "cooling-off",
-            "finance clause",
-            "building inspection",
-            "pest inspection",
-            "strata",
-            "title",
-            "contract",
-            "agreement",
-            "property",
-        ]
-
-        text_lower = enhanced_text.lower()
-        contract_terms_count = sum(1 for term in contract_terms if term in text_lower)
-
-        # Enhancement factor based on improvements made
-        enhancement_factor = 1.0
-        if enhancements_applied:
-            enhancement_factor += len(enhancements_applied) * 0.02
-        if contract_terms_count > 5:
-            enhancement_factor += 0.05
-
-        return {
-            "text": enhanced_text,
-            "enhancement_factor": min(
-                1.2, enhancement_factor
-            ),  # Cap at 20% improvement
-            "enhancements_applied": enhancements_applied,
-            "contract_terms_count": contract_terms_count,
-        }
-
-    def _calculate_ocr_confidence(
-        self, extracted_text: str, page_number: int, is_single_image: bool = False
-    ) -> float:
-        """Calculate confidence score for OCR extraction"""
-
-        if not extracted_text:
-            return 0.0
-
-        confidence = 0.5  # Base confidence
-
-        # Text length factor
-        text_length = len(extracted_text.strip())
-        if text_length > 100:
-            confidence += 0.1
-        if text_length > 500:
-            confidence += 0.1
-        if text_length > 1000:
-            confidence += 0.1
-
-        # Contract keyword factor
-        contract_keywords = [
-            "contract",
-            "agreement",
-            "purchase",
-            "sale",
-            "property",
-            "vendor",
-            "purchaser",
-            "settlement",
-            "deposit",
-            "price",
-            "australia",
-            "nsw",
-            "vic",
-            "qld",
-            "sa",
-            "wa",
-            "tas",
-            "nt",
-            "act",
-        ]
-
-        text_lower = extracted_text.lower()
-        keyword_matches = sum(
-            1 for keyword in contract_keywords if keyword in text_lower
-        )
-        confidence += min(0.2, keyword_matches * 0.02)
-
-        # Text quality indicators
-        words = extracted_text.split()
-        if words:
-            # Reduce confidence for high ratio of single characters (poor OCR)
-            single_char_ratio = sum(1 for word in words if len(word) == 1) / len(words)
-            confidence -= single_char_ratio * 0.3
-
-            # Boost confidence for reasonable word lengths
-            avg_word_length = sum(len(word) for word in words) / len(words)
-            if 3 <= avg_word_length <= 8:  # Reasonable average word length
-                confidence += 0.1
-
-        return max(0.0, min(1.0, confidence))
+        # Check if file is empty
+        if len(file_content) == 0:
+            raise HTTPException(
+                status_code=400, detail="Empty file cannot be processed"
+            )
 
     def _select_processing_profile(
         self, priority: ProcessingPriority, file_size: int
@@ -616,89 +291,84 @@ Please extract ALL text from this document image with the highest accuracy possi
         # Adjust based on file size
         file_size_mb = file_size / (1024 * 1024)
 
-        if file_size_mb > 20:  # Large files need quality processing
+        if file_size_mb > 20:  # Large files
             if base_profile == "fast":
                 base_profile = "balanced"
-        elif file_size_mb < 1:  # Small files can use fast processing
+        elif file_size_mb < 1:  # Small files
             if base_profile == "quality":
                 base_profile = "balanced"
 
         return base_profile
 
-    async def _extract_from_pdf_optimized(
-        self,
-        pdf_content: bytes,
-        filename: str,
-        contract_context: Optional[Dict[str, Any]] = None,
-        processing_profile: str = "balanced",
+    def _prepare_ocr_context(
+        self, contract_context: Optional[Dict[str, Any]], profile: str
     ) -> Dict[str, Any]:
-        """Extract text from PDF with optimization enhancements"""
+        """Prepare context for OCR processing"""
+        ocr_context = contract_context or {}
 
-        # Use the existing method but with profile-based enhancements
-        result = await self._extract_from_pdf(pdf_content, filename, contract_context)
-
-        # Apply profile-specific enhancements
+        # Add profile-specific settings
         profile_config = self.processing_profiles.get(
-            processing_profile, self.processing_profiles["balanced"]
+            profile, self.processing_profiles["balanced"]
         )
 
-        # Enhance result with profile metadata
-        result["processing_details"] = {
-            **result.get("processing_details", {}),
-            "processing_profile": processing_profile,
-            "profile_config": profile_config,
-            "optimization_applied": True,
-        }
+        ocr_context.update(
+            {
+                "processing_profile": profile,
+                "profile_config": profile_config,
+                "service_version": "v2",
+            }
+        )
 
-        return result
+        return ocr_context
 
-    async def _extract_from_image_optimized(
+    async def _track_performance_metrics(
         self,
-        image_content: bytes,
-        file_type: str,
-        filename: str,
-        contract_context: Optional[Dict[str, Any]] = None,
-        processing_profile: str = "balanced",
-    ) -> Dict[str, Any]:
-        """Extract text from image with optimization enhancements"""
-
-        # Use the existing method but with profile-based enhancements
-        result = await self._extract_from_image(
-            image_content, file_type, filename, contract_context
-        )
-
-        # Apply profile-specific enhancements
-        profile_config = self.processing_profiles.get(
-            processing_profile, self.processing_profiles["balanced"]
-        )
-
-        # Enhance result with profile metadata
-        result["processing_details"] = {
-            **result.get("processing_details", {}),
-            "processing_profile": processing_profile,
-            "profile_config": profile_config,
-            "optimization_applied": True,
-        }
-
-        return result
+        user_id: Optional[str],
+        file_size: int,
+        processing_time: float,
+        confidence: float,
+        priority: ProcessingPriority,
+    ):
+        """Track performance metrics for optimization"""
+        try:
+            if self.performance_service:
+                await self.performance_service.track_processing(
+                    user_id=user_id or "anonymous",
+                    processing_time_ms=int(processing_time * 1000),
+                    file_size_bytes=file_size,
+                    confidence_score=confidence,
+                    priority=priority,
+                    extraction_method="gemini_client_ocr",
+                )
+        except Exception as e:
+            logger.warning(f"Failed to track performance metrics: {e}")
 
     async def health_check(self) -> Dict[str, Any]:
-        """Comprehensive health check with performance metrics"""
+        """Comprehensive health check for OCR service"""
         try:
-            # Basic service check
-            service_available = self.model is not None
+            # Check if client is initialized
+            if not self.gemini_client:
+                return {
+                    "service_status": "not_initialized",
+                    "error": "GeminiClient not initialized",
+                    "last_health_check": datetime.now(UTC).isoformat(),
+                }
 
-            # API connectivity check
-            api_responsive = False
-            if service_available:
-                api_responsive = await self._test_api_connection()
+            # Get client health status
+            client_health = await self.gemini_client.health_check()
+
+            # Check OCR specific health
+            ocr_available = (
+                client_health.get("status") == "healthy"
+                and client_health.get("ocr_status", "unknown") == "healthy"
+            )
 
             # Performance service health
             performance_health = {"status": "disabled"}
             if hasattr(self, "performance_service"):
                 performance_health = await self.performance_service.health_check()
 
-            # Current load and capacity metrics
+            # Current capacity metrics
             capacity_metrics = {
                 "max_file_size_mb": self.max_file_size / (1024 * 1024),
                 "supported_formats": len(self.supported_formats),
@@ -706,10 +376,12 @@ Please extract ALL text from this document image with the highest accuracy possi
             }
 
             return {
-                "service_status": (
-                    "healthy" if (service_available and api_responsive) else "unhealthy"
+                "service_status": "healthy" if ocr_available else "degraded",
+                "gemini_client_status": client_health.get("status", "unknown"),
+                "ocr_available": ocr_available,
+                "authentication_method": client_health.get("authentication", {}).get(
+                    "method", "unknown"
                 ),
-                "gemini_api_status": "connected" if api_responsive else "disconnected",
                 "performance_optimization": performance_health.get(
                     "service_status", "unknown"
                 ),
@@ -719,12 +391,8 @@ Please extract ALL text from this document image with the highest accuracy possi
                     "image_enhancement",
                     "contract_specific_ocr",
                     "confidence_scoring",
-                    "hybrid_extraction",
-                    "australian_context_awareness",
+                    "service_role_authentication",
                     "ai_performance_optimization",
-                    "intelligent_caching",
-                    "quality_assessment",
-                    "cost_optimization",
                 ],
                 "last_health_check": datetime.now(UTC).isoformat(),
             }
@@ -740,26 +408,32 @@ Please extract ALL text from this document image with the highest accuracy possi
     async def get_processing_capabilities(self) -> Dict[str, Any]:
         """Get comprehensive OCR service capabilities and status"""
         base_capabilities = {
-            "service_available": self.model is not None,
-            "model_name": self.model_name,
+            "service_available": self.gemini_client is not None,
             "supported_formats": list(self.supported_formats),
             "max_file_size_mb": self.max_file_size / (1024 * 1024),
             "processing_profiles": list(self.processing_profiles.keys()),
+            "authentication_method": "unknown",
             "features": [
                 "multi_page_pdf_processing",
                 "image_enhancement",
                 "contract_specific_ocr",
                 "confidence_scoring",
-                "hybrid_extraction",
-                "australian_context_awareness",
+                "service_role_authentication",
                 "ai_performance_optimization",
-                "intelligent_caching",
-                "quality_assessment",
-                "cost_optimization",
             ],
         }
 
-        # Add performance optimization capabilities if available
+        # Get authentication method from client
+        if self.gemini_client:
+            try:
+                client_health = await self.gemini_client.health_check()
+                base_capabilities["authentication_method"] = client_health.get(
+                    "authentication", {}
+                ).get("method", "unknown")
+            except Exception as e:
+                logger.warning(f"Could not get client health: {e}")
+
+        # Add performance metrics if available
         if hasattr(self, "performance_service"):
             try:
                 perf_analytics = (

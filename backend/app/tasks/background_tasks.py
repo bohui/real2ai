@@ -47,7 +47,7 @@ def process_document_background(
             document_id=document_id,
             user_id=user_id,
             australian_state=australian_state,
-            contract_type=contract_type
+            contract_type=contract_type,
         ):
             try:
                 log_trace_info(
@@ -55,7 +55,7 @@ def process_document_background(
                     document_id=document_id,
                     user_id=user_id,
                     australian_state=australian_state,
-                    contract_type=contract_type
+                    contract_type=contract_type,
                 )
                 # Get service database client (has elevated permissions)
                 db_client = get_service_database_client()
@@ -69,7 +69,10 @@ def process_document_background(
 
                 # Get document metadata
                 doc_result = (
-                    db_client.table("documents").select("*").eq("id", document_id).execute()
+                    db_client.table("documents")
+                    .select("*")
+                    .eq("id", document_id)
+                    .execute()
                 )
                 if not doc_result.data:
                     raise Exception("Document not found")
@@ -120,19 +123,24 @@ def process_document_background(
                 ).eq("id", document_id).execute()
 
                 # Send WebSocket notification via Redis Pub/Sub
-                publish_progress_sync(document_id, {
-                    "event_type": "document_processed",
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                    "data": {
-                        "document_id": document_id,
-                        "extraction_confidence": extraction_result.get(
-                            "extraction_confidence", 0.0
-                        ),
-                        "character_count": extraction_result.get("character_count", 0),
-                        "word_count": extraction_result.get("word_count", 0),
+                publish_progress_sync(
+                    document_id,
+                    {
+                        "event_type": "document_processed",
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "data": {
+                            "document_id": document_id,
+                            "extraction_confidence": extraction_result.get(
+                                "extraction_confidence", 0.0
+                            ),
+                            "character_count": extraction_result.get(
+                                "character_count", 0
+                            ),
+                            "word_count": extraction_result.get("word_count", 0),
+                        },
                     },
-                })
-                
+                )
+
                 # Also send via WebSocket manager for immediate delivery (if connected)
                 await websocket_manager.send_message(
                     document_id,
@@ -143,7 +151,9 @@ def process_document_background(
                             "extraction_confidence": extraction_result.get(
                                 "extraction_confidence", 0.0
                             ),
-                            "character_count": extraction_result.get("character_count", 0),
+                            "character_count": extraction_result.get(
+                                "character_count", 0
+                            ),
                             "word_count": extraction_result.get("word_count", 0),
                         },
                     },
@@ -158,12 +168,15 @@ def process_document_background(
                 ).eq("id", document_id).execute()
 
                 # Send error notification via Redis Pub/Sub
-                publish_progress_sync(document_id, {
-                    "event_type": "document_processing_failed",
-                    "timestamp": datetime.now(timezone.utc).isoformat(), 
-                    "data": {"document_id": document_id, "error_message": str(e)},
-                })
-                
+                publish_progress_sync(
+                    document_id,
+                    {
+                        "event_type": "document_processing_failed",
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "data": {"document_id": document_id, "error_message": str(e)},
+                    },
+                )
+
                 # Also send via WebSocket manager for immediate delivery (if connected)
                 await websocket_manager.send_message(
                     document_id,
@@ -214,20 +227,23 @@ def analyze_contract_background(
             ).execute()
 
             # Send analysis_started event via Redis Pub/Sub
-            publish_progress_sync(contract_id, {
-                "event_type": "analysis_started",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "data": {
-                    "contract_id": contract_id,
-                    "estimated_time_minutes": 5,
-                    "message": "Analysis started"
-                }
-            })
-            
+            publish_progress_sync(
+                contract_id,
+                {
+                    "event_type": "analysis_started",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "data": {
+                        "contract_id": contract_id,
+                        "estimated_time_minutes": 5,
+                        "message": "Analysis started",
+                    },
+                },
+            )
+
             # Also send via WebSocket manager for immediate delivery (if connected)
             await websocket_manager.send_message(
                 contract_id,
-                WebSocketEvents.analysis_started(contract_id, estimated_time=5)
+                WebSocketEvents.analysis_started(contract_id, estimated_time=5),
             )
 
             # Get user profile for context
@@ -243,31 +259,34 @@ def analyze_contract_background(
                     raise Exception(
                         "quota_error - Insufficient credits or quota exceeded."
                     )
-            
+
             # Progress update: Initial validation complete via Redis Pub/Sub
-            publish_progress_sync(contract_id, {
-                "event_type": "analysis_progress",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "data": {
-                    "contract_id": contract_id,
-                    "current_step": "validating_input",
-                    "progress_percent": 10,
-                    "step_description": "Validating user credentials and document access",
-                    "estimated_completion_minutes": 5
-                }
-            })
-            
+            publish_progress_sync(
+                contract_id,
+                {
+                    "event_type": "analysis_progress",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "data": {
+                        "contract_id": contract_id,
+                        "current_step": "validating_input",
+                        "progress_percent": 10,
+                        "step_description": "Validating user credentials and document access",
+                        "estimated_completion_minutes": 5,
+                    },
+                },
+            )
+
             # Also send via WebSocket manager for immediate delivery (if connected)
             await websocket_manager.send_message(
                 contract_id,
                 WebSocketEvents.analysis_progress(
-                    contract_id, 
-                    "validating_input", 
+                    contract_id,
+                    "validating_input",
                     10,
-                    "Validating user credentials and document access"
-                )
+                    "Validating user credentials and document access",
+                ),
             )
-            
+
             # Save progress to database
             try:
                 await db_client.execute_rpc(
@@ -279,11 +298,13 @@ def analyze_contract_background(
                         "p_current_step": "validating_input",
                         "p_progress_percent": 10,
                         "p_step_description": "Validating user credentials and document access",
-                        "p_estimated_completion_minutes": 5
-                    }
+                        "p_estimated_completion_minutes": 5,
+                    },
                 )
             except Exception as progress_error:
-                logger.warning(f"Failed to save progress to database: {str(progress_error)}")
+                logger.warning(
+                    f"Failed to save progress to database: {str(progress_error)}"
+                )
 
             # Verify document file exists in storage before processing
             try:
@@ -299,29 +320,32 @@ def analyze_contract_background(
                     )
 
             # Progress update: Setting up analysis context via Redis Pub/Sub
-            publish_progress_sync(contract_id, {
-                "event_type": "analysis_progress",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "data": {
-                    "contract_id": contract_id,
-                    "current_step": "processing_document",
-                    "progress_percent": 20,
-                    "step_description": "Setting up analysis context and extracting document content",
-                    "estimated_completion_minutes": 4
-                }
-            })
-            
+            publish_progress_sync(
+                contract_id,
+                {
+                    "event_type": "analysis_progress",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "data": {
+                        "contract_id": contract_id,
+                        "current_step": "processing_document",
+                        "progress_percent": 20,
+                        "step_description": "Setting up analysis context and extracting document content",
+                        "estimated_completion_minutes": 4,
+                    },
+                },
+            )
+
             # Also send via WebSocket manager for immediate delivery (if connected)
             await websocket_manager.send_message(
                 contract_id,
                 WebSocketEvents.analysis_progress(
-                    contract_id, 
-                    "processing_document", 
+                    contract_id,
+                    "processing_document",
                     20,
-                    "Setting up analysis context and extracting document content"
-                )
+                    "Setting up analysis context and extracting document content",
+                ),
             )
-            
+
             # Save progress to database
             try:
                 await db_client.execute_rpc(
@@ -333,12 +357,14 @@ def analyze_contract_background(
                         "p_current_step": "processing_document",
                         "p_progress_percent": 20,
                         "p_step_description": "Setting up analysis context and extracting document content",
-                        "p_estimated_completion_minutes": 4
-                    }
+                        "p_estimated_completion_minutes": 4,
+                    },
                 )
             except Exception as progress_error:
-                logger.warning(f"Failed to save progress to database: {str(progress_error)}")
-            
+                logger.warning(
+                    f"Failed to save progress to database: {str(progress_error)}"
+                )
+
             # Create initial state
             initial_state = create_initial_state(
                 user_id=user_id,
@@ -382,29 +408,32 @@ def analyze_contract_background(
                     ).eq("id", document["id"]).execute()
 
             # Progress update: Preparing document for analysis via Redis Pub/Sub
-            publish_progress_sync(contract_id, {
-                "event_type": "analysis_progress",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "data": {
-                    "contract_id": contract_id,
-                    "current_step": "extracting_terms",
-                    "progress_percent": 40,
-                    "step_description": "Preparing document content for AI analysis",
-                    "estimated_completion_minutes": 3
-                }
-            })
-            
+            publish_progress_sync(
+                contract_id,
+                {
+                    "event_type": "analysis_progress",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "data": {
+                        "contract_id": contract_id,
+                        "current_step": "extracting_terms",
+                        "progress_percent": 40,
+                        "step_description": "Preparing document content for AI analysis",
+                        "estimated_completion_minutes": 3,
+                    },
+                },
+            )
+
             # Also send via WebSocket manager for immediate delivery (if connected)
             await websocket_manager.send_message(
                 contract_id,
                 WebSocketEvents.analysis_progress(
-                    contract_id, 
-                    "extracting_terms", 
+                    contract_id,
+                    "extracting_terms",
                     40,
-                    "Preparing document content for AI analysis"
-                )
+                    "Preparing document content for AI analysis",
+                ),
             )
-            
+
             # Save progress to database
             try:
                 await db_client.execute_rpc(
@@ -416,12 +445,14 @@ def analyze_contract_background(
                         "p_current_step": "extracting_terms",
                         "p_progress_percent": 40,
                         "p_step_description": "Preparing document content for AI analysis",
-                        "p_estimated_completion_minutes": 3
-                    }
+                        "p_estimated_completion_minutes": 3,
+                    },
                 )
             except Exception as progress_error:
-                logger.warning(f"Failed to save progress to database: {str(progress_error)}")
-            
+                logger.warning(
+                    f"Failed to save progress to database: {str(progress_error)}"
+                )
+
             # Add document data to state
             initial_state["document_data"] = {
                 "document_id": document["id"],
@@ -432,29 +463,32 @@ def analyze_contract_background(
             }
 
             # Progress update: Starting AI analysis via Redis Pub/Sub
-            publish_progress_sync(contract_id, {
-                "event_type": "analysis_progress",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "data": {
-                    "contract_id": contract_id,
-                    "current_step": "analyzing_compliance",
-                    "progress_percent": 60,
-                    "step_description": "AI is analyzing contract terms and compliance requirements",
-                    "estimated_completion_minutes": 2
-                }
-            })
-            
+            publish_progress_sync(
+                contract_id,
+                {
+                    "event_type": "analysis_progress",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "data": {
+                        "contract_id": contract_id,
+                        "current_step": "analyzing_compliance",
+                        "progress_percent": 60,
+                        "step_description": "AI is analyzing contract terms and compliance requirements",
+                        "estimated_completion_minutes": 2,
+                    },
+                },
+            )
+
             # Also send via WebSocket manager for immediate delivery (if connected)
             await websocket_manager.send_message(
                 contract_id,
                 WebSocketEvents.analysis_progress(
-                    contract_id, 
-                    "analyzing_compliance", 
+                    contract_id,
+                    "analyzing_compliance",
                     60,
-                    "AI is analyzing contract terms and compliance requirements"
-                )
+                    "AI is analyzing contract terms and compliance requirements",
+                ),
             )
-            
+
             # Save progress to database
             try:
                 await db_client.execute_rpc(
@@ -466,39 +500,44 @@ def analyze_contract_background(
                         "p_current_step": "analyzing_compliance",
                         "p_progress_percent": 60,
                         "p_step_description": "AI is analyzing contract terms and compliance requirements",
-                        "p_estimated_completion_minutes": 2
-                    }
+                        "p_estimated_completion_minutes": 2,
+                    },
                 )
             except Exception as progress_error:
-                logger.warning(f"Failed to save progress to database: {str(progress_error)}")
-            
+                logger.warning(
+                    f"Failed to save progress to database: {str(progress_error)}"
+                )
+
             # Run analysis workflow
             final_state = await contract_workflow.analyze_contract(initial_state)
-            
+
             # Progress update: Generating risk assessment via Redis Pub/Sub
-            publish_progress_sync(contract_id, {
-                "event_type": "analysis_progress",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "data": {
-                    "contract_id": contract_id,
-                    "current_step": "assessing_risks",
-                    "progress_percent": 80,
-                    "step_description": "Evaluating potential risks and generating insights",
-                    "estimated_completion_minutes": 1
-                }
-            })
-            
+            publish_progress_sync(
+                contract_id,
+                {
+                    "event_type": "analysis_progress",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "data": {
+                        "contract_id": contract_id,
+                        "current_step": "assessing_risks",
+                        "progress_percent": 80,
+                        "step_description": "Evaluating potential risks and generating insights",
+                        "estimated_completion_minutes": 1,
+                    },
+                },
+            )
+
             # Also send via WebSocket manager for immediate delivery (if connected)
             await websocket_manager.send_message(
                 contract_id,
                 WebSocketEvents.analysis_progress(
-                    contract_id, 
-                    "assessing_risks", 
+                    contract_id,
+                    "assessing_risks",
                     80,
-                    "Evaluating potential risks and generating insights"
-                )
+                    "Evaluating potential risks and generating insights",
+                ),
             )
-            
+
             # Save progress to database
             try:
                 await db_client.execute_rpc(
@@ -510,36 +549,41 @@ def analyze_contract_background(
                         "p_current_step": "assessing_risks",
                         "p_progress_percent": 80,
                         "p_step_description": "Evaluating potential risks and generating insights",
-                        "p_estimated_completion_minutes": 1
-                    }
+                        "p_estimated_completion_minutes": 1,
+                    },
                 )
             except Exception as progress_error:
-                logger.warning(f"Failed to save progress to database: {str(progress_error)}")
+                logger.warning(
+                    f"Failed to save progress to database: {str(progress_error)}"
+                )
 
             # Progress update: Compiling final report via Redis Pub/Sub
-            publish_progress_sync(contract_id, {
-                "event_type": "analysis_progress",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "data": {
-                    "contract_id": contract_id,
-                    "current_step": "compiling_report",
-                    "progress_percent": 95,
-                    "step_description": "Finalizing analysis report and recommendations",
-                    "estimated_completion_minutes": 0
-                }
-            })
-            
+            publish_progress_sync(
+                contract_id,
+                {
+                    "event_type": "analysis_progress",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "data": {
+                        "contract_id": contract_id,
+                        "current_step": "compiling_report",
+                        "progress_percent": 95,
+                        "step_description": "Finalizing analysis report and recommendations",
+                        "estimated_completion_minutes": 0,
+                    },
+                },
+            )
+
             # Also send via WebSocket manager for immediate delivery (if connected)
             await websocket_manager.send_message(
                 contract_id,
                 WebSocketEvents.analysis_progress(
-                    contract_id, 
-                    "compiling_report", 
+                    contract_id,
+                    "compiling_report",
                     95,
-                    "Finalizing analysis report and recommendations"
-                )
+                    "Finalizing analysis report and recommendations",
+                ),
             )
-            
+
             # Save progress to database
             try:
                 await db_client.execute_rpc(
@@ -551,12 +595,14 @@ def analyze_contract_background(
                         "p_current_step": "compiling_report",
                         "p_progress_percent": 95,
                         "p_step_description": "Finalizing analysis report and recommendations",
-                        "p_estimated_completion_minutes": 0
-                    }
+                        "p_estimated_completion_minutes": 0,
+                    },
                 )
             except Exception as progress_error:
-                logger.warning(f"Failed to save progress to database: {str(progress_error)}")
-            
+                logger.warning(
+                    f"Failed to save progress to database: {str(progress_error)}"
+                )
+
             # Update analysis results
             analysis_result = final_state.get("analysis_results", {})
 
@@ -610,32 +656,41 @@ def analyze_contract_background(
 
             # Send completion update via Redis Pub/Sub
             analysis_summary = {
-                "overall_risk_score": analysis_result.get("risk_assessment", {}).get("overall_risk_score", 0),
-                "total_recommendations": len(analysis_result.get("recommendations", [])),
+                "overall_risk_score": analysis_result.get("risk_assessment", {}).get(
+                    "overall_risk_score", 0
+                ),
+                "total_recommendations": len(
+                    analysis_result.get("recommendations", [])
+                ),
                 "compliance_status": (
                     "compliant"
-                    if analysis_result.get("compliance_check", {}).get("state_compliance", False)
+                    if analysis_result.get("compliance_check", {}).get(
+                        "state_compliance", False
+                    )
                     else "non-compliant"
                 ),
                 "processing_time_seconds": final_state.get("processing_time", 0),
             }
-            
-            publish_progress_sync(contract_id, {
-                "event_type": "analysis_completed",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "data": {
-                    "contract_id": contract_id,
-                    "status": "completed",
-                    "analysis_summary": analysis_summary
-                }
-            })
-            
+
+            publish_progress_sync(
+                contract_id,
+                {
+                    "event_type": "analysis_completed",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "data": {
+                        "contract_id": contract_id,
+                        "status": "completed",
+                        "analysis_summary": analysis_summary,
+                    },
+                },
+            )
+
             # Also send via WebSocket manager for immediate delivery (if connected)
             await websocket_manager.send_message(
                 contract_id,
-                WebSocketEvents.analysis_completed(contract_id, analysis_summary)
+                WebSocketEvents.analysis_completed(contract_id, analysis_summary),
             )
-            
+
             # Mark analysis as completed in database
             try:
                 await db_client.execute_rpc(
@@ -643,11 +698,13 @@ def analyze_contract_background(
                     {
                         "p_contract_id": contract_id,
                         "p_analysis_id": analysis_id,
-                        "p_final_status": "completed"
-                    }
+                        "p_final_status": "completed",
+                    },
                 )
             except Exception as progress_error:
-                logger.warning(f"Failed to mark analysis as completed in database: {str(progress_error)}")
+                logger.warning(
+                    f"Failed to mark analysis as completed in database: {str(progress_error)}"
+                )
 
             logger.info(f"Contract analysis {analysis_id} completed successfully")
 
@@ -690,25 +747,34 @@ def analyze_contract_background(
             ).eq("id", analysis_id).execute()
 
             # Send detailed error update via Redis Pub/Sub
-            retry_available = error_type in ["llm_api_error", "timeout_error", "rate_limit_error"]
-            publish_progress_sync(contract_id, {
-                "event_type": "analysis_failed",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "data": {
-                    "contract_id": contract_id,
-                    "status": "failed",
-                    "error_message": error_message,
-                    "error_type": error_type,
-                    "retry_available": retry_available
-                }
-            })
-            
+            retry_available = error_type in [
+                "llm_api_error",
+                "timeout_error",
+                "rate_limit_error",
+            ]
+            publish_progress_sync(
+                contract_id,
+                {
+                    "event_type": "analysis_failed",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "data": {
+                        "contract_id": contract_id,
+                        "status": "failed",
+                        "error_message": error_message,
+                        "error_type": error_type,
+                        "retry_available": retry_available,
+                    },
+                },
+            )
+
             # Also send via WebSocket manager for immediate delivery (if connected)
             await websocket_manager.send_message(
                 contract_id,
-                WebSocketEvents.analysis_failed(contract_id, error_message, retry_available)
+                WebSocketEvents.analysis_failed(
+                    contract_id, error_message, retry_available
+                ),
             )
-            
+
             # Mark analysis as failed in database
             try:
                 await db_client.execute_rpc(
@@ -716,11 +782,13 @@ def analyze_contract_background(
                     {
                         "p_contract_id": contract_id,
                         "p_analysis_id": analysis_id,
-                        "p_final_status": "failed"
-                    }
+                        "p_final_status": "failed",
+                    },
                 )
             except Exception as progress_error:
-                logger.warning(f"Failed to mark analysis as failed in database: {str(progress_error)}")
+                logger.warning(
+                    f"Failed to mark analysis as failed in database: {str(progress_error)}"
+                )
 
     # Run the async function
     return asyncio.run(_async_analyze_contract())
