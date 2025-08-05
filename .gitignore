@@ -63,5 +63,20 @@ temp/
 frontend/coverage/
 backend/.coverage
 
-# secrects
+# Celery runtime files
+celerybeat-schedule
+celerybeat-schedule.*
+
+# Coverage reports
+coverage.xml
+htmlcov/
+
+# Python package build artifacts
+*.egg-info/
+real2ai_backend.egg-info/
+
+# Pytest cache
+.pytest_cache/
+
+# secrets
 gcp_key.json
