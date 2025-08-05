@@ -55,21 +55,11 @@ class GeminiClient(BaseClient, AIOperations):
                 "Initializing Gemini client with service role authentication..."
             )
 
-            # Configure Gemini API authentication
-            if self.config.api_key and not self.config.use_service_account:
-                # Use API key authentication if explicitly configured
-                self.logger.info("Using API key authentication")
-                genai.configure(api_key=self.config.api_key)
-            elif self.config.use_service_account:
-                # Use service role authentication (Application Default Credentials)
-                self.logger.info(
-                    "Using service role authentication via Application Default Credentials"
-                )
-                await self._configure_service_role_auth()
-            else:
-                # Fallback to default configuration
-                self.logger.info("Using default Gemini configuration")
-                genai.configure()
+            # Configure Gemini API with service role authentication
+            self.logger.info(
+                "Using service role authentication via Application Default Credentials"
+            )
+            await self._configure_service_role_auth()
 
             # Set up safety settings
             safety_settings = self._get_safety_settings()
@@ -210,9 +200,7 @@ class GeminiClient(BaseClient, AIOperations):
                     "FORBIDDEN",
                 ]
             ):
-                auth_method = (
-                    "service account" if self.config.use_service_account else "API key"
-                )
+                auth_method = "service account"
                 raise ClientAuthenticationError(
                     f"Gemini API authentication failed using {auth_method}: {str(e)}",
                     client_name=self.client_name,
@@ -266,24 +254,18 @@ class GeminiClient(BaseClient, AIOperations):
                 else {"status": "not_initialized"}
             )
 
-            # Determine authentication method
-            auth_method = (
-                "api_key"
-                if (self.config.api_key and not self.config.use_service_account)
-                else "service_account"
-            )
+            # Authentication method is always service account
+            auth_method = "service_account"
 
-            # Get credentials info
-            credentials_info = {}
-            if self.config.use_service_account:
-                credentials_path = self.config.credentials_path or os.getenv(
-                    "GOOGLE_APPLICATION_CREDENTIALS"
-                )
-                credentials_info = {
-                    "credentials_path": credentials_path,
-                    "project_id": self.config.project_id,
-                    "env_var_set": bool(os.getenv("GOOGLE_APPLICATION_CREDENTIALS")),
-                }
+            # Get service account credentials info
+            credentials_path = self.config.credentials_path or os.getenv(
+                "GOOGLE_APPLICATION_CREDENTIALS"
+            )
+            credentials_info = {
+                "credentials_path": credentials_path,
+                "project_id": self.config.project_id,
+                "env_var_set": bool(os.getenv("GOOGLE_APPLICATION_CREDENTIALS")),
+            }
 
             return {
                 "status": "healthy",
@@ -293,7 +275,7 @@ class GeminiClient(BaseClient, AIOperations):
                 "connection": "ok",
                 "authentication": {
                     "method": auth_method,
-                    "service_account_enabled": self.config.use_service_account,
+                    "service_account_enabled": True,
                     **credentials_info,
                 },
                 "ocr_status": ocr_health.get("status", "unknown"),
@@ -302,7 +284,7 @@ class GeminiClient(BaseClient, AIOperations):
                     "timeout": self.config.timeout,
                     "max_retries": self.config.max_retries,
                     "max_file_size_mb": self.config.max_file_size / (1024 * 1024),
-                    "use_service_account": self.config.use_service_account,
+                    "service_account_only": True,
                 },
             }
 
@@ -316,12 +298,8 @@ class GeminiClient(BaseClient, AIOperations):
                 "error_type": error_type,
                 "initialized": self._initialized,
                 "authentication": {
-                    "method": (
-                        "api_key"
-                        if (self.config.api_key and not self.config.use_service_account)
-                        else "service_account"
-                    ),
-                    "service_account_enabled": self.config.use_service_account,
+                    "method": "service_account",
+                    "service_account_enabled": True,
                 },
             }
 

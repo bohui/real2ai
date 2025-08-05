@@ -11,14 +11,12 @@ from ..base.client import ClientConfig
 
 @dataclass(kw_only=True)
 class GeminiClientConfig(ClientConfig):
-    """Configuration for Google Gemini client."""
+    """Configuration for Google Gemini client with service role authentication."""
 
-    # Gemini API settings
-    api_key: Optional[str] = None
+    # Gemini API settings  
     model_name: str = "gemini-2.5-pro"
 
-    # Service role authentication settings
-    use_service_account: bool = True
+    # Service role authentication settings (required)
     credentials_path: Optional[str] = None
     project_id: Optional[str] = None
 
@@ -55,11 +53,9 @@ class GeminiClientConfig(ClientConfig):
 class GeminiSettings(BaseSettings):
     """Pydantic settings for Gemini configuration from environment."""
 
-    gemini_api_key: Optional[str] = None
     gemini_model_name: str = "gemini-2.5-pro"
 
-    # Service role authentication settings
-    gemini_use_service_account: bool = True
+    # Service role authentication settings (required)
     gemini_credentials_path: Optional[str] = None
     gemini_project_id: Optional[str] = None
 
@@ -91,10 +87,8 @@ class GeminiSettings(BaseSettings):
         """Convert to GeminiClientConfig."""
         return GeminiClientConfig(
             # API settings
-            api_key=self.gemini_api_key,
             model_name=self.gemini_model_name,
             # Service role authentication settings
-            use_service_account=self.gemini_use_service_account,
             credentials_path=self.gemini_credentials_path,
             project_id=self.gemini_project_id,
             # Safety settings

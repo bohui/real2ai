@@ -68,15 +68,19 @@ CREATE TABLE contract_analyses (
     agent_version TEXT NOT NULL DEFAULT '1.0',
     status analysis_status NOT NULL DEFAULT 'pending',
     
-    -- Analysis results structure
+    -- Analysis results structure (compatible with both old and new code)
+    analysis_result JSONB DEFAULT '{}',
     executive_summary JSONB DEFAULT '{}',
     risk_assessment JSONB DEFAULT '{}',
     compliance_check JSONB DEFAULT '{}',
     recommendations JSONB DEFAULT '[]',
     
-    -- Metrics
+    -- Metrics (compatible with both old and new code)
+    risk_score DECIMAL(3,2) DEFAULT 0.0 CHECK (risk_score >= 0.0 AND risk_score <= 10.0),
     overall_risk_score DECIMAL(3,2) DEFAULT 0.0 CHECK (overall_risk_score >= 0.0 AND overall_risk_score <= 10.0),
+    confidence_score DECIMAL(3,2) DEFAULT 0.0 CHECK (confidence_score >= 0.0 AND confidence_score <= 1.0),
     confidence_level DECIMAL(3,2) DEFAULT 0.0 CHECK (confidence_level >= 0.0 AND confidence_level <= 1.0),
+    processing_time DECIMAL(10,3) DEFAULT 0.0,
     processing_time_seconds DECIMAL(10,3) DEFAULT 0.0,
     
     -- Metadata

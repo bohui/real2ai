@@ -7,13 +7,15 @@ services:
     container_name: real2ai-backend
     ports:
       - "8000:8000"
+    env_file:
+      - .env
     environment:
       - ENVIRONMENT=development
       - DEBUG=true
       - PYTHONPATH=/app
       - GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp_key.json
-    env_file:
-      - .env
+      - SUPABASE_URL=http://host.docker.internal:54321
+      - REDIS_URL=redis://redis:6379
     volumes:
       - ./backend/gcp_key.json:/secrets/gcp_key.json:ro
       - ./backend:/app
@@ -55,12 +57,14 @@ services:
       dockerfile: Dockerfile
     container_name: real2ai-celery-worker
     command: celery -A app.core.celery worker --loglevel=info --concurrency=4
+    env_file:
+      - .env
     environment:
       - ENVIRONMENT=development
       - PYTHONPATH=/app
       - C_FORCE_ROOT=1
-    env_file:
-      - .env
+      - SUPABASE_URL=http://host.docker.internal:54321
+      - REDIS_URL=redis://redis:6379
     volumes:
       - ./backend:/app
       - backend_data:/app/data
@@ -83,14 +87,16 @@ services:
       dockerfile: Dockerfile
     container_name: real2ai-celery-ocr-worker
     command: celery -A app.core.celery worker --loglevel=info --queues=ocr_queue,priority_queue --concurrency=2
+    env_file:
+      - .env
     environment:
       - ENVIRONMENT=development
       - PYTHONPATH=/app
       - C_FORCE_ROOT=1
       - WORKER_TYPE=ocr_specialist
       - GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp_key.json
-    env_file:
-      - .env
+      - SUPABASE_URL=http://host.docker.internal:54321
+      - REDIS_URL=redis://redis:6379
     volumes:
       - ./backend/gcp_key.json:/secrets/gcp_key.json:ro
       - ./backend:/app
@@ -114,13 +120,15 @@ services:
       dockerfile: Dockerfile
     container_name: real2ai-celery-batch-worker
     command: celery -A app.core.celery worker --loglevel=info --queues=batch_queue --concurrency=1
+    env_file:
+      - .env
     environment:
       - ENVIRONMENT=development
       - PYTHONPATH=/app
       - C_FORCE_ROOT=1
       - WORKER_TYPE=batch_processor
-    env_file:
-      - .env
+      - SUPABASE_URL=http://host.docker.internal:54321
+      - REDIS_URL=redis://redis:6379
     volumes:
       - ./backend:/app
       - backend_data:/app/data
@@ -143,11 +151,13 @@ services:
       dockerfile: Dockerfile
     container_name: real2ai-celery-beat
     command: celery -A app.core.celery beat --loglevel=info
+    env_file:
+      - .env
     environment:
       - ENVIRONMENT=development
       - PYTHONPATH=/app
-    env_file:
-      - .env
+      - SUPABASE_URL=http://host.docker.internal:54321
+      - REDIS_URL=redis://redis:6379
     volumes:
       - ./backend:/app
       - backend_data:/app/data

@@ -13,10 +13,9 @@ from enum import Enum
 import json
 import re
 
-from google import genai
-from google.genai.types import HarmCategory, HarmBlockThreshold
-
 from app.core.config import get_settings
+from app.clients.factory import get_gemini_client
+from app.clients.base.exceptions import ClientError, ClientAuthenticationError
 from app.models.contract_state import AustralianState, ContractType
 
 logger = logging.getLogger(__name__)
@@ -58,24 +57,18 @@ class ContractAnalysisService:
 
     def __init__(self):
         self.settings = get_settings()
+        self._gemini_client = None
 
-        # Initialize Gemini for contract analysis
-        if hasattr(self.settings, "gemini_api_key") and self.settings.gemini_api_key:
-            genai.configure(api_key=self.settings.gemini_api_key)
-            self.model = genai.GenerativeModel(
-                model_name="gemini-2.5-pro",
-                safety_settings={
-                    HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
-                    HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
-                    HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
-                    HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
-                },
-            )
-        else:
-            logger.warning(
-                "Gemini API key not configured - Contract Analysis will be limited"
-            )
-            self.model = None
+    async def _get_gemini_client(self):
+        """Get initialized Gemini client."""
+        if self._gemini_client is None:
+            try:
+                self._gemini_client = await get_gemini_client()
+                logger.info("Gemini client initialized for contract analysis")
+            except (ClientError, ClientAuthenticationError) as e:
+                logger.warning(f"Gemini client not available for contract analysis: {e}")
+                self._gemini_client = None
+        return self._gemini_client
 
         # Australian state-specific regulations
         self.state_regulations = {
@@ -243,12 +236,15 @@ class ContractAnalysisService:
         prompt = self._create_extraction_prompt(text, config)
 
         try:
-            response = await asyncio.get_event_loop().run_in_executor(
-                None, lambda: self.model.generate_content(prompt)
-            )
+            gemini_client = await self._get_gemini_client()
+            if not gemini_client:
+                logger.warning("Gemini client unavailable, using pattern-based extraction")
+                return self._extract_with_patterns(text)
+                
+            response = await gemini_client.generate_content(prompt)
 
             # Parse the AI response
-            ai_extracted = self._parse_ai_extraction_response(response.text)
+            ai_extracted = self._parse_ai_extraction_response(response)
 
             # Enhance with pattern-based extraction
             pattern_extracted = self._extract_with_patterns(text)
@@ -273,11 +269,14 @@ class ContractAnalysisService:
         risk_prompt = self._create_risk_assessment_prompt(text, structured_data, config)
 
         try:
-            response = await asyncio.get_event_loop().run_in_executor(
-                None, lambda: self.model.generate_content(risk_prompt)
-            )
+            gemini_client = await self._get_gemini_client()
+            if not gemini_client:
+                logger.warning("Gemini client unavailable, using rule-based risk assessment")
+                return self._assess_risks_rule_based(structured_data, config)
+                
+            response = await gemini_client.generate_content(risk_prompt)
 
-            ai_risks = self._parse_risk_assessment_response(response.text)
+            ai_risks = self._parse_risk_assessment_response(response)
 
         except Exception as e:
             logger.error(f"AI risk assessment failed: {str(e)}")
@@ -434,11 +433,14 @@ class ContractAnalysisService:
         )
 
         try:
-            response = await asyncio.get_event_loop().run_in_executor(
-                None, lambda: self.model.generate_content(prompt)
-            )
+            gemini_client = await self._get_gemini_client()
+            if not gemini_client:
+                logger.warning("Gemini client unavailable, using rule-based recommendations")
+                return self._generate_rule_based_recommendations(risk_assessment, compliance_analysis)
+                
+            response = await gemini_client.generate_content(prompt)
 
-            ai_recommendations = self._parse_recommendations_response(response.text)
+            ai_recommendations = self._parse_recommendations_response(response)
 
         except Exception as e:
             logger.error(f"AI recommendations failed: {str(e)}")

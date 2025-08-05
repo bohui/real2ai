@@ -25,7 +25,6 @@ class Settings(BaseSettings):
     # AI Services
     openai_api_key: str
     openai_api_base: Optional[str] = None
-    gemini_api_key: Optional[str] = None
     langsmith_api_key: Optional[str] = None
     langsmith_project: str = "real2ai-development"
 

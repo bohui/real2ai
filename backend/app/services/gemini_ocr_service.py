@@ -12,14 +12,14 @@ from pathlib import Path
 import base64
 import tempfile
 
-from google import genai
-from google.genai.types import HarmCategory, HarmBlockThreshold
 from fastapi import HTTPException
 import fitz  # PyMuPDF for PDF handling
 from PIL import Image
 import io
 
 from app.core.config import get_settings
+from app.clients.factory import get_gemini_client
+from app.clients.base.exceptions import ClientError, ClientAuthenticationError
 from app.models.contract_state import ProcessingStatus
 from app.services.ocr_performance_service import (
     OCRPerformanceService,
@@ -49,6 +49,9 @@ class GeminiOCRService:
 
         # Performance optimization service
         self.performance_service = OCRPerformanceService()
+        
+        # Gemini client
+        self._gemini_client = None
 
         # Advanced processing options
         self.processing_profiles = {
@@ -69,31 +72,25 @@ class GeminiOCRService:
             },
         }
 
-        # Initialize Gemini API
-        if hasattr(self.settings, "gemini_api_key") and self.settings.gemini_api_key:
-            genai.configure(api_key=self.settings.gemini_api_key)
-            self.model = genai.GenerativeModel(
-                model_name=self.model_name,
-                safety_settings={
-                    HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
-                    HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
-                    HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
-                    HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
-                },
-            )
-        else:
-            logger.warning(
-                "Gemini API key not configured - OCR service will be disabled"
-            )
-            self.model = None
+    async def _get_gemini_client(self):
+        """Get initialized Gemini client."""
+        if self._gemini_client is None:
+            try:
+                self._gemini_client = await get_gemini_client()
+                logger.info("Gemini client initialized for OCR service")
+            except (ClientError, ClientAuthenticationError) as e:
+                logger.warning(f"Gemini client not available for OCR: {e}")
+                self._gemini_client = None
+        return self._gemini_client
 
     async def initialize(self):
         """Initialize Gemini OCR service with performance optimization"""
         try:
-            if self.model:
-                # Test API connection
-                test_response = await self._test_api_connection()
-                if test_response:
+            gemini_client = await self._get_gemini_client()
+            if gemini_client:
+                # Test client connection
+                health_status = await gemini_client.health_check()
+                if health_status.get("status") == "healthy":
                     logger.info("Gemini OCR service initialized successfully")
 
                     # Initialize performance service

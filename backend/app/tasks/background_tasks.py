@@ -223,14 +223,29 @@ def analyze_contract_background(
             # Update analysis results
             analysis_result = final_state.get("analysis_results", {})
 
+            # Update with both old and new column names for compatibility
             db_client.table("contract_analyses").update(
                 {
                     "status": "completed",
                     "analysis_result": analysis_result,
+                    "executive_summary": analysis_result.get("executive_summary", {}),
+                    "risk_assessment": analysis_result.get("risk_assessment", {}),
+                    "compliance_check": analysis_result.get("compliance_check", {}),
+                    "recommendations": analysis_result.get("recommendations", []),
                     "risk_score": analysis_result.get("risk_assessment", {}).get(
                         "overall_risk_score", 0
                     ),
+                    "overall_risk_score": analysis_result.get(
+                        "risk_assessment", {}
+                    ).get("overall_risk_score", 0),
+                    "confidence_score": analysis_result.get(
+                        "executive_summary", {}
+                    ).get("confidence_level", 0),
+                    "confidence_level": analysis_result.get(
+                        "executive_summary", {}
+                    ).get("confidence_level", 0),
                     "processing_time": final_state.get("processing_time", 0),
+                    "processing_time_seconds": final_state.get("processing_time", 0),
                 }
             ).eq("id", analysis_id).execute()
 
