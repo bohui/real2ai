@@ -14,6 +14,7 @@ import DashboardPage from '@/pages/DashboardPage'
 import AnalysisPage from '@/pages/AnalysisPage'
 import HistoryPage from '@/pages/HistoryPage'
 import SettingsPage from '@/pages/SettingsPage'
+import ReportsPage from '@/pages/ReportsPage'
 
 // Components
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
@@ -144,6 +145,7 @@ const App: React.FC = () => {
               <Route path="analysis" element={<AnalysisPage />} />
               <Route path="analysis/:contractId" element={<AnalysisPage />} />
               <Route path="history" element={<HistoryPage />} />
+              <Route path="reports" element={<ReportsPage />} />
               <Route path="settings" element={<SettingsPage />} />
               <Route index element={<Navigate to="/app/dashboard" replace />} />
             </Route>
