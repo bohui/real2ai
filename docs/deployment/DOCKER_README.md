@@ -61,10 +61,13 @@ docker-compose down
 ### Core Services (Always Running)
 
 - **backend**: FastAPI application on port 8000
-- **postgres**: PostgreSQL database on port 5432
-- **redis**: Redis cache on port 6379
+- **redis**: Redis cache on port 6379 (for Celery queues)
 - **celery-worker**: Background task processing
+- **celery-ocr-worker**: Specialized OCR processing
+- **celery-batch-worker**: Batch document processing
 - **celery-beat**: Scheduled task processing
+
+**Note**: This application uses Supabase (cloud PostgreSQL) for database operations, so no local PostgreSQL container is needed.
 
 ### Optional Services
 
@@ -84,7 +87,7 @@ docker-compose down
 
 ```bash
 # Start backend services only
-docker-compose up backend postgres redis celery-worker celery-beat
+docker-compose up backend redis celery-worker celery-beat
 
 # Run frontend locally (outside Docker)
 cd frontend
@@ -111,29 +114,24 @@ docker-compose --profile production up -d
 ### Initialize Database
 
 ```bash
-# The database will be automatically initialized with the schema
-# from database_schema.sql when the postgres container starts
+# Database operations are handled by Supabase cloud service
+# No local database initialization needed
 ```
 
 ### Access Database
 
 ```bash
-# Connect to PostgreSQL
-docker-compose exec postgres psql -U real2ai_user -d real2ai
-
-# Backup database
-docker-compose exec postgres pg_dump -U real2ai_user real2ai > backup.sql
-
-# Restore database
-docker-compose exec -T postgres psql -U real2ai_user -d real2ai < backup.sql
+# Database operations are managed through Supabase dashboard
+# Visit your Supabase project dashboard for database management
+# Backups are handled automatically by Supabase
 ```
 
 ### Reset Database
 
 ```bash
-# Remove database volume and restart
+# Remove all volumes and restart
 docker-compose down
-docker volume rm real2ai_postgres_data
+docker volume rm real2ai_redis_data real2ai_backend_data
 docker-compose up -d
 ```
 
@@ -189,11 +187,11 @@ curl http://localhost:8000/health
 
 4. **Database Connection Issues**
    ```bash
-   # Check if postgres is ready
-   docker-compose exec postgres pg_isready -U real2ai_user
+   # Check Supabase connection from backend
+   docker-compose exec backend python -c "from app.core.database import get_database_client; print('Supabase connection test')"
    
-   # Restart postgres
-   docker-compose restart postgres
+   # Check environment variables
+   docker-compose exec backend env | grep SUPABASE
    ```
 
 ### Debug Mode
@@ -286,8 +284,8 @@ chmod +x backup.sh
 ### Restore from Backup
 
 ```bash
-# Restore database
-gunzip -c backup_20240101_120000.sql.gz | docker-compose exec -T postgres psql -U real2ai_user -d real2ai
+# Database restore is handled through Supabase dashboard
+# Visit your project settings for restore options
 ```
 
 ## Security Considerations
