@@ -1,0 +1,63 @@
+# OCR Extraction Fragment Orchestration Configuration
+
+prompt_id: "ocr_extraction"
+description: "Orchestrates state-specific legal terminology for OCR extraction"
+base_template: "user/instructions/ocr_extraction_base.md"
+
+fragments:
+  # State-specific legal terminology
+  state_specific:
+    condition: "australian_state"
+    composition: "replace"
+    priority: 80
+    mappings:
+      NSW:
+        - "fragments/nsw/ocr_terminology.md"
+      VIC:
+        - "fragments/vic/ocr_terminology.md"
+      QLD:
+        - "fragments/qld/ocr_terminology.md"
+  
+  # Contract type specific focus areas
+  contract_type:
+    condition: "contract_type"
+    composition: "replace"
+    priority: 75
+    mappings:
+      PURCHASE_AGREEMENT:
+        - "fragments/purchase/ocr_focus_areas.md"
+      LEASE_AGREEMENT:
+        - "fragments/lease/ocr_focus_areas.md"
+  
+  # Quality requirements based on quality level
+  quality_requirements:
+    condition: "quality_requirements"
+    composition: "replace"
+    priority: 70
+    mappings:
+      high:
+        - "fragments/ocr/high_quality_processing.md"
+      standard:
+        - "fragments/ocr/standard_processing.md"
+      fast:
+        - "fragments/ocr/fast_processing.md"
+
+# Quality and performance settings
+quality_settings:
+  validation:
+    require_all_fragments: false
+    fallback_on_missing: true
+    log_missing_fragments: true
+  
+  performance:
+    cache_resolved_fragments: true
+    cache_ttl_seconds: 7200  # 2 hours
+    max_fragment_size_kb: 25
+    warn_on_large_fragments: true
+
+# Metadata for orchestration
+metadata:
+  version: "1.0.0"
+  last_updated: "2024-01-15"
+  author: "OCR Technology Team"
+  review_frequency: "monthly"

@@ -1,0 +1,78 @@
+# Composition rules for combining system and user prompts
+
+compositions:
+  contract_analysis_complete:
+    description: "Complete contract analysis with legal expertise and Australian context"
+    system_prompts:
+      - "assistant_core"
+      - "legal_specialist"
+      - "australian_legal"
+    user_prompts:
+      - "contract_analysis_base"
+    output_template: "analysis_report"
+    validation: "validation_workflow"
+    merge_strategy: "sequential"
+    
+  ocr_extraction_specialized:
+    description: "OCR extraction with document processing expertise"
+    system_prompts:
+      - "assistant_core"
+      - "ocr_processor"
+    user_prompts:
+      - "ocr_extraction_base"
+    merge_strategy: "sequential"
+    
+  risk_assessment_comprehensive:
+    description: "Comprehensive risk assessment with state-specific legal analysis"
+    system_prompts:
+      - "assistant_core"
+      - "legal_specialist"
+      - "australian_legal"
+    user_prompts:
+      - "risk_assessment_base"
+    output_template: "risk_summary"
+    merge_strategy: "sequential"
+      
+  contract_workflow_guided:
+    description: "Multi-step contract analysis workflow with user guidance"
+    system_prompts:
+      - "assistant_core"
+      - "legal_specialist"
+      - "workflow_coordinator"
+    user_prompts:
+      - "contract_workflow"
+      - "clarification_prompts"
+    validation: "workflow_validation"
+    merge_strategy: "sequential"
+    
+  quick_contract_check:
+    description: "Fast contract analysis for basic checks"
+    system_prompts:
+      - "assistant_core"
+      - "legal_specialist"
+    user_prompts:
+      - "quick_analysis"
+    merge_strategy: "parallel"
+    
+  state_specific_analysis:
+    description: "Analysis tailored to specific Australian states"
+    system_prompts:
+      - "assistant_core"
+      - "legal_specialist"
+      - "state_context"  # Will be dynamically resolved based on australian_state variable
+    user_prompts:
+      - "contract_analysis_base"
+      - "state_specific_instructions"
+    merge_strategy: "sequential"
+
+# Dynamic composition rules (resolved at runtime)
+dynamic_compositions:
+  state_aware_analysis:
+    description: "State-aware analysis that includes appropriate state context"
+    base_composition: "contract_analysis_complete"
+    dynamic_system_prompts:
+      - template: "state_context_{australian_state}"
+        condition: "australian_state in ['NSW', 'VIC', 'QLD', 'SA', 'WA', 'TAS', 'ACT', 'NT']"
+    dynamic_user_prompts:
+      - template: "state_specific_instructions_{australian_state}"
+        condition: "analysis_type == 'comprehensive'"

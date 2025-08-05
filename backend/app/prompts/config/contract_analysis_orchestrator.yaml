@@ -1,0 +1,148 @@
+# Contract Analysis Fragment Orchestration Configuration
+
+prompt_id: "contract_analysis"
+description: "Orchestrates state-specific legal fragments for comprehensive contract analysis"
+base_template: "user/instructions/contract_analysis_base.md"
+
+fragments:
+  # State-specific legal requirements
+  state_legal_requirements:
+    condition: "australian_state"
+    composition: "replace"
+    priority: 80
+    mappings:
+      NSW:
+        - "fragments/nsw/planning_certificates.md"
+        - "fragments/nsw/cooling_off_period.md"
+      VIC:
+        - "fragments/vic/vendor_statements.md"  
+        - "fragments/vic/cooling_off_period.md"
+      QLD:
+        - "fragments/qld/disclosure_statements.md"
+        - "fragments/qld/body_corporate.md"
+        - "fragments/qld/qbcc_requirements.md"
+      SA:
+        - "fragments/sa/vendor_disclosure.md"
+        - "fragments/sa/planning_requirements.md"
+      WA:
+        - "fragments/wa/property_disclosure.md"
+        - "fragments/wa/planning_approvals.md"
+  
+  # Consumer protection framework (always included)
+  consumer_protection:
+    always_include:
+      - "fragments/common/cooling_off_framework.md"
+      - "fragments/common/statutory_warranties.md"
+      - "fragments/common/unfair_terms_protection.md"
+    priority: 90
+  
+  # Contract type specific requirements
+  contract_type_specific:
+    condition: "contract_type"
+    composition: "union"
+    priority: 70
+    mappings:
+      PURCHASE_AGREEMENT:
+        - "fragments/purchase/settlement_requirements.md"
+        - "fragments/purchase/finance_conditions.md"
+        - "fragments/purchase/inspection_rights.md"
+      LEASE_AGREEMENT:
+        - "fragments/lease/rental_obligations.md"
+        - "fragments/lease/maintenance_responsibilities.md"
+        - "fragments/lease/termination_rights.md"
+      OPTION_AGREEMENT:
+        - "fragments/option/exercise_conditions.md"
+        - "fragments/option/time_limitations.md"
+  
+  # User experience level adjustments
+  experience_level_guidance:
+    condition: "user_experience_level"
+    composition: "replace"
+    priority: 60
+    mappings:
+      novice:
+        - "fragments/guidance/first_time_buyer.md"
+        - "fragments/guidance/key_terminology.md"
+        - "fragments/guidance/common_pitfalls.md"
+      experienced:
+        - "fragments/guidance/advanced_considerations.md"
+        - "fragments/guidance/market_variations.md"
+      professional:
+        - "fragments/guidance/technical_analysis.md"
+        - "fragments/guidance/precedent_references.md"
+  
+  # Analysis depth modifiers
+  analysis_depth:
+    condition: "analysis_type"
+    composition: "union"
+    priority: 50
+    mappings:
+      comprehensive:
+        - "fragments/analysis/detailed_risk_matrix.md"
+        - "fragments/analysis/financial_modeling.md"
+        - "fragments/analysis/compliance_checklist.md"
+      quick:
+        - "fragments/analysis/key_points_summary.md"
+        - "fragments/analysis/critical_flags_only.md"
+      focused:
+        # Dynamically resolved based on specific_concerns variable
+        - "fragments/analysis/targeted_assessment.md"
+
+# Quality and performance settings
+quality_settings:
+  validation:
+    require_all_fragments: false
+    fallback_on_missing: true
+    log_missing_fragments: true
+  
+  performance:
+    cache_resolved_fragments: true
+    cache_ttl_seconds: 3600
+    max_fragment_size_kb: 100
+    warn_on_large_fragments: true
+  
+  testing:
+    enable_a_b_testing: true
+    test_fragment_variations: true
+    track_fragment_effectiveness: true
+
+# Conditional logic rules for complex scenarios
+conditional_rules:
+  # Multiple state property transactions
+  interstate_transaction:
+    condition: "property_states && property_states.length > 1"
+    action: "include_all_state_fragments"
+    priority: 95
+  
+  # High value transactions
+  high_value_transaction:
+    condition: "transaction_value > 2000000"
+    action: "include_additional_due_diligence"
+    fragments:
+      - "fragments/high_value/enhanced_scrutiny.md"
+      - "fragments/high_value/specialist_reports.md"
+  
+  # Commercial elements in residential
+  mixed_use_property:
+    condition: "property_type == 'mixed_use'"
+    action: "include_commercial_considerations"
+    fragments:
+      - "fragments/commercial/zoning_compliance.md"
+      - "fragments/commercial/business_considerations.md"
+
+# Metadata for orchestration
+metadata:
+  version: "1.0.0"
+  last_updated: "2024-01-15"
+  author: "Legal Technology Team"
+  review_frequency: "quarterly"
+  
+  dependencies:
+    - "legal_terms_glossary"
+    - "state_legislation_updates"
+    - "consumer_protection_updates"
+  
+  metrics:
+    track_fragment_usage: true
+    measure_composition_time: true
+    monitor_cache_efficiency: true

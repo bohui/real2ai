@@ -6,6 +6,7 @@ Australian Real Estate AI Assistant
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer
+from contextlib import asynccontextmanager
 import uvicorn
 import os
 import logging
@@ -35,29 +36,6 @@ from app.router.health import router as health_router
 from app.router.websockets import router as websockets_router
 from app.router.property_profile import router as property_profile_router
 
-# Initialize FastAPI app
-app = FastAPI(
-    title="Real2.AI API",
-    description="Australian Real Estate AI Assistant API",
-    version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc",
-)
-
-# Configure CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://localhost:3100",
-        "https://real2.ai",
-        "https://*.real2.ai",
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 # Initialize services
 settings = get_settings()
 security = HTTPBearer()
@@ -75,21 +53,11 @@ contract_workflow = ContractAnalysisWorkflow(
 # Global state storage (in production, use Redis/database)
 analysis_sessions: Dict[str, RealEstateAgentState] = {}
 
-# Include routers
-app.include_router(health_router)
-app.include_router(auth_router)
-app.include_router(documents_router)
-app.include_router(contracts_router)
-app.include_router(users_router)
-app.include_router(onboarding_router)
-app.include_router(ocr_router)
-app.include_router(websockets_router)
-app.include_router(property_profile_router)
 
-
-@app.on_event("startup")
-async def startup_event():
-    """Initialize application on startup"""
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan context manager for startup and shutdown events"""
+    # Startup
     logger.info("Starting Real2.AI API...")
 
     # Initialize LangSmith tracing
@@ -108,10 +76,9 @@ async def startup_event():
 
     logger.info("Real2.AI API started successfully")
 
+    yield
 
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Cleanup on shutdown"""
+    # Shutdown
     logger.info("Shutting down Real2.AI API...")
 
     # Close database connections
@@ -121,6 +88,43 @@ async def shutdown_event():
     await websocket_manager.disconnect_all()
 
     logger.info("Real2.AI API shutdown complete")
+
+
+# Initialize FastAPI app
+app = FastAPI(
+    title="Real2.AI API",
+    description="Australian Real Estate AI Assistant API",
+    version="1.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    lifespan=lifespan,
+)
+
+# Configure CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",
+        "http://localhost:3100",
+        "https://real2.ai",
+        "https://*.real2.ai",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+# Include routers
+app.include_router(health_router)
+app.include_router(auth_router)
+app.include_router(documents_router)
+app.include_router(contracts_router)
+app.include_router(users_router)
+app.include_router(onboarding_router)
+app.include_router(ocr_router)
+app.include_router(websockets_router)
+app.include_router(property_profile_router)
 
 
 # Import background tasks

@@ -1,0 +1,196 @@
+# Version manifest for prompt management system
+
+current_version: "2.1.0"
+schema_version: "1.0"
+
+versions:
+  "2.1.0":
+    release_date: "2024-01-15"
+    description: "Enhanced prompt composition system with system/user separation"
+    changes:
+      - "Complete system/user prompt separation architecture"
+      - "Advanced prompt composition system with YAML configuration"
+      - "Enhanced state-specific legal context handling"
+      - "Improved currency and date formatting macros"
+      - "Comprehensive risk assessment framework"
+      - "Template inheritance and fragment system"
+      - "Performance optimizations and caching improvements"
+    compatibility:
+      breaking_changes: true
+      backward_compatible: true
+      migration_required: true
+      deprecated_features:
+        - "Legacy single-file prompt templates (use composition instead)"
+        - "Hardcoded prompt logic (use configuration-driven approach)"
+      new_features:
+        - "PromptComposer class for advanced prompt assembly"
+        - "YAML-based composition rules and registry"
+        - "Template fragments and shared components"
+        - "Dynamic state-specific prompt resolution"
+        - "Enhanced validation and quality assurance"
+    dependencies:
+      python: ">=3.9"
+      jinja2: ">=3.0.0"
+      pyyaml: ">=6.0"
+      pathlib: ">=1.0"
+    migration_guide: "docs/migration/v2.1.0.md"
+    
+  "2.0.0":
+    release_date: "2024-01-01"
+    description: "Major refactoring with advanced features"
+    changes:
+      - "Introduced PromptManager with comprehensive caching"
+      - "Advanced Jinja2 templating with custom filters"
+      - "Australian legal terminology specialization"
+      - "Context-aware prompt rendering"
+      - "Template validation and error handling"
+      - "Metrics and monitoring capabilities"
+    compatibility:
+      breaking_changes: true
+      backward_compatible: false
+      migration_required: true
+      deprecated_features:
+        - "Simple string-based prompts"
+        - "Manual template management"
+      new_features:
+        - "PromptManager class with caching and validation"
+        - "YAML frontmatter metadata support"
+        - "Context-aware rendering with PromptContext"
+        - "Australian legal filters and helpers"
+        - "Comprehensive error handling and logging"
+    migration_guide: "docs/migration/v2.0.0.md"
+    
+  "1.0.0":
+    release_date: "2023-11-01"
+    description: "Initial prompt management system"
+    changes:
+      - "Basic prompt template system"
+      - "Simple Jinja2 integration"
+      - "Contract analysis prompts"
+      - "OCR extraction prompts"
+    compatibility:
+      breaking_changes: false
+      backward_compatible: true
+      migration_required: false
+    archived: true
+
+# Feature matrix by version
+feature_matrix:
+  template_management:
+    "1.0.0": "basic"
+    "2.0.0": "advanced"
+    "2.1.0": "enterprise"
+    
+  composition_system:
+    "1.0.0": false
+    "2.0.0": false
+    "2.1.0": true
+    
+  system_user_separation:
+    "1.0.0": false
+    "2.0.0": false
+    "2.1.0": true
+    
+  state_specific_context:
+    "1.0.0": "basic"
+    "2.0.0": "intermediate"
+    "2.1.0": "comprehensive"
+    
+  validation_system:
+    "1.0.0": false
+    "2.0.0": "basic"
+    "2.1.0": "comprehensive"
+    
+  caching_performance:
+    "1.0.0": false
+    "2.0.0": "basic"
+    "2.1.0": "optimized"
+
+# Upgrade paths
+upgrade_paths:
+  "1.0.0_to_2.0.0":
+    strategy: "migrate_templates"
+    automated: false
+    manual_steps:
+      - "Convert plain text prompts to YAML frontmatter format"
+      - "Update import statements to use PromptManager"
+      - "Migrate hardcoded variables to PromptContext"
+      - "Update error handling for new exception types"
+    estimated_effort: "4-8 hours"
+    
+  "2.0.0_to_2.1.0":
+    strategy: "enable_composition"
+    automated: true
+    manual_steps:
+      - "Configure composition rules in YAML"
+      - "Separate system and user prompts"
+      - "Update service layer to use composition API"
+      - "Test state-specific functionality"
+    estimated_effort: "2-4 hours"
+    
+  "1.0.0_to_2.1.0":
+    strategy: "complete_migration"
+    automated: false
+    manual_steps:
+      - "Follow 1.0.0→2.0.0 migration first"
+      - "Then follow 2.0.0→2.1.0 migration"
+      - "Comprehensive testing required"
+    estimated_effort: "8-12 hours"
+
+# Quality gates for version releases
+quality_gates:
+  "2.1.0":
+    code_coverage: 95%
+    performance_tests: "passed"
+    compatibility_tests: "passed"
+    documentation: "complete"
+    security_review: "approved"
+    load_testing: "passed"
+    
+  standards:
+    minimum_coverage: 90%
+    performance_regression: "none"
+    breaking_changes: "documented"
+    security_scan: "clean"
+    accessibility: "AA_compliant"
+
+# Rollback procedures
+rollback_procedures:
+  "2.1.0_to_2.0.0":
+    safe: true
+    data_loss: false
+    steps:
+      - "Disable composition system in configuration"
+      - "Revert to individual template rendering"
+      - "Update service layer calls"
+      - "Clear caches and restart services"
+    
+  "2.0.0_to_1.0.0":
+    safe: false
+    data_loss: true
+    warning: "Advanced features will be lost"
+    steps:
+      - "Export critical templates to plain text"
+      - "Update application code to use simple strings"
+      - "Remove PromptManager dependencies"
+      - "Manual verification required"
+
+# Support lifecycle
+support_lifecycle:
+  "2.1.0":
+    status: "active"
+    end_of_life: "2025-01-15"
+    security_updates: true
+    feature_updates: true
+    
+  "2.0.0":
+    status: "maintenance"
+    end_of_life: "2024-07-01"
+    security_updates: true
+    feature_updates: false
+    
+  "1.0.0":
+    status: "deprecated"
+    end_of_life: "2024-03-01"
+    security_updates: false
+    feature_updates: false
