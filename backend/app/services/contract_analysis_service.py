@@ -1,709 +1,344 @@
 """
-Contract Analysis Service V2 - Refactored to use GeminiClient
-AI-powered contract analysis with specialized Australian real estate focus
+Enhanced Contract Analysis Service with WebSocket Integration
 """
 
 import asyncio
 import logging
-import time
-from typing import Dict, Any, Optional, List, Tuple
+from typing import Dict, Any, Optional
 from datetime import datetime, UTC
-from dataclasses import dataclass
-from enum import Enum
-import json
-import re
 
-from fastapi import HTTPException
-
-from app.core.config import get_settings
-from app.models.contract_state import AustralianState, ContractType
-from app.clients import get_gemini_client
-from app.core.langsmith_config import langsmith_trace, langsmith_session, log_trace_info
-from app.clients.base.exceptions import (
-    ClientError,
-    ClientConnectionError,
-    ClientQuotaExceededError,
-)
+from app.agents.contract_workflow import ContractAnalysisWorkflow
+from app.models.contract_state import create_initial_state, RealEstateAgentState
+from app.model.enums import AustralianState, ProcessingStatus
+from app.services.websocket_service import WebSocketManager, WebSocketEvents
 
 logger = logging.getLogger(__name__)
 
 
-class AnalysisComplexity(Enum):
-    SIMPLE = "simple"
-    STANDARD = "standard"
-    COMPLEX = "complex"
-    ENTERPRISE = "enterprise"
-
-
-class ContractSection(Enum):
-    PARTIES = "parties"
-    PROPERTY_DETAILS = "property_details"
-    FINANCIAL_TERMS = "financial_terms"
-    SETTLEMENT_TERMS = "settlement_terms"
-    CONDITIONS = "conditions"
-    LEGAL_CLAUSES = "legal_clauses"
-    SPECIAL_CONDITIONS = "special_conditions"
-
-
-@dataclass
-class ContractAnalysisConfig:
-    """Configuration for contract analysis"""
-
-    australian_state: AustralianState
-    contract_type: ContractType
-    analysis_depth: AnalysisComplexity
-    focus_areas: List[ContractSection]
-    include_risk_assessment: bool = True
-    include_compliance_check: bool = True
-    include_financial_analysis: bool = True
-    language_preference: str = "en"
-
-
 class ContractAnalysisService:
-    """Advanced AI-powered contract analysis service using GeminiClient"""
+    """
+    Enhanced contract analysis service with real-time progress tracking
+    """
 
-    def __init__(self):
-        self.settings = get_settings()
-        self.gemini_client = None
-
-        # Australian state-specific regulations
-        self.state_regulations = {
-            AustralianState.NSW: {
-                "cooling_off_period_days": 5,
-                "stamp_duty_threshold": 25000,
-                "first_home_buyer_threshold": 800000,
-                "foreign_buyer_surcharge": 0.08,
-                "mandatory_searches": [
-                    "title_search",
-                    "planning_certificate",
-                    "building_certificate",
-                ],
-            },
-            AustralianState.VIC: {
-                "cooling_off_period_days": 3,
-                "stamp_duty_threshold": 25000,
-                "first_home_buyer_threshold": 750000,
-                "foreign_buyer_surcharge": 0.075,
-                "mandatory_searches": ["title_search", "planning_certificate"],
-            },
-            AustralianState.QLD: {
-                "cooling_off_period_days": 5,
-                "stamp_duty_threshold": 10000,
-                "first_home_buyer_threshold": 550000,
-                "foreign_buyer_surcharge": 0.075,
-                "mandatory_searches": ["title_search", "body_corporate_search"],
-            },
-            AustralianState.SA: {
-                "cooling_off_period_days": 2,
-                "stamp_duty_threshold": 12000,
-                "first_home_buyer_threshold": 600000,
-                "foreign_buyer_surcharge": 0.07,
-                "mandatory_searches": ["title_search", "planning_certificate"],
-            },
-            AustralianState.WA: {
-                "cooling_off_period_days": 0,  # No cooling off in WA
-                "stamp_duty_threshold": 25000,
-                "first_home_buyer_threshold": 550000,
-                "foreign_buyer_surcharge": 0.075,
-                "mandatory_searches": ["title_search", "property_information_report"],
-            },
-            AustralianState.TAS: {
-                "cooling_off_period_days": 3,
-                "stamp_duty_threshold": 3000,
-                "first_home_buyer_threshold": 600000,
-                "foreign_buyer_surcharge": 0.08,
-                "mandatory_searches": ["title_search", "planning_certificate"],
-            },
-            AustralianState.NT: {
-                "cooling_off_period_days": 4,
-                "stamp_duty_threshold": 0,
-                "first_home_buyer_threshold": 650000,
-                "foreign_buyer_surcharge": 0.015,
-                "mandatory_searches": ["title_search"],
-            },
-            AustralianState.ACT: {
-                "cooling_off_period_days": 5,
-                "stamp_duty_threshold": 0,
-                "first_home_buyer_threshold": 750000,
-                "foreign_buyer_surcharge": 0.075,
-                "mandatory_searches": ["title_search", "planning_certificate"],
-            },
-        }
-
-        # Contract type specific requirements
-        self.contract_requirements = {
-            ContractType.SALE_OF_LAND: {
-                "mandatory_clauses": [
-                    "purchase_price",
-                    "settlement_date",
-                    "deposit_amount",
-                    "cooling_off_period",
-                ],
-                "recommended_clauses": [
-                    "finance_clause",
-                    "building_inspection",
-                    "pest_inspection",
-                ],
-            },
-            ContractType.OFF_THE_PLAN: {
-                "mandatory_clauses": [
-                    "purchase_price",
-                    "completion_date",
-                    "deposit_structure",
-                    "sunset_clause",
-                ],
-                "recommended_clauses": ["material_changes", "defects_liability"],
-            },
-            ContractType.AUCTION: {
-                "mandatory_clauses": [
-                    "purchase_price",
-                    "auction_date",
-                    "deposit_amount",
-                    "settlement_terms",
-                ],
-                "recommended_clauses": ["vendor_bid_declaration"],
-            },
-        }
-
-    async def initialize(self):
-        """Initialize contract analysis service with GeminiClient"""
-        try:
-            # Get initialized Gemini client from factory
-            self.gemini_client = await get_gemini_client()
-
-            # Verify client is available
-            if not self.gemini_client:
-                raise ClientConnectionError(
-                    "Failed to get Gemini client",
-                    client_name="ContractAnalysisService",
-                )
-
-            logger.info("Contract Analysis Service V2 initialized with GeminiClient")
-
-        except ClientConnectionError as e:
-            logger.error(f"Failed to connect to Gemini service: {e}")
-            raise HTTPException(
-                status_code=503, detail="AI analysis service unavailable"
-            )
-        except Exception as e:
-            logger.error(f"Failed to initialize contract analysis service: {str(e)}")
-            raise
-
-    @langsmith_trace(
-        name="contract_analysis_service_analyze_contract", run_type="chain"
-    )
-    async def analyze_contract(
+    def __init__(
         self,
-        contract_text: str,
-        config: ContractAnalysisConfig,
-        metadata: Optional[Dict[str, Any]] = None,
+        websocket_manager: WebSocketManager,
+        openai_api_key: str,
+        model_name: str = "gpt-4"
+    ):
+        self.websocket_manager = websocket_manager
+        self.workflow = ContractAnalysisWorkflow(
+            openai_api_key=openai_api_key,
+            model_name=model_name
+        )
+        self.active_analyses: Dict[str, Dict[str, Any]] = {}
+
+    async def start_analysis(
+        self,
+        user_id: str,
+        session_id: str,
+        document_data: Dict[str, Any],
+        australian_state: AustralianState,
+        user_preferences: Optional[Dict[str, Any]] = None,
+        user_type: str = "buyer"
     ) -> Dict[str, Any]:
-        """Analyze contract text using AI with Australian-specific legal framework
-
-        Args:
-            contract_text: The extracted contract text
-            config: Analysis configuration
-            metadata: Additional metadata about the contract
-
-        Returns:
-            Dict containing comprehensive contract analysis
         """
-
-        if not self.gemini_client:
-            raise HTTPException(
-                status_code=503, detail="AI analysis service not initialized"
-            )
-
+        Start contract analysis with real-time progress tracking
+        """
+        
         try:
-            log_trace_info(
-                "contract_analysis_service_analyze_contract",
-                contract_length=len(contract_text),
-                state=config.state.value if config.state else None,
-                contract_type=(
-                    config.contract_type.value if config.contract_type else None
-                ),
-                analysis_type=(
-                    config.analysis_type.value if config.analysis_type else None
-                ),
+            # Create initial state
+            initial_state = create_initial_state(
+                user_id=user_id,
+                australian_state=australian_state,
+                user_type=user_type,
+                user_preferences=user_preferences or {}
             )
-            start_time = time.time()
-
-            # Prepare analysis prompt
-            analysis_prompt = self._create_analysis_prompt(
-                contract_text, config, metadata
+            
+            # Override session_id if provided
+            initial_state["session_id"] = session_id
+            initial_state["document_data"] = document_data
+            
+            # Store analysis info
+            contract_id = initial_state["session_id"]
+            self.active_analyses[contract_id] = {
+                "start_time": datetime.now(UTC),
+                "user_id": user_id,
+                "session_id": session_id,
+                "status": "starting",
+                "progress": 0
+            }
+            
+            # Send analysis started event
+            await self.websocket_manager.send_message(
+                session_id,
+                WebSocketEvents.analysis_started(contract_id, estimated_time=3)
             )
-
-            # Use Gemini client for analysis
-            try:
-                ai_response = await self.gemini_client.generate_content(
-                    prompt=analysis_prompt,
-                    temperature=0.2,  # Lower temperature for more consistent analysis
-                    max_tokens=4000,
+            
+            # Execute analysis with progress tracking
+            final_state = await self._execute_with_progress_tracking(
+                initial_state, session_id, contract_id
+            )
+            
+            # Send completion event
+            if final_state.get("error_state"):
+                await self.websocket_manager.send_message(
+                    session_id,
+                    WebSocketEvents.analysis_failed(
+                        contract_id,
+                        final_state["error_state"],
+                        retry_available=True
+                    )
                 )
-            except ClientQuotaExceededError:
-                raise HTTPException(
-                    status_code=429,
-                    detail="AI analysis quota exceeded. Please try again later.",
+                
+                # Update analysis status
+                self.active_analyses[contract_id]["status"] = "failed"
+                self.active_analyses[contract_id]["error"] = final_state["error_state"]
+                
+            else:
+                # Create analysis summary
+                analysis_results = final_state.get("analysis_results", {})
+                summary = {
+                    "overall_confidence": analysis_results.get("overall_confidence", 0),
+                    "risk_score": analysis_results.get("risk_assessment", {}).get("overall_risk_score", 0),
+                    "compliance_status": analysis_results.get("compliance_check", {}).get("state_compliance", False),
+                    "recommendations_count": len(analysis_results.get("recommendations", [])),
+                    "processing_time": final_state.get("processing_time", 0)
+                }
+                
+                await self.websocket_manager.send_message(
+                    session_id,
+                    WebSocketEvents.analysis_completed(contract_id, summary)
                 )
-            except ClientError as e:
-                logger.error(f"Gemini client error during analysis: {e}")
-                raise HTTPException(
-                    status_code=500, detail=f"AI analysis failed: {str(e)}"
-                )
-
-            # Parse AI response
-            analysis_result = self._parse_ai_response(ai_response, config)
-
-            # Add compliance checks
-            compliance_result = self._check_compliance(analysis_result, config)
-
-            # Add risk assessment
-            risk_assessment = self._assess_risks(analysis_result, config)
-
-            # Calculate financial implications
-            financial_analysis = self._analyze_financial_terms(analysis_result, config)
-
-            # Get authentication method from client
-            auth_method = "unknown"
-            try:
-                client_health = await self.gemini_client.health_check()
-                auth_method = client_health.get("authentication", {}).get(
-                    "method", "unknown"
-                )
-            except Exception:
-                pass
-
+                
+                # Update analysis status
+                self.active_analyses[contract_id]["status"] = "completed"
+                self.active_analyses[contract_id]["summary"] = summary
+            
             return {
-                "contract_summary": analysis_result.get("summary", {}),
-                "key_terms": analysis_result.get("key_terms", {}),
-                "parties": analysis_result.get("parties", {}),
-                "property_details": analysis_result.get("property_details", {}),
-                "financial_terms": financial_analysis,
-                "compliance_check": compliance_result,
-                "risk_assessment": risk_assessment,
-                "recommendations": self._generate_recommendations(
-                    analysis_result, compliance_result, risk_assessment
-                ),
-                "analysis_metadata": {
-                    "analysis_timestamp": datetime.now(UTC).isoformat(),
-                    "analysis_duration_seconds": time.time() - start_time,
-                    "contract_type": config.contract_type.value,
-                    "australian_state": config.australian_state.value,
-                    "analysis_depth": config.analysis_depth.value,
-                    "ai_model": "gemini",
-                    "authentication_method": auth_method,
-                    "service": "ContractAnalysisService",
-                },
+                "success": True,
+                "contract_id": contract_id,
+                "session_id": session_id,
+                "final_state": final_state,
+                "analysis_results": final_state.get("analysis_results", {}),
+                "processing_time": final_state.get("processing_time", 0)
+            }
+            
+        except Exception as e:
+            logger.error(f"Analysis failed for session {session_id}: {str(e)}")
+            
+            # Send error event
+            if session_id:
+                await self.websocket_manager.send_message(
+                    session_id,
+                    WebSocketEvents.analysis_failed(
+                        session_id,
+                        f"Analysis service error: {str(e)}",
+                        retry_available=True
+                    )
+                )
+            
+            return {
+                "success": False,
+                "error": str(e),
+                "session_id": session_id
             }
 
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error(f"Contract analysis error: {str(e)}")
-            raise HTTPException(
-                status_code=500, detail=f"Contract analysis failed: {str(e)}"
-            )
-
-    def _create_analysis_prompt(
+    async def _execute_with_progress_tracking(
         self,
-        contract_text: str,
-        config: ContractAnalysisConfig,
-        metadata: Optional[Dict[str, Any]] = None,
-    ) -> str:
-        """Create a comprehensive prompt for contract analysis"""
-
-        state_info = self.state_regulations.get(config.australian_state, {})
-        contract_reqs = self.contract_requirements.get(config.contract_type, {})
-
-        prompt = f"""
-You are an expert Australian real estate lawyer specializing in {config.australian_state.value} property law.
-
-Analyze the following {config.contract_type.value} contract and provide a comprehensive analysis.
-
-Contract Text:
-{contract_text[:15000]}  # Limit to prevent token overflow
-
-Analysis Requirements:
-1. **Contract Summary**: Provide a clear, concise summary of the contract
-2. **Key Terms Extraction**: Extract and categorize all important terms
-3. **Party Information**: Identify all parties and their roles
-4. **Property Details**: Extract all property-related information
-5. **Financial Terms**: Identify all financial obligations and terms
-6. **Legal Compliance**: Check compliance with {config.australian_state.value} regulations
-7. **Risk Identification**: Identify potential risks and issues
-8. **Missing Elements**: Identify any missing mandatory clauses
-
-State-Specific Information:
-- Cooling-off period: {state_info.get('cooling_off_period_days', 'N/A')} days
-- Stamp duty threshold: ${state_info.get('stamp_duty_threshold', 'N/A')}
-- First home buyer threshold: ${state_info.get('first_home_buyer_threshold', 'N/A')}
-- Foreign buyer surcharge: {state_info.get('foreign_buyer_surcharge', 0) * 100}%
-- Mandatory searches: {', '.join(state_info.get('mandatory_searches', []))}
-
-Contract Type Requirements:
-- Mandatory clauses: {', '.join(contract_reqs.get('mandatory_clauses', []))}
-- Recommended clauses: {', '.join(contract_reqs.get('recommended_clauses', []))}
-
-Provide your analysis in a structured JSON format with the following sections:
-- summary: Brief overview of the contract
-- key_terms: Dictionary of important terms and their values
-- parties: Information about vendor, purchaser, and other parties
-- property_details: Address, title, and other property information
-- financial_terms: Purchase price, deposit, and payment structure
-- compliance_issues: List of any compliance problems found
-- risks: List of identified risks with severity levels
-- missing_clauses: List of missing mandatory or recommended clauses
-- recommendations: Specific recommendations for the buyer/seller
-
-Focus Areas: {', '.join([area.value for area in config.focus_areas])}
-"""
-
-        if metadata:
-            prompt += f"\n\nAdditional Context: {json.dumps(metadata)}"
-
-        return prompt
-
-    def _parse_ai_response(
-        self, ai_response: str, config: ContractAnalysisConfig
-    ) -> Dict[str, Any]:
-        """Parse and structure the AI response"""
-
-        try:
-            # Try to extract JSON from the response
-            json_match = re.search(r"\{[\s\S]*\}", ai_response)
-            if json_match:
-                return json.loads(json_match.group())
-        except Exception as e:
-            logger.warning(f"Failed to parse AI response as JSON: {e}")
-
-        # Fallback: Create structured response from text
-        return self._extract_structured_data(ai_response)
-
-    def _extract_structured_data(self, text: str) -> Dict[str, Any]:
-        """Extract structured data from unstructured text response"""
-
-        result = {
-            "summary": "",
-            "key_terms": {},
-            "parties": {},
-            "property_details": {},
-            "financial_terms": {},
-            "compliance_issues": [],
-            "risks": [],
-            "missing_clauses": [],
-        }
-
-        # Extract sections using pattern matching
-        sections = text.split("\n\n")
-
-        for section in sections:
-            section_lower = section.lower()
-
-            if "summary" in section_lower:
-                result["summary"] = section
-            elif "purchase price" in section_lower or "price" in section_lower:
-                # Extract price
-                price_match = re.search(r"\$[\d,]+", section)
-                if price_match:
-                    result["key_terms"]["purchase_price"] = price_match.group()
-            elif "vendor" in section_lower or "seller" in section_lower:
-                result["parties"]["vendor"] = section
-            elif "purchaser" in section_lower or "buyer" in section_lower:
-                result["parties"]["purchaser"] = section
-            elif "property" in section_lower or "address" in section_lower:
-                result["property_details"]["description"] = section
-            elif "risk" in section_lower:
-                result["risks"].append(section)
-            elif "compliance" in section_lower:
-                result["compliance_issues"].append(section)
-
-        return result
-
-    def _check_compliance(
-        self, analysis_result: Dict[str, Any], config: ContractAnalysisConfig
-    ) -> Dict[str, Any]:
-        """Check contract compliance with state regulations"""
-
-        compliance_issues = []
-        state_regs = self.state_regulations.get(config.australian_state, {})
-        contract_reqs = self.contract_requirements.get(config.contract_type, {})
-
-        # Check mandatory clauses
-        missing_mandatory = []
-        for clause in contract_reqs.get("mandatory_clauses", []):
-            if clause not in analysis_result.get("key_terms", {}):
-                missing_mandatory.append(clause)
-
-        if missing_mandatory:
-            compliance_issues.append(
-                {
-                    "issue": "Missing mandatory clauses",
-                    "severity": "high",
-                    "details": missing_mandatory,
-                    "recommendation": f"Add missing clauses: {', '.join(missing_mandatory)}",
-                }
-            )
-
-        # Check cooling-off period
-        if state_regs.get("cooling_off_period_days", 0) > 0:
-            cooling_off = analysis_result.get("key_terms", {}).get("cooling_off_period")
-            if not cooling_off:
-                compliance_issues.append(
-                    {
-                        "issue": "No cooling-off period specified",
-                        "severity": "high",
-                        "details": f"Required: {state_regs['cooling_off_period_days']} days",
-                        "recommendation": "Add standard cooling-off period clause",
-                    }
-                )
-
-        return {
-            "compliant": len(compliance_issues) == 0,
-            "issues": compliance_issues,
-            "checked_regulations": list(state_regs.keys()),
-            "state": config.australian_state.value,
-        }
-
-    def _assess_risks(
-        self, analysis_result: Dict[str, Any], config: ContractAnalysisConfig
-    ) -> Dict[str, Any]:
-        """Assess risks in the contract"""
-
-        risks = []
-        risk_score = 0
-
-        # Check for sunset clause in off-the-plan
-        if config.contract_type == ContractType.OFF_THE_PLAN:
-            sunset_clause = analysis_result.get("key_terms", {}).get("sunset_clause")
-            if not sunset_clause:
-                risks.append(
-                    {
-                        "risk": "No sunset clause",
-                        "severity": "high",
-                        "impact": "Developer can delay indefinitely",
-                        "mitigation": "Negotiate sunset clause with reasonable timeframe",
-                    }
-                )
-                risk_score += 30
-
-        # Check finance clause
-        finance_clause = analysis_result.get("key_terms", {}).get("finance_clause")
-        if not finance_clause and config.contract_type != ContractType.AUCTION:
-            risks.append(
-                {
-                    "risk": "No finance clause",
-                    "severity": "medium",
-                    "impact": "Risk of losing deposit if finance not approved",
-                    "mitigation": "Add finance clause with specific conditions",
-                }
-            )
-            risk_score += 20
-
-        # Add identified risks from AI analysis
-        for risk in analysis_result.get("risks", []):
-            risks.append(
-                {
-                    "risk": risk,
-                    "severity": "medium",
-                    "impact": "Review required",
-                    "mitigation": "Seek legal advice",
-                }
-            )
-            risk_score += 15
-
-        return {
-            "overall_risk_level": self._calculate_risk_level(risk_score),
-            "risk_score": risk_score,
-            "identified_risks": risks,
-            "risk_count": len(risks),
-        }
-
-    def _calculate_risk_level(self, score: int) -> str:
-        """Calculate overall risk level based on score"""
-        if score >= 70:
-            return "high"
-        elif score >= 40:
-            return "medium"
-        elif score >= 20:
-            return "low"
-        else:
-            return "minimal"
-
-    def _analyze_financial_terms(
-        self, analysis_result: Dict[str, Any], config: ContractAnalysisConfig
-    ) -> Dict[str, Any]:
-        """Analyze financial terms and implications"""
-
-        financial_terms = {}
-        key_terms = analysis_result.get("key_terms", {})
-
-        # Extract purchase price
-        purchase_price = key_terms.get("purchase_price", "0")
-        if isinstance(purchase_price, str):
-            # Extract numeric value
-            price_match = re.search(r"[\d,]+", purchase_price.replace("$", ""))
-            if price_match:
-                purchase_price = float(price_match.group().replace(",", ""))
-            else:
-                purchase_price = 0
-
-        financial_terms["purchase_price"] = purchase_price
-
-        # Calculate stamp duty (simplified)
-        state_regs = self.state_regulations.get(config.australian_state, {})
-        if purchase_price > state_regs.get("stamp_duty_threshold", 0):
-            # Simplified stamp duty calculation (actual rates are more complex)
-            stamp_duty_rate = 0.055  # Average rate
-            financial_terms["estimated_stamp_duty"] = purchase_price * stamp_duty_rate
-        else:
-            financial_terms["estimated_stamp_duty"] = 0
-
-        # Extract deposit
-        deposit = key_terms.get("deposit_amount", "10%")
-        if isinstance(deposit, str) and "%" in deposit:
-            deposit_percent = float(deposit.replace("%", "")) / 100
-            financial_terms["deposit_amount"] = purchase_price * deposit_percent
-        else:
-            financial_terms["deposit_amount"] = deposit
-
-        # Total upfront costs
-        financial_terms["total_upfront_costs"] = (
-            financial_terms.get("deposit_amount", 0)
-            + financial_terms.get("estimated_stamp_duty", 0)
-            + 5000  # Estimated legal and other fees
+        initial_state: RealEstateAgentState,
+        session_id: str,
+        contract_id: str
+    ) -> RealEstateAgentState:
+        """
+        Execute workflow with real-time progress updates
+        """
+        
+        # Create a custom workflow that sends progress updates
+        class ProgressTrackingWorkflow(ContractAnalysisWorkflow):
+            def __init__(self, parent_service, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.parent_service = parent_service
+                self.session_id = session_id
+                self.contract_id = contract_id
+            
+            def validate_input(self, state):
+                # Send progress update
+                asyncio.create_task(self.parent_service._send_progress_update(
+                    self.session_id, self.contract_id, "validate_input", 14,
+                    "Validating document and input parameters"
+                ))
+                return super().validate_input(state)
+            
+            def process_document(self, state):
+                asyncio.create_task(self.parent_service._send_progress_update(
+                    self.session_id, self.contract_id, "process_document", 28,
+                    "Processing document and extracting text content"
+                ))
+                return super().process_document(state)
+            
+            def extract_contract_terms(self, state):
+                asyncio.create_task(self.parent_service._send_progress_update(
+                    self.session_id, self.contract_id, "extract_terms", 42,
+                    "Extracting key contract terms using Australian tools"
+                ))
+                return super().extract_contract_terms(state)
+            
+            def analyze_australian_compliance(self, state):
+                asyncio.create_task(self.parent_service._send_progress_update(
+                    self.session_id, self.contract_id, "analyze_compliance", 57,
+                    "Analyzing compliance with Australian property laws"
+                ))
+                return super().analyze_australian_compliance(state)
+            
+            def assess_contract_risks(self, state):
+                asyncio.create_task(self.parent_service._send_progress_update(
+                    self.session_id, self.contract_id, "assess_risks", 71,
+                    "Assessing contract risks and potential issues"
+                ))
+                return super().assess_contract_risks(state)
+            
+            def generate_recommendations(self, state):
+                asyncio.create_task(self.parent_service._send_progress_update(
+                    self.session_id, self.contract_id, "generate_recommendations", 85,
+                    "Generating actionable recommendations"
+                ))
+                return super().generate_recommendations(state)
+            
+            def compile_analysis_report(self, state):
+                asyncio.create_task(self.parent_service._send_progress_update(
+                    self.session_id, self.contract_id, "compile_report", 100,
+                    "Compiling final analysis report"
+                ))
+                return super().compile_analysis_report(state)
+        
+        # Create progress-tracking workflow
+        progress_workflow = ProgressTrackingWorkflow(
+            self,
+            openai_api_key=self.workflow.llm.openai_api_key,
+            model_name=self.workflow.llm.model_name
         )
+        
+        # Execute the workflow
+        return await progress_workflow.analyze_contract(initial_state)
 
-        return financial_terms
-
-    def _generate_recommendations(
+    async def _send_progress_update(
         self,
-        analysis_result: Dict[str, Any],
-        compliance_result: Dict[str, Any],
-        risk_assessment: Dict[str, Any],
-    ) -> List[Dict[str, Any]]:
-        """Generate actionable recommendations"""
-
-        recommendations = []
-
-        # Compliance recommendations
-        if not compliance_result["compliant"]:
-            recommendations.append(
-                {
-                    "priority": "high",
-                    "category": "compliance",
-                    "recommendation": "Address compliance issues before proceeding",
-                    "details": compliance_result["issues"],
-                }
-            )
-
-        # Risk recommendations
-        if risk_assessment["overall_risk_level"] in ["high", "medium"]:
-            recommendations.append(
-                {
-                    "priority": "high",
-                    "category": "risk",
-                    "recommendation": "Review identified risks with legal counsel",
-                    "details": risk_assessment["identified_risks"],
-                }
-            )
-
-        # Missing clause recommendations
-        missing_clauses = analysis_result.get("missing_clauses", [])
-        if missing_clauses:
-            recommendations.append(
-                {
-                    "priority": "medium",
-                    "category": "contract_terms",
-                    "recommendation": "Consider adding recommended clauses",
-                    "details": missing_clauses,
-                }
-            )
-
-        # General recommendations
-        recommendations.extend(
-            [
-                {
-                    "priority": "medium",
-                    "category": "due_diligence",
-                    "recommendation": "Complete all mandatory property searches",
-                    "details": "Ensure title search, planning certificates are obtained",
-                },
-                {
-                    "priority": "low",
-                    "category": "professional_advice",
-                    "recommendation": "Review contract with qualified conveyancer",
-                    "details": "Professional review recommended for all property transactions",
-                },
-            ]
-        )
-
-        return recommendations
-
-    async def generate_contract_summary(
-        self, contract_text: str, config: ContractAnalysisConfig
-    ) -> str:
-        """Generate a plain English summary of the contract"""
-
-        if not self.gemini_client:
-            raise HTTPException(status_code=503, detail="AI service not initialized")
-
-        prompt = f"""
-Provide a clear, plain English summary of this {config.contract_type.value} contract 
-for {config.australian_state.value}. The summary should be suitable for a property buyer 
-with no legal background.
-
-Contract Text:
-{contract_text[:10000]}
-
-Include:
-1. What is being sold and where
-2. How much it costs
-3. When settlement happens
-4. Key conditions and requirements
-5. Important dates and deadlines
-6. What the buyer needs to do next
-
-Keep the summary under 500 words and use simple language.
-"""
-
+        session_id: str,
+        contract_id: str,
+        step: str,
+        progress_percent: int,
+        description: str
+    ):
+        """Send progress update via WebSocket"""
         try:
-            summary = await self.gemini_client.generate_content(
-                prompt=prompt,
-                temperature=0.3,
-                max_tokens=1000,
+            # Update internal tracking
+            if contract_id in self.active_analyses:
+                self.active_analyses[contract_id]["progress"] = progress_percent
+                self.active_analyses[contract_id]["current_step"] = step
+            
+            # Send WebSocket event
+            await self.websocket_manager.send_message(
+                session_id,
+                WebSocketEvents.analysis_progress(
+                    contract_id, step, progress_percent, description
+                )
             )
-            return summary
-        except ClientError as e:
-            logger.error(f"Summary generation failed: {e}")
-            return "Summary generation failed. Please review the full analysis."
+        except Exception as e:
+            logger.error(f"Failed to send progress update: {str(e)}")
 
-    async def health_check(self) -> Dict[str, Any]:
-        """Check health of contract analysis service"""
+    async def get_analysis_status(self, contract_id: str) -> Optional[Dict[str, Any]]:
+        """Get current analysis status"""
+        return self.active_analyses.get(contract_id)
 
-        health_status = {
-            "service": "ContractAnalysisService",
-            "status": "healthy",
-            "timestamp": datetime.now(UTC).isoformat(),
+    async def cancel_analysis(self, contract_id: str, session_id: str) -> bool:
+        """Cancel ongoing analysis"""
+        try:
+            if contract_id in self.active_analyses:
+                self.active_analyses[contract_id]["status"] = "cancelled"
+                
+                # Send cancellation event
+                await self.websocket_manager.send_message(
+                    session_id,
+                    WebSocketEvents.system_notification(
+                        f"Analysis {contract_id} has been cancelled",
+                        notification_type="info"
+                    )
+                )
+                return True
+            return False
+        except Exception as e:
+            logger.error(f"Failed to cancel analysis {contract_id}: {str(e)}")
+            return False
+
+    async def retry_analysis(
+        self,
+        contract_id: str,
+        session_id: str,
+        user_id: str
+    ) -> Dict[str, Any]:
+        """Retry failed analysis"""
+        
+        # Get previous analysis data
+        analysis_info = self.active_analyses.get(contract_id)
+        if not analysis_info:
+            return {
+                "success": False,
+                "error": "Analysis not found"
+            }
+        
+        # Clear error state
+        if contract_id in self.active_analyses:
+            self.active_analyses[contract_id]["status"] = "retrying"
+            self.active_analyses[contract_id].pop("error", None)
+        
+        # Send retry notification
+        await self.websocket_manager.send_message(
+            session_id,
+            WebSocketEvents.system_notification(
+                f"Retrying analysis {contract_id}",
+                notification_type="info"
+            )
+        )
+        
+        # Note: In a full implementation, you would need to store and retrieve
+        # the original document data and parameters to retry the analysis
+        return {
+            "success": True,
+            "message": "Retry initiated"
         }
 
-        # Check Gemini client
-        if self.gemini_client:
-            try:
-                gemini_health = await self.gemini_client.health_check()
-                health_status["gemini_status"] = gemini_health.get("status", "unknown")
-                health_status["authentication_method"] = gemini_health.get(
-                    "authentication", {}
-                ).get("method", "unknown")
-            except Exception as e:
-                health_status["gemini_status"] = "error"
-                health_status["status"] = "degraded"
-                health_status["error"] = str(e)
-        else:
-            health_status["gemini_status"] = "not_initialized"
-            health_status["status"] = "degraded"
+    def cleanup_completed_analyses(self, max_age_hours: int = 24):
+        """Clean up old completed analyses"""
+        cutoff_time = datetime.now(UTC).timestamp() - (max_age_hours * 3600)
+        
+        to_remove = []
+        for contract_id, analysis_info in self.active_analyses.items():
+            if analysis_info["start_time"].timestamp() < cutoff_time:
+                if analysis_info["status"] in ["completed", "failed", "cancelled"]:
+                    to_remove.append(contract_id)
+        
+        for contract_id in to_remove:
+            del self.active_analyses[contract_id]
+        
+        logger.info(f"Cleaned up {len(to_remove)} old analyses")
 
-        # Check configuration
-        health_status["states_configured"] = len(self.state_regulations)
-        health_status["contract_types_configured"] = len(self.contract_requirements)
+    def get_active_analyses_count(self) -> int:
+        """Get count of active analyses"""
+        return len([
+            a for a in self.active_analyses.values()
+            if a["status"] in ["starting", "processing", "retrying"]
+        ])
 
-        return health_status
+    def get_all_analyses_summary(self) -> Dict[str, Any]:
+        """Get summary of all analyses"""
+        status_counts = {}
+        for analysis in self.active_analyses.values():
+            status = analysis["status"]
+            status_counts[status] = status_counts.get(status, 0) + 1
+        
+        return {
+            "total_analyses": len(self.active_analyses),
+            "status_breakdown": status_counts,
+            "active_count": self.get_active_analyses_count()
+        }

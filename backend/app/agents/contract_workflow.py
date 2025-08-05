@@ -12,13 +12,13 @@ from datetime import datetime, UTC
 
 from app.models.contract_state import (
     RealEstateAgentState,
-    ProcessingStatus,
     ContractTerms,
     RiskFactor,
     ComplianceCheck,
     update_state_step,
     calculate_confidence_score,
 )
+from app.model.enums import ProcessingStatus
 from app.agents.australian_tools import (
     extract_australian_contract_terms,
     validate_cooling_off_period,
@@ -106,9 +106,21 @@ class ContractAnalysisWorkflow:
         """Execute the complete contract analysis workflow"""
 
         start_time = time.time()
+        
+        # Initialize progress tracking
+        initial_state["progress"] = {
+            "current_step": 0,
+            "total_steps": 7,
+            "step_names": [
+                "validate_input", "process_document", "extract_terms", 
+                "analyze_compliance", "assess_risks", "generate_recommendations", 
+                "compile_report"
+            ],
+            "percentage": 0
+        }
 
         try:
-            # Run the workflow
+            # Run the workflow with progress tracking
             final_state = await self.workflow.ainvoke(initial_state)
 
             # Calculate processing time
@@ -116,9 +128,16 @@ class ContractAnalysisWorkflow:
             final_state["processing_time"] = processing_time
 
             # Calculate overall confidence
+            if "analysis_results" not in final_state:
+                final_state["analysis_results"] = {}
+            
             final_state["analysis_results"]["overall_confidence"] = (
                 calculate_confidence_score(final_state)
             )
+
+            # Mark progress complete
+            final_state["progress"]["percentage"] = 100
+            final_state["progress"]["current_step"] = 7
 
             return final_state
 
@@ -130,10 +149,15 @@ class ContractAnalysisWorkflow:
                 error=f"Workflow execution failed: {str(e)}",
             )
             error_state["processing_time"] = time.time() - start_time
+            error_state["progress"]["percentage"] = 0
             return error_state
 
     def validate_input(self, state: RealEstateAgentState) -> RealEstateAgentState:
         """Validate document and user input"""
+        
+        # Update progress
+        state["progress"]["current_step"] = 1
+        state["progress"]["percentage"] = 14
 
         if not state.get("document_data"):
             return update_state_step(
@@ -152,10 +176,19 @@ class ContractAnalysisWorkflow:
                 state, "validation_failed", error="Document content not accessible"
             )
 
+        # Add confidence score for validation
+        if "confidence_scores" not in state:
+            state["confidence_scores"] = {}
+        state["confidence_scores"]["input_validation"] = 0.95
+
         return update_state_step(state, "input_validated")
 
     def process_document(self, state: RealEstateAgentState) -> RealEstateAgentState:
         """Process document and extract text content"""
+        
+        # Update progress
+        state["progress"]["current_step"] = 2
+        state["progress"]["percentage"] = 28
 
         try:
             document_data = state["document_data"]
@@ -181,6 +214,9 @@ class ContractAnalysisWorkflow:
 
             # Calculate text quality metrics
             text_quality = self._assess_text_quality(extracted_text)
+
+            # Update confidence scores
+            state["confidence_scores"]["document_processing"] = extraction_confidence * text_quality["score"]
 
             # Update state with extracted text
             updated_data = {
@@ -209,22 +245,43 @@ class ContractAnalysisWorkflow:
         self, state: RealEstateAgentState
     ) -> RealEstateAgentState:
         """Extract key contract terms using Australian-specific tools"""
+        
+        # Update progress
+        state["progress"]["current_step"] = 3
+        state["progress"]["percentage"] = 42
 
         try:
             document_text = state["document_metadata"]["extracted_text"]
             australian_state = state["australian_state"]
 
-            # Use the Australian contract tools
-            extraction_result = extract_australian_contract_terms.invoke(
-                {"document_text": document_text, "state": australian_state}
-            )
+            # Use the Australian contract tools with better error handling
+            try:
+                extraction_result = extract_australian_contract_terms.invoke(
+                    {"document_text": document_text, "state": australian_state}
+                )
+            except Exception as tool_error:
+                # Fallback extraction if tool fails
+                extraction_result = self._fallback_term_extraction(document_text, australian_state)
+                extraction_result["extraction_method"] = "fallback"
+
+            # Validate extraction quality
+            if extraction_result["overall_confidence"] < 0.3:
+                return update_state_step(
+                    state,
+                    "term_extraction_failed",
+                    error="Low confidence in term extraction",
+                )
 
             # Store results in state
+            state["confidence_scores"]["term_extraction"] = extraction_result["overall_confidence"]
+            
             updated_data = {
                 "contract_terms": extraction_result["terms"],
-                "confidence_scores": {
-                    "term_extraction": extraction_result["overall_confidence"]
-                },
+                "extraction_metadata": {
+                    "confidence_scores": extraction_result.get("confidence_scores", {}),
+                    "state_requirements": extraction_result.get("state_requirements", {}),
+                    "extraction_method": extraction_result.get("extraction_method", "standard")
+                }
             }
 
             return update_state_step(state, "terms_extracted", data=updated_data)
@@ -240,38 +297,75 @@ class ContractAnalysisWorkflow:
         self, state: RealEstateAgentState
     ) -> RealEstateAgentState:
         """Analyze compliance with Australian property laws"""
+        
+        # Update progress
+        state["progress"]["current_step"] = 4
+        state["progress"]["percentage"] = 57
 
         try:
             contract_terms = state["contract_terms"]
             australian_state = state["australian_state"]
+            compliance_confidence = 0.0
+            compliance_components = 0
 
-            # Validate cooling-off period
-            cooling_off_result = validate_cooling_off_period.invoke(
-                {"contract_terms": contract_terms, "state": australian_state}
-            )
+            # Validate cooling-off period with error handling
+            try:
+                cooling_off_result = validate_cooling_off_period.invoke(
+                    {"contract_terms": contract_terms, "state": australian_state}
+                )
+                compliance_confidence += 0.9
+                compliance_components += 1
+            except Exception as e:
+                cooling_off_result = {
+                    "compliant": False,
+                    "error": f"Cooling-off validation failed: {str(e)}",
+                    "warnings": ["Unable to validate cooling-off period"]
+                }
 
-            # Calculate stamp duty
+            # Calculate stamp duty with error handling
+            stamp_duty_result = None
             purchase_price = contract_terms.get("purchase_price", 0)
             if purchase_price > 0:
-                stamp_duty_result = calculate_stamp_duty.invoke(
-                    {
-                        "purchase_price": purchase_price,
-                        "state": australian_state,
-                        "is_first_home": state["user_preferences"].get(
-                            "is_first_home_buyer", False
-                        ),
-                        "is_foreign_buyer": state["user_preferences"].get(
-                            "is_foreign_buyer", False
-                        ),
+                try:
+                    stamp_duty_result = calculate_stamp_duty.invoke(
+                        {
+                            "purchase_price": purchase_price,
+                            "state": australian_state,
+                            "is_first_home": state["user_preferences"].get(
+                                "is_first_home_buyer", False
+                            ),
+                            "is_foreign_buyer": state["user_preferences"].get(
+                                "is_foreign_buyer", False
+                            ),
+                        }
+                    )
+                    compliance_confidence += 0.95
+                    compliance_components += 1
+                except Exception as e:
+                    stamp_duty_result = {
+                        "error": f"Stamp duty calculation failed: {str(e)}",
+                        "total_duty": 0,
+                        "state": australian_state
                     }
-                )
-            else:
-                stamp_duty_result = None
 
-            # Analyze special conditions
-            special_conditions_result = analyze_special_conditions.invoke(
-                {"contract_terms": contract_terms, "state": australian_state}
-            )
+            # Analyze special conditions with error handling
+            try:
+                special_conditions_result = analyze_special_conditions.invoke(
+                    {"contract_terms": contract_terms, "state": australian_state}
+                )
+                compliance_confidence += 0.8
+                compliance_components += 1
+            except Exception as e:
+                special_conditions_result = {
+                    "error": f"Special conditions analysis failed: {str(e)}",
+                    "conditions": []
+                }
+
+            # Calculate average compliance confidence
+            if compliance_components > 0:
+                compliance_confidence = compliance_confidence / compliance_components
+            else:
+                compliance_confidence = 0.5  # Default if all failed
 
             # Compile compliance check
             compliance_check = {
@@ -281,6 +375,7 @@ class ContractAnalysisWorkflow:
                 "special_conditions_analysis": special_conditions_result,
                 "compliance_issues": [],
                 "warnings": cooling_off_result.get("warnings", []),
+                "compliance_confidence": compliance_confidence
             }
 
             # Add compliance issues
@@ -288,13 +383,16 @@ class ContractAnalysisWorkflow:
                 compliance_check["compliance_issues"].append(
                     "Cooling-off period non-compliant"
                 )
+                
+            if stamp_duty_result and stamp_duty_result.get("error"):
+                compliance_check["compliance_issues"].append(
+                    "Stamp duty calculation incomplete"
+                )
 
+            state["confidence_scores"]["compliance_check"] = compliance_confidence
+            
             updated_data = {
-                "compliance_check": compliance_check,
-                "confidence_scores": {
-                    **state.get("confidence_scores", {}),
-                    "compliance_check": 0.9,  # High confidence in rule-based analysis
-                },
+                "compliance_check": compliance_check
             }
 
             return update_state_step(state, "compliance_analyzed", data=updated_data)
@@ -310,6 +408,10 @@ class ContractAnalysisWorkflow:
         self, state: RealEstateAgentState
     ) -> RealEstateAgentState:
         """Assess contract risks using LLM analysis"""
+        
+        # Update progress
+        state["progress"]["current_step"] = 5
+        state["progress"]["percentage"] = 71
 
         try:
             contract_terms = state["contract_terms"]
@@ -320,23 +422,36 @@ class ContractAnalysisWorkflow:
                 contract_terms, compliance_check, state["australian_state"]
             )
 
-            # Get LLM risk analysis
-            messages = [
-                SystemMessage(
-                    content="You are an expert Australian property lawyer analyzing contract risks."
-                ),
-                HumanMessage(content=risk_prompt),
-            ]
+            # Get LLM risk analysis with retry mechanism
+            risk_analysis = None
+            risk_confidence = 0.0
+            
+            try:
+                messages = [
+                    SystemMessage(
+                        content="You are an expert Australian property lawyer analyzing contract risks."
+                    ),
+                    HumanMessage(content=risk_prompt),
+                ]
 
-            llm_response = self.llm.invoke(messages)
-            risk_analysis = self._parse_risk_analysis(llm_response.content)
+                llm_response = self.llm.invoke(messages)
+                risk_analysis = self._parse_risk_analysis(llm_response.content)
+                risk_confidence = 0.85  # Good confidence in LLM analysis
+                
+            except Exception as llm_error:
+                # Fallback risk analysis
+                risk_analysis = self._fallback_risk_analysis(contract_terms, compliance_check)
+                risk_confidence = 0.6  # Lower confidence for fallback
 
+            # Validate risk analysis quality
+            if not risk_analysis or risk_analysis.get("overall_risk_score", 0) == 0:
+                risk_analysis = self._fallback_risk_analysis(contract_terms, compliance_check)
+                risk_confidence = 0.5
+
+            state["confidence_scores"]["risk_assessment"] = risk_confidence
+            
             updated_data = {
-                "risk_assessment": risk_analysis,
-                "confidence_scores": {
-                    **state.get("confidence_scores", {}),
-                    "risk_assessment": 0.85,  # Good confidence in LLM analysis
-                },
+                "risk_assessment": risk_analysis
             }
 
             return update_state_step(state, "risks_assessed", data=updated_data)
@@ -352,21 +467,41 @@ class ContractAnalysisWorkflow:
         self, state: RealEstateAgentState
     ) -> RealEstateAgentState:
         """Generate actionable recommendations"""
+        
+        # Update progress
+        state["progress"]["current_step"] = 6
+        state["progress"]["percentage"] = 85
 
         try:
             # Create recommendations prompt
             recommendations_prompt = self._create_recommendations_prompt(state)
+            recommendations = None
+            recommendations_confidence = 0.0
 
-            messages = [
-                SystemMessage(
-                    content="You are an expert Australian property advisor providing actionable recommendations."
-                ),
-                HumanMessage(content=recommendations_prompt),
-            ]
+            try:
+                messages = [
+                    SystemMessage(
+                        content="You are an expert Australian property advisor providing actionable recommendations."
+                    ),
+                    HumanMessage(content=recommendations_prompt),
+                ]
 
-            llm_response = self.llm.invoke(messages)
-            recommendations = self._parse_recommendations(llm_response.content)
+                llm_response = self.llm.invoke(messages)
+                recommendations = self._parse_recommendations(llm_response.content)
+                recommendations_confidence = 0.8
+                
+            except Exception as llm_error:
+                # Fallback recommendations
+                recommendations = self._fallback_recommendations(state)
+                recommendations_confidence = 0.6
 
+            # Validate recommendations quality
+            if not recommendations or len(recommendations) == 0:
+                recommendations = self._fallback_recommendations(state)
+                recommendations_confidence = 0.5
+
+            state["confidence_scores"]["recommendations"] = recommendations_confidence
+            
             updated_data = {
                 "final_recommendations": recommendations,
                 "recommendations": recommendations,  # For backwards compatibility
@@ -387,8 +522,15 @@ class ContractAnalysisWorkflow:
         self, state: RealEstateAgentState
     ) -> RealEstateAgentState:
         """Compile the final analysis report"""
+        
+        # Update progress
+        state["progress"]["current_step"] = 7
+        state["progress"]["percentage"] = 100
 
         try:
+            # Calculate overall confidence
+            overall_confidence = calculate_confidence_score(state)
+            
             # Compile all analysis results
             analysis_results = {
                 "contract_id": state.get("session_id"),
@@ -400,12 +542,21 @@ class ContractAnalysisWorkflow:
                 "compliance_check": state.get("compliance_check", {}),
                 "recommendations": state.get("final_recommendations", []),
                 "confidence_scores": state.get("confidence_scores", {}),
-                "overall_confidence": calculate_confidence_score(state),
+                "overall_confidence": overall_confidence,
                 "processing_summary": {
                     "steps_completed": state["current_step"],
                     "processing_time": state.get("processing_time"),
                     "analysis_version": state["agent_version"],
+                    "progress": state.get("progress", {}),
                 },
+                "quality_metrics": {
+                    "extraction_quality": state.get("document_metadata", {}).get("text_quality", {}),
+                    "confidence_breakdown": state.get("confidence_scores", {}),
+                    "processing_method": {
+                        "document_extraction": state.get("document_metadata", {}).get("extraction_method", "unknown"),
+                        "term_extraction": state.get("extraction_metadata", {}).get("extraction_method", "standard"),
+                    }
+                }
             }
 
             updated_data = {
@@ -679,6 +830,128 @@ class ContractAnalysisWorkflow:
             "contract_keywords_found": found_keywords,
         }
 
+    def _fallback_term_extraction(self, document_text: str, australian_state: str) -> Dict[str, Any]:
+        """Fallback term extraction using basic regex patterns"""
+        import re
+        
+        terms = {}
+        confidence_scores = {}
+        
+        # Basic price extraction
+        price_patterns = [r'\$([\d,]+)', r'price[:\s]+([\d,]+)', r'consideration[:\s]+([\d,]+)']
+        for pattern in price_patterns:
+            match = re.search(pattern, document_text, re.IGNORECASE)
+            if match:
+                try:
+                    terms['purchase_price'] = float(match.group(1).replace(',', ''))
+                    confidence_scores['purchase_price'] = 0.7
+                    break
+                except ValueError:
+                    pass
+        
+        # Basic deposit extraction
+        deposit_patterns = [r'deposit[:\s]+\$?([\d,]+)', r'initial[\s]+payment[:\s]+\$?([\d,]+)']
+        for pattern in deposit_patterns:
+            match = re.search(pattern, document_text, re.IGNORECASE)
+            if match:
+                try:
+                    terms['deposit_amount'] = float(match.group(1).replace(',', ''))
+                    confidence_scores['deposit_amount'] = 0.6
+                    break
+                except ValueError:
+                    pass
+        
+        # Basic address extraction
+        address_pattern = r'property[:\s]+(.+?)(?=\n|\.|,)'
+        match = re.search(address_pattern, document_text, re.IGNORECASE)
+        if match:
+            terms['property_address'] = match.group(1).strip()
+            confidence_scores['property_address'] = 0.5
+        
+        overall_confidence = sum(confidence_scores.values()) / len(confidence_scores) if confidence_scores else 0.3
+        
+        return {
+            "terms": terms,
+            "confidence_scores": confidence_scores,
+            "overall_confidence": overall_confidence,
+            "extraction_method": "fallback"
+        }
+    
+    def _fallback_risk_analysis(self, contract_terms: Dict, compliance_check: Dict) -> Dict[str, Any]:
+        """Fallback risk analysis when LLM fails"""
+        risk_factors = []
+        risk_score = 5.0  # Default medium risk
+        
+        # Check for missing key terms
+        if not contract_terms.get('purchase_price'):
+            risk_factors.append({
+                "factor": "Missing purchase price",
+                "severity": "high",
+                "description": "Purchase price not clearly identified in contract",
+                "impact": "Unable to calculate stamp duty and assess financial risks",
+                "australian_specific": False
+            })
+            risk_score += 2.0
+        
+        # Check compliance issues
+        if not compliance_check.get('state_compliance', False):
+            risk_factors.append({
+                "factor": "Compliance issues identified",
+                "severity": "high",
+                "description": "Contract may not comply with state property laws",
+                "impact": "Legal risks and potential contract invalidation",
+                "australian_specific": True
+            })
+            risk_score += 1.5
+        
+        # Cap risk score at 10
+        risk_score = min(10.0, risk_score)
+        
+        return {
+            "overall_risk_score": risk_score,
+            "risk_factors": risk_factors
+        }
+    
+    def _fallback_recommendations(self, state: RealEstateAgentState) -> List[Dict[str, Any]]:
+        """Fallback recommendations when LLM fails"""
+        recommendations = []
+        
+        # Always recommend legal review
+        recommendations.append({
+            "priority": "high",
+            "category": "legal",
+            "recommendation": "Seek professional legal advice from a qualified property lawyer",
+            "action_required": True,
+            "australian_context": f"Ensure lawyer is qualified in {state['australian_state']} property law",
+            "estimated_cost": 500.0
+        })
+        
+        # Check for missing information
+        contract_terms = state.get('contract_terms', {})
+        if not contract_terms.get('purchase_price'):
+            recommendations.append({
+                "priority": "critical",
+                "category": "legal",
+                "recommendation": "Clarify purchase price and all financial terms",
+                "action_required": True,
+                "australian_context": "Required for stamp duty calculation and contract validity",
+                "estimated_cost": None
+            })
+        
+        # Compliance recommendations
+        compliance_check = state.get('compliance_check', {})
+        if not compliance_check.get('state_compliance', False):
+            recommendations.append({
+                "priority": "high",
+                "category": "legal",
+                "recommendation": "Review contract for state law compliance",
+                "action_required": True,
+                "australian_context": f"Ensure compliance with {state['australian_state']} property laws",
+                "estimated_cost": 300.0
+            })
+        
+        return recommendations
+    
     def _create_report_summary(
         self, analysis_results: Dict[str, Any]
     ) -> Dict[str, Any]:
@@ -719,4 +992,9 @@ class ContractAnalysisWorkflow:
                     r.get("estimated_cost", 0) or 0 for r in recommendations
                 ),
             },
+            "quality_indicators": {
+                "confidence_breakdown": analysis_results.get("confidence_scores", {}),
+                "processing_quality": analysis_results.get("quality_metrics", {}),
+                "overall_confidence": analysis_results.get("overall_confidence", 0)
+            }
         }

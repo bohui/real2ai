@@ -6,7 +6,7 @@ from typing import TypedDict, Optional, Dict, List, Any
 from datetime import datetime
 import uuid
 
-from app.model.enums import AustralianState, ContractType, ProcessingStatus, RiskLevel
+from app.models.contract_state import AustralianState, ContractType, ProcessingStatus, RiskLevel
 
 
 class RealEstateAgentState(TypedDict):
@@ -178,18 +178,20 @@ def update_state_step(
 
 
 def calculate_confidence_score(state: RealEstateAgentState) -> float:
-    """Calculate overall confidence score for analysis"""
+    """Calculate overall confidence score for analysis with enhanced weighting"""
     
     scores = state.get("confidence_scores", {})
     if not scores:
         return 0.0
     
-    # Weighted average of different analysis components
+    # Enhanced weighted average of different analysis components
     weights = {
-        "document_parsing": 0.2,
-        "term_extraction": 0.3,
-        "risk_assessment": 0.25,
-        "compliance_check": 0.25
+        "input_validation": 0.05,
+        "document_processing": 0.15,
+        "term_extraction": 0.30,
+        "compliance_check": 0.25,
+        "risk_assessment": 0.20,
+        "recommendations": 0.05
     }
     
     weighted_sum = 0.0
@@ -197,7 +199,36 @@ def calculate_confidence_score(state: RealEstateAgentState) -> float:
     
     for component, weight in weights.items():
         if component in scores:
-            weighted_sum += scores[component] * weight
+            score = scores[component]
+            # Apply quality penalty for very low scores
+            if score < 0.3:
+                score *= 0.5  # Significant penalty for very low confidence
+            elif score < 0.5:
+                score *= 0.8  # Moderate penalty for low confidence
+            
+            weighted_sum += score * weight
             total_weight += weight
     
-    return weighted_sum / total_weight if total_weight > 0 else 0.0
+    base_confidence = weighted_sum / total_weight if total_weight > 0 else 0.0
+    
+    # Apply additional penalties/bonuses
+    document_metadata = state.get("document_metadata", {})
+    text_quality = document_metadata.get("text_quality", {})
+    
+    # Bonus for high-quality text extraction
+    if text_quality.get("score", 0) > 0.8:
+        base_confidence *= 1.1
+    elif text_quality.get("score", 0) < 0.5:
+        base_confidence *= 0.9
+    
+    # Penalty for using fallback methods
+    extraction_metadata = state.get("extraction_metadata", {})
+    if extraction_metadata.get("extraction_method") == "fallback":
+        base_confidence *= 0.8
+    
+    # Penalty for errors in workflow
+    if state.get("error_state"):
+        base_confidence *= 0.7
+    
+    # Ensure confidence is within valid range
+    return max(0.0, min(1.0, base_confidence))
