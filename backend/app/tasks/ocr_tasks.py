@@ -7,45 +7,14 @@ import asyncio
 import logging
 from typing import Dict, Any, Optional
 from datetime import datetime, timezone
-from celery import Celery
 from celery.exceptions import Retry, MaxRetriesExceededError
 
-from app.core.config import get_settings
+from app.core.celery import celery_app
 from app.core.database import get_database_client
 from app.services.document_service import DocumentService
 from app.services.websocket_service import WebSocketManager
 
 logger = logging.getLogger(__name__)
-
-# Initialize Celery
-settings = get_settings()
-celery_app = Celery(
-    "real2ai_ocr",
-    broker=settings.redis_url,
-    backend=settings.redis_url
-)
-
-# Configure Celery
-celery_app.conf.update(
-    task_serializer='json',
-    accept_content=['json'],
-    result_serializer='json',
-    timezone='UTC',
-    enable_utc=True,
-    task_track_started=True,
-    task_time_limit=30 * 60,  # 30 minutes
-    task_soft_time_limit=25 * 60,  # 25 minutes
-    worker_prefetch_multiplier=1,
-    task_acks_late=True,
-    worker_disable_rate_limits=False,
-    task_routes={
-        'app.tasks.ocr_tasks.process_document_ocr': {'queue': 'ocr_queue'},
-        'app.tasks.ocr_tasks.batch_process_documents': {'queue': 'batch_queue'},
-        'app.tasks.ocr_tasks.priority_ocr_processing': {'queue': 'priority_queue'},
-    },
-    task_default_queue='default',
-    task_create_missing_queues=True,
-)
 
 
 @celery_app.task(
