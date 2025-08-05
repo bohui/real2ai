@@ -12,11 +12,11 @@ from fastapi import HTTPException
 
 from app.core.config import get_settings
 from app.core.prompts.service_mixin import PromptEnabledService
-from app.models.contract_state import AustralianState, ContractType
+from app.model.enums import AustralianState, ContractType
 from app.prompts.template.image_semantics_schema import ImageSemantics, ImageType, RiskIndicator
 from app.prompts.template.diagram_risk_schema import DiagramRiskAssessment, RiskExtractor
 from app.services.gemini_ocr_service import GeminiOCRService
-from app.services.document_service import DocumentService
+# Circular import removed - DocumentService will be passed as parameter if needed
 from app.clients.base.exceptions import ClientError
 
 logger = logging.getLogger(__name__)

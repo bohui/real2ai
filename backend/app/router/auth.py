@@ -42,11 +42,13 @@ async def register_user(user_data: UserRegistrationRequest, db_client=Depends(ge
                 "onboarding_preferences": {}
             }
 
-            db_client.table("profiles").insert(profile_data).execute()
-
+            profile_result = db_client.table("profiles").insert(profile_data).execute()
+            
+            # Return format consistent with frontend expectations
             return {
-                "user_id": user_result.user.id,
-                "email": user_data.email,
+                "access_token": user_result.session.access_token if user_result.session else None,
+                "refresh_token": user_result.session.refresh_token if user_result.session else None,
+                "user_profile": profile_result.data[0] if profile_result.data else profile_data,
                 "message": "User registered successfully",
             }
         else:
@@ -77,10 +79,11 @@ async def login_user(login_data: UserLoginRequest, db_client=Depends(get_databas
                 .execute()
             )
 
+            user_profile = profile_result.data[0] if profile_result.data else None
             return {
                 "access_token": auth_result.session.access_token,
                 "refresh_token": auth_result.session.refresh_token,
-                "user_profile": profile_result.data[0] if profile_result.data else None,
+                "user_profile": user_profile,
             }
         else:
             raise HTTPException(status_code=401, detail="Invalid credentials")

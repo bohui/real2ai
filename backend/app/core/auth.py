@@ -82,10 +82,11 @@ def verify_token(token: str) -> TokenData:
         # Get expiration from the user session if available
         exp_timestamp = getattr(user.user, "exp", None)
         if exp_timestamp:
-            exp = datetime.fromtimestamp(exp_timestamp)
+            exp = datetime.fromtimestamp(exp_timestamp, UTC)
         else:
             # Default to 1 hour from now if no expiration found
-            exp = datetime.now(UTC)
+            from datetime import timedelta
+            exp = datetime.now(UTC) + timedelta(hours=1)
 
         return TokenData(user_id=user_id, email=email, exp=exp)
 
