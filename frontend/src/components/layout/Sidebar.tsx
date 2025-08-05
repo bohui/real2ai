@@ -127,31 +127,38 @@ const Sidebar: React.FC = () => {
             Recent Analyses
           </h3>
           <div className="space-y-2">
-            {recentAnalyses.slice(0, 3).map((analysis) => (
-              <Link
-                key={analysis.contract_id}
-                to={`/app/analysis/${analysis.contract_id}`}
-                className="block p-2 rounded-lg hover:bg-neutral-50 transition-colors"
-              >
-                <div className="flex items-center gap-2">
-                  <FileText className="w-4 h-4 text-neutral-400" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-neutral-900 truncate">
-                      Contract Analysis
-                    </p>
-                    <p className="text-xs text-neutral-500">
-                      {new Date(analysis.analysis_timestamp).toLocaleDateString()}
-                    </p>
+            {recentAnalyses.slice(0, 3).map((analysis) => {
+              // Safely get risk score from either executive_summary or risk_assessment
+              const riskScore = analysis.executive_summary?.overall_risk_score 
+                ?? analysis.risk_assessment?.overall_risk_score 
+                ?? 0;
+              
+              return (
+                <Link
+                  key={analysis.contract_id}
+                  to={`/app/analysis/${analysis.contract_id}`}
+                  className="block p-2 rounded-lg hover:bg-neutral-50 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-neutral-400" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-neutral-900 truncate">
+                        Contract Analysis
+                      </p>
+                      <p className="text-xs text-neutral-500">
+                        {new Date(analysis.analysis_timestamp).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <div className={cn(
+                      'w-2 h-2 rounded-full',
+                      riskScore >= 7 ? 'bg-danger-500' :
+                      riskScore >= 5 ? 'bg-warning-500' :
+                      'bg-success-500'
+                    )} />
                   </div>
-                  <div className={cn(
-                    'w-2 h-2 rounded-full',
-                    analysis.executive_summary.overall_risk_score >= 7 ? 'bg-danger-500' :
-                    analysis.executive_summary.overall_risk_score >= 5 ? 'bg-warning-500' :
-                    'bg-success-500'
-                  )} />
-                </div>
-              </Link>
-            ))}
+                </Link>
+              );
+            })}
           </div>
         </div>
       )}

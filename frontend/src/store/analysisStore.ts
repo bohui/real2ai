@@ -146,13 +146,34 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
             .then(result => {
               get().setAnalysisResult(result)
               get().addRecentAnalysis(result)
-              set({ isAnalyzing: false })
+              set({ isAnalyzing: false, analysisError: null })
             })
             .catch(error => {
+              console.error('Failed to fetch analysis result:', error)
+              // Keep analyzing state to prevent blank page and show error
               set({ 
-                isAnalyzing: false,
-                analysisError: apiService.handleError(error)
+                analysisError: `Failed to load analysis results: ${apiService.handleError(error)}`,
+                // Don't set isAnalyzing to false to avoid blank page
+                // Instead, show error while maintaining loading state context
               })
+              
+              // Retry fetching the result after a delay
+              setTimeout(() => {
+                apiService.getAnalysisResult(contractId)
+                  .then(result => {
+                    get().setAnalysisResult(result)
+                    get().addRecentAnalysis(result) 
+                    set({ isAnalyzing: false, analysisError: null })
+                  })
+                  .catch(retryError => {
+                    console.error('Retry failed for analysis result:', retryError)
+                    // After retry fails, stop loading and show error
+                    set({ 
+                      isAnalyzing: false,
+                      analysisError: `Analysis completed but results unavailable: ${apiService.handleError(retryError)}`
+                    })
+                  })
+              }, 2000) // Retry after 2 seconds
             })
           break
           
@@ -246,6 +267,24 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
   },
 
   addRecentAnalysis: (analysis: ContractAnalysisResult) => {
+    // Validate that analysis has required properties before adding
+    if (!analysis.contract_id || !analysis.analysis_timestamp) {
+      console.warn('Skipping invalid analysis for recent list:', analysis);
+      return;
+    }
+    
+    // Ensure executive_summary exists with fallback values
+    if (!analysis.executive_summary) {
+      console.warn('Analysis missing executive_summary, creating fallback:', analysis.contract_id);
+      analysis.executive_summary = {
+        overall_risk_score: analysis.risk_assessment?.overall_risk_score || 0,
+        compliance_status: analysis.compliance_check?.state_compliance ? 'compliant' : 'non-compliant',
+        total_recommendations: analysis.recommendations?.length || 0,
+        critical_issues: analysis.recommendations?.filter(r => r.priority === 'critical')?.length || 0,
+        confidence_level: analysis.overall_confidence || 0.8
+      };
+    }
+    
     const recent = get().recentAnalyses
     const updated = [analysis, ...recent.filter(a => a.contract_id !== analysis.contract_id)]
       .slice(0, 10) // Keep only 10 most recent

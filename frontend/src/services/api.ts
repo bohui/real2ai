@@ -214,10 +214,54 @@ class ApiService {
   }
 
   async getAnalysisResult(contractId: string): Promise<ContractAnalysisResult> {
-    const response = await this.client.get<ContractAnalysisResult>(
+    const response = await this.client.get<any>(
       `/api/contracts/${contractId}/analysis`
     );
-    return response.data;
+    
+    // Transform API response to match frontend expectations
+    const apiData = response.data;
+    const analysisResult = apiData.analysis_result || {};
+    
+    // Create executive summary from available data
+    const executiveSummary = {
+      overall_risk_score: analysisResult.risk_assessment?.overall_risk_score || apiData.risk_score || 0,
+      compliance_status: analysisResult.compliance_check?.state_compliance ? 'compliant' : 'non-compliant',
+      total_recommendations: analysisResult.recommendations?.length || 0,
+      critical_issues: analysisResult.recommendations?.filter((r: any) => r.priority === 'critical')?.length || 0,
+      confidence_level: analysisResult.overall_confidence || 0.8
+    };
+    
+    // Transform to match ContractAnalysisResult interface
+    const transformedResult: ContractAnalysisResult = {
+      contract_id: apiData.contract_id,
+      analysis_id: analysisResult.analysis_id || apiData.contract_id,
+      analysis_timestamp: analysisResult.analysis_timestamp || apiData.created_at,
+      user_id: analysisResult.user_id || '',
+      australian_state: analysisResult.australian_state || 'NSW',
+      analysis_status: apiData.analysis_status || 'completed',
+      contract_terms: analysisResult.contract_terms || {},
+      risk_assessment: {
+        overall_risk_score: analysisResult.risk_assessment?.overall_risk_score || apiData.risk_score || 0,
+        risk_factors: analysisResult.risk_assessment?.risk_factors || []
+      },
+      compliance_check: analysisResult.compliance_check || {
+        state_compliance: false,
+        compliance_issues: [],
+        cooling_off_compliance: false,
+        cooling_off_details: {},
+        mandatory_disclosures: [],
+        warnings: [],
+        legal_references: []
+      },
+      recommendations: analysisResult.recommendations || [],
+      confidence_scores: analysisResult.confidence_scores || {},
+      overall_confidence: analysisResult.overall_confidence || 0.8,
+      processing_time: apiData.processing_time || 0,
+      analysis_version: analysisResult.processing_summary?.analysis_version || '1.0',
+      executive_summary: executiveSummary
+    };
+    
+    return transformedResult;
   }
 
   async deleteAnalysis(contractId: string): Promise<void> {
