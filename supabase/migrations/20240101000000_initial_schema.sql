@@ -1,5 +1,6 @@
 -- Initial schema migration for Real2.AI
--- Creates all core tables, relationships, and security policies
+-- Creates all core tables, relationships, and enhanced features
+-- Includes: onboarding tracking, analysis progress with real-time updates, and comprehensive functions
 
 -- Enable required extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -171,17 +172,31 @@ CREATE TABLE user_subscriptions (
 );
 
 -- Analysis progress tracking for real-time updates
+-- Enhanced table with comprehensive progress tracking and timing
 CREATE TABLE analysis_progress (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    contract_id UUID REFERENCES contracts(id) ON DELETE CASCADE NOT NULL,
     analysis_id UUID REFERENCES contract_analyses(id) ON DELETE CASCADE NOT NULL,
     user_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+    
+    -- Progress tracking
     current_step TEXT NOT NULL,
-    total_steps INTEGER NOT NULL DEFAULT 1,
-    completed_steps INTEGER NOT NULL DEFAULT 0,
-    progress_percentage DECIMAL(5,2) NOT NULL DEFAULT 0.0,
-    status_message TEXT,
+    progress_percent INTEGER NOT NULL DEFAULT 0 CHECK (progress_percent >= 0 AND progress_percent <= 100),
+    step_description TEXT,
+    estimated_completion_minutes INTEGER,
+    
+    -- Timing information
+    step_started_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    step_completed_at TIMESTAMP WITH TIME ZONE,
+    total_elapsed_seconds INTEGER DEFAULT 0,
+    
+    -- Status and metadata
+    status TEXT NOT NULL DEFAULT 'in_progress' CHECK (status IN ('in_progress', 'completed', 'failed', 'cancelled')),
     error_message TEXT,
     metadata JSONB DEFAULT '{}',
+    
+    -- Timestamps
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -217,11 +232,182 @@ CREATE INDEX idx_user_subscriptions_user_id ON user_subscriptions(user_id);
 CREATE INDEX idx_user_subscriptions_status ON user_subscriptions(status);
 CREATE INDEX idx_user_subscriptions_stripe_id ON user_subscriptions(stripe_subscription_id);
 
+CREATE INDEX idx_analysis_progress_contract_id ON analysis_progress(contract_id);
 CREATE INDEX idx_analysis_progress_analysis_id ON analysis_progress(analysis_id);
 CREATE INDEX idx_analysis_progress_user_id ON analysis_progress(user_id);
+CREATE INDEX idx_analysis_progress_status ON analysis_progress(status);
+CREATE INDEX idx_analysis_progress_created_at ON analysis_progress(created_at);
+
+-- Create partial index for active progress tracking
+CREATE INDEX idx_analysis_progress_active ON analysis_progress(contract_id, updated_at) 
+WHERE status = 'in_progress';
 
 -- Create composite indexes for common queries
 CREATE INDEX idx_documents_user_status ON documents(user_id, status);
 CREATE INDEX idx_contracts_user_type ON contracts(user_id, contract_type);
 CREATE INDEX idx_analyses_user_status ON contract_analyses(user_id, status);
 CREATE INDEX idx_usage_logs_user_timestamp ON usage_logs(user_id, timestamp DESC);
+
+-- Triggers and Functions for analysis progress
+-- Create trigger to automatically update updated_at timestamp
+CREATE OR REPLACE FUNCTION update_analysis_progress_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER analysis_progress_updated_at_trigger
+    BEFORE UPDATE ON analysis_progress
+    FOR EACH ROW EXECUTE FUNCTION update_analysis_progress_updated_at();
+
+-- Function to get latest progress for a contract
+CREATE OR REPLACE FUNCTION get_latest_analysis_progress(contract_uuid UUID)
+RETURNS analysis_progress AS $$
+DECLARE
+    progress_record analysis_progress;
+BEGIN
+    SELECT * INTO progress_record
+    FROM analysis_progress
+    WHERE contract_id = contract_uuid
+    ORDER BY updated_at DESC
+    LIMIT 1;
+    
+    RETURN progress_record;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function to update analysis progress
+CREATE OR REPLACE FUNCTION update_analysis_progress(
+    p_contract_id UUID,
+    p_analysis_id UUID,
+    p_user_id UUID,
+    p_current_step TEXT,
+    p_progress_percent INTEGER,
+    p_step_description TEXT DEFAULT NULL,
+    p_estimated_completion_minutes INTEGER DEFAULT NULL
+)
+RETURNS UUID AS $$
+DECLARE
+    progress_id UUID;
+    existing_progress analysis_progress;
+BEGIN
+    -- Get existing progress record
+    SELECT * INTO existing_progress
+    FROM analysis_progress
+    WHERE contract_id = p_contract_id
+    AND analysis_id = p_analysis_id
+    ORDER BY updated_at DESC
+    LIMIT 1;
+    
+    -- Calculate elapsed time if previous step exists
+    DECLARE
+        elapsed_seconds INTEGER := 0;
+    BEGIN
+        IF existing_progress.id IS NOT NULL THEN
+            elapsed_seconds := EXTRACT(EPOCH FROM (NOW() - existing_progress.step_started_at))::INTEGER;
+            
+            -- Update previous step completion time
+            UPDATE analysis_progress
+            SET step_completed_at = NOW(),
+                total_elapsed_seconds = elapsed_seconds
+            WHERE id = existing_progress.id;
+        END IF;
+    END;
+    
+    -- Insert new progress record
+    INSERT INTO analysis_progress (
+        contract_id,
+        analysis_id,
+        user_id,
+        current_step,
+        progress_percent,
+        step_description,
+        estimated_completion_minutes,
+        total_elapsed_seconds
+    ) VALUES (
+        p_contract_id,
+        p_analysis_id,
+        p_user_id,
+        p_current_step,
+        p_progress_percent,
+        p_step_description,
+        p_estimated_completion_minutes,
+        COALESCE(existing_progress.total_elapsed_seconds, 0) + COALESCE(elapsed_seconds, 0)
+    )
+    RETURNING id INTO progress_id;
+    
+    RETURN progress_id;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function to mark analysis as completed
+CREATE OR REPLACE FUNCTION complete_analysis_progress(
+    p_contract_id UUID,
+    p_analysis_id UUID,
+    p_final_status TEXT DEFAULT 'completed'
+)
+RETURNS BOOLEAN AS $$
+DECLARE
+    latest_progress analysis_progress;
+    total_time INTEGER;
+BEGIN
+    -- Get latest progress
+    SELECT * INTO latest_progress
+    FROM analysis_progress
+    WHERE contract_id = p_contract_id
+    AND analysis_id = p_analysis_id
+    ORDER BY updated_at DESC
+    LIMIT 1;
+    
+    IF latest_progress.id IS NOT NULL THEN
+        -- Calculate total processing time
+        total_time := EXTRACT(EPOCH FROM (NOW() - latest_progress.created_at))::INTEGER;
+        
+        -- Update final progress record
+        UPDATE analysis_progress
+        SET status = p_final_status,
+            progress_percent = CASE WHEN p_final_status = 'completed' THEN 100 ELSE progress_percent END,
+            step_completed_at = NOW(),
+            total_elapsed_seconds = total_time
+        WHERE id = latest_progress.id;
+        
+        RETURN TRUE;
+    END IF;
+    
+    RETURN FALSE;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Views for enhanced data access
+-- View for analysis progress with contract and analysis details
+CREATE OR REPLACE VIEW analysis_progress_detailed AS
+SELECT 
+    ap.*,
+    c.contract_type,
+    ca.agent_version,
+    ca.status as analysis_status,
+    d.filename as document_filename,
+    d.file_type as document_file_type
+FROM analysis_progress ap
+JOIN contracts c ON ap.contract_id = c.id
+JOIN contract_analyses ca ON ap.analysis_id = ca.id
+JOIN documents d ON c.document_id = d.id;
+
+-- Grant permissions on the view
+GRANT SELECT ON analysis_progress_detailed TO authenticated;
+
+-- Comments for documentation
+COMMENT ON TABLE analysis_progress IS 'Real-time progress tracking for contract analyses with comprehensive timing and status information';
+COMMENT ON COLUMN analysis_progress.contract_id IS 'Reference to the contract being analyzed';
+COMMENT ON COLUMN analysis_progress.current_step IS 'Current analysis step (validating_input, processing_document, etc.)';
+COMMENT ON COLUMN analysis_progress.progress_percent IS 'Completion percentage (0-100)';
+COMMENT ON COLUMN analysis_progress.step_description IS 'Human-readable description of current step';
+COMMENT ON COLUMN analysis_progress.estimated_completion_minutes IS 'Estimated minutes to completion';
+COMMENT ON COLUMN analysis_progress.total_elapsed_seconds IS 'Total processing time elapsed';
+COMMENT ON COLUMN analysis_progress.status IS 'Overall status (in_progress, completed, failed, cancelled)';
+
+COMMENT ON COLUMN profiles.onboarding_completed IS 'Tracks if user has completed initial onboarding process';
+COMMENT ON COLUMN profiles.onboarding_completed_at IS 'Timestamp when user completed onboarding';
+COMMENT ON COLUMN profiles.onboarding_preferences IS 'Preferences collected during onboarding process';

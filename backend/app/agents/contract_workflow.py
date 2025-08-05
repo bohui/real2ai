@@ -8,7 +8,7 @@ from langchain_openai import ChatOpenAI
 from langchain.schema import HumanMessage, SystemMessage
 import json
 import time
-from datetime import datetime
+from datetime import datetime, UTC
 
 from app.models.contract_state import (
     RealEstateAgentState,
@@ -191,7 +191,7 @@ class ContractAnalysisWorkflow:
                     "text_quality": text_quality,
                     "character_count": len(extracted_text),
                     "word_count": len(extracted_text.split()),
-                    "processing_timestamp": datetime.utcnow().isoformat(),
+                    "processing_timestamp": datetime.now(UTC).isoformat(),
                 },
                 "parsing_status": ProcessingStatus.COMPLETED,
             }
@@ -392,7 +392,7 @@ class ContractAnalysisWorkflow:
             # Compile all analysis results
             analysis_results = {
                 "contract_id": state.get("session_id"),
-                "analysis_timestamp": datetime.utcnow().isoformat(),
+                "analysis_timestamp": datetime.now(UTC).isoformat(),
                 "user_id": state["user_id"],
                 "australian_state": state["australian_state"],
                 "contract_terms": state.get("contract_terms", {}),
@@ -434,7 +434,7 @@ class ContractAnalysisWorkflow:
         error_details = {
             "error_message": error_message,
             "failed_step": state["current_step"],
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "session_id": state["session_id"],
         }
 

@@ -7,7 +7,7 @@ import asyncio
 import logging
 import time
 from typing import Dict, Any, Optional, List, Tuple
-from datetime import datetime
+from datetime import datetime, UTC
 from dataclasses import dataclass
 from enum import Enum
 import json
@@ -66,7 +66,9 @@ class ContractAnalysisService:
                 self._gemini_client = await get_gemini_client()
                 logger.info("Gemini client initialized for contract analysis")
             except (ClientError, ClientAuthenticationError) as e:
-                logger.warning(f"Gemini client not available for contract analysis: {e}")
+                logger.warning(
+                    f"Gemini client not available for contract analysis: {e}"
+                )
                 self._gemini_client = None
         return self._gemini_client
 
@@ -200,7 +202,7 @@ class ContractAnalysisService:
 
             return {
                 "analysis_id": f"analysis_{int(time.time() * 1000)}",
-                "analysis_timestamp": datetime.utcnow().isoformat(),
+                "analysis_timestamp": datetime.now(UTC).isoformat(),
                 "processing_time_seconds": processing_time,
                 "config": config.__dict__,
                 "structured_data": structured_data,
@@ -221,7 +223,7 @@ class ContractAnalysisService:
             logger.error(f"Contract analysis failed: {str(e)}")
             return {
                 "analysis_id": f"failed_{int(time.time() * 1000)}",
-                "analysis_timestamp": datetime.utcnow().isoformat(),
+                "analysis_timestamp": datetime.now(UTC).isoformat(),
                 "error": str(e),
                 "fallback_analysis": await self._fallback_analysis(
                     extracted_text, config
@@ -238,9 +240,11 @@ class ContractAnalysisService:
         try:
             gemini_client = await self._get_gemini_client()
             if not gemini_client:
-                logger.warning("Gemini client unavailable, using pattern-based extraction")
+                logger.warning(
+                    "Gemini client unavailable, using pattern-based extraction"
+                )
                 return self._extract_with_patterns(text)
-                
+
             response = await gemini_client.generate_content(prompt)
 
             # Parse the AI response
@@ -271,9 +275,11 @@ class ContractAnalysisService:
         try:
             gemini_client = await self._get_gemini_client()
             if not gemini_client:
-                logger.warning("Gemini client unavailable, using rule-based risk assessment")
+                logger.warning(
+                    "Gemini client unavailable, using rule-based risk assessment"
+                )
                 return self._assess_risks_rule_based(structured_data, config)
-                
+
             response = await gemini_client.generate_content(risk_prompt)
 
             ai_risks = self._parse_risk_assessment_response(response)
@@ -435,9 +441,13 @@ class ContractAnalysisService:
         try:
             gemini_client = await self._get_gemini_client()
             if not gemini_client:
-                logger.warning("Gemini client unavailable, using rule-based recommendations")
-                return self._generate_rule_based_recommendations(risk_assessment, compliance_analysis)
-                
+                logger.warning(
+                    "Gemini client unavailable, using rule-based recommendations"
+                )
+                return self._generate_rule_based_recommendations(
+                    risk_assessment, compliance_analysis
+                )
+
             response = await gemini_client.generate_content(prompt)
 
             ai_recommendations = self._parse_recommendations_response(response)

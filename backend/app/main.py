@@ -31,6 +31,7 @@ from app.router.users import router as users_router
 from app.router.onboarding import router as onboarding_router
 from app.router.ocr import router as ocr_router
 from app.router.health import router as health_router
+from app.router.websockets import router as websockets_router
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -80,6 +81,7 @@ app.include_router(contracts_router)
 app.include_router(users_router)
 app.include_router(onboarding_router)
 app.include_router(ocr_router)
+app.include_router(websockets_router)
 
 
 @app.on_event("startup")

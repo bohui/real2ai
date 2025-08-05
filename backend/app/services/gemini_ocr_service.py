@@ -7,7 +7,7 @@ import os
 import asyncio
 import logging
 from typing import Dict, Any, Optional, List, BinaryIO
-from datetime import datetime
+from datetime import datetime, UTC
 from pathlib import Path
 import base64
 import tempfile
@@ -49,7 +49,7 @@ class GeminiOCRService:
 
         # Performance optimization service
         self.performance_service = OCRPerformanceService()
-        
+
         # Gemini client
         self._gemini_client = None
 
@@ -174,7 +174,7 @@ class GeminiOCRService:
                 "extraction_method": "gemini_ocr_failed",
                 "extraction_confidence": 0.0,
                 "error": str(e),
-                "extraction_timestamp": datetime.utcnow().isoformat(),
+                "extraction_timestamp": datetime.now(UTC).isoformat(),
                 "file_processed": filename,
                 "processing_details": {
                     "file_size": len(file_content),
@@ -261,7 +261,7 @@ class GeminiOCRService:
                 ),
                 "character_count": len(enhanced_result["text"]),
                 "word_count": len(enhanced_result["text"].split()),
-                "extraction_timestamp": datetime.utcnow().isoformat(),
+                "extraction_timestamp": datetime.now(UTC).isoformat(),
                 "file_processed": filename,
                 "processing_details": {
                     **processing_details,
@@ -368,7 +368,7 @@ class GeminiOCRService:
                 * enhanced_result["enhancement_factor"],
                 "character_count": len(enhanced_result["text"]),
                 "word_count": len(enhanced_result["text"].split()),
-                "extraction_timestamp": datetime.utcnow().isoformat(),
+                "extraction_timestamp": datetime.now(UTC).isoformat(),
                 "file_processed": filename,
                 "processing_details": {
                     "image_enhanced": True,
@@ -726,7 +726,7 @@ Please extract ALL text from this document image with the highest accuracy possi
                     "quality_assessment",
                     "cost_optimization",
                 ],
-                "last_health_check": datetime.utcnow().isoformat(),
+                "last_health_check": datetime.now(UTC).isoformat(),
             }
 
         except Exception as e:
@@ -734,7 +734,7 @@ Please extract ALL text from this document image with the highest accuracy possi
             return {
                 "service_status": "error",
                 "error_message": str(e),
-                "last_health_check": datetime.utcnow().isoformat(),
+                "last_health_check": datetime.now(UTC).isoformat(),
             }
 
     async def get_processing_capabilities(self) -> Dict[str, Any]:

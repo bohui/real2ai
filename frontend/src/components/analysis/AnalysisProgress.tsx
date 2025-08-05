@@ -15,6 +15,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { useAnalysisStore } from '@/store/analysisStore'
 import { cn, formatRelativeTime } from '@/utils'
+import { Button } from '@/components/ui/Button'
 
 interface AnalysisProgressProps {
   className?: string
@@ -66,7 +67,13 @@ const steps = [
 ]
 
 const AnalysisProgress: React.FC<AnalysisProgressProps> = ({ className }) => {
-  const { isAnalyzing, analysisProgress, currentAnalysis } = useAnalysisStore()
+  const { 
+    isAnalyzing, 
+    analysisProgress, 
+    currentAnalysis, 
+    wsService, 
+    analysisError 
+  } = useAnalysisStore()
 
   if (!isAnalyzing && !currentAnalysis) {
     return null
@@ -77,6 +84,15 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({ className }) => {
     : -1
 
   const progress = analysisProgress?.progress_percent || 0
+  const isConnected = wsService?.isConnected() || false
+  
+  const handleCancelAnalysis = () => {
+    if (wsService && isAnalyzing) {
+      if (confirm('Are you sure you want to cancel this analysis? This action cannot be undone.')) {
+        wsService.cancelAnalysis();
+      }
+    }
+  }
 
   return (
     <Card className={cn('w-full', className)}>
@@ -90,18 +106,41 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({ className }) => {
                 - In Progress
               </span>
             )}
+            {/* Connection Status Indicator */}
+            {isAnalyzing && (
+              <div className={cn(
+                "w-2 h-2 rounded-full",
+                isConnected ? "bg-green-500" : "bg-red-500"
+              )} 
+              title={isConnected ? "Connected" : "Disconnected"}
+              />
+            )}
           </CardTitle>
           
-          {analysisProgress && (
-            <div className="text-right">
-              <div className="text-2xl font-bold text-primary-600">
-                {progress}%
+          <div className="flex items-center gap-3">
+            {analysisProgress && (
+              <div className="text-right">
+                <div className="text-2xl font-bold text-primary-600">
+                  {progress}%
+                </div>
+                <div className="text-xs text-neutral-500">
+                  Complete
+                </div>
               </div>
-              <div className="text-xs text-neutral-500">
-                Complete
-              </div>
-            </div>
-          )}
+            )}
+            
+            {/* Cancel Button */}
+            {isAnalyzing && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleCancelAnalysis}
+                className="text-red-600 border-red-200 hover:bg-red-50"
+              >
+                Cancel
+              </Button>
+            )}
+          </div>
         </div>
       </CardHeader>
 
@@ -241,15 +280,35 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({ className }) => {
         )}
 
         {/* Error State */}
-        {!isAnalyzing && !currentAnalysis && (
+        {(analysisError || (!isAnalyzing && !currentAnalysis)) && (
           <div className="text-center p-6 bg-danger-50 rounded-lg border border-danger-200">
             <AlertCircle className="w-12 h-12 text-danger-600 mx-auto mb-3" />
             <h3 className="text-lg font-semibold text-danger-900 mb-2">
               Analysis Failed
             </h3>
-            <p className="text-danger-700">
-              There was an issue analyzing your contract. Please try uploading again.
+            <p className="text-danger-700 mb-4">
+              {analysisError || "There was an issue analyzing your contract. Please try uploading again."}
             </p>
+            
+            {/* Connection Status for Errors */}
+            {!isConnected && isAnalyzing && (
+              <div className="text-sm text-amber-700 bg-amber-50 p-3 rounded-lg border border-amber-200">
+                <div className="flex items-center justify-center gap-2">
+                  <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
+                  Reconnecting to analysis service...
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+        
+        {/* Real-time Status Info */}
+        {isAnalyzing && analysisProgress && (
+          <div className="text-xs text-neutral-500 text-center">
+            Last updated: {new Date().toLocaleTimeString()}
+            {isConnected && (
+              <span className="ml-2 text-green-600">● Live</span>
+            )}
           </div>
         )}
       </CardContent>

@@ -16,7 +16,7 @@ from app.models.contract_state import (
 from app.agents.contract_workflow import ContractAnalysisWorkflow
 from app.core.database import get_service_database_client
 from app.services.document_service import DocumentService
-from app.services.websocket_service import WebSocketManager
+from app.services.websocket_service import WebSocketManager, WebSocketEvents
 
 logger = logging.getLogger(__name__)
 
@@ -176,13 +176,10 @@ def analyze_contract_background(
                 "id", analysis_id
             ).execute()
 
-            # Send WebSocket update
+            # Send WebSocket analysis_started event with estimated time
             await websocket_manager.send_message(
                 contract_id,
-                {
-                    "event_type": "analysis_started",
-                    "data": {"contract_id": contract_id, "status": "processing"},
-                },
+                WebSocketEvents.analysis_started(contract_id, estimated_time=5)
             )
 
             # Get user profile for context
@@ -198,6 +195,34 @@ def analyze_contract_background(
                     raise Exception(
                         "quota_error - Insufficient credits or quota exceeded."
                     )
+            
+            # Progress update: Initial validation complete
+            await websocket_manager.send_message(
+                contract_id,
+                WebSocketEvents.analysis_progress(
+                    contract_id, 
+                    "validating_input", 
+                    10,
+                    "Validating user credentials and document access"
+                )
+            )
+            
+            # Save progress to database
+            try:
+                await db_client.execute_rpc(
+                    "update_analysis_progress",
+                    {
+                        "p_contract_id": contract_id,
+                        "p_analysis_id": analysis_id,
+                        "p_user_id": user_id,
+                        "p_current_step": "validating_input",
+                        "p_progress_percent": 10,
+                        "p_step_description": "Validating user credentials and document access",
+                        "p_estimated_completion_minutes": 5
+                    }
+                )
+            except Exception as progress_error:
+                logger.warning(f"Failed to save progress to database: {str(progress_error)}")
 
             # Verify document file exists in storage before processing
             try:
@@ -212,6 +237,34 @@ def analyze_contract_background(
                         f"File not found and no extracted text available: {document['storage_path']}"
                     )
 
+            # Progress update: Setting up analysis context
+            await websocket_manager.send_message(
+                contract_id,
+                WebSocketEvents.analysis_progress(
+                    contract_id, 
+                    "processing_document", 
+                    20,
+                    "Setting up analysis context and extracting document content"
+                )
+            )
+            
+            # Save progress to database
+            try:
+                await db_client.execute_rpc(
+                    "update_analysis_progress",
+                    {
+                        "p_contract_id": contract_id,
+                        "p_analysis_id": analysis_id,
+                        "p_user_id": user_id,
+                        "p_current_step": "processing_document",
+                        "p_progress_percent": 20,
+                        "p_step_description": "Setting up analysis context and extracting document content",
+                        "p_estimated_completion_minutes": 4
+                    }
+                )
+            except Exception as progress_error:
+                logger.warning(f"Failed to save progress to database: {str(progress_error)}")
+            
             # Create initial state
             initial_state = create_initial_state(
                 user_id=user_id,
@@ -254,6 +307,34 @@ def analyze_contract_background(
                         {"processing_results": extraction_result}
                     ).eq("id", document["id"]).execute()
 
+            # Progress update: Preparing document for analysis
+            await websocket_manager.send_message(
+                contract_id,
+                WebSocketEvents.analysis_progress(
+                    contract_id, 
+                    "extracting_terms", 
+                    40,
+                    "Preparing document content for AI analysis"
+                )
+            )
+            
+            # Save progress to database
+            try:
+                await db_client.execute_rpc(
+                    "update_analysis_progress",
+                    {
+                        "p_contract_id": contract_id,
+                        "p_analysis_id": analysis_id,
+                        "p_user_id": user_id,
+                        "p_current_step": "extracting_terms",
+                        "p_progress_percent": 40,
+                        "p_step_description": "Preparing document content for AI analysis",
+                        "p_estimated_completion_minutes": 3
+                    }
+                )
+            except Exception as progress_error:
+                logger.warning(f"Failed to save progress to database: {str(progress_error)}")
+            
             # Add document data to state
             initial_state["document_data"] = {
                 "document_id": document["id"],
@@ -263,9 +344,93 @@ def analyze_contract_background(
                 "file_type": document["file_type"],
             }
 
+            # Progress update: Starting AI analysis
+            await websocket_manager.send_message(
+                contract_id,
+                WebSocketEvents.analysis_progress(
+                    contract_id, 
+                    "analyzing_compliance", 
+                    60,
+                    "AI is analyzing contract terms and compliance requirements"
+                )
+            )
+            
+            # Save progress to database
+            try:
+                await db_client.execute_rpc(
+                    "update_analysis_progress",
+                    {
+                        "p_contract_id": contract_id,
+                        "p_analysis_id": analysis_id,
+                        "p_user_id": user_id,
+                        "p_current_step": "analyzing_compliance",
+                        "p_progress_percent": 60,
+                        "p_step_description": "AI is analyzing contract terms and compliance requirements",
+                        "p_estimated_completion_minutes": 2
+                    }
+                )
+            except Exception as progress_error:
+                logger.warning(f"Failed to save progress to database: {str(progress_error)}")
+            
             # Run analysis workflow
             final_state = await contract_workflow.analyze_contract(initial_state)
+            
+            # Progress update: Generating risk assessment
+            await websocket_manager.send_message(
+                contract_id,
+                WebSocketEvents.analysis_progress(
+                    contract_id, 
+                    "assessing_risks", 
+                    80,
+                    "Evaluating potential risks and generating insights"
+                )
+            )
+            
+            # Save progress to database
+            try:
+                await db_client.execute_rpc(
+                    "update_analysis_progress",
+                    {
+                        "p_contract_id": contract_id,
+                        "p_analysis_id": analysis_id,
+                        "p_user_id": user_id,
+                        "p_current_step": "assessing_risks",
+                        "p_progress_percent": 80,
+                        "p_step_description": "Evaluating potential risks and generating insights",
+                        "p_estimated_completion_minutes": 1
+                    }
+                )
+            except Exception as progress_error:
+                logger.warning(f"Failed to save progress to database: {str(progress_error)}")
 
+            # Progress update: Compiling final report
+            await websocket_manager.send_message(
+                contract_id,
+                WebSocketEvents.analysis_progress(
+                    contract_id, 
+                    "compiling_report", 
+                    95,
+                    "Finalizing analysis report and recommendations"
+                )
+            )
+            
+            # Save progress to database
+            try:
+                await db_client.execute_rpc(
+                    "update_analysis_progress",
+                    {
+                        "p_contract_id": contract_id,
+                        "p_analysis_id": analysis_id,
+                        "p_user_id": user_id,
+                        "p_current_step": "compiling_report",
+                        "p_progress_percent": 95,
+                        "p_step_description": "Finalizing analysis report and recommendations",
+                        "p_estimated_completion_minutes": 0
+                    }
+                )
+            except Exception as progress_error:
+                logger.warning(f"Failed to save progress to database: {str(progress_error)}")
+            
             # Update analysis results
             analysis_result = final_state.get("analysis_results", {})
 
@@ -318,33 +483,34 @@ def analyze_contract_background(
                     )
 
             # Send completion WebSocket update
+            analysis_summary = {
+                "overall_risk_score": analysis_result.get("risk_assessment", {}).get("overall_risk_score", 0),
+                "total_recommendations": len(analysis_result.get("recommendations", [])),
+                "compliance_status": (
+                    "compliant"
+                    if analysis_result.get("compliance_check", {}).get("state_compliance", False)
+                    else "non-compliant"
+                ),
+                "processing_time_seconds": final_state.get("processing_time", 0),
+            }
+            
             await websocket_manager.send_message(
                 contract_id,
-                {
-                    "event_type": "analysis_completed",
-                    "data": {
-                        "contract_id": contract_id,
-                        "analysis_summary": {
-                            "overall_risk_score": analysis_result.get(
-                                "risk_assessment", {}
-                            ).get("overall_risk_score", 0),
-                            "total_recommendations": len(
-                                analysis_result.get("recommendations", [])
-                            ),
-                            "compliance_status": (
-                                "compliant"
-                                if analysis_result.get("compliance_check", {}).get(
-                                    "state_compliance", False
-                                )
-                                else "non-compliant"
-                            ),
-                            "processing_time_seconds": final_state.get(
-                                "processing_time", 0
-                            ),
-                        },
-                    },
-                },
+                WebSocketEvents.analysis_completed(contract_id, analysis_summary)
             )
+            
+            # Mark analysis as completed in database
+            try:
+                await db_client.execute_rpc(
+                    "complete_analysis_progress",
+                    {
+                        "p_contract_id": contract_id,
+                        "p_analysis_id": analysis_id,
+                        "p_final_status": "completed"
+                    }
+                )
+            except Exception as progress_error:
+                logger.warning(f"Failed to mark analysis as completed in database: {str(progress_error)}")
 
             logger.info(f"Contract analysis {analysis_id} completed successfully")
 
@@ -386,20 +552,25 @@ def analyze_contract_background(
                 }
             ).eq("id", analysis_id).execute()
 
-            # Send detailed error WebSocket update
+            # Send detailed error WebSocket update  
+            retry_available = error_type in ["llm_api_error", "timeout_error", "rate_limit_error"]
             await websocket_manager.send_message(
                 contract_id,
-                {
-                    "event_type": "analysis_failed",
-                    "data": {
-                        "contract_id": contract_id,
-                        "error_type": error_type,
-                        "error_message": error_message,
-                        "retry_suggested": error_type
-                        in ["llm_api_error", "timeout_error", "rate_limit_error"],
-                    },
-                },
+                WebSocketEvents.analysis_failed(contract_id, error_message, retry_available)
             )
+            
+            # Mark analysis as failed in database
+            try:
+                await db_client.execute_rpc(
+                    "complete_analysis_progress",
+                    {
+                        "p_contract_id": contract_id,
+                        "p_analysis_id": analysis_id,
+                        "p_final_status": "failed"
+                    }
+                )
+            except Exception as progress_error:
+                logger.warning(f"Failed to mark analysis as failed in database: {str(progress_error)}")
 
     # Run the async function
     return asyncio.run(_async_analyze_contract())

@@ -5,7 +5,7 @@ Provides OCR capabilities for contract document processing using proper client a
 
 import logging
 from typing import Dict, Any, Optional, List
-from datetime import datetime
+from datetime import datetime, UTC
 from pathlib import Path
 
 from fastapi import HTTPException
@@ -71,31 +71,33 @@ class GeminiOCRServiceV2:
         try:
             # Get initialized Gemini client from factory
             self.gemini_client = await get_gemini_client()
-            
+
             # Check if OCR functionality is available
-            if hasattr(self.gemini_client, 'ocr') and self.gemini_client.ocr:
-                logger.info("Gemini OCR service initialized successfully with GeminiClient")
-                
+            if hasattr(self.gemini_client, "ocr") and self.gemini_client.ocr:
+                logger.info(
+                    "Gemini OCR service initialized successfully with GeminiClient"
+                )
+
                 # Initialize performance service
                 await self.performance_service.initialize()
                 logger.info("OCR Performance optimization enabled")
-                
+
                 return True
             else:
                 logger.warning("GeminiClient does not have OCR capabilities")
                 return False
-                
+
         except ClientConnectionError as e:
             logger.error(f"Failed to connect to Gemini service: {e}")
             raise HTTPException(
                 status_code=503,
-                detail="Gemini OCR service unavailable - connection failed"
+                detail="Gemini OCR service unavailable - connection failed",
             )
         except Exception as e:
             logger.error(f"Failed to initialize Gemini OCR service: {str(e)}")
             raise HTTPException(
                 status_code=503,
-                detail=f"Gemini OCR service initialization failed: {str(e)}"
+                detail=f"Gemini OCR service initialization failed: {str(e)}",
             )
 
     async def extract_text_from_document(
@@ -109,7 +111,7 @@ class GeminiOCRServiceV2:
         enable_optimization: bool = True,
     ) -> Dict[str, Any]:
         """Extract text from document using GeminiClient's OCR capabilities
-        
+
         Args:
             file_content: Raw file bytes
             file_type: File extension (pdf, jpg, png, etc.)
@@ -118,14 +120,13 @@ class GeminiOCRServiceV2:
             user_id: User ID for cost tracking and optimization
             priority: Processing priority level
             enable_optimization: Enable AI performance optimization
-            
+
         Returns:
             Dict containing extracted text, confidence, and metadata
         """
         if not self.gemini_client:
             raise HTTPException(
-                status_code=503,
-                detail="Gemini OCR service not initialized"
+                status_code=503, detail="Gemini OCR service not initialized"
             )
 
         try:
@@ -134,7 +135,7 @@ class GeminiOCRServiceV2:
 
             # Select processing profile based on priority
             profile = self._select_processing_profile(priority, len(file_content))
-            
+
             # Prepare contract context for OCR
             ocr_context = self._prepare_ocr_context(contract_context, profile)
 
@@ -146,7 +147,7 @@ class GeminiOCRServiceV2:
                     contract_context=ocr_context,
                     processing_profile=profile,
                 )
-                
+
                 # Add performance metrics if enabled
                 if enable_optimization and self.performance_service:
                     await self._track_performance_metrics(
@@ -156,28 +157,29 @@ class GeminiOCRServiceV2:
                         confidence=result.get("extraction_confidence", 0),
                         priority=priority,
                     )
-                
+
                 # Enhance result with service-level metadata
-                result.update({
-                    "service": "GeminiOCRServiceV2",
-                    "processing_profile": profile,
-                    "file_processed": filename,
-                    "optimization_enabled": enable_optimization,
-                })
-                
+                result.update(
+                    {
+                        "service": "GeminiOCRServiceV2",
+                        "processing_profile": profile,
+                        "file_processed": filename,
+                        "optimization_enabled": enable_optimization,
+                    }
+                )
+
                 return result
-                
+
             except ClientQuotaExceededError as e:
                 logger.error(f"Gemini quota exceeded: {e}")
                 raise HTTPException(
                     status_code=429,
-                    detail="OCR quota exceeded. Please try again later."
+                    detail="OCR quota exceeded. Please try again later.",
                 )
             except ClientError as e:
                 logger.error(f"Gemini client error during OCR: {e}")
                 raise HTTPException(
-                    status_code=500,
-                    detail=f"OCR processing failed: {str(e)}"
+                    status_code=500, detail=f"OCR processing failed: {str(e)}"
                 )
 
         except HTTPException:
@@ -189,7 +191,7 @@ class GeminiOCRServiceV2:
                 "extraction_method": "gemini_ocr_failed",
                 "extraction_confidence": 0.0,
                 "error": str(e),
-                "extraction_timestamp": datetime.utcnow().isoformat(),
+                "extraction_timestamp": datetime.now(UTC).isoformat(),
                 "file_processed": filename,
                 "processing_details": {
                     "file_size": len(file_content),
@@ -207,21 +209,20 @@ class GeminiOCRServiceV2:
         analysis_options: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Analyze document content using GeminiClient's analysis capabilities
-        
+
         Args:
             file_content: Raw file bytes
             file_type: File extension
             filename: Original filename
             contract_context: Additional context
             analysis_options: Analysis configuration options
-            
+
         Returns:
             Dict containing analysis results
         """
         if not self.gemini_client:
             raise HTTPException(
-                status_code=503,
-                detail="Gemini OCR service not initialized"
+                status_code=503, detail="Gemini OCR service not initialized"
             )
 
         try:
@@ -235,21 +236,22 @@ class GeminiOCRServiceV2:
                 contract_context=contract_context,
                 analysis_options=analysis_options,
             )
-            
+
             # Add service metadata
-            result.update({
-                "service": "GeminiOCRServiceV2",
-                "file_processed": filename,
-                "analysis_timestamp": datetime.utcnow().isoformat(),
-            })
-            
+            result.update(
+                {
+                    "service": "GeminiOCRServiceV2",
+                    "file_processed": filename,
+                    "analysis_timestamp": datetime.now(UTC).isoformat(),
+                }
+            )
+
             return result
-            
+
         except ClientError as e:
             logger.error(f"Document analysis failed: {e}")
             raise HTTPException(
-                status_code=500,
-                detail=f"Document analysis failed: {str(e)}"
+                status_code=500, detail=f"Document analysis failed: {str(e)}"
             )
 
     def _validate_file(self, file_content: bytes, file_type: str):
@@ -258,28 +260,26 @@ class GeminiOCRServiceV2:
         if len(file_content) > self.max_file_size:
             raise HTTPException(
                 status_code=413,
-                detail=f"File too large for OCR. Maximum size: {self.max_file_size / 1024 / 1024}MB"
+                detail=f"File too large for OCR. Maximum size: {self.max_file_size / 1024 / 1024}MB",
             )
 
         # Check file format
         if file_type.lower() not in self.supported_formats:
             raise HTTPException(
-                status_code=400,
-                detail=f"Unsupported file format for OCR: {file_type}"
+                status_code=400, detail=f"Unsupported file format for OCR: {file_type}"
             )
 
         # Check if file is empty
         if len(file_content) == 0:
             raise HTTPException(
-                status_code=400,
-                detail="Empty file cannot be processed"
+                status_code=400, detail="Empty file cannot be processed"
             )
 
     def _select_processing_profile(
         self, priority: ProcessingPriority, file_size: int
     ) -> str:
         """Select optimal processing profile based on priority and file characteristics"""
-        
+
         # Base profile selection
         if priority in [ProcessingPriority.CRITICAL, ProcessingPriority.HIGH]:
             base_profile = "quality"
@@ -301,24 +301,24 @@ class GeminiOCRServiceV2:
         return base_profile
 
     def _prepare_ocr_context(
-        self, 
-        contract_context: Optional[Dict[str, Any]], 
-        profile: str
+        self, contract_context: Optional[Dict[str, Any]], profile: str
     ) -> Dict[str, Any]:
         """Prepare context for OCR processing"""
         ocr_context = contract_context or {}
-        
+
         # Add profile-specific settings
         profile_config = self.processing_profiles.get(
             profile, self.processing_profiles["balanced"]
         )
-        
-        ocr_context.update({
-            "processing_profile": profile,
-            "profile_config": profile_config,
-            "service_version": "v2",
-        })
-        
+
+        ocr_context.update(
+            {
+                "processing_profile": profile,
+                "profile_config": profile_config,
+                "service_version": "v2",
+            }
+        )
+
         return ocr_context
 
     async def _track_performance_metrics(
@@ -351,16 +351,16 @@ class GeminiOCRServiceV2:
                 return {
                     "service_status": "not_initialized",
                     "error": "GeminiClient not initialized",
-                    "last_health_check": datetime.utcnow().isoformat(),
+                    "last_health_check": datetime.now(UTC).isoformat(),
                 }
 
             # Get client health status
             client_health = await self.gemini_client.health_check()
-            
+
             # Check OCR specific health
             ocr_available = (
-                client_health.get("status") == "healthy" and
-                client_health.get("ocr_status", "unknown") == "healthy"
+                client_health.get("status") == "healthy"
+                and client_health.get("ocr_status", "unknown") == "healthy"
             )
 
             # Performance service health
@@ -379,7 +379,9 @@ class GeminiOCRServiceV2:
                 "service_status": "healthy" if ocr_available else "degraded",
                 "gemini_client_status": client_health.get("status", "unknown"),
                 "ocr_available": ocr_available,
-                "authentication_method": client_health.get("authentication", {}).get("method", "unknown"),
+                "authentication_method": client_health.get("authentication", {}).get(
+                    "method", "unknown"
+                ),
                 "performance_optimization": performance_health.get(
                     "service_status", "unknown"
                 ),
@@ -392,7 +394,7 @@ class GeminiOCRServiceV2:
                     "service_role_authentication",
                     "ai_performance_optimization",
                 ],
-                "last_health_check": datetime.utcnow().isoformat(),
+                "last_health_check": datetime.now(UTC).isoformat(),
             }
 
         except Exception as e:
@@ -400,7 +402,7 @@ class GeminiOCRServiceV2:
             return {
                 "service_status": "error",
                 "error_message": str(e),
-                "last_health_check": datetime.utcnow().isoformat(),
+                "last_health_check": datetime.now(UTC).isoformat(),
             }
 
     async def get_processing_capabilities(self) -> Dict[str, Any]:
@@ -413,7 +415,7 @@ class GeminiOCRServiceV2:
             "authentication_method": "unknown",
             "features": [
                 "multi_page_pdf_processing",
-                "image_enhancement", 
+                "image_enhancement",
                 "contract_specific_ocr",
                 "confidence_scoring",
                 "service_role_authentication",
@@ -425,9 +427,9 @@ class GeminiOCRServiceV2:
         if self.gemini_client:
             try:
                 client_health = await self.gemini_client.health_check()
-                base_capabilities["authentication_method"] = (
-                    client_health.get("authentication", {}).get("method", "unknown")
-                )
+                base_capabilities["authentication_method"] = client_health.get(
+                    "authentication", {}
+                ).get("method", "unknown")
             except Exception as e:
                 logger.warning(f"Could not get client health: {e}")
 

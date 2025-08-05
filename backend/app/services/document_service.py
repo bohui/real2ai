@@ -7,7 +7,7 @@ import uuid
 import asyncio
 import logging
 from typing import Dict, Any, Optional, BinaryIO
-from datetime import datetime
+from datetime import datetime, UTC
 from pathlib import Path
 import mimetypes
 
@@ -31,9 +31,7 @@ class DocumentService:
         self.settings = get_settings()
         # Use service role client for background tasks to access storage
         self.db_client = (
-            get_service_database_client() 
-            if use_service_role 
-            else get_database_client()
+            get_service_database_client() if use_service_role else get_database_client()
         )
         self.storage_bucket = "documents"
         self.gemini_ocr = GeminiOCRService()
@@ -116,7 +114,7 @@ class DocumentService:
                 "original_filename": file.filename,
                 "file_size": len(file_content),
                 "content_type": file.content_type,
-                "upload_timestamp": datetime.utcnow().isoformat(),
+                "upload_timestamp": datetime.now(UTC).isoformat(),
             }
 
         except Exception as e:
@@ -149,7 +147,7 @@ class DocumentService:
         """Get file content from storage"""
         try:
             storage = self.db_client.storage()
-            
+
             # Directly attempt to download the file
             # The storage API will return appropriate errors if file doesn't exist
             result = storage.from_(self.storage_bucket).download(storage_path)
@@ -168,7 +166,11 @@ class DocumentService:
             logger.error(f"Error retrieving file {storage_path}: {str(e)}")
             # Return more specific error message based on error content
             error_str = str(e).lower()
-            if "not_found" in error_str or "404" in error_str or "object not found" in error_str:
+            if (
+                "not_found" in error_str
+                or "404" in error_str
+                or "object not found" in error_str
+            ):
                 raise HTTPException(status_code=404, detail="File not found")
             elif "unauthorized" in error_str or "403" in error_str:
                 raise HTTPException(status_code=403, detail="Access denied")
@@ -279,7 +281,7 @@ class DocumentService:
                     ),
                     "character_count": len(extracted_text),
                     "word_count": len(extracted_text.split()),
-                    "extraction_timestamp": datetime.utcnow().isoformat(),
+                    "extraction_timestamp": datetime.now(UTC).isoformat(),
                 }
 
             # Choose best result
@@ -311,7 +313,7 @@ class DocumentService:
                     "extraction_confidence": 0.0,
                     "character_count": 0,
                     "word_count": 0,
-                    "extraction_timestamp": datetime.utcnow().isoformat(),
+                    "extraction_timestamp": datetime.now(UTC).isoformat(),
                     "error": "All extraction methods failed",
                 }
 
@@ -324,7 +326,7 @@ class DocumentService:
                 "extraction_method": "failed",
                 "extraction_confidence": 0.0,
                 "error": str(e),
-                "extraction_timestamp": datetime.utcnow().isoformat(),
+                "extraction_timestamp": datetime.now(UTC).isoformat(),
             }
 
     async def _extract_pdf_text(self, file_content: bytes) -> str:

@@ -4,7 +4,7 @@ This replaces direct Supabase client instantiation with the new client factory s
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import Optional
 from pydantic import BaseModel
 from fastapi import HTTPException, status, Depends
@@ -92,10 +92,10 @@ class AuthService:
                 if isinstance(exp_timestamp, (int, float)):
                     exp = datetime.fromtimestamp(exp_timestamp)
                 else:
-                    exp = datetime.utcnow()
+                    exp = datetime.now(UTC)
             else:
                 # Default to current time if no expiration found
-                exp = datetime.utcnow()
+                exp = datetime.now(UTC)
             
             return TokenData(
                 user_id=user_id,

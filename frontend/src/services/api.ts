@@ -263,10 +263,12 @@ export class WebSocketService {
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
   private reconnectDelay = 1000;
+  private heartbeatInterval: NodeJS.Timeout | null = null;
 
   constructor(contractId: string) {
     const wsUrl = API_BASE_URL.replace("http", "ws");
-    this.url = `${wsUrl}/ws/contracts/${contractId}/progress`;
+    const token = localStorage.getItem("auth_token");
+    this.url = `${wsUrl}/ws/contracts/${contractId}?token=${encodeURIComponent(token || "")}`;
   }
 
   connect(): Promise<void> {
@@ -277,6 +279,13 @@ export class WebSocketService {
         this.ws.onopen = () => {
           console.log("WebSocket connected");
           this.reconnectAttempts = 0;
+          
+          // Start heartbeat
+          this.startHeartbeat();
+          
+          // Request initial status
+          this.sendMessage({ type: "get_status" });
+          
           resolve();
         };
 
@@ -331,6 +340,37 @@ export class WebSocketService {
       this.ws.close(1000, "Client disconnect");
       this.ws = null;
     }
+    
+    // Stop heartbeat
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+      this.heartbeatInterval = null;
+    }
+  }
+
+  private startHeartbeat(): void {
+    // Send heartbeat every 30 seconds
+    this.heartbeatInterval = setInterval(() => {
+      if (this.isConnected()) {
+        this.sendMessage({ type: "heartbeat" });
+      }
+    }, 30000);
+  }
+
+  sendMessage(message: any): void {
+    if (this.isConnected()) {
+      this.ws!.send(JSON.stringify(message));
+    } else {
+      console.warn("WebSocket not connected, cannot send message:", message);
+    }
+  }
+
+  requestStatus(): void {
+    this.sendMessage({ type: "get_status" });
+  }
+
+  cancelAnalysis(): void {
+    this.sendMessage({ type: "cancel_analysis" });
   }
 
   isConnected(): boolean {

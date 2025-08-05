@@ -115,6 +115,10 @@ CREATE POLICY "Service can manage analysis progress"
     ON analysis_progress FOR ALL 
     USING (auth.jwt() ->> 'role' = 'service_role');
 
+-- Analysis progress detailed view policies
+-- Note: RLS cannot be enabled on views, but the view inherits security from underlying tables
+-- The view will automatically respect the RLS policies on analysis_progress table
+
 -- Subscription plans are publicly readable (no RLS needed)
 -- This allows users to see available plans without authentication
 CREATE POLICY "Anyone can view active subscription plans" 
