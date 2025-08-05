@@ -126,6 +126,7 @@ class PromptManager:
         validate: bool = None,
         cache_key: str = None,
         service_name: str = None,
+        output_parser: Optional['BaseOutputParser'] = None,
         **kwargs
     ) -> str:
         """Render a prompt template with full validation and caching
@@ -137,6 +138,8 @@ class PromptManager:
             model: Target AI model for validation
             validate: Override validation setting
             cache_key: Custom cache key for result caching
+            service_name: Service name for tracking and validation
+            output_parser: Optional output parser for structured output
             **kwargs: Additional template variables
         
         Returns:
@@ -176,6 +179,10 @@ class PromptManager:
             
             # Load template
             template = await self.loader.load_template(template_name, version)
+            
+            # Set output parser if provided
+            if output_parser is not None:
+                template.set_output_parser(output_parser)
             
             # Validate context if enabled
             should_validate = validate if validate is not None else self.config.validation_enabled
@@ -243,6 +250,86 @@ class PromptManager:
                 f"Template rendering failed: {str(e)}",
                 prompt_id=template_name,
                 details={"error_type": type(e).__name__}
+            )
+    
+    async def render_with_parser(
+        self,
+        template_name: str,
+        context: Union[PromptContext, Dict[str, Any]],
+        output_parser: 'BaseOutputParser',
+        version: str = None,
+        model: str = None,
+        validate: bool = None,
+        cache_key: str = None,
+        service_name: str = None,
+        **kwargs
+    ) -> str:
+        """Render template with automatic format instructions injection
+        
+        Args:
+            template_name: Name of the template to render
+            context: Prompt context or dictionary of variables
+            output_parser: Output parser for structured output
+            version: Specific template version (defaults to latest)
+            model: Target AI model for validation
+            validate: Override validation setting
+            cache_key: Custom cache key for result caching
+            service_name: Service name for tracking
+            **kwargs: Additional template variables
+        
+        Returns:
+            Rendered prompt string with format instructions
+        """
+        return await self.render(
+            template_name=template_name,
+            context=context,
+            version=version,
+            model=model,
+            validate=validate,
+            cache_key=cache_key,
+            service_name=service_name,
+            output_parser=output_parser,
+            **kwargs
+        )
+    
+    async def parse_ai_response(
+        self,
+        template_name: str,
+        ai_response: str,
+        output_parser: 'BaseOutputParser',
+        version: str = None,
+        use_retry: bool = True
+    ) -> 'ParsingResult':
+        """Parse AI response using specified parser
+        
+        Args:
+            template_name: Name of template used to generate the response
+            ai_response: Raw AI response text
+            output_parser: Parser to use for structured output
+            version: Template version used
+            use_retry: Whether to use retry mechanism
+            
+        Returns:
+            ParsingResult with parsed data or error information
+        """
+        try:
+            # Load template to get parser context
+            template = await self.loader.load_template(template_name, version)
+            template.set_output_parser(output_parser)
+            
+            # Parse output using template's parser
+            result = template.parse_output(ai_response, use_retry=use_retry)
+            
+            logger.debug(f"Parsed AI response for template {template_name}")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Failed to parse AI response for template {template_name}: {e}")
+            from .output_parser import ParsingResult
+            return ParsingResult(
+                success=False,
+                raw_output=ai_response,
+                parsing_errors=[f"Parser setup failed: {str(e)}"]
             )
     
     async def validate_template(self, template_name: str, version: str = None) -> ValidationResult:

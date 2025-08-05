@@ -2,7 +2,7 @@
 
 import logging
 import re
-from typing import Dict, Any, Optional, List, Callable
+from typing import Dict, Any, Optional, List, Callable, Union
 from datetime import datetime, UTC
 from pathlib import Path
 from dataclasses import dataclass
@@ -11,6 +11,7 @@ from jinja2.exceptions import TemplateError, UndefinedError
 
 from .context import PromptContext
 from .exceptions import PromptTemplateError
+from .output_parser import BaseOutputParser, ParsingResult
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,8 @@ class TemplateMetadata:
     temperature_range: tuple = (0.0, 1.0)
     created_at: datetime = None
     tags: List[str] = None
+    output_parser_enabled: bool = False
+    expects_structured_output: bool = False
 
 
 class PromptTemplate:
@@ -37,11 +40,18 @@ class PromptTemplate:
         self, 
         template_content: str, 
         metadata: TemplateMetadata,
-        template_dir: Optional[Path] = None
+        template_dir: Optional[Path] = None,
+        output_parser: Optional[BaseOutputParser] = None
     ):
         self.content = template_content
         self.metadata = metadata
         self.template_dir = template_dir
+        self.output_parser = output_parser
+        
+        # Update metadata if parser is provided
+        if output_parser is not None:
+            self.metadata.output_parser_enabled = True
+            self.metadata.expects_structured_output = True
         
         # Set up Jinja2 environment
         if template_dir:
@@ -80,6 +90,16 @@ class PromptTemplate:
             render_vars['format_currency'] = self._format_currency
             render_vars['format_date'] = self._format_date
             render_vars['extract_numbers'] = self._extract_numbers
+            
+            # Auto-inject format instructions if output parser is available
+            if self.output_parser is not None:
+                render_vars['format_instructions'] = self.output_parser.get_format_instructions()
+                render_vars['expects_structured_output'] = True
+                render_vars['output_format'] = self.output_parser.output_format.value
+                
+                logger.debug(f"Injected format instructions for {self.metadata.name}")
+            else:
+                render_vars['expects_structured_output'] = False
             
             # Validate required variables
             self._validate_variables(render_vars)
@@ -128,6 +148,57 @@ class PromptTemplate:
                         )
         
         return issues
+    
+    def parse_output(self, ai_response: str, use_retry: bool = True) -> Union[ParsingResult, str]:
+        """Parse AI response using configured output parser
+        
+        Args:
+            ai_response: Raw AI response text
+            use_retry: Whether to use retry mechanism for parsing failures
+            
+        Returns:
+            ParsingResult if parser is configured, otherwise returns raw response
+        """
+        if self.output_parser is None:
+            logger.debug(f"No output parser configured for template {self.metadata.name}")
+            return ai_response
+        
+        try:
+            if use_retry:
+                result = self.output_parser.parse_with_retry(ai_response)
+            else:
+                result = self.output_parser.parse(ai_response)
+            
+            if result.success:
+                logger.debug(f"Successfully parsed output for template {self.metadata.name}")
+            else:
+                logger.warning(
+                    f"Failed to parse output for template {self.metadata.name}: "
+                    f"parsing_errors={result.parsing_errors}, validation_errors={result.validation_errors}"
+                )
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Unexpected error parsing output for template {self.metadata.name}: {e}")
+            # Return failed parsing result
+            return ParsingResult(
+                success=False,
+                raw_output=ai_response,
+                parsing_errors=[f"Unexpected error: {str(e)}"]
+            )
+    
+    def set_output_parser(self, parser: BaseOutputParser) -> None:
+        """Set or update the output parser for this template
+        
+        Args:
+            parser: Output parser instance
+        """
+        self.output_parser = parser
+        self.metadata.output_parser_enabled = True
+        self.metadata.expects_structured_output = True
+        
+        logger.debug(f"Set output parser for template {self.metadata.name}")
     
     def get_estimated_tokens(self, context: PromptContext) -> int:
         """Estimate token count for rendered template"""

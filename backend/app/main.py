@@ -50,9 +50,6 @@ contract_workflow = ContractAnalysisWorkflow(
     openai_api_base=settings.openai_api_base,
 )
 
-# Global state storage (in production, use Redis/database)
-analysis_sessions: Dict[str, RealEstateAgentState] = {}
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -104,7 +101,7 @@ app = FastAPI(
 # Get allowed origins from environment variable or use defaults
 allowed_origins = os.getenv(
     "ALLOWED_ORIGINS",
-    "http://localhost:3000,http://localhost:3100,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:3100,http://127.0.0.1:5173"
+    "http://localhost:3000,http://localhost:3100,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:3100,http://127.0.0.1:5173",
 ).split(",")
 
 # Add production origins if configured
@@ -112,7 +109,7 @@ if os.getenv("ENVIRONMENT") == "production":
     production_origins = [
         "https://real2.ai",
         "https://www.real2.ai",
-        "https://app.real2.ai"
+        "https://app.real2.ai",
     ]
     allowed_origins.extend(production_origins)
 

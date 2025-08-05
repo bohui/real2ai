@@ -44,6 +44,7 @@ class PromptEnabledService(ABC):
         model: str = None,
         validate: bool = None,
         use_cache: bool = True,
+        output_parser: Optional['BaseOutputParser'] = None,
         **kwargs
     ) -> str:
         """Render a single prompt template
@@ -55,6 +56,7 @@ class PromptEnabledService(ABC):
             model: Target AI model for validation (optional)
             validate: Override validation setting (optional)
             use_cache: Whether to use caching (default: True)
+            output_parser: Optional output parser for structured output
             **kwargs: Additional template variables
             
         Returns:
@@ -88,6 +90,7 @@ class PromptEnabledService(ABC):
                 validate=validate,
                 cache_key=cache_key,
                 service_name=self._service_name,
+                output_parser=output_parser,
                 **kwargs
             )
             
@@ -265,6 +268,130 @@ class PromptEnabledService(ABC):
                 service_name=self._service_name,
                 details={'error_type': type(e).__name__, 'request_count': len(requests)}
             )
+    
+    async def render_with_parser(
+        self,
+        template_name: str,
+        context: Union[Dict[str, Any], PromptContext],
+        output_parser: 'BaseOutputParser',
+        version: str = None,
+        model: str = None,
+        validate: bool = None,
+        use_cache: bool = True,
+        **kwargs
+    ) -> str:
+        """Render prompt with automatic format instructions injection
+        
+        Args:
+            template_name: Name of template to render
+            context: Context variables or PromptContext object
+            output_parser: Output parser for structured output
+            version: Specific template version (optional)
+            model: Target AI model for validation (optional)
+            validate: Override validation setting (optional)
+            use_cache: Whether to use caching (default: True)
+            **kwargs: Additional template variables
+            
+        Returns:
+            Rendered prompt string with format instructions
+        """
+        return await self.render_prompt(
+            template_name=template_name,
+            context=context,
+            version=version,
+            model=model,
+            validate=validate,
+            use_cache=use_cache,
+            output_parser=output_parser,
+            **kwargs
+        )
+    
+    async def parse_ai_response(
+        self,
+        template_name: str,
+        ai_response: str,
+        output_parser: 'BaseOutputParser',
+        version: str = None,
+        use_retry: bool = True
+    ) -> 'ParsingResult':
+        """Parse AI response using specified parser
+        
+        Args:
+            template_name: Name of template used for the response
+            ai_response: Raw AI response text
+            output_parser: Parser for structured output
+            version: Template version used (optional)
+            use_retry: Whether to use retry mechanism (default: True)
+            
+        Returns:
+            ParsingResult with parsed data or error information
+        """
+        try:
+            result = await self.prompt_manager.parse_ai_response(
+                template_name=template_name,
+                ai_response=ai_response,
+                output_parser=output_parser,
+                version=version,
+                use_retry=use_retry
+            )
+            
+            if result.success:
+                logger.debug(f"Successfully parsed AI response for {self._service_name}")
+            else:
+                logger.warning(f"Failed to parse AI response for {self._service_name}: {result.parsing_errors}")
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Unexpected error parsing AI response for {self._service_name}: {e}")
+            from .output_parser import ParsingResult
+            return ParsingResult(
+                success=False,
+                raw_output=ai_response,
+                parsing_errors=[f"Service parsing error: {str(e)}"]
+            )
+    
+    async def render_and_expect_structured(
+        self,
+        template_name: str,
+        context: Union[Dict[str, Any], PromptContext],
+        pydantic_model: type,
+        version: str = None,
+        model: str = None,
+        validate: bool = None,
+        use_cache: bool = True,
+        **kwargs
+    ) -> str:
+        """Convenience method: render prompt with auto-created parser
+        
+        Args:
+            template_name: Name of template to render
+            context: Context variables or PromptContext object
+            pydantic_model: Pydantic model class for output parsing
+            version: Specific template version (optional)
+            model: Target AI model for validation (optional)
+            validate: Override validation setting (optional)
+            use_cache: Whether to use caching (default: True)
+            **kwargs: Additional template variables
+            
+        Returns:
+            Rendered prompt string with format instructions
+        """
+        from .output_parser import create_parser
+        
+        # Create parser for the Pydantic model
+        parser = create_parser(pydantic_model)
+        
+        return await self.render_with_parser(
+            template_name=template_name,
+            context=context,
+            output_parser=parser,
+            version=version,
+            model=model,
+            validate=validate,
+            use_cache=use_cache,
+            **kwargs
+        )
     
     def create_context(
         self,
