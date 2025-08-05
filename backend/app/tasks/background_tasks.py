@@ -40,25 +40,61 @@ def process_document_background(
     """Background task for document processing"""
 
     async def _async_process_document():
+        db_client = None
         try:
             # Get database client
             db_client = get_database_client()
             if not hasattr(db_client, "_client") or db_client._client is None:
                 await db_client.initialize()
 
+            # First, check if document exists before processing
+            doc_result = (
+                db_client.table("documents").select("*").eq("id", document_id).execute()
+            )
+            if not doc_result.data:
+                logger.error(f"Document {document_id} not found in database")
+                return
+
+            document = doc_result.data[0]
+
+            # Check if document is already processed or failed
+            if document.get("status") in ["processed", "failed", "ocr_failed"]:
+                logger.info(
+                    f"Document {document_id} already processed with status: {document.get('status')}"
+                )
+                return
+
             # Update document status
             db_client.table("documents").update({"status": "processing"}).eq(
                 "id", document_id
             ).execute()
 
-            # Get document metadata
-            doc_result = (
-                db_client.table("documents").select("*").eq("id", document_id).execute()
-            )
-            if not doc_result.data:
-                raise Exception("Document not found")
+            # Verify file exists in storage before processing
+            try:
+                storage = db_client.storage()
+                file_exists = storage.from_("documents").list(
+                    path=document["storage_path"].rsplit("/", 1)[
+                        0
+                    ]  # Get directory path
+                )
 
-            document = doc_result.data[0]
+                # Check if the specific file exists
+                file_found = False
+                for file_info in file_exists:
+                    if file_info.name == document["storage_path"].split("/")[-1]:
+                        file_found = True
+                        break
+
+                if not file_found:
+                    raise Exception(
+                        f"File not found in storage: {document['storage_path']}"
+                    )
+
+            except Exception as storage_error:
+                logger.error(
+                    f"Storage verification failed for {document_id}: {str(storage_error)}"
+                )
+                raise Exception(f"File not accessible in storage: {str(storage_error)}")
 
             # Extract text from document with contract context
             contract_context = {
@@ -98,18 +134,31 @@ def process_document_background(
 
         except Exception as e:
             logger.error(f"Document processing failed for {document_id}: {str(e)}")
-            db_client.table("documents").update(
-                {"status": "failed", "processing_results": {"error": str(e)}}
-            ).eq("id", document_id).execute()
+
+            # Only update status if we have a valid database client
+            if db_client:
+                try:
+                    db_client.table("documents").update(
+                        {"status": "failed", "processing_results": {"error": str(e)}}
+                    ).eq("id", document_id).execute()
+                except Exception as db_error:
+                    logger.error(
+                        f"Failed to update document status for {document_id}: {str(db_error)}"
+                    )
 
             # Send error WebSocket notification
-            await websocket_manager.send_message(
-                document_id,
-                {
-                    "event_type": "document_processing_failed",
-                    "data": {"document_id": document_id, "error_message": str(e)},
-                },
-            )
+            try:
+                await websocket_manager.send_message(
+                    document_id,
+                    {
+                        "event_type": "document_processing_failed",
+                        "data": {"document_id": document_id, "error_message": str(e)},
+                    },
+                )
+            except Exception as ws_error:
+                logger.error(
+                    f"Failed to send WebSocket error notification for {document_id}: {str(ws_error)}"
+                )
 
     # Run the async function
     return asyncio.run(_async_process_document())
@@ -140,11 +189,30 @@ def analyze_contract_background(
             openai_api_base=settings.openai_api_base,
         )
 
+        db_client = None
         try:
             # Get database client
             db_client = get_database_client()
             if not hasattr(db_client, "_client") or db_client._client is None:
                 await db_client.initialize()
+
+            # Check if analysis already exists and its status
+            analysis_result = (
+                db_client.table("contract_analyses")
+                .select("*")
+                .eq("id", analysis_id)
+                .execute()
+            )
+            if not analysis_result.data:
+                logger.error(f"Analysis {analysis_id} not found in database")
+                return
+
+            analysis = analysis_result.data[0]
+            if analysis.get("status") in ["completed", "failed"]:
+                logger.info(
+                    f"Analysis {analysis_id} already processed with status: {analysis.get('status')}"
+                )
+                return
 
             # Update analysis status
             db_client.table("contract_analyses").update({"status": "processing"}).eq(
@@ -165,6 +233,36 @@ def analyze_contract_background(
                 db_client.table("profiles").select("*").eq("id", user_id).execute()
             )
             user_profile = user_result.data[0] if user_result.data else {}
+
+            # Check user credits before processing
+            if user_profile.get("subscription_status") == "free":
+                credits_remaining = user_profile.get("credits_remaining", 0)
+                if credits_remaining <= 0:
+                    raise Exception("Insufficient credits for analysis")
+
+            # Verify document exists and is accessible
+            try:
+                storage = db_client.storage()
+                file_exists = storage.from_("documents").list(
+                    path=document["storage_path"].rsplit("/", 1)[0]
+                )
+
+                file_found = False
+                for file_info in file_exists:
+                    if file_info.name == document["storage_path"].split("/")[-1]:
+                        file_found = True
+                        break
+
+                if not file_found:
+                    raise Exception(
+                        f"Document file not found in storage: {document['storage_path']}"
+                    )
+
+            except Exception as storage_error:
+                logger.error(
+                    f"Storage verification failed for document {document['id']}: {str(storage_error)}"
+                )
+                raise Exception(f"Document file not accessible: {str(storage_error)}")
 
             # Create initial state
             initial_state = create_initial_state(
@@ -249,22 +347,27 @@ def analyze_contract_background(
                 }
             ).eq("id", analysis_id).execute()
 
-            # Deduct user credit
+            # Deduct user credit only if analysis was successful
             if user_profile.get("subscription_status") == "free":
                 new_credits = max(0, user_profile.get("credits_remaining", 0) - 1)
                 db_client.table("profiles").update(
                     {"credits_remaining": new_credits}
                 ).eq("id", user_id).execute()
 
-            # Log usage
-            db_client.table("usage_logs").insert(
-                {
-                    "user_id": user_id,
-                    "action_type": "contract_analysis",
-                    "credits_used": 1,
-                    "remaining_credits": user_profile.get("credits_remaining", 0) - 1,
-                }
-            ).execute()
+                # Log usage only if deduction was successful
+                try:
+                    db_client.table("usage_logs").insert(
+                        {
+                            "user_id": user_id,
+                            "action_type": "contract_analysis",
+                            "credits_used": 1,
+                            "remaining_credits": new_credits,
+                        }
+                    ).execute()
+                except Exception as log_error:
+                    logger.warning(
+                        f"Failed to log usage for user {user_id}: {str(log_error)}"
+                    )
 
             # Send completion WebSocket update
             await websocket_manager.send_message(
@@ -298,21 +401,72 @@ def analyze_contract_background(
             logger.info(f"Contract analysis {analysis_id} completed successfully")
 
         except Exception as e:
-            logger.error(f"Contract analysis failed for {analysis_id}: {str(e)}")
+            error_message = str(e)
+            error_type = "general_error"
 
-            # Update analysis status to failed
-            db_client.table("contract_analyses").update({"status": "failed"}).eq(
-                "id", analysis_id
-            ).execute()
+            # Classify error types for better handling
+            if "openrouter" in error_message.lower() or "api" in error_message.lower():
+                error_type = "llm_api_error"
+                error_message = "LLM service temporarily unavailable. Please try again."
+            elif "timeout" in error_message.lower():
+                error_type = "timeout_error"
+                error_message = "Analysis timed out. Document may be too complex."
+            elif "rate limit" in error_message.lower():
+                error_type = "rate_limit_error"
+                error_message = (
+                    "API rate limit reached. Please try again in a few minutes."
+                )
+            elif (
+                "quota" in error_message.lower()
+                or "credit" in error_message.lower()
+                or "insufficient credits" in error_message.lower()
+            ):
+                error_type = "quota_error"
+                error_message = "Insufficient credits or quota exceeded."
 
-            # Send error WebSocket update
-            await websocket_manager.send_message(
-                contract_id,
-                {
-                    "event_type": "analysis_failed",
-                    "data": {"contract_id": contract_id, "error_message": str(e)},
-                },
+            logger.error(
+                f"Contract analysis failed for {analysis_id}: {error_type} - {error_message}"
             )
+
+            # Update analysis status to failed with error details
+            if db_client:
+                try:
+                    db_client.table("contract_analyses").update(
+                        {
+                            "status": "failed",
+                            "analysis_result": {
+                                "error": {
+                                    "type": error_type,
+                                    "message": error_message,
+                                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                                }
+                            },
+                        }
+                    ).eq("id", analysis_id).execute()
+                except Exception as db_error:
+                    logger.error(
+                        f"Failed to update analysis status for {analysis_id}: {str(db_error)}"
+                    )
+
+            # Send detailed error WebSocket update
+            try:
+                await websocket_manager.send_message(
+                    contract_id,
+                    {
+                        "event_type": "analysis_failed",
+                        "data": {
+                            "contract_id": contract_id,
+                            "error_type": error_type,
+                            "error_message": error_message,
+                            "retry_suggested": error_type
+                            in ["llm_api_error", "timeout_error", "rate_limit_error"],
+                        },
+                    },
+                )
+            except Exception as ws_error:
+                logger.error(
+                    f"Failed to send WebSocket error notification for {contract_id}: {str(ws_error)}"
+                )
 
     # Run the async function
     return asyncio.run(_async_analyze_contract())

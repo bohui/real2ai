@@ -23,9 +23,9 @@ async def start_contract_analysis(
 
     try:
         # Ensure database client is initialized
-        if not hasattr(db_client, '_client') or db_client._client is None:
+        if not hasattr(db_client, "_client") or db_client._client is None:
             await db_client.initialize()
-            
+
         # Check user credits
         if user.credits_remaining <= 0 and user.subscription_status == "free":
             raise HTTPException(
@@ -55,9 +55,7 @@ async def start_contract_analysis(
             "user_id": user.id,
         }
 
-        contract_result = (
-            db_client.table("contracts").insert(contract_data).execute()
-        )
+        contract_result = db_client.table("contracts").insert(contract_data).execute()
         contract_id = contract_result.data[0]["id"]
 
         # Create analysis record
@@ -73,21 +71,22 @@ async def start_contract_analysis(
         )
         analysis_id = analysis_result.data[0]["id"]
 
-        # Start background analysis
+        # Start background analysis via Celery
         from app.tasks.background_tasks import analyze_contract_background
-        background_tasks.add_task(
-            analyze_contract_background,
+
+        task = analyze_contract_background.delay(
             contract_id,
             analysis_id,
             user.id,
             document,
-            request.analysis_options,
+            request.analysis_options.model_dump(),
         )
 
         return ContractAnalysisResponse(
             contract_id=contract_id,
             analysis_id=analysis_id,
-            status="pending",
+            status="queued",
+            task_id=task.id,
             estimated_completion_minutes=2,
         )
 
@@ -99,17 +98,77 @@ async def start_contract_analysis(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
+@router.get("/{contract_id}/status")
+async def get_analysis_status(
+    contract_id: str,
+    user: User = Depends(get_current_user),
+    db_client=Depends(get_database_client),
+):
+    """Get contract analysis status and progress"""
+    try:
+        # Ensure database client is initialized
+        if not hasattr(db_client, "_client") or db_client._client is None:
+            await db_client.initialize()
+
+        # Get analysis status from database
+        result = (
+            db_client.table("contract_analyses")
+            .select("id, status, created_at, updated_at, processing_time")
+            .eq("contract_id", contract_id)
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Analysis not found")
+
+        analysis = result.data[0]
+
+        # Determine progress percentage based on status
+        progress_map = {
+            "pending": 0,
+            "queued": 5,
+            "processing": 50,
+            "completed": 100,
+            "failed": 0,
+        }
+
+        return {
+            "contract_id": contract_id,
+            "analysis_id": analysis["id"],
+            "status": analysis["status"],
+            "progress": progress_map.get(analysis["status"], 0),
+            "processing_time": analysis.get("processing_time", 0),
+            "created_at": analysis["created_at"],
+            "updated_at": analysis["updated_at"],
+            "estimated_completion": (
+                "2-5 minutes"
+                if analysis["status"] in ["pending", "queued", "processing"]
+                else None
+            ),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Status check error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
 @router.get("/{contract_id}/analysis")
 async def get_contract_analysis(
-    contract_id: str, user: User = Depends(get_current_user), db_client=Depends(get_database_client)
+    contract_id: str,
+    user: User = Depends(get_current_user),
+    db_client=Depends(get_database_client),
 ):
     """Get contract analysis results"""
 
     try:
         # Ensure database client is initialized
-        if not hasattr(db_client, '_client') or db_client._client is None:
+        if not hasattr(db_client, "_client") or db_client._client is None:
             await db_client.initialize()
-            
+
         # Get analysis results
         result = (
             db_client.table("contract_analyses")
@@ -125,10 +184,7 @@ async def get_contract_analysis(
 
         # Verify user owns this contract
         contract_result = (
-            db_client.table("contracts")
-            .select("*")
-            .eq("id", contract_id)
-            .execute()
+            db_client.table("contracts").select("*").eq("id", contract_id).execute()
         )
         if not contract_result.data:
             raise HTTPException(status_code=404, detail="Contract not found")
@@ -164,7 +220,10 @@ async def get_contract_analysis(
 
 @router.get("/{contract_id}/report")
 async def download_analysis_report(
-    contract_id: str, format: str = "pdf", user: User = Depends(get_current_user), db_client=Depends(get_database_client)
+    contract_id: str,
+    format: str = "pdf",
+    user: User = Depends(get_current_user),
+    db_client=Depends(get_database_client),
 ):
     """Download analysis report"""
 
@@ -175,6 +234,7 @@ async def download_analysis_report(
         if format == "pdf":
             # Generate PDF report (would implement with reportlab or similar)
             from app.tasks.background_tasks import generate_pdf_report
+
             pdf_content = await generate_pdf_report(analysis_data)
             return JSONResponse(
                 content={"download_url": f"/api/contracts/{contract_id}/report.pdf"},

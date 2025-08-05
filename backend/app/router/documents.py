@@ -74,10 +74,9 @@ async def upload_document(
             
         db_client.table("documents").insert(document_data).execute()
 
-        # Start background processing
+        # Start background processing via Celery
         from app.tasks.background_tasks import process_document_background
-        background_tasks.add_task(
-            process_document_background,
+        task = process_document_background.delay(
             upload_result["document_id"],
             user.id,
             australian_state,
@@ -182,10 +181,9 @@ async def reprocess_document_with_ocr(
             "contract_specific": True
         }
         
-        # Use enhanced background processing
+        # Use enhanced background processing via Celery
         from app.tasks.background_tasks import enhanced_reprocess_document_with_ocr_background
-        background_tasks.add_task(
-            enhanced_reprocess_document_with_ocr_background,
+        task = enhanced_reprocess_document_with_ocr_background.delay(
             document_id,
             user.id,
             document,
@@ -275,8 +273,7 @@ async def batch_process_ocr(
         batch_id = batch_context["batch_id"]
         
         from app.tasks.background_tasks import batch_ocr_processing_background
-        background_tasks.add_task(
-            batch_ocr_processing_background,
+        task = batch_ocr_processing_background.delay(
             [doc["id"] for doc in verified_docs],
             user.id,
             batch_context,

@@ -31,6 +31,7 @@ class ContractAnalysisResponse(BaseModel):
     contract_id: str
     analysis_id: str
     status: str = "pending"
+    task_id: Optional[str] = None
     estimated_completion_minutes: int = 2
 
 
