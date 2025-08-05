@@ -20,6 +20,7 @@ from ..base.exceptions import (
 )
 from .config import GeminiClientConfig
 from .ocr_client import GeminiOCRClient
+from ...core.langsmith_config import langsmith_trace, log_trace_info
 
 logger = logging.getLogger(__name__)
 
@@ -328,9 +329,11 @@ class GeminiClient(BaseClient, AIOperations):
     # AIOperations interface implementation
 
     @with_retry(max_retries=3, backoff_factor=2.0)
+    @langsmith_trace(name="gemini_generate_content", run_type="llm")
     async def generate_content(self, prompt: str, **kwargs) -> str:
         """Generate content based on a prompt."""
         try:
+            log_trace_info("gemini_generate_content", prompt_length=len(prompt), model=self.config.model_name)
             self.logger.debug(f"Generating content for prompt: {prompt[:100]}...")
 
             # Execute in thread pool to avoid blocking
@@ -363,11 +366,13 @@ class GeminiClient(BaseClient, AIOperations):
                     original_error=e,
                 )
 
+    @langsmith_trace(name="gemini_analyze_document", run_type="tool")
     async def analyze_document(
         self, content: bytes, content_type: str, **kwargs
     ) -> Dict[str, Any]:
         """Analyze a document and extract information."""
         try:
+            log_trace_info("gemini_analyze_document", content_type=content_type, content_size=len(content))
             self.logger.debug(f"Analyzing document of type: {content_type}")
 
             # Delegate to OCR client for document analysis
@@ -384,11 +389,13 @@ class GeminiClient(BaseClient, AIOperations):
                 original_error=e,
             )
 
+    @langsmith_trace(name="gemini_extract_text", run_type="tool")
     async def extract_text(
         self, content: bytes, content_type: str, **kwargs
     ) -> Dict[str, Any]:
         """Extract text from a document using OCR."""
         try:
+            log_trace_info("gemini_extract_text", content_type=content_type, content_size=len(content))
             self.logger.debug(f"Extracting text from document of type: {content_type}")
 
             # Delegate to OCR client
@@ -405,11 +412,13 @@ class GeminiClient(BaseClient, AIOperations):
                 original_error=e,
             )
 
+    @langsmith_trace(name="gemini_classify_content", run_type="llm")
     async def classify_content(
         self, content: str, categories: list, **kwargs
     ) -> Dict[str, Any]:
         """Classify content into predefined categories."""
         try:
+            log_trace_info("gemini_classify_content", content_length=len(content), categories_count=len(categories))
             self.logger.debug(f"Classifying content into {len(categories)} categories")
 
             # Create classification prompt

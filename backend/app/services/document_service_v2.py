@@ -20,6 +20,7 @@ from unstructured.partition.auto import partition
 from app.core.config import get_settings
 from app.models.contract_state import ContractType
 from app.clients import get_supabase_client, get_gemini_client
+from app.core.langsmith_config import langsmith_trace, langsmith_session, log_trace_info
 from app.clients.base.exceptions import (
     ClientError,
     ClientConnectionError,
@@ -165,6 +166,7 @@ class DocumentServiceV2:
                 raise HTTPException(status_code=404, detail="File not found")
             raise HTTPException(status_code=500, detail="Could not retrieve file")
 
+    @langsmith_trace(name="document_service_extract_text", run_type="chain")
     async def extract_text(
         self,
         storage_path: str,
@@ -175,6 +177,12 @@ class DocumentServiceV2:
         """Extract text from document using intelligent OCR fallback"""
 
         try:
+            log_trace_info(
+                "document_service_extract_text",
+                storage_path=storage_path,
+                file_type=file_type,
+                force_ocr=force_ocr
+            )
             # Get file content
             file_content = await self.get_file_content(storage_path)
             filename = Path(storage_path).name

@@ -22,6 +22,7 @@ from app.core.config import get_settings
 from app.core.database import get_database_client
 from app.services.document_service import DocumentService
 from app.services.websocket_service import WebSocketManager
+from app.core.langsmith_init import initialize_langsmith, get_langsmith_status
 
 # Import routers
 from app.router.auth import router as auth_router
@@ -88,6 +89,14 @@ app.include_router(websockets_router)
 async def startup_event():
     """Initialize application on startup"""
     logger.info("Starting Real2.AI API...")
+
+    # Initialize LangSmith tracing
+    langsmith_enabled = initialize_langsmith()
+    if langsmith_enabled:
+        status = get_langsmith_status()
+        logger.info(f"LangSmith tracing enabled for project: {status['project_name']}")
+    else:
+        logger.info("LangSmith tracing disabled")
 
     # Initialize database connection
     await db_client.initialize()

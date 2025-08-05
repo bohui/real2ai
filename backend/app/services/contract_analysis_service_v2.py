@@ -18,6 +18,7 @@ from fastapi import HTTPException
 from app.core.config import get_settings
 from app.models.contract_state import AustralianState, ContractType
 from app.clients import get_gemini_client
+from app.core.langsmith_config import langsmith_trace, langsmith_session, log_trace_info
 from app.clients.base.exceptions import (
     ClientError,
     ClientConnectionError,
@@ -188,6 +189,7 @@ class ContractAnalysisServiceV2:
             logger.error(f"Failed to initialize contract analysis service: {str(e)}")
             raise
 
+    @langsmith_trace(name="contract_analysis_service_analyze_contract", run_type="chain")
     async def analyze_contract(
         self,
         contract_text: str,
@@ -211,6 +213,13 @@ class ContractAnalysisServiceV2:
             )
 
         try:
+            log_trace_info(
+                "contract_analysis_service_analyze_contract",
+                contract_length=len(contract_text),
+                state=config.state.value if config.state else None,
+                contract_type=config.contract_type.value if config.contract_type else None,
+                analysis_type=config.analysis_type.value if config.analysis_type else None
+            )
             start_time = time.time()
 
             # Prepare analysis prompt

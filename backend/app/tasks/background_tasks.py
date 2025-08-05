@@ -16,13 +16,14 @@ from app.models.contract_state import (
 from app.agents.contract_workflow import ContractAnalysisWorkflow
 from app.core.database import get_service_database_client
 from app.services.document_service import DocumentService
-from app.services.websocket_service import WebSocketManager, WebSocketEvents
+from app.services.websocket_service import WebSocketEvents
+from app.services.websocket_singleton import websocket_manager
+from app.core.langsmith_config import langsmith_session, log_trace_info
 
 logger = logging.getLogger(__name__)
 
 # Initialize services with service role for elevated permissions
 document_service = DocumentService(use_service_role=True)
-websocket_manager = WebSocketManager()
 
 
 @celery_app.task(
@@ -40,7 +41,21 @@ def process_document_background(
     """Background task for document processing"""
 
     async def _async_process_document():
-        try:
+        async with langsmith_session(
+            "background_document_processing",
+            document_id=document_id,
+            user_id=user_id,
+            australian_state=australian_state,
+            contract_type=contract_type
+        ):
+            try:
+                log_trace_info(
+                    "background_document_processing",
+                    document_id=document_id,
+                    user_id=user_id,
+                    australian_state=australian_state,
+                    contract_type=contract_type
+                )
             # Get service database client (has elevated permissions)
             db_client = get_service_database_client()
             if not hasattr(db_client, "_client") or db_client._client is None:

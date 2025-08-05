@@ -1,0 +1,243 @@
+"""
+LangSmith integration configuration and utilities.
+"""
+
+import os
+import logging
+from typing import Optional, Dict, Any, Callable
+from functools import wraps
+from contextlib import asynccontextmanager
+from langsmith import Client, traceable
+from langsmith.run_helpers import trace
+
+from .config import get_settings
+
+logger = logging.getLogger(__name__)
+
+
+class LangSmithConfig:
+    """LangSmith configuration manager."""
+    
+    def __init__(self):
+        self.settings = get_settings()
+        self._client: Optional[Client] = None
+        self._enabled = bool(self.settings.langsmith_api_key)
+        
+    @property
+    def enabled(self) -> bool:
+        """Check if LangSmith is enabled."""
+        return self._enabled
+    
+    @property 
+    def client(self) -> Optional[Client]:
+        """Get LangSmith client."""
+        if not self._enabled:
+            return None
+            
+        if not self._client:
+            self._client = Client(
+                api_key=self.settings.langsmith_api_key,
+                api_url=os.getenv("LANGSMITH_ENDPOINT", "https://api.smith.langchain.com")
+            )
+        return self._client
+    
+    @property
+    def project_name(self) -> str:
+        """Get project name for tracing."""
+        return self.settings.langsmith_project
+    
+    def configure_environment(self) -> None:
+        """Configure environment variables for LangSmith."""
+        if self._enabled:
+            os.environ["LANGSMITH_API_KEY"] = self.settings.langsmith_api_key
+            os.environ["LANGSMITH_PROJECT"] = self.settings.langsmith_project
+            os.environ["LANGSMITH_TRACING"] = "true"
+            logger.info(f"LangSmith configured for project: {self.settings.langsmith_project}")
+        else:
+            # Ensure tracing is disabled if no API key
+            os.environ.pop("LANGSMITH_API_KEY", None)
+            os.environ["LANGSMITH_TRACING"] = "false"
+            logger.info("LangSmith tracing disabled - no API key provided")
+
+
+# Global instance
+_langsmith_config: Optional[LangSmithConfig] = None
+
+
+def get_langsmith_config() -> LangSmithConfig:
+    """Get LangSmith configuration singleton."""
+    global _langsmith_config
+    if _langsmith_config is None:
+        _langsmith_config = LangSmithConfig()
+        _langsmith_config.configure_environment()
+    return _langsmith_config
+
+
+def langsmith_trace(
+    name: Optional[str] = None,
+    run_type: str = "llm",
+    **trace_kwargs
+):
+    """
+    Decorator for tracing LLM operations with LangSmith.
+    
+    Args:
+        name: Custom name for the trace operation
+        run_type: Type of operation (llm, chain, tool, etc.)
+        **trace_kwargs: Additional tracing parameters
+    """
+    def decorator(func: Callable):
+        config = get_langsmith_config()
+        
+        if not config.enabled:
+            # Return original function if LangSmith is disabled
+            return func
+        
+        # Use the function name if no custom name provided
+        trace_name = name or f"{func.__module__}.{func.__qualname__}"
+        
+        @wraps(func)
+        async def async_wrapper(*args, **kwargs):
+            # Add metadata
+            metadata = {
+                "function": func.__name__,
+                "module": func.__module__,
+                "run_type": run_type,
+                **trace_kwargs
+            }
+            
+            # Extract client information from args if available
+            if args and hasattr(args[0], "client_name"):
+                metadata["client_name"] = args[0].client_name
+                
+            # Use LangSmith's trace context manager
+            with trace(
+                name=trace_name,
+                run_type=run_type,
+                project_name=config.project_name,
+                metadata=metadata
+            ) as run:
+                try:
+                    result = await func(*args, **kwargs)
+                    
+                    # Add result metadata
+                    if isinstance(result, dict):
+                        if "extracted_text" in result:
+                            run.outputs = {"text_length": len(result["extracted_text"])}
+                        elif "classification" in result:
+                            run.outputs = {"classification": result["classification"]}
+                        elif "analysis" in result:
+                            run.outputs = {"analysis_type": type(result["analysis"]).__name__}
+                    elif isinstance(result, str):
+                        run.outputs = {"response_length": len(result)}
+                    
+                    return result
+                    
+                except Exception as e:
+                    run.error = str(e)
+                    run.end(error=str(e))
+                    raise
+        
+        @wraps(func)
+        def sync_wrapper(*args, **kwargs):
+            # Handle synchronous functions (though most will be async)
+            metadata = {
+                "function": func.__name__,
+                "module": func.__module__,
+                "run_type": run_type,
+                **trace_kwargs
+            }
+            
+            with trace(
+                name=trace_name,
+                run_type=run_type,
+                project_name=config.project_name,
+                metadata=metadata
+            ) as run:
+                try:
+                    result = func(*args, **kwargs)
+                    return result
+                except Exception as e:
+                    run.error = str(e)
+                    run.end(error=str(e))
+                    raise
+        
+        # Return appropriate wrapper based on function type
+        import asyncio
+        if asyncio.iscoroutinefunction(func):
+            return async_wrapper
+        else:
+            return sync_wrapper
+    
+    return decorator
+
+
+@asynccontextmanager
+async def langsmith_session(session_name: str, **metadata):
+    """
+    Context manager for grouping related LLM operations in a session.
+    
+    Args:
+        session_name: Name for the session
+        **metadata: Additional metadata for the session
+    """
+    config = get_langsmith_config()
+    
+    if not config.enabled:
+        # If LangSmith is disabled, just yield without tracing
+        yield
+        return
+    
+    with trace(
+        name=session_name,
+        run_type="chain",
+        project_name=config.project_name,
+        metadata=metadata
+    ) as session_run:
+        try:
+            yield session_run
+        except Exception as e:
+            session_run.error = str(e)
+            session_run.end(error=str(e))
+            raise
+
+
+def get_trace_url(run_id: str) -> Optional[str]:
+    """
+    Generate LangSmith trace URL for a given run ID.
+    
+    Args:
+        run_id: The run ID from LangSmith
+        
+    Returns:
+        URL to the trace in LangSmith UI or None if not configured
+    """
+    config = get_langsmith_config()
+    if not config.enabled:
+        return None
+        
+    base_url = os.getenv("LANGSMITH_ENDPOINT", "https://smith.langchain.com")
+    project_name = config.project_name
+    return f"{base_url}/o/default/projects/p/{project_name}/r/{run_id}"
+
+
+def log_trace_info(operation: str, **metadata):
+    """
+    Log trace information for debugging.
+    
+    Args:
+        operation: Name of the operation
+        **metadata: Additional metadata to log
+    """
+    config = get_langsmith_config()
+    if config.enabled:
+        logger.info(
+            f"LangSmith trace: {operation}",
+            extra={
+                "project": config.project_name,
+                "langsmith_enabled": True,
+                **metadata
+            }
+        )
+    else:
+        logger.debug(f"Operation: {operation} (LangSmith disabled)", extra=metadata)
