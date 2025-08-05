@@ -264,27 +264,62 @@ export class WebSocketService {
   private maxReconnectAttempts = 5;
   private reconnectDelay = 1000;
   private heartbeatInterval: NodeJS.Timeout | null = null;
+  private isConnecting = false;
+  private isConnected = false;
+  private contractId: string;
+  private messageQueue: any[] = [];
 
   constructor(contractId: string) {
     const wsUrl = API_BASE_URL.replace("http", "ws");
     const token = localStorage.getItem("auth_token");
+    this.contractId = contractId;
     this.url = `${wsUrl}/ws/contracts/${contractId}?token=${encodeURIComponent(token || "")}`;
   }
 
   connect(): Promise<void> {
+    // Prevent multiple connection attempts
+    if (this.isConnecting || this.isConnected) {
+      console.log(`WebSocket already connecting/connected for contract ${this.contractId}`);
+      return Promise.resolve();
+    }
+
     return new Promise((resolve, reject) => {
       try {
+        this.isConnecting = true;
+        
+        // Close existing connection if any
+        if (this.ws) {
+          console.log(`Closing existing WebSocket for contract ${this.contractId}`);
+          this.ws.close(1000, "Reconnecting");
+          this.ws = null;
+        }
+
+        // Validate URL before creating WebSocket
+        if (!this.url || !this.url.startsWith('ws')) {
+          throw new Error(`Invalid WebSocket URL: ${this.url}`);
+        }
+
+        console.log(`Creating new WebSocket connection for contract ${this.contractId}: ${this.url}`);
         this.ws = new WebSocket(this.url);
 
         this.ws.onopen = () => {
-          console.log("WebSocket connected");
+          console.log(`WebSocket connected for contract ${this.contractId}`);
           this.reconnectAttempts = 0;
+          this.isConnecting = false;
+          this.isConnected = true;
           
           // Start heartbeat
           this.startHeartbeat();
           
-          // Request initial status
-          this.sendMessage({ type: "get_status" });
+          // Process queued messages
+          this.processMessageQueue();
+          
+          // Request initial status after a brief delay to ensure connection is stable
+          setTimeout(() => {
+            if (this.isConnected && this.ws?.readyState === WebSocket.OPEN) {
+              this.sendMessage({ type: "get_status" });
+            }
+          }, 100);
           
           resolve();
         };
@@ -292,6 +327,14 @@ export class WebSocketService {
         this.ws.onmessage = (event) => {
           try {
             const data = JSON.parse(event.data);
+            console.log(`WebSocket message received for contract ${this.contractId}:`, data.event_type);
+            
+            // Validate message structure
+            if (!data.event_type) {
+              console.warn(`Invalid WebSocket message format for contract ${this.contractId}:`, data);
+              return;
+            }
+            
             // Emit custom event for components to listen to
             window.dispatchEvent(
               new CustomEvent("analysis:update", {
@@ -299,14 +342,19 @@ export class WebSocketService {
               })
             );
           } catch (error) {
-            console.error("Error parsing WebSocket message:", error);
+            console.error(`Error parsing WebSocket message for contract ${this.contractId}:`, error, event.data);
           }
         };
 
         this.ws.onclose = (event) => {
-          console.log("WebSocket disconnected:", event.code, event.reason);
+          console.log(`WebSocket disconnected for contract ${this.contractId}:`, event.code, event.reason);
+          this.isConnecting = false;
+          this.isConnected = false;
+          
+          // Only reconnect if it wasn't a clean disconnect (1000) and we haven't exceeded max attempts
           if (
             event.code !== 1000 &&
+            event.code !== 1001 && // Going away
             this.reconnectAttempts < this.maxReconnectAttempts
           ) {
             this.reconnect();
@@ -314,54 +362,108 @@ export class WebSocketService {
         };
 
         this.ws.onerror = (error) => {
-          console.error("WebSocket error:", error);
+          console.error(`WebSocket error for contract ${this.contractId}:`, error);
+          this.isConnecting = false;
+          this.isConnected = false;
           reject(error);
         };
       } catch (error) {
+        this.isConnecting = false;
+        this.isConnected = false;
         reject(error);
       }
     });
   }
 
   private reconnect(): void {
+    // Prevent multiple reconnection attempts
+    if (this.isConnecting) {
+      return;
+    }
+
     this.reconnectAttempts++;
     const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1);
 
     setTimeout(() => {
       console.log(
-        `Attempting to reconnect WebSocket (${this.reconnectAttempts}/${this.maxReconnectAttempts})`
+        `Attempting to reconnect WebSocket for contract ${this.contractId} (${this.reconnectAttempts}/${this.maxReconnectAttempts})`
       );
       this.connect().catch(console.error);
     }, delay);
   }
 
   disconnect(): void {
-    if (this.ws) {
-      this.ws.close(1000, "Client disconnect");
-      this.ws = null;
-    }
+    console.log(`Disconnecting WebSocket for contract ${this.contractId}`);
     
-    // Stop heartbeat
+    this.isConnecting = false;
+    this.isConnected = false;
+    
+    // Stop heartbeat first
     if (this.heartbeatInterval) {
       clearInterval(this.heartbeatInterval);
       this.heartbeatInterval = null;
     }
+    
+    // Close WebSocket connection
+    if (this.ws) {
+      try {
+        this.ws.close(1000, "Client disconnect");
+      } catch (error) {
+        console.warn(`Error closing WebSocket for contract ${this.contractId}:`, error);
+      }
+      this.ws = null;
+    }
+    
+    // Clear message queue
+    this.messageQueue = [];
   }
 
   private startHeartbeat(): void {
+    // Clear existing heartbeat
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+    }
+    
     // Send heartbeat every 30 seconds
     this.heartbeatInterval = setInterval(() => {
-      if (this.isConnected()) {
+      if (this.isConnected && this.ws?.readyState === WebSocket.OPEN) {
         this.sendMessage({ type: "heartbeat" });
+      } else {
+        // Connection lost, clear heartbeat
+        if (this.heartbeatInterval) {
+          clearInterval(this.heartbeatInterval);
+          this.heartbeatInterval = null;
+        }
       }
     }, 30000);
   }
 
   sendMessage(message: any): void {
-    if (this.isConnected()) {
-      this.ws!.send(JSON.stringify(message));
+    if (this.isConnected && this.ws?.readyState === WebSocket.OPEN) {
+      try {
+        const messageStr = JSON.stringify(message);
+        console.log(`Sending WebSocket message for contract ${this.contractId}:`, message.type);
+        this.ws.send(messageStr);
+      } catch (error) {
+        console.error(`Error sending WebSocket message for contract ${this.contractId}:`, error);
+        // Queue message for retry only if it's not a heartbeat
+        if (message.type !== 'heartbeat') {
+          this.messageQueue.push(message);
+        }
+      }
     } else {
-      console.warn("WebSocket not connected, cannot send message:", message);
+      console.warn(`WebSocket not connected for contract ${this.contractId} (state: ${this.getConnectionState()}), queueing message:`, message.type);
+      // Queue non-heartbeat messages for when connection is established
+      if (message.type !== 'heartbeat') {
+        this.messageQueue.push(message);
+      }
+    }
+  }
+
+  private processMessageQueue(): void {
+    while (this.messageQueue.length > 0 && this.isConnected) {
+      const message = this.messageQueue.shift();
+      this.sendMessage(message);
     }
   }
 
@@ -373,11 +475,92 @@ export class WebSocketService {
     this.sendMessage({ type: "cancel_analysis" });
   }
 
-  isConnected(): boolean {
-    return this.ws?.readyState === WebSocket.OPEN;
+  isWebSocketConnected(): boolean {
+    return this.isConnected && this.ws?.readyState === WebSocket.OPEN;
+  }
+
+  getConnectionState(): string {
+    if (!this.ws) return 'disconnected';
+    switch (this.ws.readyState) {
+      case WebSocket.CONNECTING: return 'connecting';
+      case WebSocket.OPEN: return 'open';
+      case WebSocket.CLOSING: return 'closing';
+      case WebSocket.CLOSED: return 'closed';
+      default: return 'unknown';
+    }
   }
 }
 
-// Export singleton instance
+// WebSocket Connection Manager to prevent multiple connections
+class WebSocketConnectionManager {
+  private static instance: WebSocketConnectionManager;
+  private connections: Map<string, WebSocketService> = new Map();
+
+  static getInstance(): WebSocketConnectionManager {
+    if (!WebSocketConnectionManager.instance) {
+      WebSocketConnectionManager.instance = new WebSocketConnectionManager();
+    }
+    return WebSocketConnectionManager.instance;
+  }
+
+  getConnection(contractId: string): WebSocketService | null {
+    return this.connections.get(contractId) || null;
+  }
+
+  createConnection(contractId: string): WebSocketService {
+    console.log(`Creating WebSocket connection for contract ${contractId}`);
+    
+    // Close existing connection if any
+    const existing = this.connections.get(contractId);
+    if (existing) {
+      console.log(`Closing existing connection for contract ${contractId}`);
+      existing.disconnect();
+      this.connections.delete(contractId);
+    }
+
+    const connection = new WebSocketService(contractId);
+    this.connections.set(contractId, connection);
+    console.log(`WebSocket connection created and registered for contract ${contractId}`);
+    return connection;
+  }
+
+  removeConnection(contractId: string): void {
+    const connection = this.connections.get(contractId);
+    if (connection) {
+      connection.disconnect();
+      this.connections.delete(contractId);
+    }
+  }
+
+  disconnectAll(): void {
+    for (const [contractId, connection] of this.connections) {
+      connection.disconnect();
+    }
+    this.connections.clear();
+  }
+
+  getActiveConnections(): string[] {
+    return Array.from(this.connections.keys()).filter(contractId => {
+      const connection = this.connections.get(contractId);
+      return connection?.isWebSocketConnected();
+    });
+  }
+}
+
+// Export singleton instances
 export const apiService = new ApiService();
+export const wsConnectionManager = WebSocketConnectionManager.getInstance();
 export default apiService;
+
+// Cleanup connections on page unload
+window.addEventListener('beforeunload', () => {
+  wsConnectionManager.disconnectAll();
+});
+
+// Cleanup connections on page visibility change (mobile Safari)
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    // Page is hidden, disconnect WebSockets to save resources
+    wsConnectionManager.disconnectAll();
+  }
+});

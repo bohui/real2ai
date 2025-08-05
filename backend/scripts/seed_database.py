@@ -21,7 +21,8 @@ import uuid
 # Add the app directory to the path so we can import from it
 import sys
 import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+
+sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 from app.core.database import get_database_client, init_database
 
@@ -122,7 +123,7 @@ class DatabaseSeeder:
                 existing_user = await conn.fetchrow(
                     "SELECT id FROM auth.users WHERE email = $1", user["email"]
                 )
-                
+
                 if existing_user:
                     # User already exists, use their ID
                     auth_user_id = existing_user["id"]
@@ -133,8 +134,10 @@ class DatabaseSeeder:
                     auth_user_id = None
                     try:
                         # Use Supabase client sign_up method (same as in main.py)
-                        logger.info(f"Attempting to create auth user for {user['email']}")
-                        
+                        logger.info(
+                            f"Attempting to create auth user for {user['email']}"
+                        )
+
                         # Create user using the same method as the registration endpoint
                         user_result = self.db_client.auth.sign_up(
                             {
@@ -149,14 +152,16 @@ class DatabaseSeeder:
                                 },
                             }
                         )
-                        
+
                         if user_result.user:
                             auth_user_id = user_result.user.id
                             user["id"] = auth_user_id
-                            logger.info(f"Created auth user: {user['email']} with ID: {auth_user_id}")
+                            logger.info(
+                                f"Created auth user: {user['email']} with ID: {auth_user_id}"
+                            )
                         else:
                             raise Exception("User creation failed - no user returned")
-                            
+
                     except Exception as e:
                         logger.warning(
                             f"Failed to create auth user for {user['email']}: {e}"
@@ -172,9 +177,29 @@ class DatabaseSeeder:
                         existing_profile = await conn.fetchrow(
                             "SELECT id FROM profiles WHERE id = $1", user["id"]
                         )
-                        
+
                         if existing_profile:
-                            logger.info(f"Profile already exists for: {user['email']}")
+                            logger.info(
+                                f"Profile already exists for: {user['email']}, updating..."
+                            )
+                            await conn.execute(
+                                """
+                                UPDATE profiles 
+                                SET email = $2,
+                                    australian_state = $3,
+                                    user_type = $4,
+                                    subscription_status = $5,
+                                    credits_remaining = $6
+                                WHERE id = $1
+                            """,
+                                user["id"],
+                                user["email"],
+                                user["australian_state"],
+                                user["user_type"],
+                                user["subscription_status"],
+                                user["credits_remaining"],
+                            )
+                            logger.info(f"Updated demo user profile: {user['email']}")
                             created_users.append(user)
                         else:
                             await conn.execute(
@@ -200,7 +225,9 @@ class DatabaseSeeder:
                             logger.info(f"Created demo user profile: {user['email']}")
                             created_users.append(user)
                     except Exception as e:
-                        logger.error(f"Failed to create profile for {user['email']}: {e}")
+                        logger.error(
+                            f"Failed to create profile for {user['email']}: {e}"
+                        )
 
         finally:
             await conn.close()
@@ -220,7 +247,9 @@ class DatabaseSeeder:
         if len(available_users) < 4:
             # If we have fewer than 4 users, repeat the last user to fill the slots
             while len(available_users) < 4:
-                available_users.append(available_users[-1] if available_users else demo_users[0])
+                available_users.append(
+                    available_users[-1] if available_users else demo_users[0]
+                )
 
         sample_documents = [
             {

@@ -13,23 +13,37 @@ logger = logging.getLogger(__name__)
 
 
 class ConnectionManager:
-    """Manage WebSocket connections for a specific session"""
+    """Manage WebSocket connections for a specific session
+    
+    Follows ASGI WebSocket lifecycle best practices:
+    - WebSocket must be accepted before calling connect()
+    - Proper error handling and state tracking
+    - Graceful connection cleanup
+    """
 
     def __init__(self):
         self.active_connections: List[WebSocket] = []
         self.connection_info: Dict[WebSocket, Dict[str, Any]] = {}
 
     async def connect(self, websocket: WebSocket, metadata: Dict[str, Any] = None):
-        """Connect a new WebSocket"""
-        await websocket.accept()
-        self.active_connections.append(websocket)
-        self.connection_info[websocket] = {
-            "connected_at": datetime.now(UTC),
-            "metadata": metadata or {},
-        }
-        logger.info(
-            f"WebSocket connected. Total connections: {len(self.active_connections)}"
-        )
+        """Connect a new WebSocket (assumes websocket is already accepted and authenticated)"""
+        # Verify WebSocket is in correct state (should be OPEN after accept)
+        if websocket.client_state.name != "CONNECTED":
+            logger.warning(f"WebSocket connect called with state: {websocket.client_state.name}")
+            
+        # Prevent duplicate connections
+        if websocket not in self.active_connections:
+            self.active_connections.append(websocket)
+            self.connection_info[websocket] = {
+                "connected_at": datetime.now(UTC),
+                "metadata": metadata or {},
+                "authenticated": metadata.get("authenticated", False) if metadata else False,
+            }
+            logger.info(
+                f"WebSocket connected successfully. Total connections: {len(self.active_connections)}"
+            )
+        else:
+            logger.warning("Attempted to connect already connected WebSocket")
 
     def disconnect(self, websocket: WebSocket):
         """Disconnect a WebSocket"""
@@ -43,24 +57,40 @@ class ConnectionManager:
     async def send_personal_message(
         self, message: Dict[str, Any], websocket: WebSocket
     ):
-        """Send message to specific WebSocket"""
+        """Send message to specific WebSocket with enhanced error handling and state validation"""
         try:
-            await websocket.send_text(json.dumps(message))
+            if websocket in self.active_connections:
+                # Verify WebSocket is still in CONNECTED state before sending
+                if websocket.client_state.name == "CONNECTED":
+                    await websocket.send_text(json.dumps(message))
+                else:
+                    logger.warning(f"WebSocket not in CONNECTED state: {websocket.client_state.name}")
+                    self.disconnect(websocket)
+            else:
+                logger.warning("Attempted to send message to inactive WebSocket")
         except Exception as e:
             logger.error(f"Error sending personal message: {str(e)}")
+            # Remove the problematic connection to prevent further issues
             self.disconnect(websocket)
 
     async def broadcast(self, message: Dict[str, Any]):
-        """Broadcast message to all connected WebSockets"""
+        """Broadcast message to all connected WebSockets with state validation"""
         if not self.active_connections:
+            logger.debug("No active connections for broadcast")
             return
 
         message_str = json.dumps(message)
         disconnected = []
+        successful_sends = 0
 
-        for connection in self.active_connections:
+        for connection in self.active_connections.copy():  # Use copy to avoid modification during iteration
             try:
-                await connection.send_text(message_str)
+                # Validate connection is still in our active list
+                if connection in self.active_connections:
+                    await connection.send_text(message_str)
+                    successful_sends += 1
+                else:
+                    logger.warning("Skipped broadcast to connection not in active list")
             except Exception as e:
                 logger.error(f"Error broadcasting to connection: {str(e)}")
                 disconnected.append(connection)
@@ -68,6 +98,8 @@ class ConnectionManager:
         # Clean up disconnected connections
         for connection in disconnected:
             self.disconnect(connection)
+            
+        logger.debug(f"Broadcast completed: {successful_sends} successful, {len(disconnected)} failed")
 
     async def disconnect_all(self):
         """Disconnect all WebSocket connections"""

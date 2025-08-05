@@ -84,7 +84,7 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({ className }) => {
     : -1
 
   const progress = analysisProgress?.progress_percent || 0
-  const isConnected = wsService?.isConnected() || false
+  const isConnected = wsService?.isWebSocketConnected() || false
   
   const handleCancelAnalysis = () => {
     if (wsService && isAnalyzing) {

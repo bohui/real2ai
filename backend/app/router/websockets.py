@@ -27,30 +27,42 @@ async def contract_analysis_websocket(
     """
     WebSocket endpoint for real-time contract analysis updates.
 
-    Clients connect to receive progress updates for a specific contract analysis.
+    ASGI-compliant WebSocket lifecycle: accept → authenticate → connect → handle messages
+    This prevents ASGI protocol violations by accepting before any close operations.
     """
+    
+    user = None
+    connection_established = False
+    authenticated = False
 
     try:
-        # Log the connection attempt
-        logger.info(f"WebSocket connection attempt for contract {contract_id}")
-        logger.info(f"Token provided: {token[:20]}..." if token else "No token")
-
-        # Accept the WebSocket connection first
+        # Step 1: Log connection attempt
+        logger.info(f"WebSocket connection requested for contract {contract_id} by user token")
+        
+        # Step 2: ACCEPT FIRST (required by ASGI protocol)
+        # Must accept before any other operations to establish proper ASGI state
         await websocket.accept()
-        logger.info("WebSocket connection accepted")
+        logger.info("WebSocket connection accepted, proceeding with authentication")
+        connection_established = True
 
-        # Authenticate user via token
-        user = await get_current_user_ws(token)
-        if not user:
-            logger.error(f"WebSocket authentication failed for contract {contract_id}")
+        # Step 3: Authenticate AFTER accepting (ASGI compliant)
+        try:
+            user = await get_current_user_ws(token)
+            if not user:
+                logger.error(f"WebSocket authentication failed for contract {contract_id}")
+                await websocket.close(code=4001, reason="Authentication failed")
+                return
+            
+            authenticated = True
+            logger.info(
+                f"WebSocket authentication successful for contract {contract_id} by user {user.id}"
+            )
+        except Exception as auth_error:
+            logger.error(f"WebSocket authentication error for contract {contract_id}: {str(auth_error)}")
             await websocket.close(code=4001, reason="Authentication failed")
             return
 
-        logger.info(
-            f"WebSocket connection requested for contract {contract_id} by user {user.id}"
-        )
-
-        # Connect WebSocket
+        # Step 4: Register with connection manager (websocket accepted and authenticated)
         await websocket_manager.connect(
             websocket,
             contract_id,
@@ -58,6 +70,7 @@ async def contract_analysis_websocket(
                 "user_id": str(user.id),
                 "contract_id": contract_id,
                 "connected_at": datetime.now(UTC).isoformat(),
+                "authenticated": True,
             },
         )
 
@@ -105,11 +118,26 @@ async def contract_analysis_websocket(
 
     except Exception as e:
         logger.error(f"WebSocket error for contract {contract_id}: {str(e)}")
-        await websocket.close(code=4000, reason="Internal server error")
+        # Only attempt to close if connection was properly established and authenticated
+        if connection_established and authenticated:
+            try:
+                await websocket.close(code=4000, reason="Internal server error")
+            except Exception as close_error:
+                logger.error(f"Error closing WebSocket: {str(close_error)}")
+        elif connection_established:
+            # Connection accepted but not authenticated - close with auth error
+            try:
+                await websocket.close(code=4001, reason="Authentication required")
+            except Exception as close_error:
+                logger.error(f"Error closing unauthenticated WebSocket: {str(close_error)}")
 
     finally:
-        # Cleanup
-        websocket_manager.disconnect(websocket, contract_id)
+        # Cleanup - only register/disconnect if properly authenticated
+        if connection_established and authenticated and user:
+            websocket_manager.disconnect(websocket, contract_id)
+            logger.info(f"WebSocket cleanup completed for contract {contract_id}")
+        else:
+            logger.info(f"WebSocket cleanup skipped - connection not fully established for contract {contract_id}")
 
 
 async def handle_client_message(

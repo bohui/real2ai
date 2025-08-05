@@ -292,6 +292,7 @@ RETURNS UUID AS $$
 DECLARE
     progress_id UUID;
     existing_progress analysis_progress;
+    elapsed_seconds INTEGER := 0;
 BEGIN
     -- Get existing progress record
     SELECT * INTO existing_progress
@@ -302,19 +303,15 @@ BEGIN
     LIMIT 1;
     
     -- Calculate elapsed time if previous step exists
-    DECLARE
-        elapsed_seconds INTEGER := 0;
-    BEGIN
-        IF existing_progress.id IS NOT NULL THEN
-            elapsed_seconds := EXTRACT(EPOCH FROM (NOW() - existing_progress.step_started_at))::INTEGER;
-            
-            -- Update previous step completion time
-            UPDATE analysis_progress
-            SET step_completed_at = NOW(),
-                total_elapsed_seconds = elapsed_seconds
-            WHERE id = existing_progress.id;
-        END IF;
-    END;
+    IF existing_progress.id IS NOT NULL THEN
+        elapsed_seconds := EXTRACT(EPOCH FROM (NOW() - existing_progress.step_started_at))::INTEGER;
+        
+        -- Update previous step completion time
+        UPDATE analysis_progress
+        SET step_completed_at = NOW(),
+            total_elapsed_seconds = elapsed_seconds
+        WHERE id = existing_progress.id;
+    END IF;
     
     -- Insert new progress record
     INSERT INTO analysis_progress (

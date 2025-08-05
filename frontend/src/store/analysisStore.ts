@@ -5,7 +5,7 @@ import {
   AnalysisProgressUpdate,
   ContractAnalysisRequest 
 } from '@/types'
-import { apiService, WebSocketService } from '@/services/api'
+import { apiService, WebSocketService, wsConnectionManager } from '@/services/api'
 
 interface AnalysisState {
   // Current analysis state
@@ -23,6 +23,8 @@ interface AnalysisState {
   
   // WebSocket
   wsService: WebSocketService | null
+  wsEventListener: ((event: any) => void) | null
+  currentContractId: string | null
   
   // Recent analyses
   recentAnalyses: ContractAnalysisResult[]
@@ -50,6 +52,8 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
   isAnalyzing: false,
   analysisError: null,
   wsService: null,
+  wsEventListener: null,
+  currentContractId: null,
   recentAnalyses: [],
 
   uploadDocument: async (file: File, contractType: string, state: string) => {
@@ -105,66 +109,118 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
   },
 
   connectWebSocket: async (contractId: string) => {
+    const state = get();
+    
+    // Don't reconnect to the same contract
+    if (state.currentContractId === contractId && state.wsService?.isWebSocketConnected()) {
+      console.log(`Already connected to contract ${contractId}`);
+      return;
+    }
+    
     // Disconnect existing connection
     get().disconnectWebSocket()
     
-    const wsService = new WebSocketService(contractId)
-    set({ wsService })
+    // Use connection manager to prevent duplicate connections
+    const wsService = wsConnectionManager.createConnection(contractId)
+    
+    // Create event handler with proper cleanup
+    const handleUpdate = (event: any) => {
+      const data = event.detail
+      
+      // Ensure this event is for the current contract
+      if (data.data?.contract_id && data.data.contract_id !== contractId) {
+        console.log(`Ignoring WebSocket event for different contract: ${data.data.contract_id} (expected: ${contractId})`);
+        return;
+      }
+      
+      console.log(`Processing WebSocket event for contract ${contractId}:`, data.event_type);
+      
+      switch (data.event_type) {
+        case 'analysis_progress':
+          get().updateProgress(data.data)
+          break
+          
+        case 'analysis_completed':
+          // Fetch full analysis result
+          apiService.getAnalysisResult(contractId)
+            .then(result => {
+              get().setAnalysisResult(result)
+              get().addRecentAnalysis(result)
+              set({ isAnalyzing: false })
+            })
+            .catch(error => {
+              set({ 
+                isAnalyzing: false,
+                analysisError: apiService.handleError(error)
+              })
+            })
+          break
+          
+        case 'analysis_failed':
+          set({
+            isAnalyzing: false,
+            analysisError: data.data?.error_message || 'Analysis failed'
+          })
+          break
+
+        case 'connection_established':
+          console.log(`WebSocket connection established for contract ${contractId}`);
+          break;
+          
+        case 'heartbeat':
+          // Heartbeat received, connection is alive
+          break;
+          
+        default:
+          console.log('Received WebSocket event:', data.event_type, data);
+      }
+    }
+    
+    set({ 
+      wsService, 
+      wsEventListener: handleUpdate,
+      currentContractId: contractId
+    })
     
     try {
       await wsService.connect()
-      
-      // Listen for analysis updates
-      const handleUpdate = (event: any) => {
-        const data = event.detail
-        
-        switch (data.event_type) {
-          case 'analysis_progress':
-            get().updateProgress(data.data)
-            break
-            
-          case 'analysis_completed':
-            // Fetch full analysis result
-            apiService.getAnalysisResult(contractId)
-              .then(result => {
-                get().setAnalysisResult(result)
-                get().addRecentAnalysis(result)
-                set({ isAnalyzing: false })
-              })
-              .catch(error => {
-                set({ 
-                  isAnalyzing: false,
-                  analysisError: apiService.handleError(error)
-                })
-              })
-            break
-            
-          case 'analysis_failed':
-            set({
-              isAnalyzing: false,
-              analysisError: data.data.error_message
-            })
-            break
-        }
-      }
-      
       window.addEventListener('analysis:update', handleUpdate)
       
     } catch (error) {
       console.error('WebSocket connection failed:', error)
-      set({ analysisError: 'Failed to connect for real-time updates' })
+      set({ 
+        analysisError: 'Failed to connect for real-time updates',
+        wsService: null,
+        wsEventListener: null,
+        currentContractId: null
+      })
     }
   },
 
   disconnectWebSocket: () => {
-    const { wsService } = get()
+    const { wsService, wsEventListener, currentContractId } = get()
+    
+    console.log(`Disconnecting WebSocket for contract ${currentContractId}`);
+    
     if (wsService) {
       wsService.disconnect()
-      set({ wsService: null })
     }
     
-    // Remove event listeners
-    window.removeEventListener('analysis:update', () => {})
+    // Also remove from connection manager
+    if (currentContractId) {
+      wsConnectionManager.removeConnection(currentContractId)
+    }
+    
+    // Remove event listener with proper reference
+    if (wsEventListener) {
+      window.removeEventListener('analysis:update', wsEventListener)
+    }
+    
+    set({ 
+      wsService: null, 
+      wsEventListener: null,
+      currentContractId: null
+    })
   },
 
   updateProgress: (progress: AnalysisProgressUpdate) => {
@@ -176,6 +232,7 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
   },
 
   clearCurrentAnalysis: () => {
+    console.log('Clearing current analysis and disconnecting WebSocket');
     get().disconnectWebSocket()
     set({
       currentDocument: null,

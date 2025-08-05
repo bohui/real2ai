@@ -160,17 +160,25 @@ async def get_optional_user(
 
 
 async def get_current_user_ws(token: str) -> Optional[User]:
-    """Get current authenticated user for WebSocket connections"""
+    """Get current authenticated user for WebSocket connections with enhanced validation"""
 
     try:
-        logger.info("Attempting WebSocket authentication")
+        logger.info("Starting WebSocket authentication")
 
-        if not token:
-            logger.error("No token provided for WebSocket authentication")
+        if not token or token.strip() == "":
+            logger.error(
+                "No token or empty token provided for WebSocket authentication"
+            )
             return None
 
+        # Remove any URL encoding if present
+        if token.startswith("Bearer%20"):
+            token = token.replace("Bearer%20", "")
+        elif token.startswith("Bearer "):
+            token = token.replace("Bearer ", "")
+
         token_data = verify_token(token)
-        logger.info(f"Token verified for user: {token_data.user_id}")
+        logger.info(f"Token verified successfully for user: {token_data.user_id}")
 
         # Get user profile from database
         db_client = get_database_client()
@@ -193,7 +201,7 @@ async def get_current_user_ws(token: str) -> Optional[User]:
         profile = result.data[0]
         logger.info(f"User profile retrieved successfully: {profile['email']}")
 
-        return User(
+        user = User(
             id=profile["id"],
             email=profile["email"],
             australian_state=profile["australian_state"],
@@ -202,6 +210,9 @@ async def get_current_user_ws(token: str) -> Optional[User]:
             credits_remaining=profile.get("credits_remaining", 0),
             preferences=profile.get("preferences", {}),
         )
+
+        logger.info(f"WebSocket authentication completed for user: {user.email}")
+        return user
 
     except Exception as e:
         logger.error(f"WebSocket authentication error: {str(e)}")
