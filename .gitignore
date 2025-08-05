@@ -62,6 +62,7 @@ temp/
 # test
 frontend/coverage/
 backend/.coverage
+backend/coverage.xml
 
 # Celery runtime files
 celerybeat-schedule
