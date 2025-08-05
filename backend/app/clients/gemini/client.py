@@ -6,7 +6,12 @@ import logging
 import os
 from typing import Any, Dict, Optional
 from google import genai
-from google.genai.types import HarmCategory, HarmBlockThreshold
+from google.genai.types import (
+    HarmCategory,
+    HarmBlockThreshold,
+    SafetySetting,
+    GenerateContentConfig,
+)
 from google.auth import default
 from google.auth.credentials import Credentials
 
@@ -24,6 +29,12 @@ from ...core.langsmith_config import langsmith_trace, log_trace_info
 
 logger = logging.getLogger(__name__)
 
+# Constants to replace magic numbers
+BYTES_PER_MB = 1024 * 1024
+RESPONSE_PREVIEW_LENGTH = 50
+PROMPT_PREVIEW_LENGTH = 100
+CONTENT_PREVIEW_LENGTH = 2000
+
 
 class GeminiClient(BaseClient, AIOperations):
     """Google Gemini client wrapper providing AI operations."""
@@ -31,15 +42,15 @@ class GeminiClient(BaseClient, AIOperations):
     def __init__(self, config: GeminiClientConfig):
         super().__init__(config, "GeminiClient")
         self.config: GeminiClientConfig = config
-        self._model: Optional[Any] = None
+        self._client: Optional[genai.Client] = None
         self._ocr_client: Optional[GeminiOCRClient] = None
 
     @property
-    def model(self):
-        """Get the underlying Gemini model."""
-        if not self._model:
-            raise ClientError("Gemini model not initialized", self.client_name)
-        return self._model
+    def client(self):
+        """Get the underlying Gemini client."""
+        if not self._client:
+            raise ClientError("Gemini client not initialized", self.client_name)
+        return self._client
 
     @property
     def ocr(self) -> GeminiOCRClient:
@@ -62,19 +73,11 @@ class GeminiClient(BaseClient, AIOperations):
             )
             await self._configure_service_role_auth()
 
-            # Set up safety settings
-            safety_settings = self._get_safety_settings()
-
-            # Create the generative model
-            self._model = genai.GenerativeModel(
-                model_name=self.config.model_name, safety_settings=safety_settings
-            )
-
             # Test the connection
             await self._test_connection()
 
             # Initialize OCR client
-            self._ocr_client = GeminiOCRClient(self._model, self.config)
+            self._ocr_client = GeminiOCRClient(self._client, self.config)
             await self._ocr_client.initialize()
 
             self._initialized = True
@@ -132,8 +135,11 @@ class GeminiClient(BaseClient, AIOperations):
                 project_id = self.config.project_id
                 self.logger.info(f"Using configured project ID: {project_id}")
 
-            # Configure genai with credentials
-            genai.configure(credentials=credentials)
+            # Create the client with credentials
+            self._client = genai.Client(
+                credentials=credentials,
+                project=project_id,
+            )
 
             self.logger.info(
                 f"Service role authentication configured successfully"
@@ -151,7 +157,7 @@ class GeminiClient(BaseClient, AIOperations):
                 original_error=e,
             )
 
-    def _get_safety_settings(self) -> Dict:
+    def _get_safety_settings(self) -> list[SafetySetting]:
         """Get safety settings for Gemini model."""
         threshold_map = {
             "BLOCK_NONE": HarmBlockThreshold.BLOCK_NONE,
@@ -164,28 +170,50 @@ class GeminiClient(BaseClient, AIOperations):
             self.config.harm_block_threshold, HarmBlockThreshold.BLOCK_NONE
         )
 
-        return {
-            HarmCategory.HARM_CATEGORY_HATE_SPEECH: threshold,
-            HarmCategory.HARM_CATEGORY_HARASSMENT: threshold,
-            HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: threshold,
-            HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: threshold,
-        }
+        return [
+            SafetySetting(
+                category=HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold=threshold
+            ),
+            SafetySetting(
+                category=HarmCategory.HARM_CATEGORY_HARASSMENT, threshold=threshold
+            ),
+            SafetySetting(
+                category=HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                threshold=threshold,
+            ),
+            SafetySetting(
+                category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                threshold=threshold,
+            ),
+        ]
 
     async def _test_connection(self) -> None:
         """Test Gemini API connection."""
         try:
             # Simple test prompt
             test_prompt = "Test connection. Respond with 'OK'."
-            response = self._model.generate_content(test_prompt)
 
-            if not response.text:
+            # Create content for the test
+            content = genai.types.Content(parts=[genai.types.Part(text=test_prompt)])
+
+            # Generate content
+            response = self._client.models.generate_content(
+                model=self.config.model_name,
+                contents=[content],
+                config=GenerateContentConfig(
+                    safety_settings=self._get_safety_settings()
+                ),
+            )
+
+            if not response.candidates or not response.candidates[0].content:
                 raise ClientConnectionError(
                     "Gemini API test failed: No response received",
                     client_name=self.client_name,
                 )
 
+            response_text = response.candidates[0].content.parts[0].text
             self.logger.debug(
-                f"Gemini API connection test successful. Response: {response.text[:50]}..."
+                f"Gemini API connection test successful. Response: {response_text[:RESPONSE_PREVIEW_LENGTH]}..."
             )
 
         except Exception as e:
@@ -284,7 +312,7 @@ class GeminiClient(BaseClient, AIOperations):
                     "model_name": self.config.model_name,
                     "timeout": self.config.timeout,
                     "max_retries": self.config.max_retries,
-                    "max_file_size_mb": self.config.max_file_size / (1024 * 1024),
+                    "max_file_size_mb": self.config.max_file_size / BYTES_PER_MB,
                     "service_account_only": True,
                 },
             }
@@ -311,9 +339,9 @@ class GeminiClient(BaseClient, AIOperations):
                 await self._ocr_client.close()
                 self._ocr_client = None
 
-            if self._model:
-                # Gemini model doesn't require explicit closing
-                self._model = None
+            if self._client:
+                # Client doesn't require explicit closing
+                self._client = None
 
             self._initialized = False
             self.logger.info("Gemini client closed successfully")
@@ -333,23 +361,46 @@ class GeminiClient(BaseClient, AIOperations):
     async def generate_content(self, prompt: str, **kwargs) -> str:
         """Generate content based on a prompt."""
         try:
-            log_trace_info("gemini_generate_content", prompt_length=len(prompt), model=self.config.model_name)
-            self.logger.debug(f"Generating content for prompt: {prompt[:100]}...")
+            log_trace_info(
+                "gemini_generate_content",
+                prompt_length=len(prompt),
+                model=self.config.model_name,
+            )
+            self.logger.debug(
+                f"Generating content for prompt: {prompt[:PROMPT_PREVIEW_LENGTH]}..."
+            )
+
+            # Create content for the prompt
+            content = genai.types.Content(parts=[genai.types.Part(text=prompt)])
+
+            # Create generation config
+            generation_config = GenerateContentConfig(
+                safety_settings=self._get_safety_settings(),
+                temperature=kwargs.get("temperature", 0.1),
+                top_p=kwargs.get("top_p", 1.0),
+                max_output_tokens=kwargs.get("max_tokens"),
+            )
 
             # Execute in thread pool to avoid blocking
             import asyncio
 
             response = await asyncio.get_event_loop().run_in_executor(
-                None, lambda: self.model.generate_content(prompt)
+                None,
+                lambda: self.client.models.generate_content(
+                    model=self.config.model_name,
+                    contents=[content],
+                    config=generation_config,
+                ),
             )
 
-            if not response.text:
+            if not response.candidates or not response.candidates[0].content:
                 raise ClientError(
                     "No content generated from Gemini", client_name=self.client_name
                 )
 
-            self.logger.debug(f"Successfully generated {len(response.text)} characters")
-            return response.text
+            response_text = response.candidates[0].content.parts[0].text
+            self.logger.debug(f"Successfully generated {len(response_text)} characters")
+            return response_text
 
         except Exception as e:
             self.logger.error(f"Content generation failed: {e}")
@@ -372,7 +423,11 @@ class GeminiClient(BaseClient, AIOperations):
     ) -> Dict[str, Any]:
         """Analyze a document and extract information."""
         try:
-            log_trace_info("gemini_analyze_document", content_type=content_type, content_size=len(content))
+            log_trace_info(
+                "gemini_analyze_document",
+                content_type=content_type,
+                content_size=len(content),
+            )
             self.logger.debug(f"Analyzing document of type: {content_type}")
 
             # Delegate to OCR client for document analysis
@@ -395,7 +450,11 @@ class GeminiClient(BaseClient, AIOperations):
     ) -> Dict[str, Any]:
         """Extract text from a document using OCR."""
         try:
-            log_trace_info("gemini_extract_text", content_type=content_type, content_size=len(content))
+            log_trace_info(
+                "gemini_extract_text",
+                content_type=content_type,
+                content_size=len(content),
+            )
             self.logger.debug(f"Extracting text from document of type: {content_type}")
 
             # Delegate to OCR client
@@ -418,7 +477,11 @@ class GeminiClient(BaseClient, AIOperations):
     ) -> Dict[str, Any]:
         """Classify content into predefined categories."""
         try:
-            log_trace_info("gemini_classify_content", content_length=len(content), categories_count=len(categories))
+            log_trace_info(
+                "gemini_classify_content",
+                content_length=len(content),
+                categories_count=len(categories),
+            )
             self.logger.debug(f"Classifying content into {len(categories)} categories")
 
             # Create classification prompt
@@ -427,7 +490,7 @@ class GeminiClient(BaseClient, AIOperations):
             Classify the following content into one of these categories: {categories_text}
             
             Content:
-            {content[:2000]}...
+            {content[:CONTENT_PREVIEW_LENGTH]}...
             
             Respond with only the category name that best fits this content.
             """

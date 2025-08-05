@@ -10,6 +10,7 @@ from typing import Any, Dict, Optional, BinaryIO
 from datetime import datetime, UTC
 from PIL import Image
 import fitz  # PyMuPDF
+from google import genai
 
 from ..base.client import with_retry
 from ..base.exceptions import (
@@ -21,12 +22,30 @@ from .config import GeminiClientConfig
 
 logger = logging.getLogger(__name__)
 
+# Constants to replace magic numbers
+TEST_IMAGE_WIDTH = 100
+TEST_IMAGE_HEIGHT = 50
+MAX_PDF_PAGES = 50
+MIN_NATIVE_TEXT_LENGTH = 50
+NATIVE_TEXT_CONFIDENCE = 0.95
+TEXT_LENGTH_THRESHOLD_SMALL = 100
+TEXT_LENGTH_THRESHOLD_MEDIUM = 500
+TEXT_LENGTH_THRESHOLD_LARGE = 1000
+MIN_IMAGE_DIMENSION = 1000
+PATTERN_NAME_MAX_LENGTH = 20
+ENHANCEMENT_FACTOR_INCREMENT = 0.02
+CONTENT_QUALITY_THRESHOLD = 100
+BYTES_PER_MB = 1024 * 1024
+RESPONSE_PREVIEW_LENGTH = 50
+PROMPT_PREVIEW_LENGTH = 100
+CONTENT_PREVIEW_LENGTH = 2000
+
 
 class GeminiOCRClient:
     """Gemini OCR operations client."""
 
-    def __init__(self, gemini_model, config: GeminiClientConfig):
-        self.model = gemini_model
+    def __init__(self, gemini_client, config: GeminiClientConfig):
+        self.client = gemini_client
         self.config = config
         self.client_name = "GeminiOCRClient"
         self.logger = logging.getLogger(f"{__name__}.{self.client_name}")
@@ -51,7 +70,9 @@ class GeminiOCRClient:
         """Test OCR capability with a simple test."""
         try:
             # Create a simple test image programmatically
-            test_image = Image.new("RGB", (100, 50), color="white")
+            test_image = Image.new(
+                "RGB", (TEST_IMAGE_WIDTH, TEST_IMAGE_HEIGHT), color="white"
+            )
 
             # Convert to bytes
             img_buffer = io.BytesIO()
@@ -61,16 +82,27 @@ class GeminiOCRClient:
             # Test OCR on the simple image
             # This is a minimal test to verify the API works
             prompt = "What text is visible in this image? If no text, respond with 'No text found'."
-            image_part = {
-                "mime_type": "image/png",
-                "data": base64.b64encode(img_bytes).decode("utf-8"),
-            }
 
-            response = await asyncio.get_event_loop().run_in_executor(
-                None, lambda: self.model.generate_content([prompt, image_part])
+            # Create content with image
+            content = genai.types.Content(
+                parts=[
+                    genai.types.Part(text=prompt),
+                    genai.types.Part(
+                        inline_data=genai.types.Blob(
+                            mime_type="image/png", data=img_bytes
+                        )
+                    ),
+                ]
             )
 
-            if not response.text:
+            response = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: self.client.models.generate_content(
+                    model=self.config.model_name, contents=[content]
+                ),
+            )
+
+            if not response.candidates or not response.candidates[0].content:
                 raise ClientError("OCR test failed: No response received")
 
             self.logger.debug("OCR capability test successful")
@@ -87,7 +119,7 @@ class GeminiOCRClient:
         # Check file size
         if len(content) > self.config.max_file_size:
             raise ClientValidationError(
-                f"File too large for OCR. Maximum size: {self.config.max_file_size / 1024 / 1024}MB",
+                f"File too large for OCR. Maximum size: {self.config.max_file_size / BYTES_PER_MB}MB",
                 client_name=self.client_name,
             )
 
@@ -183,7 +215,7 @@ class GeminiOCRClient:
             }
 
             # Process each page (limit for performance)
-            max_pages = min(pdf_document.page_count, 50)  # Limit to 50 pages
+            max_pages = min(pdf_document.page_count, MAX_PDF_PAGES)  # Limit to 50 pages
 
             for page_num in range(max_pages):
                 page = pdf_document[page_num]
@@ -191,13 +223,13 @@ class GeminiOCRClient:
                 # Check if page has native text first
                 native_text = page.get_text().strip()
 
-                if native_text and len(native_text) > 50:
+                if native_text and len(native_text) > MIN_NATIVE_TEXT_LENGTH:
                     # Use native text extraction
                     page_result = {
                         "page_number": page_num + 1,
                         "text": native_text,
                         "extraction_method": "native_pdf",
-                        "confidence": 0.95,
+                        "confidence": NATIVE_TEXT_CONFIDENCE,
                     }
                 else:
                     # Use OCR for this page
@@ -257,17 +289,31 @@ class GeminiOCRClient:
             # Create OCR prompt
             prompt = self._create_ocr_prompt(page_number, **kwargs)
 
-            # Send to Gemini for OCR
-            image_part = {
-                "mime_type": "image/png",
-                "data": base64.b64encode(img_data).decode("utf-8"),
-            }
-
-            response = await asyncio.get_event_loop().run_in_executor(
-                None, lambda: self.model.generate_content([prompt, image_part])
+            # Create content with image
+            content = genai.types.Content(
+                parts=[
+                    genai.types.Part(text=prompt),
+                    genai.types.Part(
+                        inline_data=genai.types.Blob(
+                            mime_type="image/png", data=img_data
+                        )
+                    ),
+                ]
             )
 
-            extracted_text = response.text if response.text else ""
+            # Send to Gemini for OCR
+            response = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: self.client.models.generate_content(
+                    model=self.config.model_name, contents=[content]
+                ),
+            )
+
+            extracted_text = (
+                response.candidates[0].content.parts[0].text
+                if response.candidates and response.candidates[0].content
+                else ""
+            )
             confidence = self._calculate_confidence(extracted_text)
 
             return {
@@ -301,19 +347,32 @@ class GeminiOCRClient:
             # Create OCR prompt
             prompt = self._create_ocr_prompt(1, is_single_image=True, **kwargs)
 
-            # Prepare image for Gemini
+            # Create content with image
             mime_type = f"image/{content_type.replace('image/', '')}"
-            image_part = {
-                "mime_type": mime_type,
-                "data": base64.b64encode(enhanced_image).decode("utf-8"),
-            }
+            content = genai.types.Content(
+                parts=[
+                    genai.types.Part(text=prompt),
+                    genai.types.Part(
+                        inline_data=genai.types.Blob(
+                            mime_type=mime_type, data=enhanced_image
+                        )
+                    ),
+                ]
+            )
 
             # Send to Gemini for OCR
             response = await asyncio.get_event_loop().run_in_executor(
-                None, lambda: self.model.generate_content([prompt, image_part])
+                None,
+                lambda: self.client.models.generate_content(
+                    model=self.config.model_name, contents=[content]
+                ),
             )
 
-            extracted_text = response.text if response.text else ""
+            extracted_text = (
+                response.candidates[0].content.parts[0].text
+                if response.candidates and response.candidates[0].content
+                else ""
+            )
             confidence = self._calculate_confidence(extracted_text)
 
             # Apply text enhancement if enabled
@@ -385,11 +444,11 @@ class GeminiOCRClient:
 
         # Text length factor
         text_length = len(extracted_text.strip())
-        if text_length > 100:
+        if text_length > TEXT_LENGTH_THRESHOLD_SMALL:
             confidence += 0.1
-        if text_length > 500:
+        if text_length > TEXT_LENGTH_THRESHOLD_MEDIUM:
             confidence += 0.1
-        if text_length > 1000:
+        if text_length > TEXT_LENGTH_THRESHOLD_LARGE:
             confidence += 0.1
 
         # Quality indicators
@@ -418,8 +477,10 @@ class GeminiOCRClient:
 
             # Enhance image quality for OCR
             width, height = image.size
-            if width < 1000 or height < 1000:
-                scale_factor = max(1000 / width, 1000 / height)
+            if width < MIN_IMAGE_DIMENSION or height < MIN_IMAGE_DIMENSION:
+                scale_factor = max(
+                    MIN_IMAGE_DIMENSION / width, MIN_IMAGE_DIMENSION / height
+                )
                 new_width = int(width * scale_factor)
                 new_height = int(height * scale_factor)
                 image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
@@ -452,12 +513,15 @@ class GeminiOCRClient:
             for pattern, replacement in ocr_corrections.items():
                 if re.search(pattern, enhanced_text):
                     enhanced_text = re.sub(pattern, replacement, enhanced_text)
-                    enhancements_applied.append(f"corrected_pattern_{pattern[:20]}")
+                    enhancements_applied.append(
+                        f"corrected_pattern_{pattern[:PATTERN_NAME_MAX_LENGTH]}"
+                    )
 
             return {
                 "text": enhanced_text,
                 "enhancements_applied": enhancements_applied,
-                "enhancement_factor": 1.0 + len(enhancements_applied) * 0.02,
+                "enhancement_factor": 1.0
+                + len(enhancements_applied) * ENHANCEMENT_FACTOR_INCREMENT,
             }
 
         except Exception as e:
@@ -491,7 +555,9 @@ class GeminiOCRClient:
                 "word_count": word_count,
                 "character_count": char_count,
                 "detected_document_types": detected_types,
-                "content_quality": "good" if word_count > 100 else "limited",
+                "content_quality": (
+                    "good" if word_count > CONTENT_QUALITY_THRESHOLD else "limited"
+                ),
                 "analysis_method": "keyword_detection",
             }
 
@@ -507,8 +573,8 @@ class GeminiOCRClient:
                 "status": "healthy",
                 "client_name": self.client_name,
                 "initialized": self._initialized,
-                "model_available": self.model is not None,
-                "max_file_size_mb": self.config.max_file_size / (1024 * 1024),
+                "model_available": self.client is not None,
+                "max_file_size_mb": self.config.max_file_size / BYTES_PER_MB,
                 "supported_formats": list(self.config.supported_formats),
             }
         except Exception as e:

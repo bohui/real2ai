@@ -8,6 +8,13 @@ from pydantic_settings import BaseSettings
 
 from ..base.client import ClientConfig
 
+# Constants to replace magic numbers
+DEFAULT_MAX_FILE_SIZE_MB = 50
+DEFAULT_PROCESSING_TIMEOUT_SECONDS = 120
+DEFAULT_RATE_LIMIT_RPM = 60
+DEFAULT_CIRCUIT_TIMEOUT_SECONDS = 300  # 5 minutes for AI services
+BYTES_PER_MB = 1024 * 1024
+
 
 @dataclass(kw_only=True)
 class GeminiClientConfig(ClientConfig):
@@ -24,13 +31,13 @@ class GeminiClientConfig(ClientConfig):
     harm_block_threshold: str = "BLOCK_NONE"
 
     # OCR specific settings
-    max_file_size: int = 50 * 1024 * 1024  # 50MB
+    max_file_size: int = DEFAULT_MAX_FILE_SIZE_MB * BYTES_PER_MB  # 50MB
     supported_formats: set = None
     ocr_confidence_threshold: float = 0.7
 
     # Performance settings
-    processing_timeout: int = 120
-    rate_limit_rpm: Optional[int] = 60
+    processing_timeout: int = DEFAULT_PROCESSING_TIMEOUT_SECONDS
+    rate_limit_rpm: Optional[int] = DEFAULT_RATE_LIMIT_RPM
 
     # Enhancement settings
     enable_image_enhancement: bool = True
@@ -63,10 +70,10 @@ class GeminiSettings(BaseSettings):
     gemini_harm_block_threshold: str = "BLOCK_NONE"
 
     # OCR settings
-    gemini_max_file_size_mb: int = 50
+    gemini_max_file_size_mb: int = DEFAULT_MAX_FILE_SIZE_MB
     gemini_ocr_confidence_threshold: float = 0.7
-    gemini_processing_timeout: int = 120
-    gemini_rate_limit_rpm: Optional[int] = 60
+    gemini_processing_timeout: int = DEFAULT_PROCESSING_TIMEOUT_SECONDS
+    gemini_rate_limit_rpm: Optional[int] = DEFAULT_RATE_LIMIT_RPM
 
     # Enhancement settings
     gemini_enable_image_enhancement: bool = True
@@ -77,7 +84,9 @@ class GeminiSettings(BaseSettings):
     gemini_backoff_factor: float = 2.0
     gemini_circuit_breaker_enabled: bool = True
     gemini_failure_threshold: int = 5
-    gemini_circuit_timeout: int = 300  # 5 minutes for AI services
+    gemini_circuit_timeout: int = (
+        DEFAULT_CIRCUIT_TIMEOUT_SECONDS  # 5 minutes for AI services
+    )
 
     class Config:
         env_file = [".env", ".env.local"]
@@ -95,7 +104,7 @@ class GeminiSettings(BaseSettings):
             # Safety settings
             harm_block_threshold=self.gemini_harm_block_threshold,
             # OCR settings
-            max_file_size=self.gemini_max_file_size_mb * 1024 * 1024,
+            max_file_size=self.gemini_max_file_size_mb * BYTES_PER_MB,
             ocr_confidence_threshold=self.gemini_ocr_confidence_threshold,
             processing_timeout=self.gemini_processing_timeout,
             rate_limit_rpm=self.gemini_rate_limit_rpm,
