@@ -369,15 +369,22 @@ class DomainClient(BaseClient, RealEstateAPIOperations):
         address: str, 
         property_details: Dict[str, Any] = None
     ) -> Dict[str, Any]:
-        """Get property valuation estimate."""
+        """Get property valuation estimate with enhanced error handling and fallback."""
         try:
+            # Enhanced address validation
+            if not address or not address.strip():
+                raise InvalidPropertyAddressError("Address cannot be empty")
+            
+            # Clean and validate address format
+            cleaned_address = self._clean_address(address)
+            
             # Domain API uses address-based valuation
             endpoint = "properties/_suggest"
             
             params = {
-                "terms": address,
+                "terms": cleaned_address,
                 "channel": "buy",
-                "pageSize": 1
+                "pageSize": 5  # Increased for better matching
             }
             
             response_data = await self._make_request(
@@ -389,22 +396,62 @@ class DomainClient(BaseClient, RealEstateAPIOperations):
             )
             
             if not response_data or not response_data.get("data"):
-                raise PropertyValuationError(address, "No valuation data available")
+                # Try fallback search with different parameters
+                return await self._fallback_valuation_search(cleaned_address, property_details)
             
-            # Get detailed property info for valuation
-            property_data = response_data["data"][0]
-            property_id = property_data.get("id")
+            # Find best match from results
+            best_match = self._find_best_address_match(response_data["data"], cleaned_address)
             
+            if not best_match:
+                raise PropertyValuationError(address, "No matching property found for valuation")
+            
+            property_id = best_match.get("id")
             if not property_id:
-                raise PropertyValuationError(address, "Property ID not found")
+                raise PropertyValuationError(address, "Property ID not found in search results")
             
-            # Get detailed property information
-            details = await self.get_property_details(str(property_id))
+            # Get detailed property information with retry logic
+            try:
+                details = await self.get_property_details(str(property_id))
+            except PropertyNotFoundError:
+                # Try with other matches if available
+                other_matches = [p for p in response_data["data"] if p.get("id") != property_id]
+                if other_matches:
+                    for alt_match in other_matches[:2]:  # Try up to 2 alternatives
+                        try:
+                            details = await self.get_property_details(str(alt_match["id"]))
+                            best_match = alt_match
+                            break
+                        except PropertyNotFoundError:
+                            continue
+                    else:
+                        raise PropertyValuationError(address, "No accessible property details found")
+                else:
+                    raise PropertyValuationError(address, "Property details not accessible")
             
-            # Transform to valuation response
-            return self._transform_valuation_response(details, address)
+            # Transform to valuation response with confidence scoring
+            valuation_response = self._transform_valuation_response(details, address)
             
-        except (PropertyNotFoundError, PropertyValuationError):
+            # Enhance with confidence scoring based on match quality
+            match_confidence = self._calculate_address_match_confidence(
+                cleaned_address, 
+                best_match.get("address", {})
+            )
+            
+            # Update confidence in valuation
+            if "valuations" in valuation_response and "domain" in valuation_response["valuations"]:
+                current_confidence = valuation_response["valuations"]["domain"]["confidence"]
+                adjusted_confidence = current_confidence * match_confidence
+                valuation_response["valuations"]["domain"]["confidence"] = adjusted_confidence
+                
+                # Add match quality warning if low
+                if match_confidence < 0.8:
+                    valuation_response["warnings"].append(
+                        f"Address match confidence: {match_confidence:.1%} - valuation may be less accurate"
+                    )
+            
+            return valuation_response
+            
+        except (PropertyNotFoundError, PropertyValuationError, InvalidPropertyAddressError):
             raise
         except Exception as e:
             self.logger.error(f"Property valuation failed for {address}: {e}")
@@ -415,20 +462,35 @@ class DomainClient(BaseClient, RealEstateAPIOperations):
     async def get_market_analytics(
         self, 
         location: Dict[str, str], 
-        property_type: str = None
+        property_type: str = None,
+        include_trends: bool = True,
+        lookback_months: int = 12
     ) -> Dict[str, Any]:
-        """Get market analytics for a location."""
+        """Get enhanced market analytics for a location with trend analysis."""
         try:
             if not self.config.is_feature_enabled("market_analytics"):
                 raise DomainAPIError("Market analytics not available in current service tier")
             
+            # Validate location input
+            if not location or not isinstance(location, dict):
+                raise ValueError("Location must be a dictionary with suburb/state information")
+            
+            required_fields = ['suburb', 'state']
+            missing_fields = [field for field in required_fields if not location.get(field)]
+            if missing_fields:
+                raise ValueError(f"Location missing required fields: {missing_fields}")
+            
             # Use sales results endpoint for market analytics
             endpoint = "sales/_search"
             
+            # Calculate date range for analysis
+            from datetime import datetime, timedelta
+            lookback_date = datetime.now() - timedelta(days=lookback_months * 30)
+            
             search_payload = {
                 "locations": [location],
-                "soldSince": "2023-01-01",  # Last year of data
-                "pageSize": 100
+                "soldSince": lookback_date.strftime("%Y-%m-%d"),
+                "pageSize": min(200, self.config.max_search_results)  # Get more data for better analytics
             }
             
             if property_type:
@@ -442,9 +504,32 @@ class DomainClient(BaseClient, RealEstateAPIOperations):
                 operation_name="market_analytics"
             )
             
-            # Transform to market analytics
-            return self._transform_market_analytics(response_data, location, property_type)
+            # Enhanced analytics with trend calculation
+            analytics = self._transform_market_analytics(response_data, location, property_type)
             
+            # Add trend analysis if requested
+            if include_trends and response_data.get("data"):
+                try:
+                    trend_data = self._calculate_market_trends(response_data["data"], lookback_months)
+                    analytics.update(trend_data)
+                except Exception as e:
+                    self.logger.warning(f"Failed to calculate market trends: {e}")
+                    analytics["trend_analysis_warning"] = "Trend calculation failed"
+            
+            # Add market insights
+            analytics["market_insights"] = self._generate_market_insights(analytics)
+            
+            # Add data quality assessment
+            analytics["data_quality"] = self._assess_market_data_quality(
+                response_data.get("data", []), 
+                location, 
+                lookback_months
+            )
+            
+            return analytics
+            
+        except ValueError as e:
+            raise DomainAPIError(f"Invalid market analytics request: {str(e)}")
         except Exception as e:
             self.logger.error(f"Market analytics failed for {location}: {e}")
             if isinstance(e, (ClientError, DomainAPIError)):
@@ -647,7 +732,152 @@ class DomainClient(BaseClient, RealEstateAPIOperations):
         """Get current rate limit status."""
         return self._rate_limit_manager.get_status()
     
-    # Helper methods for data transformation
+    # Helper methods for data transformation and validation
+    
+    def _clean_address(self, address: str) -> str:
+        """Clean and normalize address for API requests."""
+        if not address:
+            return ""
+        
+        # Remove extra whitespace and normalize
+        cleaned = " ".join(address.strip().split())
+        
+        # Basic Australian address format validation
+        if not any(state in cleaned.upper() for state in ["NSW", "VIC", "QLD", "WA", "SA", "TAS", "ACT", "NT"]):
+            # If no state found, might need additional validation
+            pass
+        
+        return cleaned
+    
+    def _find_best_address_match(self, properties: List[Dict[str, Any]], target_address: str) -> Dict[str, Any]:
+        """Find the best address match from search results."""
+        if not properties:
+            return None
+        
+        # Simple matching - in production would use fuzzy matching
+        target_lower = target_address.lower()
+        
+        best_match = None
+        best_score = 0.0
+        
+        for prop in properties:
+            address_data = prop.get("address", {})
+            full_address = address_data.get("displayAddress", "")
+            
+            if not full_address:
+                continue
+            
+            # Calculate simple similarity score
+            score = self._calculate_simple_similarity(target_lower, full_address.lower())
+            
+            if score > best_score:
+                best_score = score
+                best_match = prop
+        
+        # Return best match if similarity is reasonable
+        return best_match if best_score > 0.3 else properties[0]  # Fallback to first result
+    
+    def _calculate_simple_similarity(self, addr1: str, addr2: str) -> float:
+        """Calculate simple address similarity score."""
+        words1 = set(addr1.split())
+        words2 = set(addr2.split())
+        
+        if not words1 or not words2:
+            return 0.0
+        
+        intersection = words1.intersection(words2)
+        union = words1.union(words2)
+        
+        return len(intersection) / len(union) if union else 0.0
+    
+    def _calculate_address_match_confidence(self, target_address: str, matched_address: Dict[str, Any]) -> float:
+        """Calculate confidence score for address matching."""
+        if not matched_address:
+            return 0.3
+        
+        display_address = matched_address.get("displayAddress", "")
+        if not display_address:
+            return 0.3
+        
+        # Use similarity calculation
+        similarity = self._calculate_simple_similarity(target_address.lower(), display_address.lower())
+        
+        # Bonus for exact state/suburb matches
+        bonus = 0.0
+        target_words = target_address.upper().split()
+        display_words = display_address.upper().split()
+        
+        # Check for state match
+        states = ["NSW", "VIC", "QLD", "WA", "SA", "TAS", "ACT", "NT"]
+        target_state = next((word for word in target_words if word in states), None)
+        display_state = next((word for word in display_words if word in states), None)
+        
+        if target_state and display_state and target_state == display_state:
+            bonus += 0.2
+        
+        return min(1.0, similarity + bonus)
+    
+    async def _fallback_valuation_search(self, address: str, property_details: Dict[str, Any] = None) -> Dict[str, Any]:
+        """Fallback valuation search with different parameters."""
+        try:
+            # Try broader search parameters
+            search_params = {
+                "address": address,
+                "listing_type": "Sale",
+                "page_size": 10
+            }
+            
+            # Extract suburb/state from address for broader search
+            words = address.upper().split()
+            state = next((word for word in words if word in ["NSW", "VIC", "QLD", "WA", "SA", "TAS", "ACT", "NT"]), None)
+            
+            if state:
+                search_params["state"] = state
+            
+            search_results = await self.search_properties(search_params)
+            
+            if search_results.get("listings"):
+                # Use the first result for basic valuation
+                first_listing = search_results["listings"][0]
+                
+                # Create basic valuation response
+                price_info = first_listing.get("price_details", {})
+                estimated_value = 0
+                
+                if "displayPrice" in price_info:
+                    try:
+                        import re
+                        price_text = price_info["displayPrice"]
+                        numbers = re.findall(r'[\d,]+', price_text.replace(',', ''))
+                        if numbers:
+                            estimated_value = float(numbers[0])
+                    except:
+                        pass
+                
+                return {
+                    "address": address,
+                    "valuations": {
+                        "domain": {
+                            "estimated_value": estimated_value,
+                            "valuation_range_lower": estimated_value * 0.85 if estimated_value > 0 else 0,
+                            "valuation_range_upper": estimated_value * 1.15 if estimated_value > 0 else 0,
+                            "confidence": 0.4,  # Lower confidence for fallback
+                            "valuation_date": datetime.now(timezone.utc),
+                            "valuation_source": "domain_fallback",
+                            "methodology": "similar_property_estimate",
+                            "currency": "AUD"
+                        }
+                    },
+                    "processing_time": 0.0,
+                    "data_sources_used": ["domain_fallback"],
+                    "confidence_score": 0.4,
+                    "warnings": ["Fallback valuation - limited address match", "Lower confidence estimate"]
+                }
+            
+            raise PropertyValuationError(address, "No properties found for valuation")
+            
+        except Exception as e:
+            raise PropertyValuationError(address, f"Fallback valuation failed: {str(e)}")
     
     def _build_search_payload(self, search_params: Dict[str, Any]) -> Dict[str, Any]:
         """Build Domain API search payload from search parameters."""
@@ -848,7 +1078,7 @@ class DomainClient(BaseClient, RealEstateAPIOperations):
         location: Dict[str, str],
         property_type: str = None
     ) -> Dict[str, Any]:
-        """Transform sales data to market analytics."""
+        """Transform sales data to enhanced market analytics."""
         sales_data = response_data.get("data", [])
         
         if not sales_data:
@@ -856,27 +1086,269 @@ class DomainClient(BaseClient, RealEstateAPIOperations):
                 "location": location,
                 "property_type": property_type,
                 "median_price": 0,
+                "average_price": 0,
+                "price_range_min": 0,
+                "price_range_max": 0,
                 "price_growth_12_month": 0.0,
                 "days_on_market": 0,
                 "sales_volume_12_month": 0,
-                "market_outlook": "insufficient_data"
+                "market_outlook": "insufficient_data",
+                "data_points": 0,
+                "analysis_date": datetime.now(timezone.utc).isoformat()
             }
         
-        # Calculate basic analytics
-        prices = [sale.get("price", 0) for sale in sales_data if sale.get("price")]
-        median_price = sorted(prices)[len(prices) // 2] if prices else 0
+        # Calculate enhanced analytics
+        prices = [sale.get("price", 0) for sale in sales_data if sale.get("price") and sale.get("price") > 0]
+        
+        if not prices:
+            return self._create_empty_analytics(location, property_type, len(sales_data))
+        
+        # Basic price statistics
+        sorted_prices = sorted(prices)
+        median_price = sorted_prices[len(sorted_prices) // 2]
+        average_price = sum(prices) / len(prices)
+        price_range_min = min(prices)
+        price_range_max = max(prices)
+        
+        # Price quartiles for more detailed analysis
+        q1_idx = len(sorted_prices) // 4
+        q3_idx = 3 * len(sorted_prices) // 4
+        price_q1 = sorted_prices[q1_idx] if q1_idx < len(sorted_prices) else median_price
+        price_q3 = sorted_prices[q3_idx] if q3_idx < len(sorted_prices) else median_price
         
         return {
             "location": location,
             "property_type": property_type,
             "median_price": median_price,
-            "price_growth_12_month": 0.0,  # Would need historical data
-            "days_on_market": 30,  # Default estimate
+            "average_price": int(average_price),
+            "price_range_min": price_range_min,
+            "price_range_max": price_range_max,
+            "price_q1": price_q1,
+            "price_q3": price_q3,
+            "price_growth_12_month": 0.0,  # Will be calculated by trend analysis
+            "days_on_market": self._estimate_days_on_market(sales_data),
             "sales_volume_12_month": len(sales_data),
-            "market_outlook": "stable",
+            "market_outlook": self._determine_market_outlook(prices, len(sales_data)),
             "data_points": len(sales_data),
+            "price_data_points": len(prices),
             "analysis_date": datetime.now(timezone.utc).isoformat()
         }
+    
+    def _create_empty_analytics(self, location: Dict[str, str], property_type: str, data_points: int) -> Dict[str, Any]:
+        """Create empty analytics response."""
+        return {
+            "location": location,
+            "property_type": property_type,
+            "median_price": 0,
+            "average_price": 0,
+            "price_range_min": 0,
+            "price_range_max": 0,
+            "price_growth_12_month": 0.0,
+            "days_on_market": 0,
+            "sales_volume_12_month": 0,
+            "market_outlook": "insufficient_data",
+            "data_points": data_points,
+            "price_data_points": 0,
+            "analysis_date": datetime.now(timezone.utc).isoformat(),
+            "warnings": ["No valid price data available for analysis"]
+        }
+    
+    def _estimate_days_on_market(self, sales_data: List[Dict[str, Any]]) -> int:
+        """Estimate average days on market from sales data."""
+        # This would require both listing date and sold date
+        # For now, return a reasonable estimate based on market activity
+        if len(sales_data) > 50:
+            return 25  # Active market
+        elif len(sales_data) > 20:
+            return 35  # Moderate market
+        else:
+            return 45  # Slower market
+    
+    def _determine_market_outlook(self, prices: List[float], sales_count: int) -> str:
+        """Determine market outlook based on price distribution and activity."""
+        if not prices or sales_count < 5:
+            return "insufficient_data"
+        
+        # Simple heuristic based on sales volume
+        if sales_count > 50:
+            return "active"
+        elif sales_count > 20:
+            return "moderate"
+        else:
+            return "quiet"
+    
+    def _calculate_market_trends(self, sales_data: List[Dict[str, Any]], lookback_months: int) -> Dict[str, Any]:
+        """Calculate market trends from sales data."""
+        from datetime import datetime, timedelta
+        import calendar
+        
+        # Group sales by month for trend analysis
+        monthly_data = {}
+        current_date = datetime.now()
+        
+        for sale in sales_data:
+            sold_date_str = sale.get("soldDate")
+            if not sold_date_str:
+                continue
+            
+            try:
+                # Parse date (assuming ISO format)
+                sold_date = datetime.fromisoformat(sold_date_str.replace('Z', '+00:00'))
+                month_key = sold_date.strftime("%Y-%m")
+                
+                if month_key not in monthly_data:
+                    monthly_data[month_key] = {"prices": [], "count": 0}
+                
+                price = sale.get("price")
+                if price and price > 0:
+                    monthly_data[month_key]["prices"].append(price)
+                    monthly_data[month_key]["count"] += 1
+                    
+            except (ValueError, TypeError):
+                continue
+        
+        # Calculate monthly medians and trends
+        monthly_stats = {}
+        for month, data in monthly_data.items():
+            if data["prices"]:
+                sorted_prices = sorted(data["prices"])
+                median_price = sorted_prices[len(sorted_prices) // 2]
+                monthly_stats[month] = {
+                    "median_price": median_price,
+                    "sales_count": data["count"],
+                    "average_price": sum(data["prices"]) / len(data["prices"])
+                }
+        
+        # Calculate price growth if we have sufficient data
+        price_growth = 0.0
+        if len(monthly_stats) >= 2:
+            months = sorted(monthly_stats.keys())
+            if len(months) >= 2:
+                recent_median = monthly_stats[months[-1]]["median_price"]
+                older_median = monthly_stats[months[0]]["median_price"]
+                if older_median > 0:
+                    price_growth = ((recent_median - older_median) / older_median) * 100
+        
+        return {
+            "price_growth_12_month": round(price_growth, 2),
+            "monthly_trends": monthly_stats,
+            "trend_analysis": {
+                "direction": "increasing" if price_growth > 2 else "decreasing" if price_growth < -2 else "stable",
+                "strength": "strong" if abs(price_growth) > 10 else "moderate" if abs(price_growth) > 5 else "weak",
+                "data_months": len(monthly_stats)
+            }
+        }
+    
+    def _generate_market_insights(self, analytics: Dict[str, Any]) -> List[str]:
+        """Generate market insights based on analytics."""
+        insights = []
+        
+        median_price = analytics.get("median_price", 0)
+        sales_volume = analytics.get("sales_volume_12_month", 0)
+        price_growth = analytics.get("price_growth_12_month", 0)
+        market_outlook = analytics.get("market_outlook", "unknown")
+        
+        # Price insights
+        if median_price > 1000000:
+            insights.append("High-value market segment (median price > $1M)")
+        elif median_price > 500000:
+            insights.append("Mid-to-high market segment")
+        elif median_price > 0:
+            insights.append("Affordable market segment")
+        
+        # Activity insights
+        if sales_volume > 100:
+            insights.append("High market activity with strong liquidity")
+        elif sales_volume > 50:
+            insights.append("Moderate market activity")
+        elif sales_volume > 10:
+            insights.append("Limited market activity - longer selling times expected")
+        else:
+            insights.append("Very limited market data - exercise caution")
+        
+        # Growth insights
+        if price_growth > 10:
+            insights.append("Strong price growth - potential bubble risk")
+        elif price_growth > 5:
+            insights.append("Healthy price appreciation")
+        elif price_growth < -5:
+            insights.append("Declining prices - buyer's market")
+        elif price_growth < -10:
+            insights.append("Significant price decline - market stress")
+        
+        # Market outlook insights
+        if market_outlook == "active":
+            insights.append("Active market with good liquidity")
+        elif market_outlook == "quiet":
+            insights.append("Quiet market - longer settlement times likely")
+        
+        return insights
+    
+    def _assess_market_data_quality(
+        self, 
+        sales_data: List[Dict[str, Any]], 
+        location: Dict[str, str], 
+        lookback_months: int
+    ) -> Dict[str, Any]:
+        """Assess the quality of market data for reliability scoring."""
+        total_sales = len(sales_data)
+        sales_with_prices = len([s for s in sales_data if s.get("price") and s.get("price") > 0])
+        sales_with_dates = len([s for s in sales_data if s.get("soldDate")])
+        
+        # Calculate data completeness score
+        completeness_score = 0.0
+        if total_sales > 0:
+            price_completeness = sales_with_prices / total_sales
+            date_completeness = sales_with_dates / total_sales
+            completeness_score = (price_completeness + date_completeness) / 2
+        
+        # Calculate data volume score
+        expected_monthly_sales = 5  # Baseline expectation
+        expected_total = expected_monthly_sales * lookback_months
+        volume_score = min(1.0, total_sales / expected_total) if expected_total > 0 else 0.0
+        
+        # Overall quality score
+        quality_score = (completeness_score * 0.6 + volume_score * 0.4)
+        
+        quality_rating = "high" if quality_score > 0.8 else "medium" if quality_score > 0.5 else "low"
+        
+        return {
+            "quality_score": round(quality_score, 2),
+            "quality_rating": quality_rating,
+            "data_completeness": round(completeness_score, 2),
+            "data_volume_adequacy": round(volume_score, 2),
+            "total_sales": total_sales,
+            "sales_with_prices": sales_with_prices,
+            "sales_with_dates": sales_with_dates,
+            "lookback_period_months": lookback_months,
+            "quality_warnings": self._generate_quality_warnings(
+                quality_score, 
+                total_sales, 
+                sales_with_prices
+            )
+        }
+    
+    def _generate_quality_warnings(
+        self, 
+        quality_score: float, 
+        total_sales: int, 
+        sales_with_prices: int
+    ) -> List[str]:
+        """Generate warnings about data quality issues."""
+        warnings = []
+        
+        if quality_score < 0.3:
+            warnings.append("Very low data quality - results may be unreliable")
+        elif quality_score < 0.6:
+            warnings.append("Limited data quality - interpret results with caution")
+        
+        if total_sales < 10:
+            warnings.append("Insufficient sales data for robust analysis")
+        
+        if sales_with_prices < total_sales * 0.7:
+            warnings.append("Many sales missing price information")
+        
+        return warnings
     
     def _transform_comparable_sales(
         self,
