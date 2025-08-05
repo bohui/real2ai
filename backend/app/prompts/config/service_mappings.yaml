@@ -1,0 +1,241 @@
+# Service to Template Mappings
+# Defines which templates each service can access and their priorities
+
+mappings:
+  gemini_ocr:
+    primary_templates:
+      - name: "ocr_extraction"
+        priority: 100
+        description: "Primary OCR text extraction template"
+      - name: "ocr_validation"
+        priority: 80
+        description: "OCR quality validation template"
+      - name: "ocr_enhancement"
+        priority: 60
+        description: "OCR text enhancement and cleanup"
+    
+    compositions:
+      - name: "ocr_to_analysis"
+        description: "OCR extraction followed by structure analysis"
+        priority: 90
+    
+    fallback_templates:
+      - "generic_ocr"
+      - "basic_text_extraction"
+    
+    context_requirements:
+      - "australian_state"
+      - "contract_type"
+      - "document_type"
+    
+    performance_targets:
+      render_time_ms: 150
+      cache_hit_rate: 0.85
+      success_rate: 0.98
+
+  contract_analysis:
+    primary_templates:
+      - name: "contract_structure_analysis"
+        priority: 100
+        description: "Main contract structure analysis template"
+      - name: "risk_assessment"
+        priority: 90
+        description: "Contract risk evaluation template"
+      - name: "compliance_check"
+        priority: 85
+        description: "Legal compliance validation template"
+      - name: "financial_analysis"
+        priority: 80
+        description: "Financial terms analysis template"
+    
+    compositions:
+      - name: "complete_contract_analysis"
+        description: "Full contract analysis workflow"
+        priority: 100
+      - name: "quick_contract_review"
+        description: "Abbreviated contract analysis"
+        priority: 70
+    
+    context_requirements:
+      - "extracted_text"
+      - "australian_state"
+      - "contract_type"
+      - "user_type"
+      - "user_experience_level"
+    
+    performance_targets:
+      render_time_ms: 300
+      cache_hit_rate: 0.75
+      success_rate: 0.95
+
+  websocket:
+    primary_templates:
+      - name: "progress_update"
+        priority: 100
+        description: "WebSocket progress message template"
+      - name: "error_notification"
+        priority: 95
+        description: "WebSocket error message template"
+      - name: "completion_summary"
+        priority: 90
+        description: "Task completion message template"
+      - name: "status_broadcast"
+        priority: 80
+        description: "General status broadcast template"
+    
+    context_requirements:
+      - "message_type"
+      - "timestamp"
+    
+    performance_targets:
+      render_time_ms: 50
+      cache_hit_rate: 0.90
+      success_rate: 0.99
+
+  property_profile:
+    primary_templates:
+      - name: "property_analysis"
+        priority: 100
+        description: "Property profile analysis template"
+      - name: "market_insights"
+        priority: 90
+        description: "Market data interpretation template"
+      - name: "valuation_summary"
+        priority: 80
+        description: "Property valuation summary template"
+    
+    context_requirements:
+      - "property_data"
+      - "australian_state"
+      - "analysis_type"
+    
+    performance_targets:
+      render_time_ms: 200
+      cache_hit_rate: 0.80
+      success_rate: 0.97
+
+  ocr_performance:
+    primary_templates:
+      - name: "performance_analysis"
+        priority: 100
+        description: "OCR performance analysis template"
+      - name: "quality_metrics"
+        priority: 90
+        description: "OCR quality assessment template"
+      - name: "improvement_recommendations"
+        priority: 80
+        description: "OCR improvement suggestions template"
+    
+    context_requirements:
+      - "performance_data"
+      - "quality_metrics"
+    
+    performance_targets:
+      render_time_ms: 100
+      cache_hit_rate: 0.85
+      success_rate: 0.98
+
+  semantic_analysis:
+    primary_templates:
+      - name: "semantic_analysis"
+        priority: 100
+        description: "Property diagram semantic analysis template"
+      - name: "semantic_risk_consolidation"
+        priority: 90
+        description: "Multi-diagram risk consolidation template"
+      - name: "risk_assessment_base"
+        priority: 85
+        description: "Base risk assessment template"
+    
+    compositions:
+      - name: "multi_diagram_analysis"
+        description: "Complete multi-diagram semantic analysis workflow"
+        priority: 95
+      - name: "single_diagram_analysis"
+        description: "Single diagram semantic analysis workflow"
+        priority: 90
+    
+    context_requirements:
+      - "image_type"
+      - "analysis_focus"
+      - "australian_state"
+      - "contract_context"
+    
+    performance_targets:
+      render_time_ms: 500
+      cache_hit_rate: 0.70
+      success_rate: 0.95
+
+# Global service configurations
+global_config:
+  default_cache_ttl: 3600  # 1 hour
+  max_render_time_ms: 5000
+  fallback_enabled: true
+  metrics_enabled: true
+  validation_enabled: true
+
+# Template discovery rules
+discovery_rules:
+  # Templates with these tags are available to all services
+  global_tags:
+    - "shared"
+    - "utility"
+    - "common"
+  
+  # Service-specific tag patterns
+  service_tag_patterns:
+    gemini_ocr: ["ocr", "extraction", "gemini"]
+    contract_analysis: ["analysis", "contract", "legal"]
+    websocket: ["websocket", "messaging", "notification"]
+    property_profile: ["property", "market", "valuation"]
+    ocr_performance: ["performance", "metrics", "quality"]
+
+# Composition routing rules
+composition_routing:
+  # Route composition requests to appropriate services
+  ocr_to_analysis:
+    primary_service: "gemini_ocr"
+    secondary_service: "contract_analysis"
+    coordination_required: true
+  
+  complete_contract_analysis:
+    primary_service: "contract_analysis"
+    dependencies: ["gemini_ocr"]
+    parallel_execution: false
+  
+  property_market_analysis:
+    primary_service: "property_profile"
+    dependencies: []
+    parallel_execution: true
+
+# Error handling and fallbacks
+error_handling:
+  retry_attempts: 3
+  retry_delay_ms: 1000
+  fallback_to_basic_templates: true
+  error_notification_service: "websocket"
+  
+  service_fallbacks:
+    gemini_ocr:
+      - "basic_ocr_service"
+      - "manual_processing"
+    
+    contract_analysis:
+      - "basic_analysis_service"
+      - "template_fallback"
+
+# Performance monitoring
+monitoring:
+  track_render_times: true
+  track_cache_performance: true
+  track_error_rates: true
+  alert_thresholds:
+    render_time_ms: 2000
+    error_rate: 0.05
+    cache_miss_rate: 0.30
+  
+  performance_reporting:
+    enabled: true
+    interval_minutes: 15
+    include_service_breakdown: true
+    include_template_usage: true

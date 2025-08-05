@@ -20,7 +20,8 @@ from unstructured.partition.auto import partition
 from app.core.config import get_settings
 from app.models.contract_state import ContractType
 from app.clients import get_supabase_client, get_gemini_client
-from app.services.ocr_service import get_ocr_service
+from app.services.gemini_ocr_service import GeminiOCRService
+from app.services.semantic_analysis_service import SemanticAnalysisService
 from app.core.langsmith_config import langsmith_trace, langsmith_session, log_trace_info
 from app.clients.base.exceptions import (
     ClientError,
@@ -39,6 +40,7 @@ class DocumentService:
         self.supabase_client = None
         self.gemini_client = None
         self.ocr_service = None
+        self.semantic_analysis_service = None
         self.storage_bucket = "documents"
         self.use_service_role = use_service_role
 
@@ -48,12 +50,18 @@ class DocumentService:
             # Get clients from factory
             self.supabase_client = await get_supabase_client()
             self.gemini_client = await get_gemini_client()
-            self.ocr_service = await get_ocr_service()
+            # Initialize GeminiOCRService for advanced OCR and semantic analysis
+            self.ocr_service = GeminiOCRService()
+            await self.ocr_service.initialize()
+            
+            # Initialize semantic analysis service
+            self.semantic_analysis_service = SemanticAnalysisService()
+            await self.semantic_analysis_service.initialize()
 
             # Ensure storage bucket exists
             await self._ensure_bucket_exists()
 
-            logger.info("Document service V2 initialized with client architecture and OCR service")
+            logger.info("Document service V2 initialized with client architecture, OCR, and semantic analysis services")
 
         except ClientConnectionError as e:
             logger.error(f"Failed to connect to required services: {e}")
@@ -590,58 +598,6 @@ class DocumentService:
 
         return min(1.0, confidence)
 
-    async def analyze_document(
-        self,
-        storage_path: str,
-        file_type: str,
-        contract_context: Optional[Dict[str, Any]] = None,
-        analysis_options: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
-        """Analyze document using Gemini client"""
-
-        if not self.gemini_client:
-            raise HTTPException(
-                status_code=503, detail="Analysis service not available"
-            )
-
-        try:
-            # Get file content
-            file_content = await self.get_file_content(storage_path)
-
-            # Determine content type
-            if file_type.lower() == "pdf":
-                content_type = "application/pdf"
-            elif file_type.lower() in ["jpg", "jpeg"]:
-                content_type = "image/jpeg"
-            elif file_type.lower() == "png":
-                content_type = "image/png"
-            else:
-                content_type = f"application/{file_type.lower()}"
-
-            # Use Gemini client for analysis
-            analysis_result = await self.gemini_client.analyze_document(
-                content=file_content,
-                content_type=content_type,
-                contract_context=contract_context,
-                analysis_options=analysis_options,
-            )
-
-            # Add service metadata
-            analysis_result.update(
-                {
-                    "service": "DocumentService",
-                    "storage_path": storage_path,
-                    "file_type": file_type,
-                }
-            )
-
-            return analysis_result
-
-        except ClientError as e:
-            logger.error(f"Document analysis failed: {e}")
-            raise HTTPException(
-                status_code=500, detail=f"Document analysis failed: {str(e)}"
-            )
 
     async def delete_file(self, storage_path: str) -> bool:
         """Delete file from storage"""
@@ -752,6 +708,20 @@ class DocumentService:
                 health_status["status"] = "degraded"
         else:
             health_status["dependencies"]["ocr_service"] = "not_initialized"
+            health_status["status"] = "degraded"
+
+        # Check semantic analysis service
+        if self.semantic_analysis_service:
+            try:
+                semantic_health = await self.semantic_analysis_service.health_check()
+                health_status["dependencies"]["semantic_analysis_service"] = semantic_health.get(
+                    "status", "unknown"
+                )
+            except Exception as e:
+                health_status["dependencies"]["semantic_analysis_service"] = "error"
+                health_status["status"] = "degraded"
+        else:
+            health_status["dependencies"]["semantic_analysis_service"] = "not_initialized"
             health_status["status"] = "degraded"
 
         return health_status
@@ -1229,6 +1199,447 @@ class DocumentService:
                 "progress_percent": 0,
                 "message": "Error retrieving progress",
                 "error": str(e),
+            }
+
+    async def analyze_document_semantics(
+        self,
+        storage_path: str,
+        file_type: str,
+        filename: str,
+        contract_context: Optional[Dict[str, Any]] = None,
+        analysis_options: Optional[Dict[str, Any]] = None,
+        document_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Analyze document for semantic meaning using SemanticAnalysisService
+        
+        This method provides a comprehensive semantic analysis of property documents,
+        identifying infrastructure, boundaries, environmental factors, and potential risks.
+        
+        Args:
+            storage_path: Path to document in storage
+            file_type: File extension (pdf, jpg, png, etc.)
+            filename: Original filename
+            contract_context: Contract context for analysis
+            analysis_options: Analysis configuration options
+            document_id: Document ID for progress tracking
+            
+        Returns:
+            Comprehensive semantic analysis results
+            
+        Example Usage:
+            # Analyze a sewer service diagram
+            result = await document_service.analyze_document_semantics(
+                storage_path="user123/doc456.jpg",
+                file_type="jpg",
+                filename="sewer_service_plan.jpg",
+                contract_context={
+                    "australian_state": AustralianState.NSW,
+                    "contract_type": ContractType.PURCHASE_AGREEMENT,
+                    "user_type": "buyer"
+                },
+                analysis_options={
+                    "analysis_focus": "infrastructure",
+                    "risk_categories": ["infrastructure", "construction"]
+                }
+            )
+        """
+        if not self.semantic_analysis_service:
+            raise HTTPException(
+                status_code=503, detail="Semantic analysis service not available"
+            )
+        
+        try:
+            return await self.semantic_analysis_service.analyze_document_semantics(
+                storage_path=storage_path,
+                file_type=file_type,
+                filename=filename,
+                contract_context=contract_context,
+                analysis_options=analysis_options,
+                document_id=document_id
+            )
+            
+        except Exception as e:
+            logger.error(f"Semantic analysis failed for {storage_path}: {str(e)}")
+            return {
+                "document_metadata": {
+                    "storage_path": storage_path,
+                    "filename": filename,
+                    "file_type": file_type,
+                    "analysis_timestamp": datetime.now(UTC).isoformat(),
+                    "document_id": document_id
+                },
+                "semantic_analysis": None,
+                "error": str(e),
+                "service": "DocumentService",
+                "analysis_failed": True
+            }
+
+    async def analyze_contract_diagrams(
+        self,
+        diagram_storage_paths: List[str],
+        contract_context: Dict[str, Any],
+        document_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Analyze multiple diagrams from a contract document
+        
+        This method orchestrates semantic analysis across multiple property diagrams,
+        consolidating risks and providing comprehensive property insights.
+        
+        Args:
+            diagram_storage_paths: List of storage paths to diagram images
+            contract_context: Contract context including state, type, user info
+            document_id: Document ID for progress tracking
+            
+        Returns:
+            Consolidated analysis of all contract diagrams
+            
+        Example Usage:
+            # Analyze all diagrams in a property contract
+            result = await document_service.analyze_contract_diagrams(
+                diagram_storage_paths=[
+                    "user123/sewer_plan.jpg",
+                    "user123/site_plan.pdf", 
+                    "user123/flood_map.png"
+                ],
+                contract_context={
+                    "australian_state": AustralianState.NSW,
+                    "contract_type": ContractType.PURCHASE_AGREEMENT,
+                    "property_address": "123 Main St, Sydney NSW 2000",
+                    "user_type": "buyer",
+                    "user_experience_level": "novice"
+                }
+            )
+        """
+        if not self.semantic_analysis_service:
+            raise HTTPException(
+                status_code=503, detail="Semantic analysis service not available"
+            )
+        
+        if not diagram_storage_paths:
+            raise HTTPException(
+                status_code=400, detail="No diagram paths provided for analysis"
+            )
+        
+        try:
+            return await self.semantic_analysis_service.analyze_contract_diagrams(
+                storage_paths=diagram_storage_paths,
+                contract_context=contract_context,
+                document_id=document_id
+            )
+            
+        except Exception as e:
+            logger.error(f"Contract diagram analysis failed: {str(e)}")
+            return {
+                "contract_context": contract_context,
+                "total_diagrams": len(diagram_storage_paths),
+                "error": str(e),
+                "service": "DocumentService",
+                "analysis_failed": True,
+                "analysis_timestamp": datetime.now(UTC).isoformat()
+            }
+
+    async def process_contract_with_semantic_analysis(
+        self,
+        main_document_path: str,
+        diagram_paths: List[str],
+        contract_context: Dict[str, Any],
+        document_id: str,
+        processing_options: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        Complete contract processing including text extraction and semantic analysis
+        
+        This method provides end-to-end processing of property contracts:
+        1. Text extraction from main document
+        2. Semantic analysis of all diagrams
+        3. Risk consolidation and assessment
+        4. Professional consultation recommendations
+        
+        Args:
+            main_document_path: Path to main contract document
+            diagram_paths: List of paths to property diagrams
+            contract_context: Contract context for analysis
+            document_id: Document ID for progress tracking
+            processing_options: Processing configuration options
+            
+        Returns:
+            Complete contract analysis including text and semantic analysis
+        """
+        if not self.semantic_analysis_service:
+            raise HTTPException(
+                status_code=503, detail="Semantic analysis service not available"
+            )
+        
+        processing_results = {
+            "document_id": document_id,
+            "contract_context": contract_context,
+            "processing_timestamp": datetime.now(UTC).isoformat(),
+            "text_extraction": None,
+            "semantic_analysis": None,
+            "consolidated_assessment": None,
+            "processing_stages": [],
+            "errors": []
+        }
+        
+        try:
+            # Stage 1: Process main contract document (10-50%)
+            await self.track_processing_progress(
+                document_id, "processing_main_document", 10,
+                "Processing main contract document"
+            )
+            
+            main_filename = Path(main_document_path).name
+            main_file_type = Path(main_document_path).suffix.lower().lstrip('.')
+            
+            # Extract text from main document
+            text_extraction = await self.process_document_with_progress(
+                storage_path=main_document_path,
+                file_type=main_file_type,
+                document_id=document_id,
+                contract_context=contract_context,
+                processing_options=processing_options
+            )
+            
+            processing_results["text_extraction"] = text_extraction
+            processing_results["processing_stages"].append({
+                "stage": "text_extraction",
+                "status": "completed",
+                "timestamp": datetime.now(UTC).isoformat(),
+                "confidence": text_extraction.get("extraction_confidence", 0.0)
+            })
+            
+            # Stage 2: Analyze contract diagrams (50-90%)
+            if diagram_paths:
+                await self.track_processing_progress(
+                    document_id, "analyzing_diagrams", 50,
+                    f"Analyzing {len(diagram_paths)} property diagrams"
+                )
+                
+                semantic_analysis = await self.analyze_contract_diagrams(
+                    diagram_storage_paths=diagram_paths,
+                    contract_context=contract_context,
+                    document_id=document_id
+                )
+                
+                processing_results["semantic_analysis"] = semantic_analysis
+                processing_results["processing_stages"].append({
+                    "stage": "semantic_analysis",
+                    "status": "completed",
+                    "timestamp": datetime.now(UTC).isoformat(),
+                    "diagrams_analyzed": len(diagram_paths),
+                    "risks_identified": semantic_analysis.get("consolidated_risks", [])
+                })
+            
+            # Stage 3: Consolidate results (90-100%)
+            await self.track_processing_progress(
+                document_id, "consolidating_results", 90,
+                "Consolidating contract analysis results"
+            )
+            
+            consolidated_assessment = self._consolidate_contract_analysis(
+                text_extraction,
+                processing_results.get("semantic_analysis"),
+                contract_context
+            )
+            
+            processing_results["consolidated_assessment"] = consolidated_assessment
+            processing_results["processing_stages"].append({
+                "stage": "consolidation",
+                "status": "completed",
+                "timestamp": datetime.now(UTC).isoformat(),
+                "overall_confidence": consolidated_assessment.get("overall_confidence", 0.0)
+            })
+            
+            # Final progress update
+            await self.track_processing_progress(
+                document_id, "completed", 100,
+                "Complete contract analysis finished successfully"
+            )
+            
+            return processing_results
+            
+        except Exception as e:
+            logger.error(f"Complete contract processing failed for {document_id}: {str(e)}")
+            
+            await self.track_processing_progress(
+                document_id, "failed", 0,
+                f"Contract processing failed: {str(e)}"
+            )
+            
+            processing_results["errors"].append({
+                "error": str(e),
+                "stage": "contract_processing",
+                "timestamp": datetime.now(UTC).isoformat()
+            })
+            
+            return processing_results
+
+    def _consolidate_contract_analysis(
+        self,
+        text_extraction: Optional[Dict[str, Any]],
+        semantic_analysis: Optional[Dict[str, Any]],
+        contract_context: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Consolidate text extraction and semantic analysis results"""
+        
+        consolidation = {
+            "overall_confidence": 0.0,
+            "analysis_completeness": {
+                "text_extracted": bool(text_extraction and text_extraction.get("extracted_text")),
+                "semantic_analysis_completed": bool(semantic_analysis and not semantic_analysis.get("analysis_failed")),
+                "diagrams_analyzed": len(semantic_analysis.get("diagram_analyses", [])) if semantic_analysis else 0
+            },
+            "key_insights": {
+                "contract_summary": {},
+                "property_risks": [],
+                "critical_actions": [],
+                "professional_consultations": []
+            },
+            "integrated_recommendations": []
+        }
+        
+        # Process text extraction results
+        if text_extraction and text_extraction.get("extracted_text"):
+            contract_analysis = text_extraction.get("contract_validation", {}).get("contract_analysis", {})
+            consolidation["key_insights"]["contract_summary"] = {
+                "appears_to_be_contract": contract_analysis.get("appears_to_be_contract", False),
+                "contract_likelihood": contract_analysis.get("contract_likelihood", 0.0),
+                "key_terms_found": contract_analysis.get("indicators_found", [])
+            }
+            text_confidence = text_extraction.get("extraction_confidence", 0.0)
+        else:
+            text_confidence = 0.0
+        
+        # Process semantic analysis results
+        if semantic_analysis and not semantic_analysis.get("analysis_failed"):
+            overall_assessment = semantic_analysis.get("overall_assessment", {})
+            consolidated_risks = semantic_analysis.get("consolidated_risks", [])
+            recommendations = semantic_analysis.get("recommendations", [])
+            
+            consolidation["key_insights"]["property_risks"] = [
+                {
+                    "risk_type": risk.get("risk_type", "Unknown"),
+                    "severity": risk.get("severity", "unknown"),
+                    "category": risk.get("category", "general"),
+                    "source_diagrams": risk.get("source_diagrams", [])
+                }
+                for risk in consolidated_risks
+            ]
+            
+            consolidation["key_insights"]["critical_actions"] = [
+                rec.get("recommendation", "") for rec in recommendations
+                if rec.get("priority") in ["critical", "high"]
+            ]
+            
+            consolidation["key_insights"]["professional_consultations"] = list(set([
+                rec.get("professional_required", "") for rec in recommendations
+                if rec.get("professional_required")
+            ]))
+            
+            semantic_confidence = overall_assessment.get("confidence_level", 0.0)
+        else:
+            semantic_confidence = 0.0
+        
+        # Calculate overall confidence
+        if text_confidence > 0 and semantic_confidence > 0:
+            consolidation["overall_confidence"] = (text_confidence + semantic_confidence) / 2
+        elif text_confidence > 0:
+            consolidation["overall_confidence"] = text_confidence * 0.7  # Penalty for missing semantic analysis
+        elif semantic_confidence > 0:
+            consolidation["overall_confidence"] = semantic_confidence * 0.8  # Penalty for missing text analysis
+        else:
+            consolidation["overall_confidence"] = 0.0
+        
+        # Generate integrated recommendations
+        consolidation["integrated_recommendations"] = self._generate_integrated_recommendations(
+            consolidation["key_insights"],
+            contract_context,
+            consolidation["overall_confidence"]
+        )
+        
+        return consolidation
+
+    def _generate_integrated_recommendations(
+        self,
+        key_insights: Dict[str, Any],
+        contract_context: Dict[str, Any],
+        overall_confidence: float
+    ) -> List[Dict[str, Any]]:
+        """Generate integrated recommendations from both text and semantic analysis"""
+        
+        recommendations = []
+        
+        # Contract-specific recommendations
+        contract_summary = key_insights.get("contract_summary", {})
+        if not contract_summary.get("appears_to_be_contract", False):
+            recommendations.append({
+                "type": "document_verification", 
+                "priority": "high",
+                "recommendation": "Verify that this document is the complete contract - low contract likelihood detected",
+                "source": "text_analysis"
+            })
+        
+        # Risk-based recommendations
+        property_risks = key_insights.get("property_risks", [])
+        high_risk_count = len([r for r in property_risks if r.get("severity") in ["high", "critical"]])
+        
+        if high_risk_count > 0:
+            recommendations.append({
+                "type": "risk_mitigation",
+                "priority": "critical" if high_risk_count > 2 else "high",
+                "recommendation": f"Address {high_risk_count} high-priority property risks before proceeding",
+                "source": "semantic_analysis"
+            })
+        
+        # Professional consultation recommendations
+        consultations = key_insights.get("professional_consultations", [])
+        if consultations:
+            recommendations.append({
+                "type": "professional_advice",
+                "priority": "high",
+                "recommendation": f"Engage the following professionals: {', '.join(consultations)}",
+                "source": "integrated_analysis"
+            })
+        
+        # Confidence-based recommendations
+        if overall_confidence < 0.5:
+            recommendations.append({
+                "type": "analysis_quality",
+                "priority": "medium",
+                "recommendation": "Consider providing additional documents or higher quality images for more comprehensive analysis",
+                "source": "quality_assessment"
+            })
+        
+        # User experience recommendations
+        user_experience = contract_context.get("user_experience_level", "novice")
+        if user_experience == "novice" and (high_risk_count > 0 or overall_confidence < 0.6):
+            recommendations.append({
+                "type": "experience_support",
+                "priority": "high", 
+                "recommendation": "Given your experience level and the complexity identified, strongly recommend comprehensive legal review",
+                "source": "user_context"
+            })
+        
+        return recommendations
+
+    async def get_semantic_analysis_capabilities(self) -> Dict[str, Any]:
+        """Get semantic analysis capabilities"""
+        
+        if not self.semantic_analysis_service:
+            return {
+                "semantic_analysis_available": False,
+                "reason": "Semantic analysis service not initialized"
+            }
+        
+        try:
+            return await self.semantic_analysis_service.get_analysis_capabilities()
+        except Exception as e:
+            logger.error(f"Failed to get semantic analysis capabilities: {str(e)}")
+            return {
+                "semantic_analysis_available": False,
+                "reason": str(e)
             }
     
     async def process_document_with_progress(

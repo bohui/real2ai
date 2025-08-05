@@ -17,10 +17,16 @@ logger = logging.getLogger(__name__)
 
 async def get_ocr_service() -> GeminiOCRService:
     """
-    Get OCR service instance with service role auth.
+    Get advanced OCR service instance with semantic analysis capabilities.
+    
+    This returns GeminiOCRService which provides:
+    - Advanced OCR with semantic understanding
+    - PromptManager integration for better context awareness
+    - Performance optimization with OCRPerformanceService
+    - Property document intelligence features
 
     Returns:
-        Initialized OCR service instance
+        Initialized GeminiOCRService instance
     """
     service = GeminiOCRService()
     await service.initialize()

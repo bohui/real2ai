@@ -1,10 +1,20 @@
 """
-OCR Service - Specialized service for Optical Character Recognition
-Provides abstraction layer for different OCR providers with fallback strategies
+OCR Service - DEPRECATED
+This basic OCR service has been superseded by GeminiOCRService which provides:
+- Advanced semantic analysis capabilities
+- PromptManager integration for better context awareness
+- Performance optimization with OCRPerformanceService
+- Enhanced property document intelligence
+
+Please use GeminiOCRService instead:
+    from app.services.gemini_ocr_service import GeminiOCRService
+    
+This module will be removed in a future version.
 """
 
 import logging
 import asyncio
+import warnings
 from typing import Dict, Any, Optional, List, Union
 from datetime import datetime, UTC
 from pathlib import Path
@@ -59,9 +69,19 @@ class OCRCapabilities:
 
 
 class OCRService:
-    """Service for Optical Character Recognition with multiple provider support"""
+    """Service for Optical Character Recognition with multiple provider support
+    
+    DEPRECATED: This service has been superseded by GeminiOCRService.
+    Please use GeminiOCRService for enhanced semantic analysis and property intelligence.
+    """
     
     def __init__(self):
+        warnings.warn(
+            "OCRService is deprecated and will be removed in a future version. "
+            "Please use GeminiOCRService instead for advanced OCR capabilities.",
+            DeprecationWarning,
+            stacklevel=2
+        )
         self.settings = get_settings()
         self.gemini_client = None
         self.capabilities = OCRCapabilities()
@@ -461,7 +481,17 @@ class OCRService:
 _ocr_service = None
 
 async def get_ocr_service() -> OCRService:
-    """Get the global OCR service instance"""
+    """Get the global OCR service instance
+    
+    DEPRECATED: Use get_ocr_service from app.services instead, which returns GeminiOCRService.
+    """
+    warnings.warn(
+        "get_ocr_service from ocr_service module is deprecated. "
+        "Use 'from app.services import get_ocr_service' for GeminiOCRService instead.",
+        DeprecationWarning,
+        stacklevel=2
+    )
+    
     global _ocr_service
     
     if _ocr_service is None:

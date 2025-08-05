@@ -13,12 +13,15 @@ from .template import PromptTemplate
 from .context import PromptContext, ContextType, ContextBuilder, ContextPresets
 from .validator import PromptValidator, ValidationResult
 from .composer import PromptComposer, ComposedPrompt
+from .workflow_engine import WorkflowExecutionEngine, WorkflowConfiguration
+from .config_manager import ConfigurationManager, ServiceMapping
 from .exceptions import (
     PromptNotFoundError,
     PromptValidationError,
     PromptVersionError,
     PromptContextError,
-    PromptCompositionError
+    PromptCompositionError,
+    PromptServiceError
 )
 from app.models.contract_state import AustralianState, ContractType
 
@@ -38,6 +41,8 @@ class PromptManagerConfig:
     max_render_time_seconds: int = 30
     enable_metrics: bool = True
     enable_composition: bool = True
+    enable_workflows: bool = True
+    enable_service_integration: bool = True
 
 
 class PromptManager:
@@ -63,6 +68,18 @@ class PromptManager:
         else:
             self.composer = None
         
+        # Initialize workflow execution engine
+        if config.enable_workflows:
+            self.workflow_engine = WorkflowExecutionEngine(self)
+        else:
+            self.workflow_engine = None
+        
+        # Initialize configuration manager
+        if config.enable_service_integration and config.config_dir:
+            self.config_manager = ConfigurationManager(config.config_dir)
+        else:
+            self.config_manager = None
+        
         # Runtime state
         self._render_cache: Dict[str, Dict[str, Any]] = {}
         self._metrics = {
@@ -70,10 +87,35 @@ class PromptManager:
             "cache_hits": 0,
             "validation_failures": 0,
             "errors": 0,
-            "total_render_time": 0.0
+            "total_render_time": 0.0,
+            "workflows_executed": 0,
+            "workflow_success_rate": 0.0
         }
         
+        self._initialized = False
+        
         logger.info(f"PromptManager initialized with templates from {config.templates_dir}")
+    
+    async def initialize(self):
+        """Initialize async components"""
+        if self._initialized:
+            return
+        
+        try:
+            # Initialize configuration manager
+            if self.config_manager:
+                await self.config_manager.initialize()
+                logger.info("Configuration manager initialized")
+            
+            self._initialized = True
+            logger.info("PromptManager async initialization completed")
+            
+        except Exception as e:
+            logger.error(f"Failed to initialize PromptManager: {e}")
+            raise PromptServiceError(
+                f"PromptManager initialization failed: {str(e)}",
+                service_name="prompt_manager"
+            )
     
     async def render(
         self,
@@ -83,6 +125,7 @@ class PromptManager:
         model: str = None,
         validate: bool = None,
         cache_key: str = None,
+        service_name: str = None,
         **kwargs
     ) -> str:
         """Render a prompt template with full validation and caching
@@ -107,6 +150,16 @@ class PromptManager:
         start_time = datetime.now(UTC)
         
         try:
+            # Ensure initialization
+            if not self._initialized:
+                await self.initialize()
+            
+            # Validate service integration if applicable
+            if service_name and self.config_manager:
+                await self._validate_service_render(
+                    service_name, template_name, context
+                )
+            
             # Convert dict to PromptContext if needed
             if isinstance(context, dict):
                 context = PromptContext(
@@ -342,10 +395,187 @@ class PromptManager:
             return {"valid": False, "error": "Composition system not enabled"}
         return self.composer.validate_composition(composition_name)
     
-    def reload_templates(self):
+    # Workflow Execution Methods
+    
+    async def execute_workflow(
+        self,
+        composition_name: str,
+        context: Union[PromptContext, Dict[str, Any]],
+        variables: Dict[str, Any] = None,
+        workflow_id: str = None,
+        service_name: str = None
+    ) -> Dict[str, Any]:
+        """Execute a workflow composition
+        
+        Args:
+            composition_name: Name of composition to execute
+            context: Context for workflow execution
+            variables: Additional variables
+            workflow_id: Optional workflow ID for tracking
+            service_name: Service executing the workflow
+            
+        Returns:
+            Workflow execution results
+            
+        Raises:
+            PromptCompositionError: If workflow execution fails
+            PromptServiceError: If service integration fails
+        """
+        if not self.workflow_engine:
+            raise PromptCompositionError("Workflow execution not enabled")
+        
+        if not self.config_manager:
+            raise PromptServiceError(
+                "Service integration not enabled",
+                service_name=service_name or "unknown"
+            )
+        
+        try:
+            # Ensure initialization
+            if not self._initialized:
+                await self.initialize()
+            
+            # Convert dict to PromptContext if needed
+            if isinstance(context, dict):
+                context = PromptContext(
+                    context_type=ContextType.USER,
+                    variables=context
+                )
+            
+            # Create workflow configuration from composition rule
+            workflow_config = self.config_manager.create_workflow_configuration(
+                composition_name=composition_name,
+                context_overrides=context.variables
+            )
+            
+            # Execute workflow
+            result = await self.workflow_engine.execute_workflow(
+                workflow_config=workflow_config,
+                context=context,
+                variables=variables,
+                workflow_id=workflow_id
+            )
+            
+            # Update metrics
+            self._metrics["workflows_executed"] += 1
+            if result.get("status") == "success":
+                success_rate = (
+                    self._metrics.get("workflow_success_rate", 0) * 
+                    (self._metrics["workflows_executed"] - 1) + 1.0
+                ) / self._metrics["workflows_executed"]
+                self._metrics["workflow_success_rate"] = success_rate
+            
+            logger.info(f"Workflow '{composition_name}' executed successfully")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Workflow execution failed for '{composition_name}': {e}")
+            raise
+    
+    def get_workflow_status(self, workflow_id: str) -> Optional[Dict[str, Any]]:
+        """Get status of active workflow"""
+        if not self.workflow_engine:
+            return None
+        return self.workflow_engine.get_workflow_status(workflow_id)
+    
+    def list_active_workflows(self) -> List[Dict[str, Any]]:
+        """List all active workflows"""
+        if not self.workflow_engine:
+            return []
+        return self.workflow_engine.list_active_workflows()
+    
+    # Service Integration Methods
+    
+    def get_service_templates(
+        self, 
+        service_name: str,
+        include_fallbacks: bool = False
+    ) -> List[Dict[str, Any]]:
+        """Get templates available to a service"""
+        if not self.config_manager:
+            return self.list_templates()
+        
+        service_templates = self.config_manager.get_service_templates(service_name)
+        
+        if include_fallbacks:
+            mapping = self.config_manager.get_service_mapping(service_name)
+            if mapping and mapping.fallback_templates:
+                # Add fallback templates info
+                for template_name in mapping.fallback_templates:
+                    template_info = self.get_template_info(template_name)
+                    if template_info:
+                        template_info["is_fallback"] = True
+                        service_templates.append(template_info)
+        
+        return service_templates
+    
+    def get_service_compositions(self, service_name: str) -> List[Dict[str, Any]]:
+        """Get compositions available to a service"""
+        if not self.config_manager:
+            return self.list_compositions()
+        
+        return self.config_manager.get_service_compositions(service_name)
+    
+    def get_service_performance_targets(self, service_name: str) -> Dict[str, Any]:
+        """Get performance targets for a service"""
+        if not self.config_manager:
+            return {}
+        
+        return self.config_manager.get_service_performance_targets(service_name)
+    
+    async def validate_service_context(
+        self,
+        service_name: str,
+        context: Union[PromptContext, Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """Validate context against service requirements"""
+        if not self.config_manager:
+            return {"valid": True, "missing_variables": []}
+        
+        context_vars = context.variables if isinstance(context, PromptContext) else context
+        return self.config_manager.validate_service_context(service_name, context_vars)
+    
+    async def _validate_service_render(
+        self,
+        service_name: str,
+        template_name: str,
+        context: Union[PromptContext, Dict[str, Any]]
+    ):
+        """Validate service can render template with context"""
+        # Check if service has access to template
+        service_templates = self.get_service_templates(service_name, include_fallbacks=True)
+        template_names = {t.get("name") for t in service_templates}
+        
+        if template_name not in template_names:
+            logger.warning(
+                f"Service '{service_name}' accessing template '{template_name}' "
+                "not in its configured templates"
+            )
+        
+        # Validate context requirements
+        context_validation = await self.validate_service_context(service_name, context)
+        if not context_validation["valid"]:
+            missing = context_validation["missing_variables"]
+            logger.warning(
+                f"Service '{service_name}' missing required context variables: {missing}"
+            )
+    
+    def get_available_workflows(self, service_name: str = None) -> List[Dict[str, Any]]:
+        """Get available workflow compositions"""
+        if not self.config_manager:
+            return self.list_compositions()
+        
+        return self.config_manager.list_available_compositions(service_name)
+    
+    async def reload_templates(self):
         """Manually reload all templates from disk"""
         self.loader.reload_templates()
         self._render_cache.clear()
+        
+        # Reload configurations if available
+        if self.config_manager:
+            await self.config_manager.reload_configurations()
+        
         logger.info("Templates reloaded and render cache cleared")
     
     def clear_cache(self):
@@ -354,6 +584,8 @@ class PromptManager:
         self._render_cache.clear()
         if self.composer:
             self.composer.clear_cache()
+        if self.config_manager:
+            self.config_manager.clear_config_cache()
         logger.info("All caches cleared")
     
     def get_metrics(self) -> Dict[str, Any]:
@@ -364,15 +596,29 @@ class PromptManager:
             self._metrics["total_render_time"] / max(self._metrics["renders"], 1)
         )
         
-        return {
+        metrics = {
             "prompt_manager": {
                 **self._metrics,
                 "avg_render_time_seconds": avg_render_time,
                 "render_cache_size": len(self._render_cache),
                 "validation_enabled": self.validator is not None,
+                "workflows_enabled": self.workflow_engine is not None,
+                "service_integration_enabled": self.config_manager is not None,
             },
             "loader": loader_metrics,
         }
+        
+        # Add workflow metrics if available
+        if self.workflow_engine:
+            workflow_metrics = self.workflow_engine.get_execution_metrics()
+            metrics["workflow_engine"] = workflow_metrics
+        
+        # Add configuration metrics if available
+        if self.config_manager:
+            config_info = self.config_manager.get_config_info()
+            metrics["configuration_manager"] = config_info
+        
+        return metrics
     
     async def health_check(self) -> Dict[str, Any]:
         """Comprehensive health check"""
@@ -381,6 +627,15 @@ class PromptManager:
             "timestamp": datetime.now(UTC).isoformat(),
             "components": {}
         }
+        
+        # Check initialization
+        if not self._initialized:
+            try:
+                await self.initialize()
+            except Exception as e:
+                health["status"] = "error"
+                health["initialization_error"] = str(e)
+                return health
         
         # Check loader
         try:
@@ -408,15 +663,58 @@ class PromptManager:
                 "enabled": False
             }
         
-        # Test template rendering
+        # Check workflow engine
+        if self.workflow_engine:
+            try:
+                workflow_metrics = self.workflow_engine.get_execution_metrics()
+                health["components"]["workflow_engine"] = {
+                    "status": "healthy",
+                    "enabled": True,
+                    "total_workflows": workflow_metrics.get("total_workflows", 0)
+                }
+            except Exception as e:
+                health["components"]["workflow_engine"] = {
+                    "status": "error",
+                    "enabled": True,
+                    "error": str(e)
+                }
+                health["status"] = "degraded"
+        else:
+            health["components"]["workflow_engine"] = {
+                "status": "disabled",
+                "enabled": False
+            }
+        
+        # Check configuration manager
+        if self.config_manager:
+            try:
+                config_info = self.config_manager.get_config_info()
+                health["components"]["configuration_manager"] = {
+                    "status": "healthy",
+                    "enabled": True,
+                    "service_mappings": config_info["service_mappings_count"],
+                    "composition_rules": config_info["composition_rules_count"]
+                }
+            except Exception as e:
+                health["components"]["configuration_manager"] = {
+                    "status": "error",
+                    "enabled": True,
+                    "error": str(e)
+                }
+                health["status"] = "degraded"
+        else:
+            health["components"]["configuration_manager"] = {
+                "status": "disabled",
+                "enabled": False
+            }
+        
+        # Test template rendering (basic functionality test)
         try:
-            # Try to render a simple test template
             test_context = PromptContext(
                 context_type=ContextType.SYSTEM,
                 variables={"test_var": "test_value"}
             )
             
-            # This would need a test template to exist
             health["components"]["rendering"] = {
                 "status": "not_tested",
                 "reason": "No test template available"

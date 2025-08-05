@@ -1,5 +1,5 @@
 """
-WebSocket service for Real2.AI real-time updates
+WebSocket service for Real2.AI real-time updates with PromptManager integration
 """
 
 import json
@@ -8,6 +8,9 @@ import logging
 from typing import Dict, List, Any, Optional
 from datetime import datetime, UTC
 from fastapi import WebSocket, WebSocketDisconnect
+
+from app.core.prompts.service_mixin import PromptEnabledService
+from app.models.contract_state import AustralianState, ContractType
 
 logger = logging.getLogger(__name__)
 
@@ -308,3 +311,236 @@ class WebSocketEvents:
             "timestamp": datetime.now(UTC).isoformat(),
             "data": {"status": "alive"},
         }
+
+
+class EnhancedWebSocketService(PromptEnabledService):
+    """Enhanced WebSocket service with PromptManager integration for dynamic message generation"""
+    
+    def __init__(self, websocket_manager: WebSocketManager):
+        super().__init__()
+        self.websocket_manager = websocket_manager
+        logger.info("Enhanced WebSocket service initialized with PromptManager integration")
+    
+    async def send_enhanced_notification(
+        self,
+        session_id: str,
+        notification_type: str,
+        context: Dict[str, Any],
+        template_name: str = None,
+        use_templates: bool = True
+    ) -> bool:
+        """Send enhanced notification using PromptManager templates
+        
+        Args:
+            session_id: WebSocket session ID
+            notification_type: Type of notification (progress, status, error, etc.)
+            context: Context data for message generation
+            template_name: Specific template to use (optional)
+            use_templates: Whether to use PromptManager templates
+            
+        Returns:
+            True if message sent successfully, False otherwise
+        """
+        try:
+            # Create base message structure
+            base_message = {
+                "event_type": notification_type,
+                "timestamp": datetime.now(UTC).isoformat(),
+                "data": context
+            }
+            
+            # Enhanced message generation using templates if enabled
+            if use_templates and template_name:
+                try:
+                    # Create context for notification template
+                    prompt_context = self.create_context(
+                        notification_type=notification_type,
+                        session_id=session_id,
+                        context_data=context,
+                        australian_state=context.get("australian_state", AustralianState.NSW),
+                        contract_type=context.get("contract_type", ContractType.PURCHASE_AGREEMENT),
+                        service_name=self._service_name
+                    )
+                    
+                    # Render notification template
+                    enhanced_message = await self.render_prompt(
+                        template_name=template_name,
+                        context=prompt_context,
+                        validate=True,
+                        use_cache=True
+                    )
+                    
+                    # Try to parse as JSON if template returns structured data
+                    try:
+                        structured_message = json.loads(enhanced_message)
+                        if isinstance(structured_message, dict):
+                            base_message.update(structured_message)
+                        else:
+                            base_message["enhanced_content"] = enhanced_message
+                    except json.JSONDecodeError:
+                        # Template returned text content
+                        base_message["enhanced_content"] = enhanced_message
+                    
+                    base_message["template_enhanced"] = True
+                    
+                except Exception as e:
+                    logger.warning(f"Failed to enhance message with template '{template_name}': {e}")
+                    base_message["template_enhanced"] = False
+                    base_message["template_error"] = str(e)
+            
+            # Send message via WebSocket manager
+            await self.websocket_manager.send_message(session_id, base_message)
+            
+            logger.debug(f"Enhanced notification '{notification_type}' sent to session {session_id}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to send enhanced notification: {e}")
+            return False
+    
+    async def send_progress_update(
+        self,
+        session_id: str,
+        contract_id: str,
+        step: str,
+        progress_percent: int,
+        step_description: str = None,
+        enhanced_context: Dict[str, Any] = None
+    ) -> bool:
+        """Send progress update with optional template enhancement"""
+        context = {
+            "contract_id": contract_id,
+            "current_step": step,
+            "progress_percent": progress_percent,
+            "step_description": step_description,
+        }
+        
+        if enhanced_context:
+            context.update(enhanced_context)
+        
+        return await self.send_enhanced_notification(
+            session_id=session_id,
+            notification_type="analysis_progress",
+            context=context,
+            template_name="progress_notification",
+            use_templates=True
+        )
+    
+    async def send_analysis_complete(
+        self,
+        session_id: str,
+        contract_id: str,
+        analysis_summary: Dict[str, Any],
+        enhanced_summary: bool = True
+    ) -> bool:
+        """Send analysis completion notification with enhanced summary"""
+        context = {
+            "contract_id": contract_id,
+            "status": "completed",
+            "analysis_summary": analysis_summary,
+        }
+        
+        template_name = "analysis_complete_notification" if enhanced_summary else None
+        
+        return await self.send_enhanced_notification(
+            session_id=session_id,
+            notification_type="analysis_completed",
+            context=context,
+            template_name=template_name,
+            use_templates=enhanced_summary
+        )
+    
+    async def send_error_notification(
+        self,
+        session_id: str,
+        error_type: str,
+        error_message: str,
+        contract_id: str = None,
+        recovery_suggestions: List[str] = None
+    ) -> bool:
+        """Send error notification with recovery suggestions"""
+        context = {
+            "error_type": error_type,
+            "error_message": error_message,
+            "contract_id": contract_id,
+            "recovery_suggestions": recovery_suggestions or [],
+            "retry_available": recovery_suggestions is not None
+        }
+        
+        return await self.send_enhanced_notification(
+            session_id=session_id,
+            notification_type="analysis_failed",
+            context=context,
+            template_name="error_notification",
+            use_templates=True
+        )
+    
+    async def broadcast_system_message(
+        self,
+        message_type: str,
+        content: str,
+        priority: str = "info",
+        target_sessions: List[str] = None
+    ) -> int:
+        """Broadcast system message to all or specific sessions
+        
+        Returns:
+            Number of sessions that received the message
+        """
+        context = {
+            "message": content,
+            "type": priority,
+            "broadcast_time": datetime.now(UTC).isoformat(),
+        }
+        
+        successful_sends = 0
+        
+        if target_sessions:
+            # Send to specific sessions
+            for session_id in target_sessions:
+                success = await self.send_enhanced_notification(
+                    session_id=session_id,
+                    notification_type="system_notification",
+                    context=context,
+                    template_name="system_message",
+                    use_templates=True
+                )
+                if success:
+                    successful_sends += 1
+        else:
+            # Broadcast to all sessions
+            for session_id in self.websocket_manager.managers.keys():
+                success = await self.send_enhanced_notification(
+                    session_id=session_id,
+                    notification_type="system_notification",
+                    context=context,
+                    template_name="system_message",
+                    use_templates=True
+                )
+                if success:
+                    successful_sends += 1
+        
+        logger.info(f"System message broadcast to {successful_sends} sessions")
+        return successful_sends
+    
+    def get_service_stats(self) -> Dict[str, Any]:
+        """Get enhanced service statistics"""
+        base_stats = {
+            "active_sessions": self.websocket_manager.get_session_count(),
+            "total_connections": self.websocket_manager.get_total_connections(),
+            "service_version": "v2_prompt_enhanced",
+            "prompt_manager_enabled": True,
+        }
+        
+        # Add PromptManager render statistics
+        render_stats = self.get_render_stats()
+        base_stats.update({
+            "prompt_render_stats": render_stats,
+            "template_usage": {
+                "total_renders": render_stats.get("total_renders", 0),
+                "cache_hit_rate": render_stats.get("cache_hit_rate", 0.0),
+                "error_rate": render_stats.get("error_rate", 0.0)
+            }
+        })
+        
+        return base_stats
