@@ -57,87 +57,72 @@ def process_document_background(
                     australian_state=australian_state,
                     contract_type=contract_type
                 )
-            # Get service database client (has elevated permissions)
-            db_client = get_service_database_client()
-            if not hasattr(db_client, "_client") or db_client._client is None:
-                await db_client.initialize()
+                # Get service database client (has elevated permissions)
+                db_client = get_service_database_client()
+                if not hasattr(db_client, "_client") or db_client._client is None:
+                    await db_client.initialize()
 
-            # Update document status
-            db_client.table("documents").update({"status": "processing"}).eq(
-                "id", document_id
-            ).execute()
+                # Update document status
+                db_client.table("documents").update({"status": "processing"}).eq(
+                    "id", document_id
+                ).execute()
 
-            # Get document metadata
-            doc_result = (
-                db_client.table("documents").select("*").eq("id", document_id).execute()
-            )
-            if not doc_result.data:
-                raise Exception("Document not found")
+                # Get document metadata
+                doc_result = (
+                    db_client.table("documents").select("*").eq("id", document_id).execute()
+                )
+                if not doc_result.data:
+                    raise Exception("Document not found")
 
-            document = doc_result.data[0]
+                document = doc_result.data[0]
 
-            # Verify file exists in storage before processing
-            try:
-                await document_service.get_file_content(document["storage_path"])
-            except Exception as storage_error:
-                # If file doesn't exist, mark document as failed and clean up
-                logger.error(
-                    f"File not found in storage for document {document_id}: {document['storage_path']}"
+                # Verify file exists in storage before processing
+                try:
+                    await document_service.get_file_content(document["storage_path"])
+                except Exception as storage_error:
+                    # If file doesn't exist, mark document as failed and clean up
+                    logger.error(
+                        f"File not found in storage for document {document_id}: {document['storage_path']}"
+                    )
+
+                    # Mark document as failed with specific error
+                    db_client.table("documents").update(
+                        {
+                            "status": "failed",
+                            "processing_results": {
+                                "error": "File not found in storage - orphaned record",
+                                "storage_path": document["storage_path"],
+                                "cleanup_required": True,
+                            },
+                        }
+                    ).eq("id", document_id).execute()
+
+                    raise Exception(
+                        f"File not found in storage: {document['storage_path']}"
+                    )
+
+                # Extract text from document with contract context
+                contract_context = {
+                    "australian_state": australian_state,
+                    "contract_type": contract_type,
+                    "user_type": "buyer",  # Could be derived from user profile
+                }
+
+                extraction_result = await document_service.extract_text(
+                    document["storage_path"],
+                    document["file_type"],
+                    contract_context=contract_context,
                 )
 
-                # Mark document as failed with specific error
+                # Update document with extraction results
                 db_client.table("documents").update(
-                    {
-                        "status": "failed",
-                        "processing_results": {
-                            "error": "File not found in storage - orphaned record",
-                            "storage_path": document["storage_path"],
-                            "cleanup_required": True,
-                        },
-                    }
+                    {"status": "processed", "processing_results": extraction_result}
                 ).eq("id", document_id).execute()
 
-                raise Exception(
-                    f"File not found in storage: {document['storage_path']}"
-                )
-
-            # Extract text from document with contract context
-            contract_context = {
-                "australian_state": australian_state,
-                "contract_type": contract_type,
-                "user_type": "buyer",  # Could be derived from user profile
-            }
-
-            extraction_result = await document_service.extract_text(
-                document["storage_path"],
-                document["file_type"],
-                contract_context=contract_context,
-            )
-
-            # Update document with extraction results
-            db_client.table("documents").update(
-                {"status": "processed", "processing_results": extraction_result}
-            ).eq("id", document_id).execute()
-
-            # Send WebSocket notification via Redis Pub/Sub
-            publish_progress_sync(document_id, {
-                "event_type": "document_processed",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "data": {
-                    "document_id": document_id,
-                    "extraction_confidence": extraction_result.get(
-                        "extraction_confidence", 0.0
-                    ),
-                    "character_count": extraction_result.get("character_count", 0),
-                    "word_count": extraction_result.get("word_count", 0),
-                },
-            })
-            
-            # Also send via WebSocket manager for immediate delivery (if connected)
-            await websocket_manager.send_message(
-                document_id,
-                {
+                # Send WebSocket notification via Redis Pub/Sub
+                publish_progress_sync(document_id, {
                     "event_type": "document_processed",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
                     "data": {
                         "document_id": document_id,
                         "extraction_confidence": extraction_result.get(
@@ -146,32 +131,47 @@ def process_document_background(
                         "character_count": extraction_result.get("character_count", 0),
                         "word_count": extraction_result.get("word_count", 0),
                     },
-                },
-            )
+                })
+                
+                # Also send via WebSocket manager for immediate delivery (if connected)
+                await websocket_manager.send_message(
+                    document_id,
+                    {
+                        "event_type": "document_processed",
+                        "data": {
+                            "document_id": document_id,
+                            "extraction_confidence": extraction_result.get(
+                                "extraction_confidence", 0.0
+                            ),
+                            "character_count": extraction_result.get("character_count", 0),
+                            "word_count": extraction_result.get("word_count", 0),
+                        },
+                    },
+                )
 
-            logger.info(f"Document {document_id} processed successfully")
+                logger.info(f"Document {document_id} processed successfully")
 
-        except Exception as e:
-            logger.error(f"Document processing failed for {document_id}: {str(e)}")
-            db_client.table("documents").update(
-                {"status": "failed", "processing_results": {"error": str(e)}}
-            ).eq("id", document_id).execute()
+            except Exception as e:
+                logger.error(f"Document processing failed for {document_id}: {str(e)}")
+                db_client.table("documents").update(
+                    {"status": "failed", "processing_results": {"error": str(e)}}
+                ).eq("id", document_id).execute()
 
-            # Send error notification via Redis Pub/Sub
-            publish_progress_sync(document_id, {
-                "event_type": "document_processing_failed",
-                "timestamp": datetime.now(timezone.utc).isoformat(), 
-                "data": {"document_id": document_id, "error_message": str(e)},
-            })
-            
-            # Also send via WebSocket manager for immediate delivery (if connected)
-            await websocket_manager.send_message(
-                document_id,
-                {
+                # Send error notification via Redis Pub/Sub
+                publish_progress_sync(document_id, {
                     "event_type": "document_processing_failed",
+                    "timestamp": datetime.now(timezone.utc).isoformat(), 
                     "data": {"document_id": document_id, "error_message": str(e)},
-                },
-            )
+                })
+                
+                # Also send via WebSocket manager for immediate delivery (if connected)
+                await websocket_manager.send_message(
+                    document_id,
+                    {
+                        "event_type": "document_processing_failed",
+                        "data": {"document_id": document_id, "error_message": str(e)},
+                    },
+                )
 
     # Run the async function
     return asyncio.run(_async_process_document())
