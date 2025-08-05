@@ -9,13 +9,16 @@ from fastapi.security import HTTPBearer
 from datetime import datetime, UTC
 
 from app.core.auth import get_current_user_ws
-from app.services.websocket_service import WebSocketManager, WebSocketEvents
+from app.services.websocket_service import WebSocketEvents
+from app.services.websocket_singleton import websocket_manager
+from app.core.database import get_service_database_client
+from app.services.redis_pubsub import redis_pubsub_service
+
+# Initialize database client for polling
+db_client = get_service_database_client()
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/ws", tags=["websockets"])
-
-# Global WebSocket manager instance
-websocket_manager = WebSocketManager()
 
 
 @router.websocket("/contracts/{contract_id}")
@@ -62,6 +65,10 @@ async def contract_analysis_websocket(
             await websocket.close(code=4001, reason="Authentication failed")
             return
 
+        # Initialize database client for this connection
+        if not hasattr(db_client, "_client") or db_client._client is None:
+            await db_client.initialize()
+        
         # Step 4: Register with connection manager (websocket accepted and authenticated)
         await websocket_manager.connect(
             websocket,
@@ -88,7 +95,32 @@ async def contract_analysis_websocket(
                 },
             },
         )
-
+        
+        # Start Redis subscription for progress updates
+        async def handle_redis_message(message_data: Dict[str, Any]):
+            """Handle messages received from Redis Pub/Sub"""
+            try:
+                # Forward the message directly to the WebSocket
+                await websocket_manager.send_personal_message(
+                    contract_id,
+                    websocket,
+                    message_data
+                )
+                
+                # Check if this is a completion/failure message to stop subscription
+                event_type = message_data.get("event_type")
+                if event_type in ["analysis_completed", "analysis_failed"]:
+                    logger.info(f"Analysis {event_type} for contract {contract_id}, will close subscription")
+                    
+            except Exception as e:
+                logger.error(f"Error handling Redis message: {str(e)}")
+        
+        # Subscribe to Redis channel for this contract
+        subscription_task = await redis_pubsub_service.subscribe_to_progress(
+            contract_id, 
+            handle_redis_message
+        )
+        
         # Keep connection alive and handle client messages
         try:
             while True:
@@ -115,6 +147,8 @@ async def contract_analysis_websocket(
 
         except WebSocketDisconnect:
             logger.info(f"WebSocket disconnected for contract {contract_id}")
+            # Unsubscribe from Redis channel
+            await redis_pubsub_service.unsubscribe_from_progress(contract_id)
 
     except Exception as e:
         logger.error(f"WebSocket error for contract {contract_id}: {str(e)}")
@@ -138,6 +172,10 @@ async def contract_analysis_websocket(
             logger.info(f"WebSocket cleanup completed for contract {contract_id}")
         else:
             logger.info(f"WebSocket cleanup skipped - connection not fully established for contract {contract_id}")
+        
+        # Ensure Redis subscription is cancelled  
+        if 'subscription_task' in locals():
+            await redis_pubsub_service.unsubscribe_from_progress(contract_id)
 
 
 async def handle_client_message(

@@ -18,6 +18,7 @@ from app.core.database import get_service_database_client
 from app.services.document_service import DocumentService
 from app.services.websocket_service import WebSocketEvents
 from app.services.websocket_singleton import websocket_manager
+from app.services.redis_pubsub import publish_progress_sync
 from app.core.langsmith_config import langsmith_session, log_trace_info
 
 logger = logging.getLogger(__name__)
@@ -118,7 +119,21 @@ def process_document_background(
                 {"status": "processed", "processing_results": extraction_result}
             ).eq("id", document_id).execute()
 
-            # Send WebSocket notification
+            # Send WebSocket notification via Redis Pub/Sub
+            publish_progress_sync(document_id, {
+                "event_type": "document_processed",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "data": {
+                    "document_id": document_id,
+                    "extraction_confidence": extraction_result.get(
+                        "extraction_confidence", 0.0
+                    ),
+                    "character_count": extraction_result.get("character_count", 0),
+                    "word_count": extraction_result.get("word_count", 0),
+                },
+            })
+            
+            # Also send via WebSocket manager for immediate delivery (if connected)
             await websocket_manager.send_message(
                 document_id,
                 {
@@ -142,7 +157,14 @@ def process_document_background(
                 {"status": "failed", "processing_results": {"error": str(e)}}
             ).eq("id", document_id).execute()
 
-            # Send error WebSocket notification
+            # Send error notification via Redis Pub/Sub
+            publish_progress_sync(document_id, {
+                "event_type": "document_processing_failed",
+                "timestamp": datetime.now(timezone.utc).isoformat(), 
+                "data": {"document_id": document_id, "error_message": str(e)},
+            })
+            
+            # Also send via WebSocket manager for immediate delivery (if connected)
             await websocket_manager.send_message(
                 document_id,
                 {
@@ -191,7 +213,18 @@ def analyze_contract_background(
                 "id", analysis_id
             ).execute()
 
-            # Send WebSocket analysis_started event with estimated time
+            # Send analysis_started event via Redis Pub/Sub
+            publish_progress_sync(contract_id, {
+                "event_type": "analysis_started",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "data": {
+                    "contract_id": contract_id,
+                    "estimated_time_minutes": 5,
+                    "message": "Analysis started"
+                }
+            })
+            
+            # Also send via WebSocket manager for immediate delivery (if connected)
             await websocket_manager.send_message(
                 contract_id,
                 WebSocketEvents.analysis_started(contract_id, estimated_time=5)
@@ -211,7 +244,20 @@ def analyze_contract_background(
                         "quota_error - Insufficient credits or quota exceeded."
                     )
             
-            # Progress update: Initial validation complete
+            # Progress update: Initial validation complete via Redis Pub/Sub
+            publish_progress_sync(contract_id, {
+                "event_type": "analysis_progress",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "data": {
+                    "contract_id": contract_id,
+                    "current_step": "validating_input",
+                    "progress_percent": 10,
+                    "step_description": "Validating user credentials and document access",
+                    "estimated_completion_minutes": 5
+                }
+            })
+            
+            # Also send via WebSocket manager for immediate delivery (if connected)
             await websocket_manager.send_message(
                 contract_id,
                 WebSocketEvents.analysis_progress(
@@ -252,7 +298,20 @@ def analyze_contract_background(
                         f"File not found and no extracted text available: {document['storage_path']}"
                     )
 
-            # Progress update: Setting up analysis context
+            # Progress update: Setting up analysis context via Redis Pub/Sub
+            publish_progress_sync(contract_id, {
+                "event_type": "analysis_progress",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "data": {
+                    "contract_id": contract_id,
+                    "current_step": "processing_document",
+                    "progress_percent": 20,
+                    "step_description": "Setting up analysis context and extracting document content",
+                    "estimated_completion_minutes": 4
+                }
+            })
+            
+            # Also send via WebSocket manager for immediate delivery (if connected)
             await websocket_manager.send_message(
                 contract_id,
                 WebSocketEvents.analysis_progress(
@@ -322,7 +381,20 @@ def analyze_contract_background(
                         {"processing_results": extraction_result}
                     ).eq("id", document["id"]).execute()
 
-            # Progress update: Preparing document for analysis
+            # Progress update: Preparing document for analysis via Redis Pub/Sub
+            publish_progress_sync(contract_id, {
+                "event_type": "analysis_progress",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "data": {
+                    "contract_id": contract_id,
+                    "current_step": "extracting_terms",
+                    "progress_percent": 40,
+                    "step_description": "Preparing document content for AI analysis",
+                    "estimated_completion_minutes": 3
+                }
+            })
+            
+            # Also send via WebSocket manager for immediate delivery (if connected)
             await websocket_manager.send_message(
                 contract_id,
                 WebSocketEvents.analysis_progress(
@@ -359,7 +431,20 @@ def analyze_contract_background(
                 "file_type": document["file_type"],
             }
 
-            # Progress update: Starting AI analysis
+            # Progress update: Starting AI analysis via Redis Pub/Sub
+            publish_progress_sync(contract_id, {
+                "event_type": "analysis_progress",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "data": {
+                    "contract_id": contract_id,
+                    "current_step": "analyzing_compliance",
+                    "progress_percent": 60,
+                    "step_description": "AI is analyzing contract terms and compliance requirements",
+                    "estimated_completion_minutes": 2
+                }
+            })
+            
+            # Also send via WebSocket manager for immediate delivery (if connected)
             await websocket_manager.send_message(
                 contract_id,
                 WebSocketEvents.analysis_progress(
@@ -390,7 +475,20 @@ def analyze_contract_background(
             # Run analysis workflow
             final_state = await contract_workflow.analyze_contract(initial_state)
             
-            # Progress update: Generating risk assessment
+            # Progress update: Generating risk assessment via Redis Pub/Sub
+            publish_progress_sync(contract_id, {
+                "event_type": "analysis_progress",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "data": {
+                    "contract_id": contract_id,
+                    "current_step": "assessing_risks",
+                    "progress_percent": 80,
+                    "step_description": "Evaluating potential risks and generating insights",
+                    "estimated_completion_minutes": 1
+                }
+            })
+            
+            # Also send via WebSocket manager for immediate delivery (if connected)
             await websocket_manager.send_message(
                 contract_id,
                 WebSocketEvents.analysis_progress(
@@ -418,7 +516,20 @@ def analyze_contract_background(
             except Exception as progress_error:
                 logger.warning(f"Failed to save progress to database: {str(progress_error)}")
 
-            # Progress update: Compiling final report
+            # Progress update: Compiling final report via Redis Pub/Sub
+            publish_progress_sync(contract_id, {
+                "event_type": "analysis_progress",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "data": {
+                    "contract_id": contract_id,
+                    "current_step": "compiling_report",
+                    "progress_percent": 95,
+                    "step_description": "Finalizing analysis report and recommendations",
+                    "estimated_completion_minutes": 0
+                }
+            })
+            
+            # Also send via WebSocket manager for immediate delivery (if connected)
             await websocket_manager.send_message(
                 contract_id,
                 WebSocketEvents.analysis_progress(
@@ -497,7 +608,7 @@ def analyze_contract_background(
                         f"Failed to log usage for user {user_id}: {str(log_error)}"
                     )
 
-            # Send completion WebSocket update
+            # Send completion update via Redis Pub/Sub
             analysis_summary = {
                 "overall_risk_score": analysis_result.get("risk_assessment", {}).get("overall_risk_score", 0),
                 "total_recommendations": len(analysis_result.get("recommendations", [])),
@@ -509,6 +620,17 @@ def analyze_contract_background(
                 "processing_time_seconds": final_state.get("processing_time", 0),
             }
             
+            publish_progress_sync(contract_id, {
+                "event_type": "analysis_completed",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "data": {
+                    "contract_id": contract_id,
+                    "status": "completed",
+                    "analysis_summary": analysis_summary
+                }
+            })
+            
+            # Also send via WebSocket manager for immediate delivery (if connected)
             await websocket_manager.send_message(
                 contract_id,
                 WebSocketEvents.analysis_completed(contract_id, analysis_summary)
@@ -567,8 +689,21 @@ def analyze_contract_background(
                 }
             ).eq("id", analysis_id).execute()
 
-            # Send detailed error WebSocket update  
+            # Send detailed error update via Redis Pub/Sub
             retry_available = error_type in ["llm_api_error", "timeout_error", "rate_limit_error"]
+            publish_progress_sync(contract_id, {
+                "event_type": "analysis_failed",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "data": {
+                    "contract_id": contract_id,
+                    "status": "failed",
+                    "error_message": error_message,
+                    "error_type": error_type,
+                    "retry_available": retry_available
+                }
+            })
+            
+            # Also send via WebSocket manager for immediate delivery (if connected)
             await websocket_manager.send_message(
                 contract_id,
                 WebSocketEvents.analysis_failed(contract_id, error_message, retry_available)
