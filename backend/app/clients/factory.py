@@ -13,6 +13,8 @@ from .base.exceptions import ClientError
 from .supabase import SupabaseClient, SupabaseClientConfig, SupabaseSettings
 from .gemini import GeminiClient, GeminiClientConfig, GeminiSettings
 from .openai import OpenAIClient, OpenAIClientConfig, OpenAISettings
+from .domain import DomainClient, DomainClientConfig, DomainSettings
+from .corelogic import CoreLogicClient, CoreLogicClientConfig, CoreLogicSettings
 
 logger = logging.getLogger(__name__)
 
@@ -27,11 +29,15 @@ class ClientFactory:
             "supabase": SupabaseClient,
             "gemini": GeminiClient, 
             "openai": OpenAIClient,
+            "domain": DomainClient,
+            "corelogic": CoreLogicClient,
         }
         self._config_classes: Dict[str, Type] = {
             "supabase": SupabaseSettings,
             "gemini": GeminiSettings,
             "openai": OpenAISettings,
+            "domain": DomainSettings,
+            "corelogic": CoreLogicSettings,
         }
         self._initialized = False
         self.logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
@@ -238,4 +244,22 @@ async def get_openai_client() -> OpenAIClient:
     client = factory.get_client("openai")
     if not client.is_initialized:
         await factory.initialize_client("openai")
+    return client
+
+
+async def get_domain_client() -> DomainClient:
+    """Get initialized Domain client."""
+    factory = get_client_factory()
+    client = factory.get_client("domain")
+    if not client.is_initialized:
+        await factory.initialize_client("domain")
+    return client
+
+
+async def get_corelogic_client() -> CoreLogicClient:
+    """Get initialized CoreLogic client."""
+    factory = get_client_factory()
+    client = factory.get_client("corelogic")
+    if not client.is_initialized:
+        await factory.initialize_client("corelogic")
     return client

@@ -66,3 +66,99 @@ class ClientQuotaExceededError(ClientError):
 class ClientServiceUnavailableError(ClientError):
     """Raised when external service is unavailable."""
     pass
+
+
+# Property-specific exceptions
+
+class PropertyAPIError(ClientError):
+    """Base exception for property API errors."""
+    pass
+
+
+class PropertyNotFoundError(PropertyAPIError):
+    """Raised when property cannot be found."""
+    
+    def __init__(self, address: str, **kwargs):
+        self.address = address
+        message = f"Property not found: {address}"
+        super().__init__(message, **kwargs)
+
+
+class PropertyDataIncompleteError(PropertyAPIError):
+    """Raised when property data is incomplete or insufficient."""
+    
+    def __init__(self, address: str, missing_fields: list = None, **kwargs):
+        self.address = address
+        self.missing_fields = missing_fields or []
+        message = f"Incomplete property data for: {address}"
+        if self.missing_fields:
+            message += f" (Missing: {', '.join(self.missing_fields)})"
+        super().__init__(message, **kwargs)
+
+
+class PropertyValuationError(PropertyAPIError):
+    """Raised when property valuation fails or is unavailable."""
+    
+    def __init__(self, address: str, reason: str = None, **kwargs):
+        self.address = address
+        self.reason = reason
+        message = f"Property valuation failed for: {address}"
+        if reason:
+            message += f" (Reason: {reason})"
+        super().__init__(message, **kwargs)
+
+
+class InvalidPropertyAddressError(PropertyAPIError):
+    """Raised when property address is invalid or cannot be geocoded."""
+    
+    def __init__(self, address: str, suggestion: str = None, **kwargs):
+        self.address = address
+        self.suggestion = suggestion
+        message = f"Invalid property address: {address}"
+        if suggestion:
+            message += f" (Suggestion: {suggestion})"
+        super().__init__(message, **kwargs)
+
+
+class PropertyDataValidationError(PropertyAPIError):
+    """Raised when property data fails validation checks."""
+    
+    def __init__(self, address: str, validation_issues: list = None, **kwargs):
+        self.address = address
+        self.validation_issues = validation_issues or []
+        message = f"Property data validation failed for: {address}"
+        if self.validation_issues:
+            issues = ', '.join([issue['message'] for issue in self.validation_issues])
+            message += f" (Issues: {issues})"
+        super().__init__(message, **kwargs)
+
+
+class DomainAPIError(PropertyAPIError):
+    """Raised for Domain API specific errors."""
+    
+    def __init__(self, message: str, status_code: int = None, **kwargs):
+        self.status_code = status_code
+        super().__init__(message, client_name="Domain API", **kwargs)
+
+
+class CoreLogicAPIError(PropertyAPIError):
+    """Raised for CoreLogic API specific errors."""
+    
+    def __init__(self, message: str, status_code: int = None, **kwargs):
+        self.status_code = status_code
+        super().__init__(message, client_name="CoreLogic API", **kwargs)
+
+
+class PropertyCacheError(PropertyAPIError):
+    """Raised for property cache related errors."""
+    pass
+
+
+class PropertyRateLimitError(ClientRateLimitError):
+    """Raised when property API rate limits are exceeded."""
+    
+    def __init__(self, api_name: str, message: str = None, **kwargs):
+        self.api_name = api_name
+        if not message:
+            message = f"{api_name} rate limit exceeded"
+        super().__init__(message, client_name=api_name, **kwargs)

@@ -223,3 +223,125 @@ class NotificationOperations(ABC):
     async def send_templated_notification(self, template_id: str, recipients: List[str], template_variables: Dict[str, Any], **kwargs) -> Dict[str, Any]:
         """Send notification using a template."""
         pass
+
+
+class RealEstateAPIOperations(ABC):
+    """Abstract interface for real estate API operations."""
+    
+    @abstractmethod
+    async def search_properties(self, search_params: Dict[str, Any]) -> Dict[str, Any]:
+        """Search for properties based on criteria."""
+        pass
+    
+    @abstractmethod
+    async def get_property_details(self, property_id: str) -> Dict[str, Any]:
+        """Get detailed information about a specific property."""
+        pass
+    
+    @abstractmethod
+    async def get_property_valuation(self, address: str, property_details: Dict[str, Any] = None) -> Dict[str, Any]:
+        """Get property valuation estimate."""
+        pass
+    
+    @abstractmethod
+    async def get_market_analytics(self, location: Dict[str, str], property_type: str = None) -> Dict[str, Any]:
+        """Get market analytics for a location."""
+        pass
+    
+    @abstractmethod
+    async def get_comparable_sales(self, property_id: str, radius_km: float = 2.0) -> Dict[str, Any]:
+        """Get comparable sales data for a property."""
+        pass
+    
+    @abstractmethod
+    async def get_sales_history(self, property_id: str) -> List[Dict[str, Any]]:
+        """Get sales history for a property."""
+        pass
+    
+    @abstractmethod
+    async def get_rental_history(self, property_id: str) -> List[Dict[str, Any]]:
+        """Get rental history for a property."""
+        pass
+    
+    @abstractmethod
+    async def get_suburb_demographics(self, suburb: str, state: str) -> Dict[str, Any]:
+        """Get demographic information for a suburb."""
+        pass
+    
+    @abstractmethod
+    async def check_api_health(self) -> Dict[str, Any]:
+        """Check API health and rate limit status."""
+        pass
+    
+    @abstractmethod
+    async def get_rate_limit_status(self) -> Dict[str, Any]:
+        """Get current rate limit status."""
+        pass
+
+
+class PropertyDataOperations(ABC):
+    """Abstract interface for property data operations."""
+    
+    @abstractmethod
+    async def validate_address(self, address: str) -> Dict[str, Any]:
+        """Validate and normalize property address."""
+        pass
+    
+    @abstractmethod
+    async def geocode_address(self, address: str) -> Dict[str, Any]:
+        """Get geographic coordinates for an address."""
+        pass
+    
+    @abstractmethod
+    async def calculate_property_metrics(self, property_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Calculate property investment metrics."""
+        pass
+    
+    @abstractmethod
+    async def assess_property_risk(self, property_data: Dict[str, Any], market_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Assess investment risk for a property."""
+        pass
+    
+    @abstractmethod
+    async def compare_properties(self, property_ids: List[str]) -> Dict[str, Any]:
+        """Compare multiple properties side by side."""
+        pass
+    
+    @abstractmethod
+    async def generate_property_report(self, property_id: str, report_type: str = "comprehensive") -> Dict[str, Any]:
+        """Generate a comprehensive property report."""
+        pass
+
+
+class PropertyCacheOperations(ABC):
+    """Abstract interface for property data caching operations."""
+    
+    @abstractmethod
+    async def cache_property_profile(self, address: str, profile_data: Dict[str, Any], ttl: int = 3600) -> bool:
+        """Cache property profile data."""
+        pass
+    
+    @abstractmethod
+    async def get_cached_property_profile(self, address: str) -> Optional[Dict[str, Any]]:
+        """Get cached property profile data."""
+        pass
+    
+    @abstractmethod
+    async def cache_market_data(self, location_key: str, market_data: Dict[str, Any], ttl: int = 86400) -> bool:
+        """Cache market data with longer TTL."""
+        pass
+    
+    @abstractmethod
+    async def get_cached_market_data(self, location_key: str) -> Optional[Dict[str, Any]]:
+        """Get cached market data."""
+        pass
+    
+    @abstractmethod
+    async def invalidate_property_cache(self, address: str) -> bool:
+        """Invalidate cached property data."""
+        pass
+    
+    @abstractmethod
+    async def warm_cache_for_area(self, suburb: str, state: str) -> Dict[str, Any]:
+        """Pre-populate cache for high-traffic areas."""
+        pass

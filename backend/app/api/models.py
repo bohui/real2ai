@@ -634,3 +634,263 @@ class OCRErrorNotification(BaseModel):
     error_type: str
     retry_available: bool
     support_contact: Optional[str] = None
+
+
+# Property Profile Models - Domain API & CoreLogic Integration
+
+
+class PropertyAddress(BaseModel):
+    """Australian property address"""
+    
+    unit_number: Optional[str] = None
+    street_number: str
+    street_name: str
+    street_type: str
+    suburb: str
+    state: AustralianState
+    postcode: str
+    full_address: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    map_certainty: Optional[int] = None
+
+    @field_validator("postcode")
+    @classmethod
+    def validate_postcode(cls, v):
+        if not v.isdigit() or len(v) != 4:
+            raise ValueError("Postcode must be 4 digits")
+        return v
+
+
+class PropertyDetails(BaseModel):
+    """Property physical details"""
+    
+    property_type: str  # House, Unit, Townhouse, Villa, Land
+    bedrooms: Optional[int] = None
+    bathrooms: Optional[int] = None
+    carspaces: Optional[int] = None
+    land_area: Optional[float] = None
+    building_area: Optional[float] = None
+    year_built: Optional[int] = None
+    features: List[str] = []
+    
+    @field_validator("property_type")
+    @classmethod
+    def validate_property_type(cls, v):
+        valid_types = ["House", "Unit", "Townhouse", "Villa", "Land", "Apartment"]
+        if v not in valid_types:
+            raise ValueError(f"Property type must be one of: {', '.join(valid_types)}")
+        return v
+
+
+class PropertyValuation(BaseModel):
+    """Property valuation data"""
+    
+    estimated_value: float
+    valuation_range_lower: float
+    valuation_range_upper: float
+    confidence: float
+    valuation_date: datetime
+    valuation_source: str  # domain, corelogic, combined
+    methodology: str
+    currency: str = "AUD"
+
+
+class PropertyMarketData(BaseModel):
+    """Property market analytics"""
+    
+    median_price: float
+    price_growth_12_month: float
+    price_growth_3_year: float
+    days_on_market: int
+    sales_volume_12_month: int
+    market_outlook: str
+    median_rent: Optional[float] = None
+    rental_yield: Optional[float] = None
+    vacancy_rate: Optional[float] = None
+
+
+class PropertyRiskAssessment(BaseModel):
+    """Property investment risk assessment"""
+    
+    overall_risk: RiskLevel
+    liquidity_risk: RiskLevel
+    market_risk: RiskLevel
+    structural_risk: RiskLevel
+    risk_factors: List[str]
+    confidence: float
+    risk_score: Optional[float] = None  # 0-100 scale
+
+
+class ComparableSale(BaseModel):
+    """Comparable property sale"""
+    
+    address: str
+    sale_date: datetime
+    sale_price: float
+    property_details: PropertyDetails
+    similarity_score: float
+    adjusted_price: Optional[float] = None
+    adjustments: Optional[Dict[str, float]] = None
+
+
+class PropertySalesHistory(BaseModel):
+    """Property sales history record"""
+    
+    date: datetime
+    price: float
+    sale_type: str  # Sold, Auction, Private Sale, etc.
+    days_on_market: Optional[int] = None
+
+
+class PropertyRentalHistory(BaseModel):
+    """Property rental history record"""
+    
+    date: datetime
+    weekly_rent: float
+    lease_type: str  # Leased, Relisted, etc.
+    lease_duration: Optional[str] = None
+
+
+class PropertyProfile(BaseModel):
+    """Comprehensive property profile"""
+    
+    address: PropertyAddress
+    property_details: PropertyDetails
+    valuation: PropertyValuation
+    market_data: PropertyMarketData
+    risk_assessment: PropertyRiskAssessment
+    comparable_sales: List[ComparableSale]
+    sales_history: List[PropertySalesHistory]
+    rental_history: List[PropertyRentalHistory]
+    data_sources: List[str]
+    profile_created_at: datetime
+    profile_confidence: float
+    cache_expires_at: Optional[datetime] = None
+
+
+class PropertySearchRequest(BaseModel):
+    """Property search request"""
+    
+    address: Optional[str] = None
+    property_details: Optional[PropertyDetails] = None
+    include_valuation: bool = True
+    include_market_data: bool = True
+    include_risk_assessment: bool = True
+    include_comparables: bool = True
+    include_sales_history: bool = True
+    include_rental_history: bool = False
+    force_refresh: bool = False
+    max_comparables: int = 10
+    
+    @field_validator("max_comparables")
+    @classmethod
+    def validate_max_comparables(cls, v):
+        if v < 1 or v > 20:
+            raise ValueError("max_comparables must be between 1 and 20")
+        return v
+
+
+class PropertyProfileResponse(BaseModel):
+    """Property profile API response"""
+    
+    property_profile: PropertyProfile
+    processing_time: float
+    data_freshness: Dict[str, datetime]
+    api_usage: Dict[str, int]
+    cached_data: bool = False
+    warnings: List[str] = []
+
+
+class PropertyValuationRequest(BaseModel):
+    """Property valuation request"""
+    
+    address: str
+    property_details: Optional[PropertyDetails] = None
+    valuation_source: str = "both"  # domain, corelogic, both
+    
+    @field_validator("valuation_source")
+    @classmethod
+    def validate_valuation_source(cls, v):
+        if v not in ["domain", "corelogic", "both"]:
+            raise ValueError("valuation_source must be 'domain', 'corelogic', or 'both'")
+        return v
+
+
+class PropertyValuationResponse(BaseModel):
+    """Property valuation response"""
+    
+    address: str
+    valuations: Dict[str, PropertyValuation]  # keyed by source
+    processing_time: float
+    data_sources_used: List[str]
+    confidence_score: float
+    warnings: List[str] = []
+
+
+class PropertySearchFilter(BaseModel):
+    """Property search filters for listings"""
+    
+    min_price: Optional[float] = None
+    max_price: Optional[float] = None
+    min_bedrooms: Optional[int] = None
+    max_bedrooms: Optional[int] = None
+    min_bathrooms: Optional[int] = None
+    max_bathrooms: Optional[int] = None
+    property_types: List[str] = []
+    suburbs: List[str] = []
+    states: List[AustralianState] = []
+    listing_type: str = "Sale"  # Sale, Rent, Sold
+    
+    @field_validator("listing_type")
+    @classmethod
+    def validate_listing_type(cls, v):
+        if v not in ["Sale", "Rent", "Sold"]:
+            raise ValueError("listing_type must be 'Sale', 'Rent', or 'Sold'")
+        return v
+
+
+class PropertyListing(BaseModel):
+    """Property listing information"""
+    
+    listing_id: int
+    address: PropertyAddress
+    property_details: PropertyDetails
+    price_details: Dict[str, Any]
+    listing_date: datetime
+    agent_info: Optional[Dict[str, Any]] = None
+    media_urls: List[str] = []
+    description: Optional[str] = None
+    auction_date: Optional[datetime] = None
+
+
+class PropertySearchResponse(BaseModel):
+    """Property search response"""
+    
+    total_results: int
+    results_returned: int
+    listings: List[PropertyListing]
+    search_filters: PropertySearchFilter
+    processing_time: float
+    page_number: int = 1
+    page_size: int = 20
+
+
+class PropertyAPIHealthStatus(BaseModel):
+    """Property API health status"""
+    
+    domain_api: Dict[str, Any]
+    corelogic_api: Dict[str, Any]
+    overall_status: str
+    last_checked: datetime
+    rate_limits: Dict[str, Dict[str, Any]]
+
+
+class PropertyDataValidationResult(BaseModel):
+    """Property data validation result"""
+    
+    is_valid: bool
+    validation_score: float
+    issues: List[Dict[str, Any]]
+    data_sources_compared: List[str]
+    cross_validation_passed: bool

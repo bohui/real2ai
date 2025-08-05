@@ -33,6 +33,7 @@ from app.router.onboarding import router as onboarding_router
 from app.router.ocr import router as ocr_router
 from app.router.health import router as health_router
 from app.router.websockets import router as websockets_router
+from app.router.property_profile import router as property_profile_router
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -83,6 +84,7 @@ app.include_router(users_router)
 app.include_router(onboarding_router)
 app.include_router(ocr_router)
 app.include_router(websockets_router)
+app.include_router(property_profile_router)
 
 
 @app.on_event("startup")
