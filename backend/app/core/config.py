@@ -34,6 +34,14 @@ class Settings(BaseSettings):
     domain_api_key: Optional[str] = None
     corelogic_api_key: Optional[str] = None
 
+    # JWT Settings
+    jwt_secret_key: Optional[str] = None
+    jwt_algorithm: str = "HS256"
+    jwt_expiration_hours: int = 24
+
+    # Google Application Credentials
+    google_application_credentials: Optional[str] = None
+
     # Redis Cache
     redis_url: str = "redis://localhost:6379"
 

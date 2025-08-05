@@ -13,7 +13,7 @@ from ..base.client import ClientConfig
 class GeminiClientConfig(ClientConfig):
     """Configuration for Google Gemini client with service role authentication."""
 
-    # Gemini API settings  
+    # Gemini API settings
     model_name: str = "gemini-2.5-pro"
 
     # Service role authentication settings (required)
