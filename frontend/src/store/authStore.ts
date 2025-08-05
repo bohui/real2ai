@@ -76,6 +76,12 @@ export const useAuthStore = create<AuthState>()(
           isLoading: false,
           error: null
         })
+        
+        // Reset onboarding state on logout
+        // Import is done dynamically to avoid circular dependency
+        import('@/store/uiStore').then(({ useUIStore }) => {
+          useUIStore.getState().resetOnboardingState()
+        })
       },
 
       clearError: () => {
@@ -109,22 +115,36 @@ export const useAuthStore = create<AuthState>()(
           set({ user })
         } catch (error: any) {
           console.error('Failed to refresh user:', error)
-          // Don't set error for background refresh failures
+          // If it's an auth error (401), the interceptor will handle logout
+          // Re-throw to allow callers to handle the error
+          if (error?.response?.status === 401) {
+            throw error
+          }
+          // For other errors, don't set error for background refresh failures
         }
       },
 
-      initializeAuth: () => {
+      initializeAuth: async () => {
         set({ isLoading: true })
         
-        // Check if user is already authenticated
+        // Check if user is already authenticated from persisted state
         const { user, isAuthenticated } = get()
         
         if (isAuthenticated && user) {
-          // Refresh user data in background
-          get().refreshUser()
+          try {
+            // Validate token by attempting to refresh user data
+            await get().refreshUser()
+            // If successful, user is still authenticated
+            set({ isLoading: false })
+          } catch (error) {
+            // Token is likely expired, clear auth state
+            console.log('Token validation failed during initialization, logging out')
+            get().logout()
+            set({ isLoading: false })
+          }
+        } else {
+          set({ isLoading: false })
         }
-        
-        set({ isLoading: false })
       }
     }),
     {

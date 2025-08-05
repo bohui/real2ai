@@ -14,14 +14,14 @@ from app.models.contract_state import (
     create_initial_state,
 )
 from app.agents.contract_workflow import ContractAnalysisWorkflow
-from app.core.database import get_database_client
+from app.core.database import get_service_database_client
 from app.services.document_service import DocumentService
 from app.services.websocket_service import WebSocketManager
 
 logger = logging.getLogger(__name__)
 
-# Initialize services
-document_service = DocumentService()
+# Initialize services with service role for elevated permissions
+document_service = DocumentService(use_service_role=True)
 websocket_manager = WebSocketManager()
 
 
@@ -40,61 +40,50 @@ def process_document_background(
     """Background task for document processing"""
 
     async def _async_process_document():
-        db_client = None
         try:
-            # Get database client
-            db_client = get_database_client()
+            # Get service database client (has elevated permissions)
+            db_client = get_service_database_client()
             if not hasattr(db_client, "_client") or db_client._client is None:
                 await db_client.initialize()
-
-            # First, check if document exists before processing
-            doc_result = (
-                db_client.table("documents").select("*").eq("id", document_id).execute()
-            )
-            if not doc_result.data:
-                logger.error(f"Document {document_id} not found in database")
-                return
-
-            document = doc_result.data[0]
-
-            # Check if document is already processed or failed
-            if document.get("status") in ["processed", "failed", "ocr_failed"]:
-                logger.info(
-                    f"Document {document_id} already processed with status: {document.get('status')}"
-                )
-                return
 
             # Update document status
             db_client.table("documents").update({"status": "processing"}).eq(
                 "id", document_id
             ).execute()
 
+            # Get document metadata
+            doc_result = (
+                db_client.table("documents").select("*").eq("id", document_id).execute()
+            )
+            if not doc_result.data:
+                raise Exception("Document not found")
+
+            document = doc_result.data[0]
+
             # Verify file exists in storage before processing
             try:
-                storage = db_client.storage()
-                file_exists = storage.from_("documents").list(
-                    path=document["storage_path"].rsplit("/", 1)[
-                        0
-                    ]  # Get directory path
-                )
-
-                # Check if the specific file exists
-                file_found = False
-                for file_info in file_exists:
-                    if file_info.name == document["storage_path"].split("/")[-1]:
-                        file_found = True
-                        break
-
-                if not file_found:
-                    raise Exception(
-                        f"File not found in storage: {document['storage_path']}"
-                    )
-
+                await document_service.get_file_content(document["storage_path"])
             except Exception as storage_error:
+                # If file doesn't exist, mark document as failed and clean up
                 logger.error(
-                    f"Storage verification failed for {document_id}: {str(storage_error)}"
+                    f"File not found in storage for document {document_id}: {document['storage_path']}"
                 )
-                raise Exception(f"File not accessible in storage: {str(storage_error)}")
+
+                # Mark document as failed with specific error
+                db_client.table("documents").update(
+                    {
+                        "status": "failed",
+                        "processing_results": {
+                            "error": "File not found in storage - orphaned record",
+                            "storage_path": document["storage_path"],
+                            "cleanup_required": True,
+                        },
+                    }
+                ).eq("id", document_id).execute()
+
+                raise Exception(
+                    f"File not found in storage: {document['storage_path']}"
+                )
 
             # Extract text from document with contract context
             contract_context = {
@@ -134,31 +123,18 @@ def process_document_background(
 
         except Exception as e:
             logger.error(f"Document processing failed for {document_id}: {str(e)}")
-
-            # Only update status if we have a valid database client
-            if db_client:
-                try:
-                    db_client.table("documents").update(
-                        {"status": "failed", "processing_results": {"error": str(e)}}
-                    ).eq("id", document_id).execute()
-                except Exception as db_error:
-                    logger.error(
-                        f"Failed to update document status for {document_id}: {str(db_error)}"
-                    )
+            db_client.table("documents").update(
+                {"status": "failed", "processing_results": {"error": str(e)}}
+            ).eq("id", document_id).execute()
 
             # Send error WebSocket notification
-            try:
-                await websocket_manager.send_message(
-                    document_id,
-                    {
-                        "event_type": "document_processing_failed",
-                        "data": {"document_id": document_id, "error_message": str(e)},
-                    },
-                )
-            except Exception as ws_error:
-                logger.error(
-                    f"Failed to send WebSocket error notification for {document_id}: {str(ws_error)}"
-                )
+            await websocket_manager.send_message(
+                document_id,
+                {
+                    "event_type": "document_processing_failed",
+                    "data": {"document_id": document_id, "error_message": str(e)},
+                },
+            )
 
     # Run the async function
     return asyncio.run(_async_process_document())
@@ -189,30 +165,11 @@ def analyze_contract_background(
             openai_api_base=settings.openai_api_base,
         )
 
-        db_client = None
         try:
-            # Get database client
-            db_client = get_database_client()
+            # Get service database client (has elevated permissions)
+            db_client = get_service_database_client()
             if not hasattr(db_client, "_client") or db_client._client is None:
                 await db_client.initialize()
-
-            # Check if analysis already exists and its status
-            analysis_result = (
-                db_client.table("contract_analyses")
-                .select("*")
-                .eq("id", analysis_id)
-                .execute()
-            )
-            if not analysis_result.data:
-                logger.error(f"Analysis {analysis_id} not found in database")
-                return
-
-            analysis = analysis_result.data[0]
-            if analysis.get("status") in ["completed", "failed"]:
-                logger.info(
-                    f"Analysis {analysis_id} already processed with status: {analysis.get('status')}"
-                )
-                return
 
             # Update analysis status
             db_client.table("contract_analyses").update({"status": "processing"}).eq(
@@ -238,31 +195,22 @@ def analyze_contract_background(
             if user_profile.get("subscription_status") == "free":
                 credits_remaining = user_profile.get("credits_remaining", 0)
                 if credits_remaining <= 0:
-                    raise Exception("Insufficient credits for analysis")
-
-            # Verify document exists and is accessible
-            try:
-                storage = db_client.storage()
-                file_exists = storage.from_("documents").list(
-                    path=document["storage_path"].rsplit("/", 1)[0]
-                )
-
-                file_found = False
-                for file_info in file_exists:
-                    if file_info.name == document["storage_path"].split("/")[-1]:
-                        file_found = True
-                        break
-
-                if not file_found:
                     raise Exception(
-                        f"Document file not found in storage: {document['storage_path']}"
+                        "quota_error - Insufficient credits or quota exceeded."
                     )
 
+            # Verify document file exists in storage before processing
+            try:
+                await document_service.get_file_content(document["storage_path"])
             except Exception as storage_error:
                 logger.error(
-                    f"Storage verification failed for document {document['id']}: {str(storage_error)}"
+                    f"Document file not found in storage: {document['storage_path']}"
                 )
-                raise Exception(f"Document file not accessible: {str(storage_error)}")
+                # Continue with analysis if we have extracted text, otherwise fail
+                if not document.get("processing_results", {}).get("extracted_text"):
+                    raise Exception(
+                        f"File not found and no extracted text available: {document['storage_path']}"
+                    )
 
             # Create initial state
             initial_state = create_initial_state(
@@ -361,7 +309,7 @@ def analyze_contract_background(
                             "user_id": user_id,
                             "action_type": "contract_analysis",
                             "credits_used": 1,
-                            "remaining_credits": new_credits,
+                            "credits_remaining": new_credits,
                         }
                     ).execute()
                 except Exception as log_error:
@@ -416,11 +364,7 @@ def analyze_contract_background(
                 error_message = (
                     "API rate limit reached. Please try again in a few minutes."
                 )
-            elif (
-                "quota" in error_message.lower()
-                or "credit" in error_message.lower()
-                or "insufficient credits" in error_message.lower()
-            ):
+            elif "quota" in error_message.lower() or "credit" in error_message.lower():
                 error_type = "quota_error"
                 error_message = "Insufficient credits or quota exceeded."
 
@@ -429,44 +373,33 @@ def analyze_contract_background(
             )
 
             # Update analysis status to failed with error details
-            if db_client:
-                try:
-                    db_client.table("contract_analyses").update(
-                        {
-                            "status": "failed",
-                            "analysis_result": {
-                                "error": {
-                                    "type": error_type,
-                                    "message": error_message,
-                                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                                }
-                            },
+            db_client.table("contract_analyses").update(
+                {
+                    "status": "failed",
+                    "analysis_result": {
+                        "error": {
+                            "type": error_type,
+                            "message": error_message,
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
                         }
-                    ).eq("id", analysis_id).execute()
-                except Exception as db_error:
-                    logger.error(
-                        f"Failed to update analysis status for {analysis_id}: {str(db_error)}"
-                    )
+                    },
+                }
+            ).eq("id", analysis_id).execute()
 
             # Send detailed error WebSocket update
-            try:
-                await websocket_manager.send_message(
-                    contract_id,
-                    {
-                        "event_type": "analysis_failed",
-                        "data": {
-                            "contract_id": contract_id,
-                            "error_type": error_type,
-                            "error_message": error_message,
-                            "retry_suggested": error_type
-                            in ["llm_api_error", "timeout_error", "rate_limit_error"],
-                        },
+            await websocket_manager.send_message(
+                contract_id,
+                {
+                    "event_type": "analysis_failed",
+                    "data": {
+                        "contract_id": contract_id,
+                        "error_type": error_type,
+                        "error_message": error_message,
+                        "retry_suggested": error_type
+                        in ["llm_api_error", "timeout_error", "rate_limit_error"],
                     },
-                )
-            except Exception as ws_error:
-                logger.error(
-                    f"Failed to send WebSocket error notification for {contract_id}: {str(ws_error)}"
-                )
+                },
+            )
 
     # Run the async function
     return asyncio.run(_async_analyze_contract())

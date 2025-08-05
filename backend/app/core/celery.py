@@ -14,7 +14,7 @@ celery_app = Celery(
     "real2ai",
     broker=settings.redis_url,
     backend=settings.redis_url,
-    include=["app.tasks.ocr_tasks", "app.tasks.background_tasks"],
+    include=["app.tasks.ocr_tasks", "app.tasks.background_tasks", "app.tasks.cleanup_tasks"],
 )
 
 # Configure Celery
@@ -48,5 +48,17 @@ celery_app.conf.beat_schedule = {
     "cleanup-failed-tasks": {
         "task": "app.tasks.ocr_tasks.cleanup_failed_tasks",
         "schedule": 3600.0,  # Every hour
+    },
+    "cleanup-orphaned-documents": {
+        "task": "app.tasks.cleanup_tasks.cleanup_orphaned_documents",
+        "schedule": 1800.0,  # Every 30 minutes
+    },
+    "cleanup-failed-analyses": {
+        "task": "app.tasks.cleanup_tasks.cleanup_failed_analyses", 
+        "schedule": 86400.0,  # Every 24 hours
+    },
+    "verify-storage-consistency": {
+        "task": "app.tasks.cleanup_tasks.verify_storage_consistency",
+        "schedule": 21600.0,  # Every 6 hours
     },
 }

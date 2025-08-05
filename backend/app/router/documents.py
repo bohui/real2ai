@@ -50,12 +50,30 @@ async def upload_document(
                 detail=f"Invalid file type. Allowed: {', '.join(settings.allowed_file_types_list)}",
             )
 
-        # Upload to Supabase Storage
+        # Get database client first
+        db_client = get_database_client()
+        
+        # Ensure database client is initialized
+        if not hasattr(db_client, '_client') or db_client._client is None:
+            await db_client.initialize()
+
+        # Upload to Supabase Storage (this includes validation)
         upload_result = await document_service.upload_file(
             file=file, user_id=user.id, contract_type=contract_type
         )
 
-        # Store document metadata in database
+        # Verify file was actually uploaded successfully
+        try:
+            # Try to get file content to verify upload worked
+            await document_service.get_file_content(upload_result["storage_path"])
+        except Exception as verification_error:
+            logger.error(f"File upload verification failed: {str(verification_error)}")
+            raise HTTPException(
+                status_code=500, 
+                detail="File upload failed - please try again"
+            )
+
+        # Store document metadata in database only after successful upload verification
         document_data = {
             "id": upload_result["document_id"],
             "user_id": user.id,
@@ -66,13 +84,23 @@ async def upload_document(
             "status": "uploaded",
         }
 
-        db_client = get_database_client()
-        
-        # Ensure database client is initialized
-        if not hasattr(db_client, '_client') or db_client._client is None:
-            await db_client.initialize()
+        # Insert to database with error handling
+        try:
+            db_client.table("documents").insert(document_data).execute()
+        except Exception as db_error:
+            # If database insert fails, try to clean up the uploaded file
+            logger.error(f"Database insert failed: {str(db_error)}")
+            try:
+                storage = db_client.storage()
+                storage.from_(document_service.storage_bucket).remove([upload_result["storage_path"]])
+                logger.info(f"Cleaned up orphaned file: {upload_result['storage_path']}")
+            except Exception as cleanup_error:
+                logger.warning(f"Failed to cleanup orphaned file: {str(cleanup_error)}")
             
-        db_client.table("documents").insert(document_data).execute()
+            raise HTTPException(
+                status_code=500, 
+                detail="Failed to save document metadata"
+            )
 
         # Start background processing via Celery
         from app.tasks.background_tasks import process_document_background

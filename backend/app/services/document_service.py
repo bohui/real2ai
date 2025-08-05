@@ -17,7 +17,7 @@ from docx import Document
 from unstructured.partition.auto import partition
 
 from app.core.config import get_settings
-from app.core.database import get_database_client
+from app.core.database import get_database_client, get_service_database_client
 from app.models.contract_state import ContractType
 from app.services.gemini_ocr_service import GeminiOCRService
 
@@ -27,12 +27,18 @@ logger = logging.getLogger(__name__)
 class DocumentService:
     """Service for handling document upload and processing"""
 
-    def __init__(self):
+    def __init__(self, use_service_role: bool = False):
         self.settings = get_settings()
-        self.db_client = get_database_client()
+        # Use service role client for background tasks to access storage
+        self.db_client = (
+            get_service_database_client() 
+            if use_service_role 
+            else get_database_client()
+        )
         self.storage_bucket = "documents"
         self.gemini_ocr = GeminiOCRService()
         self.ocr_enabled = True  # Can be configured via settings
+        self.use_service_role = use_service_role
 
     async def initialize(self):
         """Initialize document service"""
@@ -143,16 +149,31 @@ class DocumentService:
         """Get file content from storage"""
         try:
             storage = self.db_client.storage()
+            
+            # Directly attempt to download the file
+            # The storage API will return appropriate errors if file doesn't exist
             result = storage.from_(self.storage_bucket).download(storage_path)
 
             if isinstance(result, bytes):
+                logger.debug(f"Successfully downloaded file: {storage_path}")
                 return result
             else:
+                logger.error(f"Download returned non-bytes result for: {storage_path}")
                 raise HTTPException(status_code=404, detail="File not found")
 
+        except HTTPException:
+            # Re-raise HTTP exceptions as-is
+            raise
         except Exception as e:
-            logger.error(f"Error retrieving file: {str(e)}")
-            raise HTTPException(status_code=500, detail="Could not retrieve file")
+            logger.error(f"Error retrieving file {storage_path}: {str(e)}")
+            # Return more specific error message based on error content
+            error_str = str(e).lower()
+            if "not_found" in error_str or "404" in error_str or "object not found" in error_str:
+                raise HTTPException(status_code=404, detail="File not found")
+            elif "unauthorized" in error_str or "403" in error_str:
+                raise HTTPException(status_code=403, detail="Access denied")
+            else:
+                raise HTTPException(status_code=500, detail="Could not retrieve file")
 
     async def extract_text(
         self,

@@ -42,6 +42,7 @@ interface UIState {
   setIsMobile: (isMobile: boolean) => void
   
   setShowOnboarding: (show: boolean) => void
+  resetOnboardingState: () => void
 }
 
 export const useUIStore = create<UIState>((set, get) => ({
@@ -160,6 +161,11 @@ export const useUIStore = create<UIState>((set, get) => ({
   // Onboarding actions
   setShowOnboarding: (show: boolean) => {
     set({ showOnboarding: show })
+  },
+  
+  // Reset onboarding state - useful for logout scenarios
+  resetOnboardingState: () => {
+    set({ showOnboarding: false })
   }
 }))
 

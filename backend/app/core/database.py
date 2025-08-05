@@ -16,21 +16,30 @@ logger = logging.getLogger(__name__)
 class DatabaseClient:
     """Supabase database client wrapper"""
     
-    def __init__(self):
+    def __init__(self, use_service_role: bool = False):
         self._client: Optional[Client] = None
         self._settings = get_settings()
+        self._use_service_role = use_service_role
     
     async def initialize(self):
         """Initialize database connection"""
         try:
+            # Use service role key for background tasks to bypass RLS
+            api_key = (
+                self._settings.supabase_service_key 
+                if self._use_service_role 
+                else self._settings.supabase_anon_key
+            )
+            
             self._client = create_client(
                 self._settings.supabase_url,
-                self._settings.supabase_anon_key
+                api_key
             )
             
             # Test connection
             await self._test_connection()
-            logger.info("Database connection established")
+            connection_type = "service role" if self._use_service_role else "anon"
+            logger.info(f"Database connection established ({connection_type})")
             
         except Exception as e:
             logger.error(f"Failed to initialize database: {str(e)}")
@@ -90,16 +99,25 @@ class DatabaseClient:
             raise
 
 
-# Global database client instance
+# Global database client instances
 _db_client: Optional[DatabaseClient] = None
+_service_db_client: Optional[DatabaseClient] = None
 
 
 def get_database_client() -> DatabaseClient:
-    """Get database client singleton"""
+    """Get database client singleton (anon key)"""
     global _db_client
     if _db_client is None:
-        _db_client = DatabaseClient()
+        _db_client = DatabaseClient(use_service_role=False)
     return _db_client
+
+
+def get_service_database_client() -> DatabaseClient:
+    """Get service role database client singleton for background tasks"""
+    global _service_db_client
+    if _service_db_client is None:
+        _service_db_client = DatabaseClient(use_service_role=True)
+    return _service_db_client
 
 
 async def init_database():
@@ -109,8 +127,11 @@ async def init_database():
 
 
 async def close_database():
-    """Close database connection"""
-    global _db_client
+    """Close database connections"""
+    global _db_client, _service_db_client
     if _db_client:
         await _db_client.close()
         _db_client = None
+    if _service_db_client:
+        await _service_db_client.close()
+        _service_db_client = None

@@ -42,7 +42,7 @@ const queryClient = new QueryClient({
 })
 
 const App: React.FC = () => {
-  const { initializeAuth, isLoading, user } = useAuthStore()
+  const { initializeAuth, isLoading, user, isAuthenticated } = useAuthStore()
   const { showOnboarding, setShowOnboarding } = useUIStore()
   const [onboardingChecked, setOnboardingChecked] = React.useState(false)
 
@@ -51,36 +51,37 @@ const App: React.FC = () => {
     initializeAuth()
   }, [initializeAuth])
 
-  // Check onboarding status for authenticated users
+  // Check onboarding status for authenticated users only
   React.useEffect(() => {
     const checkOnboardingStatus = async () => {
-      if (user && !onboardingChecked) {
+      // Only proceed if user is authenticated and we haven't checked yet
+      if (user && isAuthenticated && !isLoading && !onboardingChecked) {
         try {
           const onboardingStatus = await apiService.getOnboardingStatus()
           
-          // Show onboarding if not completed
-          if (!onboardingStatus.onboarding_completed) {
-            setShowOnboarding(true)
+          // Double-check user is still authenticated after API call
+          if (user && isAuthenticated) {
+            if (!onboardingStatus.onboarding_completed) {
+              setShowOnboarding(true)
+            }
           }
           
           setOnboardingChecked(true)
         } catch (error) {
           console.error('Failed to check onboarding status:', error)
-          // Only show onboarding for authenticated users, even on error
-          if (user) {
-            setShowOnboarding(true)
-          }
+          // Don't show onboarding if API call fails - could indicate auth issues
+          // If it's a legitimate API error, user can try again after refresh
           setOnboardingChecked(true)
         }
-      } else if (!user && onboardingChecked) {
-        // Reset onboarding check when user logs out
+      } else if (!user || !isAuthenticated) {
+        // Reset onboarding state when user logs out or becomes unauthenticated
         setOnboardingChecked(false)
         setShowOnboarding(false)
       }
     }
 
     checkOnboardingStatus()
-  }, [user, onboardingChecked, setShowOnboarding])
+  }, [user, isAuthenticated, isLoading, onboardingChecked, setShowOnboarding])
 
   const handleOnboardingComplete = async (preferences: any) => {
     try {
@@ -157,8 +158,8 @@ const App: React.FC = () => {
           {/* Global components */}
           <NotificationSystem />
           
-          {/* Onboarding Wizard - Only show for authenticated users */}
-          {showOnboarding && user && (
+          {/* Onboarding Wizard - Only show for fully authenticated users */}
+          {showOnboarding && user && isAuthenticated && !isLoading && (
             <OnboardingWizard 
               onComplete={handleOnboardingComplete}
               onSkip={handleOnboardingSkip}
