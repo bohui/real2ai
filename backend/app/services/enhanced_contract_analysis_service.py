@@ -7,7 +7,7 @@ import asyncio
 from typing import Dict, Any, Optional
 from datetime import datetime, UTC
 
-from app.agents.enhanced_contract_workflow import EnhancedContractAnalysisWorkflow
+from backend.app.agents.contract_workflow import EnhancedContractAnalysisWorkflow
 from app.config.enhanced_workflow_config import (
     get_enhanced_workflow_config,
     validate_workflow_configuration,
