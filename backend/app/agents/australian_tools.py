@@ -258,6 +258,46 @@ def calculate_stamp_duty(
             ],
             "first_home_exemption_threshold": 600000,
             "foreign_buyer_surcharge": 0.07
+        },
+        "TAS": {
+            "thresholds": [
+                (13000, 0.015),
+                (30000, 0.025),
+                (50000, 0.035),
+                (75000, 0.04),
+                (200000, 0.043),
+                (375000, 0.045),
+                (725000, 0.047),
+                (float('inf'), 0.055)
+            ],
+            "first_home_exemption_threshold": 600000,
+            "first_home_concession_threshold": 750000,
+            "foreign_buyer_surcharge": 0.03,
+            "land_tax_threshold": 25000
+        },
+        "NT": {
+            "thresholds": [
+                (525000, 0.000315),  # Flat rate calculation
+                (float('inf'), 0.045)
+            ],
+            "first_home_exemption_threshold": 650000,
+            "foreign_buyer_surcharge": 0.05,
+            "territory_concession": 0.002  # Additional concession for NT residents
+        },
+        "ACT": {
+            "thresholds": [
+                (200000, 0.012),
+                (300000, 0.034),
+                (500000, 0.05),
+                (750000, 0.066),
+                (1000000, 0.0682),
+                (1455000, 0.0715),
+                (float('inf'), 0.0715)
+            ],
+            "first_home_exemption_threshold": 750000,
+            "first_home_concession_threshold": 1000000,
+            "foreign_buyer_surcharge": 0.0715,
+            "rates_system": "reformed"  # ACT has reformed stamp duty system
         }
     }
     
@@ -302,7 +342,24 @@ def calculate_stamp_duty(
     if is_investment and "investment_surcharge" in rates:
         surcharges += purchase_price * rates["investment_surcharge"]
     
-    total_duty = base_duty - exemptions + surcharges
+    # State-specific adjustments
+    state_adjustments = 0.0
+    
+    # NT territory concession for residents
+    if state == "NT" and not is_foreign_buyer and "territory_concession" in rates:
+        state_adjustments -= purchase_price * rates["territory_concession"]
+    
+    # ACT reformed system considerations
+    if state == "ACT" and rates.get("rates_system") == "reformed":
+        # ACT has been transitioning away from stamp duty - note this in calculation
+        pass
+    
+    # TAS land tax threshold considerations
+    if state == "TAS" and "land_tax_threshold" in rates:
+        # Note: This affects land tax, not stamp duty directly
+        pass
+    
+    total_duty = base_duty - exemptions + surcharges + state_adjustments
     
     return StampDutyCalculation(
         state=AustralianState(state),
@@ -920,6 +977,264 @@ def extract_days_from_period(period_text: str) -> int:
     """Extract number of days from cooling-off period text"""
     match = re.search(r'(\d+)', str(period_text))
     return int(match.group(1)) if match else 0
+
+
+@tool
+def identify_contract_template_type(document_text: str, state: str) -> Dict[str, Any]:
+    """Identify the type of Australian contract template and state-specific requirements"""
+    
+    # State-specific template indicators
+    template_indicators = {
+        "NSW": {
+            "reiv": ["real estate institute of victoria", "reiv"],
+            "law_institute": ["law society of nsw", "law institute nsw"],
+            "standard_sale": ["contract for the sale of land", "residential property"],
+            "strata": ["strata plan", "unit entitlement", "owners corporation"],
+            "off_plan": ["off the plan", "future settlement", "completion notice"],
+            "auction": ["auction conditions", "reserve price", "highest bidder"]
+        },
+        "VIC": {
+            "reiv": ["real estate institute of victoria", "reiv", "estate agents council"],
+            "law_institute": ["law institute of victoria"],
+            "standard_sale": ["contract of sale of real estate", "section 32"],
+            "strata": ["owners corporation", "strata plan", "body corporate"],
+            "off_plan": ["off the plan", "plan of subdivision", "statement of compliance"],
+            "auction": ["auction conditions", "reserve price", "auctioneer"]
+        },
+        "QLD": {
+            "reiq": ["real estate institute of queensland", "reiq"],
+            "law_society": ["queensland law society", "qls"],
+            "standard_sale": ["contract for the sale of residential property", "property law act"],
+            "strata": ["body corporate", "community titles scheme", "strata titles"],
+            "off_plan": ["off the plan", "building development approval", "completion certificate"],
+            "auction": ["auction conditions", "property sold prior", "auction terms"]
+        },
+        "SA": {
+            "real_estate": ["real estate institute of south australia", "reisa"],
+            "law_society": ["law society of south australia"],
+            "standard_sale": ["contract for the sale of land", "form 1 vendor's statement"],
+            "strata": ["strata corporation", "community titles", "strata plan"],
+            "off_plan": ["off the plan", "building approval", "practical completion"],
+            "auction": ["auction conditions", "reserve price", "sale by auction"]
+        },
+        "WA": {
+            "reiwa": ["real estate institute of western australia", "reiwa"],
+            "law_society": ["law society of western australia"],
+            "standard_sale": ["contract for the sale of residential property", "property settlement"],
+            "strata": ["strata company", "strata titles", "strata plan"],
+            "off_plan": ["off the plan", "building approval", "settlement ready"],
+            "auction": ["auction conditions", "reserve price", "auctioneer approved"]
+        },
+        "TAS": {
+            "reit": ["real estate institute of tasmania", "reit"],
+            "law_society": ["law society of tasmania"],
+            "standard_sale": ["contract for sale of land", "property disclosure statement"],
+            "strata": ["body corporate", "strata scheme", "unit plan"],
+            "off_plan": ["off the plan", "planning approval", "completion certificate"],
+            "auction": ["auction conditions", "reserve met", "sale by public auction"]
+        },
+        "NT": {
+            "reint": ["real estate institute of northern territory", "reint"],
+            "law_society": ["law society northern territory"],
+            "standard_sale": ["contract for the sale of land", "vendor disclosure statement"],
+            "strata": ["body corporate", "unit titles", "strata scheme"],
+            "off_plan": ["off the plan", "development approval", "building completion"],
+            "auction": ["auction conditions", "reserve price", "public auction"]
+        },
+        "ACT": {
+            "rei_act": ["real estate institute of act", "rei act"],
+            "law_society": ["law society of act"],
+            "standard_sale": ["contract for the sale of residential property", "section 11 statement"],
+            "strata": ["owners corporation", "unit plan", "strata titles"],
+            "off_plan": ["off the plan", "building approval", "completion certificate"],
+            "auction": ["auction conditions", "reserve price", "auction terms"]
+        }
+    }
+    
+    document_lower = document_text.lower()
+    state_indicators = template_indicators.get(state, {})
+    
+    # Analyze template type
+    template_matches = {}
+    confidence_scores = {}
+    
+    for template_type, keywords in state_indicators.items():
+        matches = sum(1 for keyword in keywords if keyword in document_lower)
+        if matches > 0:
+            template_matches[template_type] = matches
+            confidence_scores[template_type] = min(0.9, matches * 0.3)
+    
+    # Determine primary template type
+    primary_template = max(template_matches.items(), key=lambda x: x[1])[0] if template_matches else "unknown"
+    
+    # State-specific requirements based on template
+    state_requirements = get_state_specific_requirements(state, primary_template)
+    
+    # Template validation
+    validation_issues = validate_template_compliance(document_text, state, primary_template)
+    
+    return {
+        "state": state,
+        "primary_template_type": primary_template,
+        "template_matches": template_matches,
+        "confidence_scores": confidence_scores,
+        "state_specific_requirements": state_requirements,
+        "validation_issues": validation_issues,
+        "compliance_notes": get_state_compliance_notes(state, primary_template)
+    }
+
+
+def get_state_specific_requirements(state: str, template_type: str) -> Dict[str, Any]:
+    """Get state-specific requirements for contract templates"""
+    
+    requirements = {
+        "NSW": {
+            "mandatory_disclosures": ["section 66w certificate", "contract guide", "property information"],
+            "cooling_off": {"period": "5 business days", "exceptions": ["auction", "cooling off waived"]},
+            "legal_references": ["Conveyancing Act 1919", "Property and Stock Agents Act 2002"],
+            "special_conditions": ["subject to finance", "subject to building inspection"]
+        },
+        "VIC": {
+            "mandatory_disclosures": ["section 32 statement", "owners corporation certificate"],
+            "cooling_off": {"period": "3 business days", "exceptions": ["auction", "vendor bid accepted"]},
+            "legal_references": ["Sale of Land Act 1962", "Estate Agents Act 1980"],
+            "special_conditions": ["subject to finance", "subject to building inspection", "subject to pest inspection"]
+        },
+        "QLD": {
+            "mandatory_disclosures": ["property disclosure statement", "body corporate search"],
+            "cooling_off": {"period": "5 business days", "exceptions": ["auction", "investor"]},
+            "legal_references": ["Property Law Act 1974", "Body Corporate and Community Management Act"],
+            "special_conditions": ["subject to finance", "subject to building and pest inspection"]
+        },
+        "SA": {
+            "mandatory_disclosures": ["form 1 vendor's statement", "community corporation certificate"],
+            "cooling_off": {"period": "2 clear business days", "exceptions": ["auction", "waiver signed"]},
+            "legal_references": ["Law of Property Act 1936", "Land and Business Agents Act 1994"],
+            "special_conditions": ["subject to finance", "subject to building inspection"]
+        },
+        "WA": {
+            "mandatory_disclosures": ["property disclosure statement", "strata information statement"],
+            "cooling_off": {"period": "5 business days", "exceptions": ["auction", "waiver"]},
+            "legal_references": ["Property Law Act 1969", "Real Estate and Business Agents Act 1978"],
+            "special_conditions": ["subject to finance", "subject to building inspection"]
+        },
+        "TAS": {
+            "mandatory_disclosures": ["property disclosure statement", "body corporate certificate"],
+            "cooling_off": {"period": "5 business days", "exceptions": ["auction", "waiver"]},
+            "legal_references": ["Property Law Act 2000", "Real Estate Agents Act 2004"],
+            "special_conditions": ["subject to finance", "subject to building inspection"]
+        },
+        "NT": {
+            "mandatory_disclosures": ["vendor disclosure statement", "body corporate search"],
+            "cooling_off": {"period": "5 business days", "exceptions": ["auction", "waiver"]},
+            "legal_references": ["Law of Property Act 2000", "Agents Licensing Act 1979"],
+            "special_conditions": ["subject to finance", "subject to building inspection"]
+        },
+        "ACT": {
+            "mandatory_disclosures": ["section 11 statement", "owners corporation certificate"],
+            "cooling_off": {"period": "5 business days", "exceptions": ["auction", "waiver signed"]},
+            "legal_references": ["Civil Law (Sale of Residential Property) Act 2003"],
+            "special_conditions": ["subject to finance", "subject to building inspection"]
+        }
+    }
+    
+    return requirements.get(state, {})
+
+
+def validate_template_compliance(document_text: str, state: str, template_type: str) -> List[Dict[str, Any]]:
+    """Validate contract template compliance with state requirements"""
+    
+    issues = []
+    document_lower = document_text.lower()
+    requirements = get_state_specific_requirements(state, template_type)
+    
+    # Check for mandatory disclosure requirements
+    if "mandatory_disclosures" in requirements:
+        for disclosure in requirements["mandatory_disclosures"]:
+            if disclosure.lower() not in document_lower:
+                issues.append({
+                    "type": "missing_disclosure",
+                    "severity": "high",
+                    "description": f"Missing mandatory disclosure: {disclosure}",
+                    "state_requirement": True,
+                    "legal_reference": requirements.get("legal_references", [])
+                })
+    
+    # Check cooling-off period compliance
+    if "cooling_off" in requirements:
+        cooling_off_found = any(phrase in document_lower for phrase in 
+                              ["cooling off", "cooling-off", "rescission period"])
+        if not cooling_off_found:
+            issues.append({
+                "type": "missing_cooling_off",
+                "severity": "high", 
+                "description": f"Cooling-off period not clearly stated (required: {requirements['cooling_off']['period']})",
+                "state_requirement": True,
+                "recommended_action": "Add clear cooling-off period clause"
+            })
+    
+    # Check for required special conditions
+    if "special_conditions" in requirements:
+        for condition in requirements["special_conditions"]:
+            if condition.lower() not in document_lower:
+                issues.append({
+                    "type": "missing_special_condition",
+                    "severity": "medium",
+                    "description": f"Commonly required special condition not found: {condition}",
+                    "state_requirement": False,
+                    "recommended_action": f"Consider adding {condition} clause"
+                })
+    
+    return issues
+
+
+def get_state_compliance_notes(state: str, template_type: str) -> List[str]:
+    """Get state-specific compliance notes and warnings"""
+    
+    notes = {
+        "NSW": [
+            "Contract must include Section 66W certificate",
+            "Cooling-off period is 5 business days unless waived or auction sale",
+            "Property information must be provided before exchange"
+        ],
+        "VIC": [
+            "Section 32 statement must be provided",
+            "Cooling-off period is 3 business days (shorter than other states)",
+            "Owners corporation certificate required for strata properties"
+        ],
+        "QLD": [
+            "Body corporate searches required for unit purchases", 
+            "Foreign buyer duty applies to non-residents",
+            "Building and pest inspection highly recommended"
+        ],
+        "SA": [
+            "Form 1 vendor's statement mandatory",
+            "Cooling-off period is only 2 business days",
+            "Early settlement may affect stamp duty concessions"
+        ],
+        "WA": [
+            "Strata information statement required for strata properties",
+            "Foreign buyer surcharge of 7% applies",
+            "Building inspection strongly recommended"
+        ],
+        "TAS": [
+            "Property disclosure statement required",
+            "Lower foreign buyer surcharge (3%) compared to mainland",
+            "Land tax thresholds are lower than other states"
+        ],
+        "NT": [
+            "Territory resident concessions may apply",
+            "Lower foreign buyer surcharge (5%)",
+            "Building inspections crucial due to climate considerations"
+        ],
+        "ACT": [
+            "Section 11 statement required before exchange",
+            "ACT transitioning away from stamp duty system",
+            "Higher stamp duty rates but with generous first home buyer exemptions"
+        ]
+    }
+    
+    return notes.get(state, [])
 
 
 @tool

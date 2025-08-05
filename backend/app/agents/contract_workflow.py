@@ -24,6 +24,7 @@ from app.agents.australian_tools import (
     validate_cooling_off_period,
     calculate_stamp_duty,
     analyze_special_conditions,
+    identify_contract_template_type,
 )
 
 
@@ -254,15 +255,35 @@ class ContractAnalysisWorkflow:
             document_text = state["document_metadata"]["extracted_text"]
             australian_state = state["australian_state"]
 
+            # Identify contract template type first
+            template_identification = None
+            try:
+                template_identification = identify_contract_template_type.invoke({
+                    "document_text": document_text, 
+                    "state": australian_state
+                })
+            except Exception as template_error:
+                logger.warning(f"Template identification failed: {str(template_error)}")
+                template_identification = {
+                    "primary_template_type": "unknown",
+                    "validation_issues": [],
+                    "compliance_notes": []
+                }
+
             # Use the Australian contract tools with better error handling
             try:
                 extraction_result = extract_australian_contract_terms.invoke(
                     {"document_text": document_text, "state": australian_state}
                 )
+                # Add template information to extraction result
+                if template_identification:
+                    extraction_result["template_analysis"] = template_identification
             except Exception as tool_error:
                 # Fallback extraction if tool fails
                 extraction_result = self._fallback_term_extraction(document_text, australian_state)
                 extraction_result["extraction_method"] = "fallback"
+                if template_identification:
+                    extraction_result["template_analysis"] = template_identification
 
             # Validate extraction quality
             if extraction_result["overall_confidence"] < 0.3:
