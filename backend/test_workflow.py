@@ -7,7 +7,7 @@ import os
 import json
 from typing import Dict, Any
 
-from app.agents.contract_workflow import ContractAnalysisWorkflow
+from app.agents.contract_workflow import EnhancedContractAnalysisWorkflow as ContractAnalysisWorkflow
 from app.models.contract_state import create_initial_state
 from app.model.enums import AustralianState
 

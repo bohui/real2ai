@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 # Import application modules
 from app.models.contract_state import RealEstateAgentState, create_initial_state
-from app.agents.contract_workflow import ContractAnalysisWorkflow
+from app.agents.contract_workflow import EnhancedContractAnalysisWorkflow as ContractAnalysisWorkflow
 from app.core.config import get_settings
 from app.core.database import get_database_client
 from app.services.document_service import DocumentService

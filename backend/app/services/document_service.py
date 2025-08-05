@@ -7,7 +7,7 @@ import os
 import uuid
 import asyncio
 import logging
-from typing import Dict, Any, Optional, BinaryIO
+from typing import Dict, Any, Optional, BinaryIO, List
 from datetime import datetime, UTC
 from pathlib import Path
 import mimetypes

@@ -13,7 +13,7 @@ from app.models.contract_state import (
     ContractType,
     create_initial_state,
 )
-from app.agents.contract_workflow import ContractAnalysisWorkflow
+from app.agents.contract_workflow import EnhancedContractAnalysisWorkflow as ContractAnalysisWorkflow
 from app.core.database import get_service_database_client
 from app.services.document_service import DocumentService
 from app.services.websocket_service import WebSocketEvents

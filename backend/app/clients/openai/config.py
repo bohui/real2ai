@@ -61,6 +61,7 @@ class OpenAISettings(BaseSettings):
     class Config:
         env_file = [".env", ".env.local"]
         case_sensitive = False
+        extra = "ignore"  # Ignore extra environment variables
 
     def to_client_config(self) -> OpenAIClientConfig:
         """Convert to OpenAIClientConfig."""

@@ -103,7 +103,7 @@ class LangChainClient:
             
             if workflow_type == "contract_analysis":
                 # Import and create contract analysis workflow
-                from app.agents.contract_workflow import ContractAnalysisWorkflow
+                from app.agents.contract_workflow import EnhancedContractAnalysisWorkflow as ContractAnalysisWorkflow
                 
                 workflow = ContractAnalysisWorkflow(
                     openai_api_key=self.config.api_key,

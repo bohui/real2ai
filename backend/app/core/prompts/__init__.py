@@ -12,7 +12,7 @@ Phase 1 Features:
 """
 
 # Core components
-from .manager import PromptManager, PromptManagerConfig
+from .manager import PromptManager, PromptManagerConfig, get_prompt_manager
 from .loader import PromptLoader
 from .validator import PromptValidator
 from .template import PromptTemplate
@@ -50,6 +50,7 @@ __all__ = [
     # Core components
     "PromptManager",
     "PromptManagerConfig",
+    "get_prompt_manager",
     "PromptLoader",
     "PromptValidator", 
     "PromptTemplate",

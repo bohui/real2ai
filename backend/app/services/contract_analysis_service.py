@@ -7,7 +7,7 @@ import logging
 from typing import Dict, Any, Optional
 from datetime import datetime, UTC
 
-from app.agents.contract_workflow import ContractAnalysisWorkflow
+from app.agents.contract_workflow import EnhancedContractAnalysisWorkflow as ContractAnalysisWorkflow
 from app.models.contract_state import create_initial_state, RealEstateAgentState
 from app.model.enums import AustralianState, ProcessingStatus
 from app.services.websocket_service import WebSocketManager, WebSocketEvents

@@ -16,10 +16,15 @@ class TestUserRegistration:
         # Mock successful Supabase auth response
         mock_user = MagicMock()
         mock_user.id = "test-user-id"
-        mock_db_client.auth.sign_up.return_value = MagicMock(user=mock_user)
+        mock_session = MagicMock()
+        mock_session.access_token = "test-access-token"
+        mock_session.refresh_token = "test-refresh-token"
+        mock_db_client.auth.sign_up.return_value = MagicMock(user=mock_user, session=mock_session)
         
         # Mock profile creation
-        mock_db_client.table.return_value.insert.return_value.execute.return_value = None
+        mock_profile_result = MagicMock()
+        mock_profile_result.data = [{"id": "test-user-id", "email": "test@example.com"}]
+        mock_db_client.table.return_value.insert.return_value.execute.return_value = mock_profile_result
         
         registration_data = {
             "email": "test@example.com",
@@ -32,8 +37,8 @@ class TestUserRegistration:
         
         assert response.status_code == 200
         data = response.json()
-        assert data["user_id"] == "test-user-id"
-        assert data["email"] == "test@example.com"
+        assert data["user_profile"]["id"] == "test-user-id"
+        assert data["user_profile"]["email"] == "test@example.com"
         assert data["message"] == "User registered successfully"
         
         # Verify auth.sign_up was called
