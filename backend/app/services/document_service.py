@@ -20,6 +20,7 @@ from unstructured.partition.auto import partition
 from app.core.config import get_settings
 from app.models.contract_state import ContractType
 from app.clients import get_supabase_client, get_gemini_client
+from app.services.ocr_service import get_ocr_service
 from app.core.langsmith_config import langsmith_trace, langsmith_session, log_trace_info
 from app.clients.base.exceptions import (
     ClientError,
@@ -33,11 +34,13 @@ logger = logging.getLogger(__name__)
 class DocumentService:
     """Service for handling document upload and processing using client architecture"""
 
-    def __init__(self):
+    def __init__(self, use_service_role: bool = False):
         self.settings = get_settings()
         self.supabase_client = None
         self.gemini_client = None
+        self.ocr_service = None
         self.storage_bucket = "documents"
+        self.use_service_role = use_service_role
 
     async def initialize(self):
         """Initialize document service with proper clients"""
@@ -45,11 +48,12 @@ class DocumentService:
             # Get clients from factory
             self.supabase_client = await get_supabase_client()
             self.gemini_client = await get_gemini_client()
+            self.ocr_service = await get_ocr_service()
 
             # Ensure storage bucket exists
             await self._ensure_bucket_exists()
 
-            logger.info("Document service V2 initialized with client architecture")
+            logger.info("Document service V2 initialized with client architecture and OCR service")
 
         except ClientConnectionError as e:
             logger.error(f"Failed to connect to required services: {e}")
@@ -123,7 +127,7 @@ class DocumentService:
             raise HTTPException(status_code=500, detail=str(e))
 
     def _validate_file(self, file_content: bytes, filename: str):
-        """Validate uploaded file"""
+        """Enhanced file validation with content type checking"""
 
         # Check file size
         if len(file_content) > self.settings.max_file_size:
@@ -143,6 +147,172 @@ class DocumentService:
         # Basic content validation
         if len(file_content) == 0:
             raise HTTPException(status_code=400, detail="Empty file not allowed")
+        
+        # Enhanced content validation based on file type
+        validation_result = self._validate_file_content(file_content, file_extension)
+        if not validation_result["valid"]:
+            raise HTTPException(
+                status_code=400,
+                detail=f"File validation failed: {validation_result['reason']}"
+            )
+    
+    def _validate_file_content(self, file_content: bytes, file_extension: str) -> Dict[str, Any]:
+        """Validate file content matches expected format"""
+        
+        validation_result = {
+            "valid": True,
+            "reason": "File content valid",
+            "detected_type": file_extension,
+            "confidence": 1.0,
+        }
+        
+        try:
+            # PDF validation
+            if file_extension == "pdf":
+                if not file_content.startswith(b"%PDF"):
+                    validation_result.update({
+                        "valid": False,
+                        "reason": "File does not appear to be a valid PDF",
+                        "detected_type": "unknown",
+                    })
+                else:
+                    # Check if PDF is readable
+                    try:
+                        from io import BytesIO
+                        import pypdf
+                        pdf_file = BytesIO(file_content)
+                        pdf_reader = pypdf.PdfReader(pdf_file)
+                        page_count = len(pdf_reader.pages)
+                        validation_result["metadata"] = {
+                            "page_count": page_count,
+                            "encrypted": pdf_reader.is_encrypted,
+                        }
+                        if pdf_reader.is_encrypted:
+                            validation_result.update({
+                                "valid": False,
+                                "reason": "PDF is encrypted and cannot be processed",
+                            })
+                    except Exception as e:
+                        validation_result.update({
+                            "valid": False,
+                            "reason": f"PDF appears corrupted: {str(e)}",
+                        })
+            
+            # Word document validation
+            elif file_extension in ["doc", "docx"]:
+                if file_extension == "docx":
+                    # DOCX files are ZIP archives
+                    if not (file_content.startswith(b"PK") or file_content.startswith(b"\x50\x4b")):
+                        validation_result.update({
+                            "valid": False,
+                            "reason": "File does not appear to be a valid DOCX document",
+                            "detected_type": "unknown",
+                        })
+                    else:
+                        # Try to validate DOCX structure
+                        try:
+                            from io import BytesIO
+                            from docx import Document
+                            doc_file = BytesIO(file_content)
+                            doc = Document(doc_file)
+                            paragraph_count = len(doc.paragraphs)
+                            validation_result["metadata"] = {
+                                "paragraph_count": paragraph_count,
+                            }
+                        except Exception as e:
+                            validation_result.update({
+                                "valid": False,
+                                "reason": f"DOCX appears corrupted: {str(e)}",
+                            })
+                elif file_extension == "doc":
+                    # Legacy DOC format validation (basic)
+                    if not file_content.startswith((b"\xd0\xcf\x11\xe0", b"\x0e\x11\xfc\x0d")):
+                        validation_result.update({
+                            "valid": False,
+                            "reason": "File does not appear to be a valid DOC document",
+                            "detected_type": "unknown",
+                        })
+            
+            # Image file validation
+            elif file_extension in ["png", "jpg", "jpeg", "gif", "bmp", "tiff", "webp"]:
+                image_signatures = {
+                    "png": b"\x89PNG\r\n\x1a\n",
+                    "jpg": b"\xff\xd8\xff",
+                    "jpeg": b"\xff\xd8\xff",
+                    "gif": (b"GIF87a", b"GIF89a"),
+                    "bmp": b"BM",
+                    "tiff": (b"II*\x00", b"MM\x00*"),
+                    "webp": b"RIFF",
+                }
+                
+                expected_signatures = image_signatures.get(file_extension)
+                if expected_signatures:
+                    if isinstance(expected_signatures, tuple):
+                        signature_match = any(
+                            file_content.startswith(sig) for sig in expected_signatures
+                        )
+                    else:
+                        signature_match = file_content.startswith(expected_signatures)
+                    
+                    if not signature_match:
+                        # Try to detect actual image type
+                        detected_type = self._detect_image_type(file_content)
+                        validation_result.update({
+                            "valid": False,
+                            "reason": f"File appears to be {detected_type} but has {file_extension} extension",
+                            "detected_type": detected_type,
+                        })
+                    else:
+                        validation_result["metadata"] = {
+                            "format_verified": True,
+                        }
+                        
+                        # Additional validation for WebP
+                        if file_extension == "webp":
+                            if b"WEBP" not in file_content[:20]:
+                                validation_result.update({
+                                    "valid": False,
+                                    "reason": "File has RIFF signature but is not a valid WebP",
+                                })
+            
+            # File size validation for specific types
+            file_size_mb = len(file_content) / (1024 * 1024)
+            if file_extension == "pdf" and file_size_mb > 50:
+                validation_result["reason"] += " (Large PDF may slow processing)"
+            elif file_extension in ["tiff", "bmp"] and file_size_mb > 20:
+                validation_result["reason"] += " (Large image file may slow processing)"
+                
+        except Exception as e:
+            logger.warning(f"File content validation error: {str(e)}")
+            # Don't fail validation for unexpected errors, just log them
+            validation_result["reason"] += f" (Warning: {str(e)})"
+        
+        return validation_result
+    
+    def _detect_image_type(self, file_content: bytes) -> str:
+        """Detect actual image type from content"""
+        
+        image_signatures = {
+            b"\x89PNG\r\n\x1a\n": "png",
+            b"\xff\xd8\xff": "jpeg", 
+            b"GIF87a": "gif",
+            b"GIF89a": "gif",
+            b"BM": "bmp",
+            b"II*\x00": "tiff",
+            b"MM\x00*": "tiff",
+            b"RIFF": "webp_or_other",
+        }
+        
+        for signature, image_type in image_signatures.items():
+            if file_content.startswith(signature):
+                if image_type == "webp_or_other":
+                    if b"WEBP" in file_content[:20]:
+                        return "webp"
+                    else:
+                        return "riff_format"
+                return image_type
+        
+        return "unknown"
 
     async def get_file_content(self, storage_path: str) -> bytes:
         """Get file content from storage using Supabase client"""
@@ -570,4 +740,651 @@ class DocumentService:
         else:
             health_status["status"] = "degraded"
 
+        # Check OCR service
+        if self.ocr_service:
+            try:
+                ocr_health = await self.ocr_service.health_check()
+                health_status["dependencies"]["ocr_service"] = ocr_health.get(
+                    "status", "unknown"
+                )
+            except Exception as e:
+                health_status["dependencies"]["ocr_service"] = "error"
+                health_status["status"] = "degraded"
+        else:
+            health_status["dependencies"]["ocr_service"] = "not_initialized"
+            health_status["status"] = "degraded"
+
         return health_status
+
+    async def extract_text_with_ocr(
+        self,
+        storage_path: str,
+        file_type: str,
+        contract_context: Optional[Dict[str, Any]] = None,
+        options: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Extract text using dedicated OCR service"""
+        
+        if not self.ocr_service:
+            raise HTTPException(
+                status_code=503, detail="OCR service not available"
+            )
+        
+        try:
+            # Get file content
+            file_content = await self.get_file_content(storage_path)
+            
+            # Determine content type
+            if file_type.lower() == "pdf":
+                content_type = "application/pdf"
+            elif file_type.lower() in ["jpg", "jpeg"]:
+                content_type = "image/jpeg"
+            elif file_type.lower() == "png":
+                content_type = "image/png"
+            elif file_type.lower() == "gif":
+                content_type = "image/gif"
+            elif file_type.lower() == "bmp":
+                content_type = "image/bmp"
+            elif file_type.lower() in ["tiff", "tif"]:
+                content_type = "image/tiff"
+            elif file_type.lower() == "webp":
+                content_type = "image/webp"
+            else:
+                content_type = f"image/{file_type.lower()}"
+            
+            # Extract text using OCR service
+            ocr_result = await self.ocr_service.extract_text(
+                content=file_content,
+                content_type=content_type,
+                filename=Path(storage_path).name,
+                contract_context=contract_context,
+                options=options or {},
+            )
+            
+            # Add document service metadata
+            ocr_result.update({
+                "service": "DocumentService",
+                "storage_path": storage_path,
+                "file_type": file_type,
+            })
+            
+            return ocr_result
+            
+        except ClientError as e:
+            logger.error(f"OCR extraction failed for {storage_path}: {e}")
+            raise HTTPException(
+                status_code=500, detail=f"OCR extraction failed: {str(e)}"
+            )
+        except Exception as e:
+            logger.error(f"Unexpected OCR error for {storage_path}: {str(e)}")
+            return {
+                "extracted_text": "",
+                "extraction_method": "ocr_failed",
+                "extraction_confidence": 0.0,
+                "error": str(e),
+                "extraction_timestamp": datetime.now(UTC).isoformat(),
+                "service": "DocumentService",
+                "storage_path": storage_path,
+                "ocr_used": True,
+            }
+    
+    async def get_ocr_capabilities(self) -> Dict[str, Any]:
+        """Get OCR service capabilities"""
+        
+        if not self.ocr_service:
+            return {
+                "service_available": False,
+                "reason": "OCR service not initialized",
+                "supported_formats": [],
+            }
+        
+        try:
+            return await self.ocr_service.get_capabilities()
+        except Exception as e:
+            logger.error(f"Failed to get OCR capabilities: {str(e)}")
+            return {
+                "service_available": False,
+                "reason": str(e),
+                "supported_formats": [],
+            }
+    
+    def assess_document_quality(
+        self,
+        extracted_text: str,
+        file_type: str,
+        file_size: int,
+        extraction_method: str,
+        extraction_confidence: float,
+        contract_context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Assess overall document processing quality"""
+        
+        quality_assessment = {
+            "overall_score": 0.0,
+            "text_quality": {},
+            "extraction_quality": {},
+            "document_characteristics": {},
+            "recommendations": [],
+            "issues": [],
+        }
+        
+        # Text quality assessment
+        if extracted_text:
+            text_length = len(extracted_text.strip())
+            word_count = len(extracted_text.split())
+            
+            quality_assessment["text_quality"] = {
+                "length": text_length,
+                "word_count": word_count,
+                "avg_word_length": sum(len(word) for word in extracted_text.split()) / word_count if word_count > 0 else 0,
+                "has_content": text_length > 100,
+            }
+            
+            # Contract-specific assessment
+            if contract_context:
+                contract_keywords = [
+                    "purchase", "sale", "agreement", "contract", "property",
+                    "vendor", "purchaser", "settlement", "deposit", "price",
+                    "terms", "conditions", "clause", "section", "party"
+                ]
+                
+                text_lower = extracted_text.lower()
+                keyword_matches = sum(1 for keyword in contract_keywords if keyword in text_lower)
+                
+                quality_assessment["text_quality"]["contract_keywords_found"] = keyword_matches
+                quality_assessment["text_quality"]["appears_to_be_contract"] = keyword_matches >= 3
+        
+        # Extraction quality assessment
+        quality_assessment["extraction_quality"] = {
+            "method": extraction_method,
+            "confidence": extraction_confidence,
+            "confidence_adequate": extraction_confidence >= 0.6,
+        }
+        
+        # Document characteristics
+        quality_assessment["document_characteristics"] = {
+            "file_type": file_type,
+            "file_size_mb": file_size / (1024 * 1024),
+            "size_category": self._categorize_file_size(file_size),
+            "ocr_recommended": file_type.lower() in ["pdf", "png", "jpg", "jpeg", "tiff"],
+        }
+        
+        # Calculate overall score
+        score_components = []
+        
+        # Text content score (40%)
+        if extracted_text and len(extracted_text.strip()) > 100:
+            score_components.append(0.4)
+        elif extracted_text:
+            score_components.append(0.2)
+        else:
+            score_components.append(0.0)
+        
+        # Extraction confidence score (30%)
+        confidence_score = min(1.0, extraction_confidence) * 0.3
+        score_components.append(confidence_score)
+        
+        # Contract relevance score (30%)
+        if contract_context and quality_assessment["text_quality"].get("appears_to_be_contract", False):
+            score_components.append(0.3)
+        elif contract_context:
+            score_components.append(0.1)
+        else:
+            score_components.append(0.15)  # Neutral score when no contract context
+        
+        quality_assessment["overall_score"] = sum(score_components)
+        
+        # Generate recommendations and identify issues
+        if extraction_confidence < 0.5:
+            quality_assessment["issues"].append("Low extraction confidence")
+            quality_assessment["recommendations"].append("Consider using OCR for better text extraction")
+        
+        if not extracted_text or len(extracted_text.strip()) < 50:
+            quality_assessment["issues"].append("Very little text extracted")
+            quality_assessment["recommendations"].append("Check document quality and format")
+        
+        if contract_context and not quality_assessment["text_quality"].get("appears_to_be_contract", False):
+            quality_assessment["issues"].append("Document may not be a contract")
+            quality_assessment["recommendations"].append("Verify document type and content")
+        
+        if file_size > 10 * 1024 * 1024:  # 10MB
+            quality_assessment["recommendations"].append("Large file size may slow processing")
+        
+        return quality_assessment
+    
+    def _categorize_file_size(self, file_size: int) -> str:
+        """Categorize file size for quality assessment"""
+        
+        size_mb = file_size / (1024 * 1024)
+        
+        if size_mb < 1:
+            return "small"
+        elif size_mb < 5:
+            return "medium"
+        elif size_mb < 20:
+            return "large"
+        else:
+            return "very_large"
+    
+    async def validate_contract_document(
+        self,
+        storage_path: str,
+        file_type: str,
+        contract_context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Validate document specifically for contract processing"""
+        
+        validation_result = {
+            "is_valid_contract_document": False,
+            "validation_score": 0.0,
+            "issues": [],
+            "recommendations": [],
+            "document_characteristics": {},
+        }
+        
+        try:
+            # Get file content for analysis
+            file_content = await self.get_file_content(storage_path)
+            file_size = len(file_content)
+            
+            # Basic file validation
+            content_validation = self._validate_file_content(file_content, file_type)
+            if not content_validation["valid"]:
+                validation_result["issues"].append(content_validation["reason"])
+                validation_result["recommendations"].append("Check file integrity and format")
+                return validation_result
+            
+            # Extract text for content analysis
+            extraction_result = await self.extract_text(
+                storage_path, file_type, contract_context
+            )
+            
+            extracted_text = extraction_result.get("extracted_text", "")
+            extraction_confidence = extraction_result.get("extraction_confidence", 0.0)
+            
+            # Assess document quality
+            quality_assessment = self.assess_document_quality(
+                extracted_text,
+                file_type,
+                file_size,
+                extraction_result.get("extraction_method", "unknown"),
+                extraction_confidence,
+                contract_context,
+            )
+            
+            # Contract-specific validation
+            contract_indicators = self._analyze_contract_indicators(extracted_text)
+            
+            validation_result.update({
+                "document_characteristics": {
+                    "file_type": file_type,
+                    "file_size_mb": file_size / (1024 * 1024),
+                    "text_length": len(extracted_text),
+                    "extraction_confidence": extraction_confidence,
+                    "quality_score": quality_assessment["overall_score"],
+                },
+                "contract_analysis": contract_indicators,
+                "extraction_quality": quality_assessment["extraction_quality"],
+            })
+            
+            # Calculate overall validation score
+            score_factors = [
+                extraction_confidence * 0.3,  # 30% extraction quality
+                quality_assessment["overall_score"] * 0.3,  # 30% overall quality
+                contract_indicators["contract_likelihood"] * 0.4,  # 40% contract indicators
+            ]
+            
+            validation_result["validation_score"] = sum(score_factors)
+            validation_result["is_valid_contract_document"] = validation_result["validation_score"] >= 0.6
+            
+            # Generate issues and recommendations
+            if extraction_confidence < 0.5:
+                validation_result["issues"].append("Poor text extraction quality")
+                validation_result["recommendations"].append("Consider using OCR or higher quality scan")
+            
+            if contract_indicators["contract_likelihood"] < 0.3:
+                validation_result["issues"].append("Document may not be a contract")
+                validation_result["recommendations"].append("Verify document type and content")
+            
+            if len(extracted_text) < 200:
+                validation_result["issues"].append("Very short document content")
+                validation_result["recommendations"].append("Check if document is complete")
+            
+            if file_size > 20 * 1024 * 1024:  # 20MB
+                validation_result["recommendations"].append("Large file may slow processing")
+            
+        except Exception as e:
+            logger.error(f"Contract document validation failed: {str(e)}")
+            validation_result["issues"].append(f"Validation error: {str(e)}")
+            validation_result["recommendations"].append("Check file format and integrity")
+        
+        return validation_result
+    
+    def _analyze_contract_indicators(self, text: str) -> Dict[str, Any]:
+        """Analyze text for contract-specific indicators"""
+        
+        if not text:
+            return {
+                "contract_likelihood": 0.0,
+                "indicators_found": [],
+                "missing_indicators": [],
+                "confidence": 0.0,
+            }
+        
+        text_lower = text.lower()
+        
+        # Define contract indicators with weights
+        contract_indicators = {
+            # Core contract terms (high weight)
+            "agreement": 0.2,
+            "contract": 0.2,
+            "purchase": 0.15,
+            "sale": 0.15,
+            
+            # Property-specific terms (medium-high weight)
+            "property": 0.1,
+            "vendor": 0.1,
+            "purchaser": 0.1,
+            "settlement": 0.1,
+            
+            # Legal terms (medium weight)
+            "terms and conditions": 0.08,
+            "clause": 0.08,
+            "party": 0.08,
+            "hereby": 0.08,
+            
+            # Financial terms (medium weight)
+            "deposit": 0.07,
+            "price": 0.07,
+            "payment": 0.07,
+            
+            # Australian-specific terms (medium weight)
+            "cooling off": 0.06,
+            "stamp duty": 0.06,
+            "conveyancer": 0.06,
+            "solicitor": 0.06,
+            
+            # Date/time indicators (low weight)
+            "settlement date": 0.05,
+            "completion date": 0.05,
+            "due date": 0.05,
+        }
+        
+        found_indicators = []
+        total_score = 0.0
+        
+        for indicator, weight in contract_indicators.items():
+            if indicator in text_lower:
+                found_indicators.append(indicator)
+                total_score += weight
+        
+        # Normalize score to 0-1 range
+        max_possible_score = sum(contract_indicators.values())
+        contract_likelihood = min(1.0, total_score / max_possible_score * 2)  # Scale up for easier thresholds
+        
+        # Identify missing critical indicators
+        critical_indicators = ["agreement", "contract", "purchase", "sale"]
+        missing_critical = [ind for ind in critical_indicators if ind not in text_lower]
+        
+        return {
+            "contract_likelihood": contract_likelihood,
+            "indicators_found": found_indicators,
+            "missing_critical_indicators": missing_critical,
+            "total_indicators": len(found_indicators),
+            "confidence": min(1.0, len(found_indicators) / 10),  # Based on number of indicators
+        }
+    
+    async def track_processing_progress(
+        self,
+        document_id: str,
+        stage: str,
+        progress_percent: int,
+        message: str,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Track document processing progress"""
+        
+        progress_data = {
+            "document_id": document_id,
+            "stage": stage,
+            "progress_percent": min(100, max(0, progress_percent)),
+            "message": message,
+            "timestamp": datetime.now(UTC).isoformat(),
+            "metadata": metadata or {},
+        }
+        
+        try:
+            # Update database if available
+            if self.supabase_client:
+                # Try to update document progress in database
+                await self.supabase_client.execute_rpc(
+                    "update_document_progress",
+                    {
+                        "p_document_id": document_id,
+                        "p_stage": stage,
+                        "p_progress_percent": progress_percent,
+                        "p_message": message,
+                        "p_metadata": metadata or {},
+                    },
+                )
+            
+            # Send progress via WebSocket if available
+            from app.services.websocket_singleton import websocket_manager
+            await websocket_manager.send_message(
+                document_id,
+                {
+                    "event_type": "document_processing_progress",
+                    "data": progress_data,
+                },
+            )
+            
+            # Also publish via Redis for persistence
+            from app.services.redis_pubsub import publish_progress_sync
+            publish_progress_sync(document_id, {
+                "event_type": "document_processing_progress",
+                "timestamp": progress_data["timestamp"],
+                "data": progress_data,
+            })
+            
+        except Exception as e:
+            logger.warning(f"Failed to track progress for document {document_id}: {str(e)}")
+    
+    async def get_processing_progress(
+        self,
+        document_id: str,
+    ) -> Dict[str, Any]:
+        """Get current processing progress for a document"""
+        
+        try:
+            if not self.supabase_client:
+                return {
+                    "document_id": document_id,
+                    "stage": "unknown",
+                    "progress_percent": 0,
+                    "message": "Progress tracking not available",
+                    "error": "Database not available",
+                }
+            
+            # Get latest progress from database
+            result = await self.supabase_client.execute_rpc(
+                "get_document_progress",
+                {"p_document_id": document_id},
+            )
+            
+            if result and result.get("data"):
+                return result["data"][0]
+            else:
+                return {
+                    "document_id": document_id,
+                    "stage": "not_started",
+                    "progress_percent": 0,
+                    "message": "Processing not started",
+                }
+                
+        except Exception as e:
+            logger.error(f"Failed to get progress for document {document_id}: {str(e)}")
+            return {
+                "document_id": document_id,
+                "stage": "error",
+                "progress_percent": 0,
+                "message": "Error retrieving progress",
+                "error": str(e),
+            }
+    
+    async def process_document_with_progress(
+        self,
+        storage_path: str,
+        file_type: str,
+        document_id: str,
+        contract_context: Optional[Dict[str, Any]] = None,
+        processing_options: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Process document with detailed progress tracking"""
+        
+        processing_options = processing_options or {}
+        
+        try:
+            # Stage 1: Initialization (0-10%)
+            await self.track_processing_progress(
+                document_id,
+                "initializing",
+                5,
+                "Starting document processing",
+                {"storage_path": storage_path, "file_type": file_type},
+            )
+            
+            # Stage 2: File validation (10-20%)
+            await self.track_processing_progress(
+                document_id,
+                "validating",
+                15,
+                "Validating document format and integrity",
+            )
+            
+            # Validate document
+            file_content = await self.get_file_content(storage_path)
+            filename = Path(storage_path).name
+            self._validate_file(file_content, filename)
+            
+            # Stage 3: Text extraction decision (20-30%)
+            await self.track_processing_progress(
+                document_id,
+                "preparing_extraction",
+                25,
+                "Determining optimal text extraction method",
+            )
+            
+            # Determine extraction method
+            use_ocr = self._should_use_ocr(
+                file_content, file_type, processing_options.get("force_ocr", False)
+            )
+            
+            extraction_method = "OCR" if use_ocr else "Traditional"
+            
+            # Stage 4: Text extraction (30-70%)
+            await self.track_processing_progress(
+                document_id,
+                "extracting_text",
+                40,
+                f"Extracting text using {extraction_method} method",
+                {"extraction_method": extraction_method},
+            )
+            
+            # Extract text
+            if use_ocr and self.ocr_service:
+                extraction_result = await self.extract_text_with_ocr(
+                    storage_path, file_type, contract_context, processing_options
+                )
+            else:
+                extraction_result = await self.extract_text(
+                    storage_path, file_type, contract_context
+                )
+            
+            # Stage 5: Quality assessment (70-85%)
+            await self.track_processing_progress(
+                document_id,
+                "assessing_quality",
+                75,
+                "Analyzing document quality and content",
+            )
+            
+            # Assess quality
+            quality_assessment = self.assess_document_quality(
+                extraction_result.get("extracted_text", ""),
+                file_type,
+                len(file_content),
+                extraction_result.get("extraction_method", "unknown"),
+                extraction_result.get("extraction_confidence", 0.0),
+                contract_context,
+            )
+            
+            # Stage 6: Contract validation (85-95%)
+            if contract_context:
+                await self.track_processing_progress(
+                    document_id,
+                    "validating_contract",
+                    90,
+                    "Validating contract-specific content",
+                )
+                
+                contract_validation = await self.validate_contract_document(
+                    storage_path, file_type, contract_context
+                )
+            else:
+                contract_validation = {}
+            
+            # Stage 7: Finalization (95-100%)
+            await self.track_processing_progress(
+                document_id,
+                "finalizing",
+                95,
+                "Finalizing processing results",
+            )
+            
+            # Combine all results
+            final_result = {
+                **extraction_result,
+                "document_id": document_id,
+                "processing_stages_completed": 7,
+                "quality_assessment": quality_assessment,
+                "contract_validation": contract_validation,
+                "processing_options": processing_options,
+                "final_timestamp": datetime.now(UTC).isoformat(),
+            }
+            
+            # Final progress update
+            await self.track_processing_progress(
+                document_id,
+                "completed",
+                100,
+                "Document processing completed successfully",
+                {
+                    "extraction_confidence": extraction_result.get("extraction_confidence", 0.0),
+                    "quality_score": quality_assessment.get("overall_score", 0.0),
+                    "contract_likelihood": contract_validation.get("contract_analysis", {}).get("contract_likelihood", 0.0) if contract_validation else None,
+                },
+            )
+            
+            return final_result
+            
+        except Exception as e:
+            logger.error(f"Document processing failed for {document_id}: {str(e)}")
+            
+            # Error progress update
+            await self.track_processing_progress(
+                document_id,
+                "failed",
+                0,
+                f"Processing failed: {str(e)}",
+                {"error": str(e)},
+            )
+            
+            return {
+                "document_id": document_id,
+                "extracted_text": "",
+                "extraction_method": "failed",
+                "extraction_confidence": 0.0,
+                "error": str(e),
+                "extraction_timestamp": datetime.now(UTC).isoformat(),
+                "processing_failed": True,
+            }

@@ -247,6 +247,7 @@ async def reprocess_document_with_ocr(
                 "contract_analysis",
                 "australian_context",
                 "quality_enhancement",
+                "progress_tracking",
             ],
         }
 
@@ -421,4 +422,189 @@ async def get_ocr_status(
         raise
     except Exception as e:
         logger.error(f"OCR status check error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.get("/{document_id}/progress")
+async def get_document_processing_progress(
+    document_id: str,
+    user: User = Depends(get_current_user),
+    db_client=Depends(get_database_client),
+):
+    """Get real-time processing progress for a document"""
+    
+    try:
+        # Verify document ownership
+        doc_result = (
+            db_client.table("documents")
+            .select("*")
+            .eq("id", document_id)
+            .eq("user_id", user.id)
+            .execute()
+        )
+        
+        if not doc_result.data:
+            raise HTTPException(status_code=404, detail="Document not found")
+        
+        # Initialize document service
+        await document_service.initialize()
+        
+        # Get processing progress
+        progress = await document_service.get_processing_progress(document_id)
+        
+        return progress
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Progress retrieval error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.post("/{document_id}/validate-contract")
+async def validate_contract_document(
+    document_id: str,
+    user: User = Depends(get_current_user),
+    db_client=Depends(get_database_client),
+):
+    """Validate document specifically for contract processing"""
+    
+    try:
+        # Verify document ownership
+        doc_result = (
+            db_client.table("documents")
+            .select("*")
+            .eq("id", document_id)
+            .eq("user_id", user.id)
+            .execute()
+        )
+        
+        if not doc_result.data:
+            raise HTTPException(status_code=404, detail="Document not found")
+        
+        document = doc_result.data[0]
+        
+        # Get user profile for context
+        user_result = (
+            db_client.table("profiles").select("*").eq("id", user.id).execute()
+        )
+        user_profile = user_result.data[0] if user_result.data else {}
+        
+        # Create contract context
+        contract_context = {
+            "australian_state": user_profile.get("australian_state", "NSW"),
+            "contract_type": "purchase_agreement",
+            "user_type": user_profile.get("user_type", "buyer"),
+        }
+        
+        # Initialize document service
+        await document_service.initialize()
+        
+        # Validate contract document
+        validation_result = await document_service.validate_contract_document(
+            document["storage_path"],
+            document["file_type"],
+            contract_context,
+        )
+        
+        return {
+            "document_id": document_id,
+            "filename": document["filename"],
+            "validation_result": validation_result,
+            "contract_context": contract_context,
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Contract validation error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.get("/ocr/capabilities")
+async def get_ocr_capabilities(
+    user: User = Depends(get_current_user),
+):
+    """Get OCR service capabilities and status"""
+    
+    try:
+        # Initialize document service
+        await document_service.initialize()
+        
+        # Get OCR capabilities
+        capabilities = await document_service.get_ocr_capabilities()
+        
+        return capabilities
+        
+    except Exception as e:
+        logger.error(f"OCR capabilities error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.post("/{document_id}/assess-quality")
+async def assess_document_quality(
+    document_id: str,
+    user: User = Depends(get_current_user),
+    db_client=Depends(get_database_client),
+):
+    """Assess document processing quality and provide recommendations"""
+    
+    try:
+        # Verify document ownership
+        doc_result = (
+            db_client.table("documents")
+            .select("*")
+            .eq("id", document_id)
+            .eq("user_id", user.id)
+            .execute()
+        )
+        
+        if not doc_result.data:
+            raise HTTPException(status_code=404, detail="Document not found")
+        
+        document = doc_result.data[0]
+        processing_results = document.get("processing_results", {})
+        
+        # Get user profile for context
+        user_result = (
+            db_client.table("profiles").select("*").eq("id", user.id).execute()
+        )
+        user_profile = user_result.data[0] if user_result.data else {}
+        
+        # Create contract context
+        contract_context = {
+            "australian_state": user_profile.get("australian_state", "NSW"),
+            "contract_type": "purchase_agreement",
+            "user_type": user_profile.get("user_type", "buyer"),
+        }
+        
+        # Initialize document service
+        await document_service.initialize()
+        
+        # Assess document quality
+        quality_assessment = document_service.assess_document_quality(
+            processing_results.get("extracted_text", ""),
+            document["file_type"],
+            document["file_size"],
+            processing_results.get("extraction_method", "unknown"),
+            processing_results.get("extraction_confidence", 0.0),
+            contract_context,
+        )
+        
+        return {
+            "document_id": document_id,
+            "filename": document["filename"],
+            "quality_assessment": quality_assessment,
+            "processing_results_summary": {
+                "extraction_method": processing_results.get("extraction_method", "unknown"),
+                "extraction_confidence": processing_results.get("extraction_confidence", 0.0),
+                "character_count": processing_results.get("character_count", 0),
+                "word_count": processing_results.get("word_count", 0),
+            },
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Quality assessment error: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
