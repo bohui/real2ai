@@ -1,0 +1,232 @@
+# Prometheus alerting rules for LLM Evaluation System
+
+groups:
+  - name: evaluation_system_alerts
+    rules:
+      # Job failure rate alert
+      - alert: HighEvaluationJobFailureRate
+        expr: |
+          (
+            rate(evaluation_jobs_total{status="failed"}[5m]) / 
+            rate(evaluation_jobs_total[5m])
+          ) > 0.1
+        for: 2m
+        labels:
+          severity: warning
+          component: orchestrator
+        annotations:
+          summary: "High evaluation job failure rate"
+          description: "Evaluation job failure rate is {{ $value | humanizePercentage }} over the last 5 minutes"
+
+      # Long-running jobs alert
+      - alert: LongRunningEvaluationJobs
+        expr: evaluation_job_duration_seconds{quantile="0.95"} > 3600
+        for: 5m
+        labels:
+          severity: warning
+          component: orchestrator
+        annotations:
+          summary: "Long-running evaluation jobs detected"
+          description: "95th percentile of evaluation job duration is {{ $value }} seconds"
+
+      # High queue size alert
+      - alert: HighEvaluationQueueSize
+        expr: evaluation_queue_size > 100
+        for: 5m
+        labels:
+          severity: warning
+          component: queue
+        annotations:
+          summary: "High evaluation queue size"
+          description: "Evaluation queue size is {{ $value }} jobs"
+
+      # API response time alert
+      - alert: SlowAPIResponses
+        expr: |
+          histogram_quantile(0.95, 
+            rate(api_request_duration_seconds_bucket[5m])
+          ) > 2
+        for: 3m
+        labels:
+          severity: warning
+          component: api
+        annotations:
+          summary: "Slow API responses"
+          description: "95th percentile API response time is {{ $value }} seconds"
+
+      # Error rate alert
+      - alert: HighErrorRate
+        expr: |
+          (
+            rate(evaluation_errors_total[5m]) / 
+            rate(evaluation_results_total[5m])
+          ) > 0.05
+        for: 2m
+        labels:
+          severity: critical
+          component: evaluation
+        annotations:
+          summary: "High evaluation error rate"
+          description: "Evaluation error rate is {{ $value | humanizePercentage }}"
+
+      # Model performance degradation
+      - alert: ModelPerformanceDegradation
+        expr: |
+          (
+            avg_over_time(model_performance_score{metric="overall_score"}[1h]) - 
+            avg_over_time(model_performance_score{metric="overall_score"}[24h])
+          ) < -0.1
+        for: 10m
+        labels:
+          severity: warning
+          component: models
+        annotations:
+          summary: "Model performance degradation detected"
+          description: "Model {{ $labels.model }} performance has dropped by {{ $value }} points"
+
+      # Redis connection issues
+      - alert: RedisConnectionFailure
+        expr: up{job="redis"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: infrastructure
+        annotations:
+          summary: "Redis connection failure"
+          description: "Redis is unreachable"
+
+      # Worker availability
+      - alert: NoActiveWorkers
+        expr: active_evaluation_jobs > 0 and on() (up{job=~".*worker.*"} == 0)
+        for: 5m
+        labels:
+          severity: critical
+          component: workers
+        annotations:
+          summary: "No active evaluation workers"
+          description: "There are {{ query \"active_evaluation_jobs\" }} jobs pending but no workers are available"
+
+      # High token usage
+      - alert: HighTokenUsage
+        expr: |
+          rate(token_usage_total[1h]) > 1000000  # 1M tokens per hour
+        for: 5m
+        labels:
+          severity: warning
+          component: costs
+        annotations:
+          summary: "High token usage detected"
+          description: "Token usage is {{ $value }} tokens per hour"
+
+      # System resource alerts
+      - alert: HighCPUUsage
+        expr: |
+          100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+          component: infrastructure
+        annotations:
+          summary: "High CPU usage"
+          description: "CPU usage is {{ $value }}% on {{ $labels.instance }}"
+
+      - alert: HighMemoryUsage
+        expr: |
+          (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+          component: infrastructure
+        annotations:
+          summary: "High memory usage"
+          description: "Memory usage is {{ $value }}% on {{ $labels.instance }}"
+
+      - alert: DiskSpaceLow
+        expr: |
+          (node_filesystem_avail_bytes / node_filesystem_size_bytes * 100) < 10
+        for: 5m
+        labels:
+          severity: critical
+          component: infrastructure
+        annotations:
+          summary: "Low disk space"
+          description: "Disk space is {{ $value }}% available on {{ $labels.instance }}"
+
+  - name: business_metrics_alerts
+    rules:
+      # Daily evaluation volume drop
+      - alert: LowDailyEvaluationVolume
+        expr: |
+          (
+            increase(evaluation_results_total[24h]) < 
+            0.5 * avg_over_time(increase(evaluation_results_total[24h])[7d])
+          ) and on() (
+            avg_over_time(increase(evaluation_results_total[24h])[7d]) > 100
+          )
+        for: 1h
+        labels:
+          severity: warning
+          component: business
+        annotations:
+          summary: "Low daily evaluation volume"
+          description: "Daily evaluation volume is significantly below average"
+
+      # User engagement drop
+      - alert: LowUserEngagement
+        expr: |
+          count by() (
+            increase(evaluation_jobs_total[24h]) > 0
+          ) < 5
+        for: 2h
+        labels:
+          severity: info
+          component: business
+        annotations:
+          summary: "Low user engagement"
+          description: "Only {{ $value }} users created evaluation jobs in the last 24 hours"
+
+      # Model quality degradation across all models
+      - alert: SystemWideQualityDrop
+        expr: |
+          avg(model_performance_score{metric="overall_score"}) < 0.6
+        for: 30m
+        labels:
+          severity: warning
+          component: quality
+        annotations:
+          summary: "System-wide model quality degradation"
+          description: "Average model performance across all models is {{ $value }}"
+
+  - name: data_quality_alerts
+    rules:
+      # High percentage of failed evaluations
+      - alert: HighEvaluationFailureRate
+        expr: |
+          (
+            rate(evaluation_results_total{status="error"}[1h]) / 
+            rate(evaluation_results_total[1h])
+          ) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+          component: data_quality
+        annotations:
+          summary: "High evaluation failure rate"
+          description: "{{ $value | humanizePercentage }} of evaluations are failing"
+
+      # Unusual response time patterns
+      - alert: UnusualResponseTimes
+        expr: |
+          (
+            histogram_quantile(0.95, rate(api_request_duration_seconds_bucket[1h])) > 
+            2 * histogram_quantile(0.95, rate(api_request_duration_seconds_bucket[24h]))
+          ) and on() (
+            histogram_quantile(0.95, rate(api_request_duration_seconds_bucket[24h])) > 0.1
+          )
+        for: 15m
+        labels:
+          severity: info
+          component: performance
+        annotations:
+          summary: "Unusual response time patterns"
+          description: "Response times are significantly higher than usual"

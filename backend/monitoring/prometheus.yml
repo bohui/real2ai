@@ -1,0 +1,67 @@
+# Prometheus configuration for LLM Evaluation System
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'llm-evaluation-monitor'
+
+# Load alert rules
+rule_files:
+  - "rules/*.yml"
+
+# Scrape configurations
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # FastAPI application metrics
+  - job_name: 'fastapi-app'
+    static_configs:
+      - targets: ['host.docker.internal:8000']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # Evaluation worker metrics  
+  - job_name: 'evaluation-workers'
+    static_configs:
+      - targets: 
+        - 'evaluation-worker:8001'
+        - 'priority-worker:8001'
+        - 'reports-worker:8001'
+        - 'maintenance-worker:8001'
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+
+  # Redis metrics via Redis Exporter
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+    scrape_interval: 30s
+
+  # System metrics via Node Exporter
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+    scrape_interval: 30s
+
+  # Celery metrics (if exposed)
+  - job_name: 'celery-flower'
+    static_configs:
+      - targets: ['flower:5555']
+    metrics_path: '/api/workers'
+    scrape_interval: 30s
+
+# Alertmanager configuration (optional)
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          # - alertmanager:9093
+
+# Storage configuration
+storage:
+  tsdb:
+    retention.time: 30d
+    retention.size: 10GB

@@ -1,0 +1,285 @@
+# Docker Compose for LLM Evaluation System
+# Production-ready setup with monitoring, scaling, and observability
+
+version: '3.8'
+
+services:
+  # Redis for Celery message broker
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Main evaluation worker
+  evaluation-worker:
+    build:
+      context: .
+      dockerfile: docker/evaluation-worker.Dockerfile
+    restart: unless-stopped
+    environment:
+      - WORKER_TYPE=worker
+      - CELERY_CONCURRENCY=4
+      - CELERY_QUEUES=evaluation,batch,maintenance,cache
+      - LOG_LEVEL=INFO
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=${DATABASE_URL}
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/google-credentials.json
+      - LANGSMITH_API_KEY=${LANGSMITH_API_KEY}
+      - LANGSMITH_PROJECT=${LANGSMITH_PROJECT}
+    volumes:
+      - ./logs:/app/logs
+      - ./credentials:/app/credentials:ro
+      - evaluation_data:/app/data
+    depends_on:
+      - redis
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '2.0'
+        reservations:
+          memory: 1G
+          cpus: '1.0'
+
+  # High-priority evaluation worker for urgent jobs
+  priority-worker:
+    build:
+      context: .
+      dockerfile: docker/evaluation-worker.Dockerfile
+    restart: unless-stopped
+    environment:
+      - WORKER_TYPE=priority-worker
+      - CELERY_CONCURRENCY=2
+      - CELERY_QUEUES=evaluation
+      - LOG_LEVEL=INFO
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=${DATABASE_URL}
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/google-credentials.json
+      - LANGSMITH_API_KEY=${LANGSMITH_API_KEY}
+      - LANGSMITH_PROJECT=${LANGSMITH_PROJECT}
+    volumes:
+      - ./logs:/app/logs
+      - ./credentials:/app/credentials:ro
+      - evaluation_data:/app/data
+    depends_on:
+      - redis
+    command: ["priority-worker"]
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+
+  # Specialized workers for different task types
+  reports-worker:
+    build:
+      context: .
+      dockerfile: docker/evaluation-worker.Dockerfile
+    restart: unless-stopped
+    environment:
+      - WORKER_TYPE=worker
+      - CELERY_CONCURRENCY=2
+      - CELERY_QUEUES=reports,ab_tests
+      - LOG_LEVEL=INFO
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=${DATABASE_URL}
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/google-credentials.json
+      - LANGSMITH_API_KEY=${LANGSMITH_API_KEY}
+      - LANGSMITH_PROJECT=${LANGSMITH_PROJECT}
+    volumes:
+      - ./logs:/app/logs
+      - ./credentials:/app/credentials:ro
+      - evaluation_data:/app/data
+    depends_on:
+      - redis
+
+  # Maintenance worker for cleanup tasks
+  maintenance-worker:
+    build:
+      context: .
+      dockerfile: docker/evaluation-worker.Dockerfile
+    restart: unless-stopped
+    environment:
+      - WORKER_TYPE=worker
+      - CELERY_CONCURRENCY=1
+      - CELERY_QUEUES=maintenance,monitoring
+      - LOG_LEVEL=INFO
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=${DATABASE_URL}
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+    volumes:
+      - ./logs:/app/logs
+      - evaluation_data:/app/data
+    depends_on:
+      - redis
+
+  # Celery beat scheduler
+  celery-beat:
+    build:
+      context: .
+      dockerfile: docker/evaluation-worker.Dockerfile
+    restart: unless-stopped
+    environment:
+      - LOG_LEVEL=INFO
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=${DATABASE_URL}
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+    volumes:
+      - ./logs:/app/logs
+      - evaluation_data:/app/data
+    depends_on:
+      - redis
+    command: ["beat"]
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+
+  # Flower for monitoring Celery tasks
+  flower:
+    build:
+      context: .
+      dockerfile: docker/evaluation-worker.Dockerfile
+    restart: unless-stopped
+    ports:
+      - "5555:5555"
+    environment:
+      - FLOWER_PORT=5555
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - FLOWER_BASIC_AUTH=${FLOWER_USERNAME}:${FLOWER_PASSWORD}
+    depends_on:
+      - redis
+    command: ["flower"]
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+
+  # Prometheus for metrics collection
+  prometheus:
+    image: prom/prometheus:latest
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./monitoring/rules:/etc/prometheus/rules
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+      - '--web.enable-admin-api'
+
+  # Grafana for visualization
+  grafana:
+    image: grafana/grafana:latest
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
+    depends_on:
+      - prometheus
+
+  # Redis Exporter for Redis metrics
+  redis-exporter:
+    image: oliver006/redis_exporter:latest
+    restart: unless-stopped
+    ports:
+      - "9121:9121"
+    environment:
+      - REDIS_ADDR=redis://redis:6379
+    depends_on:
+      - redis
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.2'
+
+  # Node Exporter for system metrics
+  node-exporter:
+    image: prom/node-exporter:latest
+    restart: unless-stopped
+    ports:
+      - "9100:9100"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.ignored-mount-points=^/(sys|proc|dev|host|etc)($$|/)'
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.2'
+
+  # Log aggregation with Fluentd
+  fluentd:
+    image: fluent/fluentd:v1.16-debian-1
+    restart: unless-stopped
+    ports:
+      - "24224:24224"
+      - "24224:24224/udp"
+    volumes:
+      - ./logs:/fluentd/log
+      - ./monitoring/fluentd/fluent.conf:/fluentd/etc/fluent.conf
+      - fluentd_data:/var/log/fluentd
+    environment:
+      - FLUENTD_CONF=fluent.conf
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+
+volumes:
+  redis_data:
+    driver: local
+  evaluation_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+  fluentd_data:
+    driver: local
+
+networks:
+  default:
+    driver: bridge
