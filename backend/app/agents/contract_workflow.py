@@ -4,13 +4,20 @@ Enhanced LangGraph Contract Analysis Workflow with PromptManager and OutputParse
 
 from typing import Dict, Any, Optional, List, Union
 from langgraph.graph import StateGraph
-from langchain_openai import ChatOpenAI
 from langchain.schema import HumanMessage, SystemMessage
 import json
 import time
 import logging
 from datetime import datetime, UTC
 from pathlib import Path
+
+# Import new client architecture
+from app.clients import get_openai_client, get_gemini_client
+from app.clients.base.exceptions import (
+    ClientError,
+    ClientConnectionError,
+    ClientAuthenticationError,
+)
 
 from app.models.contract_state import (
     RealEstateAgentState,
@@ -72,19 +79,18 @@ class ContractAnalysisWorkflow:
 
     def __init__(
         self,
-        openai_api_key: str,
+        openai_api_key: str = None,
         model_name: str = "gpt-4",
         openai_api_base: Optional[str] = None,
         prompt_manager: Optional[PromptManager] = None,
         enable_validation: bool = True,
         enable_quality_checks: bool = True,
     ):
-        self.llm = ChatOpenAI(
-            openai_api_key=openai_api_key,
-            model_name=model_name,
-            temperature=0.1,  # Low temperature for consistent analysis
-            openai_api_base=openai_api_base,
-        )
+        # Initialize clients (will be set up in initialize method)
+        self.openai_client = None
+        self.gemini_client = None
+        self.model_name = model_name
+        self.openai_api_base = openai_api_base
 
         # Initialize prompt manager
         if prompt_manager is None:
@@ -114,6 +120,33 @@ class ContractAnalysisWorkflow:
         logger.info(
             "Enhanced ContractAnalysisWorkflow initialized with PromptManager integration"
         )
+
+    async def initialize(self):
+        """Initialize the workflow clients"""
+        try:
+            logger.info("Initializing ContractAnalysisWorkflow clients...")
+
+            # Initialize OpenAI client
+            self.openai_client = await get_openai_client()
+            logger.info("OpenAI client initialized successfully")
+
+            # Initialize Gemini client (for enhanced capabilities)
+            try:
+                self.gemini_client = await get_gemini_client()
+                logger.info("Gemini client initialized successfully")
+            except Exception as e:
+                logger.warning(f"Gemini client initialization failed: {e}")
+                self.gemini_client = None
+
+            logger.info("ContractAnalysisWorkflow clients initialized successfully")
+
+        except Exception as e:
+            logger.error(f"Failed to initialize workflow clients: {e}")
+            raise ClientConnectionError(
+                f"Failed to initialize workflow clients: {str(e)}",
+                client_name="ContractAnalysisWorkflow",
+                original_error=e,
+            )
 
     def _create_workflow(self) -> StateGraph:
         """Create the enhanced LangGraph workflow"""
@@ -230,6 +263,10 @@ class ContractAnalysisWorkflow:
             "step_names": step_names,
             "percentage": 0,
         }
+
+        # Initialize clients if not already initialized
+        if not self.openai_client:
+            await self.initialize()
 
         # Initialize prompt manager if needed
         try:
@@ -802,19 +839,15 @@ class ContractAnalysisWorkflow:
                     contract_terms, compliance_check, state["australian_state"]
                 )
 
-            # Get LLM response
+            # Get LLM response using new client architecture with fallback
             try:
-                messages = [
-                    SystemMessage(
-                        content="You are an expert Australian property lawyer analyzing contract risks."
-                    ),
-                    HumanMessage(content=rendered_prompt),
-                ]
-
-                llm_response = self.llm.invoke(messages)
+                system_message = "You are an expert Australian property lawyer analyzing contract risks."
+                llm_response = await self._generate_content_with_fallback(
+                    rendered_prompt, system_message, use_gemini_fallback=True
+                )
 
                 # Parse response using structured parser
-                parsing_result = self.risk_parser.parse_with_retry(llm_response.content)
+                parsing_result = self.risk_parser.parse_with_retry(llm_response)
 
                 if parsing_result.success:
                     risk_analysis = parsing_result.parsed_data.dict()
@@ -917,20 +950,16 @@ class ContractAnalysisWorkflow:
                 # Fallback to manual prompt creation
                 rendered_prompt = self._create_recommendations_prompt(state)
 
-            # Get LLM response and parse
+            # Get LLM response and parse using new client architecture with fallback
             try:
-                messages = [
-                    SystemMessage(
-                        content="You are an expert Australian property advisor providing actionable recommendations."
-                    ),
-                    HumanMessage(content=rendered_prompt),
-                ]
-
-                llm_response = self.llm.invoke(messages)
+                system_message = "You are an expert Australian property advisor providing actionable recommendations."
+                llm_response = await self._generate_content_with_fallback(
+                    rendered_prompt, system_message, use_gemini_fallback=True
+                )
 
                 # Parse response using structured parser
                 parsing_result = self.recommendations_parser.parse_with_retry(
-                    llm_response.content
+                    llm_response
                 )
 
                 if parsing_result.success:
@@ -1877,6 +1906,44 @@ class ContractAnalysisWorkflow:
 
         return recommendations
 
+    async def _generate_content_with_fallback(
+        self, prompt: str, system_message: str = "", use_gemini_fallback: bool = True
+    ) -> str:
+        """Generate content using OpenAI with fallback to Gemini if needed"""
+        try:
+            # Prepare full prompt
+            if system_message:
+                full_prompt = f"{system_message}\n\n{prompt}"
+            else:
+                full_prompt = prompt
+
+            # Try OpenAI first
+            response = await self.openai_client.generate_content(
+                full_prompt,
+                model=self.model_name,
+                temperature=0.1,
+            )
+            return response
+
+        except Exception as openai_error:
+            logger.warning(f"OpenAI generation failed: {openai_error}")
+
+            # Fallback to Gemini if available and enabled
+            if use_gemini_fallback and self.gemini_client:
+                try:
+                    logger.info("Falling back to Gemini client")
+                    response = await self.gemini_client.generate_content(
+                        full_prompt,
+                        model="gemini-2.5-pro",
+                        temperature=0.1,
+                    )
+                    return response
+                except Exception as gemini_error:
+                    logger.error(f"Gemini fallback also failed: {gemini_error}")
+                    raise openai_error  # Re-raise original error
+
+            raise openai_error
+
     def get_workflow_metrics(self) -> Dict[str, Any]:
         """Get comprehensive workflow performance metrics"""
         return {
@@ -1886,6 +1953,7 @@ class ContractAnalysisWorkflow:
                 "structured_parsing_enabled": True,
                 "validation_enabled": self.enable_validation,
                 "quality_checks_enabled": self.enable_quality_checks,
+                "client_architecture_enabled": True,
             },
             "parsing_metrics": {
                 "success_rate": self._metrics["successful_parses"]

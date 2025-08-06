@@ -43,11 +43,9 @@ db_client = get_database_client()
 document_service = DocumentService()
 websocket_manager = WebSocketManager()
 
-# Initialize LangGraph workflow
+# Initialize LangGraph workflow (will be initialized in lifespan)
 contract_workflow = ContractAnalysisWorkflow(
-    openai_api_key=settings.openai_api_key,
     model_name="gpt-4",
-    openai_api_base=settings.openai_api_base,
 )
 
 
@@ -70,6 +68,9 @@ async def lifespan(app: FastAPI):
 
     # Initialize document service
     await document_service.initialize()
+
+    # Initialize contract workflow
+    await contract_workflow.initialize()
 
     logger.info("Real2.AI API started successfully")
 
