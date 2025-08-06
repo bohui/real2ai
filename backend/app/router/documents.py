@@ -107,7 +107,17 @@ async def upload_document(
     )
 
     try:
+        # Log upload attempt
+        logger.info(f"File upload attempt: filename={file.filename}, size={file.size}, content_type={file.content_type}")
+        
         # Validate file
+        if file.size == 0:
+            logger.warning(f"Empty file upload attempted: {file.filename}")
+            raise HTTPException(
+                status_code=400,
+                detail="Empty file uploaded. Please select a valid document with content.",
+            )
+            
         if file.size > settings.max_file_size:
             raise HTTPException(
                 status_code=413,

@@ -1,5 +1,5 @@
-import React from 'react';
-import { motion } from 'framer-motion';
+import React from "react";
+import { motion } from "framer-motion";
 import {
   BarChart3,
   TrendingUp,
@@ -8,14 +8,14 @@ import {
   CheckCircle,
   Calendar,
   Download,
-  Filter
-} from 'lucide-react';
+  Filter,
+} from "lucide-react";
 
-import Button from '@/components/ui/Button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
-import { useAnalysisStore } from '@/store/analysisStore';
-import { useAuthStore } from '@/store/authStore';
-import { cn } from '@/utils';
+import Button from "@/components/ui/Button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
+import { useAnalysisStore } from "@/store/analysisStore";
+import { useAuthStore } from "@/store/authStore";
+import { cn } from "@/utils";
 
 const ReportsPage: React.FC = () => {
   const { recentAnalyses } = useAnalysisStore();
@@ -23,60 +23,69 @@ const ReportsPage: React.FC = () => {
 
   // Calculate summary statistics
   const totalAnalyses = recentAnalyses.length;
-  const highRiskCount = recentAnalyses.filter(analysis => {
-    const riskScore = analysis.executive_summary?.overall_risk_score 
-      ?? analysis.risk_assessment?.overall_risk_score 
-      ?? 0;
+  const highRiskCount = recentAnalyses.filter((analysis) => {
+    const riskScore =
+      analysis.executive_summary?.overall_risk_score ??
+      analysis.risk_assessment?.overall_risk_score ??
+      0;
     return riskScore >= 7;
   }).length;
-  
-  const mediumRiskCount = recentAnalyses.filter(analysis => {
-    const riskScore = analysis.executive_summary?.overall_risk_score 
-      ?? analysis.risk_assessment?.overall_risk_score 
-      ?? 0;
+
+  const mediumRiskCount = recentAnalyses.filter((analysis) => {
+    const riskScore =
+      analysis.executive_summary?.overall_risk_score ??
+      analysis.risk_assessment?.overall_risk_score ??
+      0;
     return riskScore >= 5 && riskScore < 7;
   }).length;
-  
+
   const lowRiskCount = totalAnalyses - highRiskCount - mediumRiskCount;
 
-  const averageRiskScore = totalAnalyses > 0 
-    ? recentAnalyses.reduce((sum, analysis) => {
-        const riskScore = analysis.executive_summary?.overall_risk_score 
-          ?? analysis.risk_assessment?.overall_risk_score 
-          ?? 0;
-        return sum + riskScore;
-      }, 0) / totalAnalyses
-    : 0;
+  const averageRiskScore =
+    totalAnalyses > 0
+      ? recentAnalyses.reduce((sum, analysis) => {
+          const riskScore =
+            analysis.executive_summary?.overall_risk_score ??
+            analysis.risk_assessment?.overall_risk_score ??
+            0;
+          return sum + riskScore;
+        }, 0) / totalAnalyses
+      : 0;
 
   const summaryCards = [
     {
-      title: 'Total Analyses',
+      title: "Total Contract Analyses",
       value: totalAnalyses.toString(),
       icon: FileText,
-      color: 'blue',
-      change: null
+      color: "blue",
+      change: null,
     },
     {
-      title: 'Average Risk Score',
+      title: "Average Risk Score",
       value: averageRiskScore.toFixed(1),
       icon: BarChart3,
-      color: averageRiskScore >= 7 ? 'red' : averageRiskScore >= 5 ? 'yellow' : 'green',
-      change: null
+      color:
+        averageRiskScore >= 7
+          ? "red"
+          : averageRiskScore >= 5
+          ? "yellow"
+          : "green",
+      change: null,
     },
     {
-      title: 'High Risk Contracts',
+      title: "High Risk Contracts",
       value: highRiskCount.toString(),
       icon: AlertTriangle,
-      color: 'red',
-      change: null
+      color: "red",
+      change: null,
     },
     {
-      title: 'Low Risk Contracts',
+      title: "Low Risk Contracts",
       value: lowRiskCount.toString(),
       icon: CheckCircle,
-      color: 'green',
-      change: null
-    }
+      color: "green",
+      change: null,
+    },
   ];
 
   return (
@@ -130,20 +139,24 @@ const ReportsPage: React.FC = () => {
                           {card.value}
                         </p>
                       </div>
-                      <div className={cn(
-                        'w-12 h-12 rounded-lg flex items-center justify-center',
-                        card.color === 'blue' && 'bg-blue-100',
-                        card.color === 'green' && 'bg-green-100',
-                        card.color === 'yellow' && 'bg-yellow-100',
-                        card.color === 'red' && 'bg-red-100'
-                      )}>
-                        <IconComponent className={cn(
-                          'w-6 h-6',
-                          card.color === 'blue' && 'text-blue-600',
-                          card.color === 'green' && 'text-green-600',
-                          card.color === 'yellow' && 'text-yellow-600',
-                          card.color === 'red' && 'text-red-600'
-                        )} />
+                      <div
+                        className={cn(
+                          "w-12 h-12 rounded-lg flex items-center justify-center",
+                          card.color === "blue" && "bg-blue-100",
+                          card.color === "green" && "bg-green-100",
+                          card.color === "yellow" && "bg-yellow-100",
+                          card.color === "red" && "bg-red-100"
+                        )}
+                      >
+                        <IconComponent
+                          className={cn(
+                            "w-6 h-6",
+                            card.color === "blue" && "text-blue-600",
+                            card.color === "green" && "text-green-600",
+                            card.color === "yellow" && "text-yellow-600",
+                            card.color === "red" && "text-red-600"
+                          )}
+                        />
                       </div>
                     </div>
                   </CardContent>
@@ -172,16 +185,22 @@ const ReportsPage: React.FC = () => {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <div className="w-3 h-3 bg-red-500 rounded-full" />
-                      <span className="text-sm text-neutral-600">High Risk</span>
+                      <span className="text-sm text-neutral-600">
+                        High Risk
+                      </span>
                     </div>
                     <span className="text-sm font-medium">{highRiskCount}</span>
                   </div>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <div className="w-3 h-3 bg-yellow-500 rounded-full" />
-                      <span className="text-sm text-neutral-600">Medium Risk</span>
+                      <span className="text-sm text-neutral-600">
+                        Medium Risk
+                      </span>
                     </div>
-                    <span className="text-sm font-medium">{mediumRiskCount}</span>
+                    <span className="text-sm font-medium">
+                      {mediumRiskCount}
+                    </span>
                   </div>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -210,27 +229,37 @@ const ReportsPage: React.FC = () => {
               <CardContent>
                 <div className="space-y-4">
                   {recentAnalyses.slice(0, 5).map((analysis, index) => (
-                    <div key={analysis.contract_id} className="flex items-center gap-3">
+                    <div
+                      key={analysis.contract_id}
+                      className="flex items-center gap-3"
+                    >
                       <div className="w-2 h-2 bg-primary-500 rounded-full" />
                       <div className="flex-1">
                         <p className="text-sm font-medium text-neutral-900">
                           Contract Analysis
                         </p>
                         <p className="text-xs text-neutral-500">
-                          {new Date(analysis.analysis_timestamp).toLocaleDateString()}
+                          {new Date(
+                            analysis.analysis_timestamp
+                          ).toLocaleDateString()}
                         </p>
                       </div>
-                      <div className={cn(
-                        'w-2 h-2 rounded-full',
-                        (() => {
-                          const riskScore = analysis.executive_summary?.overall_risk_score 
-                            ?? analysis.risk_assessment?.overall_risk_score 
-                            ?? 0;
-                          return riskScore >= 7 ? 'bg-red-500' :
-                                 riskScore >= 5 ? 'bg-yellow-500' :
-                                 'bg-green-500';
-                        })()
-                      )} />
+                      <div
+                        className={cn(
+                          "w-2 h-2 rounded-full",
+                          (() => {
+                            const riskScore =
+                              analysis.executive_summary?.overall_risk_score ??
+                              analysis.risk_assessment?.overall_risk_score ??
+                              0;
+                            return riskScore >= 7
+                              ? "bg-red-500"
+                              : riskScore >= 5
+                              ? "bg-yellow-500"
+                              : "bg-green-500";
+                          })()
+                        )}
+                      />
                     </div>
                   ))}
                 </div>
@@ -263,21 +292,38 @@ const ReportsPage: React.FC = () => {
                   <table className="w-full">
                     <thead>
                       <tr className="border-b border-neutral-200">
-                        <th className="text-left py-3 px-4 font-medium text-neutral-900">Contract</th>
-                        <th className="text-left py-3 px-4 font-medium text-neutral-900">Date</th>
-                        <th className="text-left py-3 px-4 font-medium text-neutral-900">Risk Score</th>
-                        <th className="text-left py-3 px-4 font-medium text-neutral-900">Status</th>
+                        <th className="text-left py-3 px-4 font-medium text-neutral-900">
+                          Contract
+                        </th>
+                        <th className="text-left py-3 px-4 font-medium text-neutral-900">
+                          Date
+                        </th>
+                        <th className="text-left py-3 px-4 font-medium text-neutral-900">
+                          Risk Score
+                        </th>
+                        <th className="text-left py-3 px-4 font-medium text-neutral-900">
+                          Status
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
                       {recentAnalyses.map((analysis) => {
-                        const riskScore = analysis.executive_summary?.overall_risk_score 
-                          ?? analysis.risk_assessment?.overall_risk_score 
-                          ?? 0;
-                        const riskLevel = riskScore >= 7 ? 'High' : riskScore >= 5 ? 'Medium' : 'Low';
-                        
+                        const riskScore =
+                          analysis.executive_summary?.overall_risk_score ??
+                          analysis.risk_assessment?.overall_risk_score ??
+                          0;
+                        const riskLevel =
+                          riskScore >= 7
+                            ? "High"
+                            : riskScore >= 5
+                            ? "Medium"
+                            : "Low";
+
                         return (
-                          <tr key={analysis.contract_id} className="border-b border-neutral-100">
+                          <tr
+                            key={analysis.contract_id}
+                            className="border-b border-neutral-100"
+                          >
                             <td className="py-3 px-4">
                               <div className="flex items-center gap-2">
                                 <FileText className="w-4 h-4 text-neutral-400" />
@@ -287,18 +333,27 @@ const ReportsPage: React.FC = () => {
                               </div>
                             </td>
                             <td className="py-3 px-4 text-neutral-600">
-                              {new Date(analysis.analysis_timestamp).toLocaleDateString()}
+                              {new Date(
+                                analysis.analysis_timestamp
+                              ).toLocaleDateString()}
                             </td>
                             <td className="py-3 px-4">
-                              <span className="font-medium">{riskScore.toFixed(1)}</span>
+                              <span className="font-medium">
+                                {riskScore.toFixed(1)}
+                              </span>
                             </td>
                             <td className="py-3 px-4">
-                              <span className={cn(
-                                'inline-flex items-center px-2 py-1 rounded-full text-xs font-medium',
-                                riskLevel === 'High' && 'bg-red-100 text-red-700',
-                                riskLevel === 'Medium' && 'bg-yellow-100 text-yellow-700',
-                                riskLevel === 'Low' && 'bg-green-100 text-green-700'
-                              )}>
+                              <span
+                                className={cn(
+                                  "inline-flex items-center px-2 py-1 rounded-full text-xs font-medium",
+                                  riskLevel === "High" &&
+                                    "bg-red-100 text-red-700",
+                                  riskLevel === "Medium" &&
+                                    "bg-yellow-100 text-yellow-700",
+                                  riskLevel === "Low" &&
+                                    "bg-green-100 text-green-700"
+                                )}
+                              >
                                 {riskLevel} Risk
                               </span>
                             </td>

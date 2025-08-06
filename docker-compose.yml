@@ -14,7 +14,7 @@ services:
       - DEBUG=true
       - PYTHONPATH=/app
       - GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp_key.json
-      - SUPABASE_URL=http://kong:8000
+      - SUPABASE_URL=http://host.docker.internal:54321
       - REDIS_URL=redis://redis:6379
     volumes:
       - ./backend/gcp_key.json:/secrets/gcp_key.json:ro
@@ -64,7 +64,7 @@ services:
       - ENVIRONMENT=development
       - PYTHONPATH=/app
       - C_FORCE_ROOT=1
-      - SUPABASE_URL=http://kong:8000
+      - SUPABASE_URL=http://host.docker.internal:54321
       - REDIS_URL=redis://redis:6379
     volumes:
       - ./backend:/app
@@ -97,7 +97,7 @@ services:
       - C_FORCE_ROOT=1
       - WORKER_TYPE=ocr_specialist
       - GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp_key.json
-      - SUPABASE_URL=http://kong:8000
+      - SUPABASE_URL=http://host.docker.internal:54321
       - REDIS_URL=redis://redis:6379
     volumes:
       - ./backend/gcp_key.json:/secrets/gcp_key.json:ro
@@ -130,7 +130,7 @@ services:
       - PYTHONPATH=/app
       - C_FORCE_ROOT=1
       - WORKER_TYPE=batch_processor
-      - SUPABASE_URL=http://kong:8000
+      - SUPABASE_URL=http://host.docker.internal:54321
       - REDIS_URL=redis://redis:6379
     volumes:
       - ./backend:/app
@@ -160,7 +160,7 @@ services:
     environment:
       - ENVIRONMENT=development
       - PYTHONPATH=/app
-      - SUPABASE_URL=http://kong:8000
+      - SUPABASE_URL=http://host.docker.internal:54321
       - REDIS_URL=redis://redis:6379
     volumes:
       - ./backend:/app

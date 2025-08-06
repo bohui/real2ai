@@ -77,6 +77,24 @@ class TestDocumentUpload:
         data = response.json()
         assert "File too large" in data["detail"]
     
+    def test_upload_document_empty_file(self, client: TestClient):
+        """Test document upload with empty file"""
+        # Create empty file
+        empty_file = BytesIO(b"")
+        
+        response = client.post(
+            "/api/documents/upload",
+            files={"file": ("empty-contract.pdf", empty_file, "application/pdf")},
+            data={
+                "contract_type": "purchase_agreement", 
+                "australian_state": "NSW"
+            }
+        )
+        
+        assert response.status_code == 400
+        data = response.json()
+        assert "Empty file uploaded" in data["detail"]
+    
     def test_upload_document_no_file(self, client: TestClient):
         """Test document upload without file"""
         response = client.post(

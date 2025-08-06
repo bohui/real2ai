@@ -143,9 +143,33 @@ const DashboardPage: React.FC = () => {
         bestValueProperties.length
       : 0;
 
+  // Calculate minimal risk properties (properties with lowest risk scores)
+  const minimalRiskProperties = recentAnalyses
+    .filter((analysis) => {
+      return (
+        analysis.analysis_status === "completed" &&
+        analysis.contract_terms?.property_address &&
+        analysis.executive_summary?.overall_risk_score !== undefined
+      );
+    })
+    .map((analysis) => ({
+      address: analysis.contract_terms.property_address,
+      riskScore: analysis.executive_summary.overall_risk_score,
+      analysis,
+    }))
+    .sort((a, b) => a.riskScore - b.riskScore) // Sort by lowest risk first
+    .slice(0, 3);
+
+  const minimalRiskCount = minimalRiskProperties.length;
+  const averageMinimalRiskScore =
+    minimalRiskProperties.length > 0
+      ? minimalRiskProperties.reduce((sum, p) => sum + p.riskScore, 0) /
+        minimalRiskProperties.length
+      : 0;
+
   const stats = [
     {
-      title: "Total Analyses",
+      title: "Total Contract Analyses",
       value: totalAnalyses,
       change: "+12%",
       trend: "up",
@@ -153,23 +177,23 @@ const DashboardPage: React.FC = () => {
       color: "primary",
     },
     {
-      title: "Best Value Properties",
-      value: bestValueCount,
+      title: "Minimal Risk Properties",
+      value: minimalRiskCount,
       change:
-        bestValueProperties.length > 0
-          ? bestValueProperties[0].address.split(",")[0] // Show first property address
-          : "+2",
+        minimalRiskProperties.length > 0
+          ? minimalRiskProperties[0].address.split(",")[0]
+          : "0",
       trend:
-        averageValueScore > 0.7
+        averageMinimalRiskScore < 3
           ? "up"
-          : averageValueScore > 0.4
+          : averageMinimalRiskScore < 5
           ? "neutral"
           : "down",
       icon: TrendingUp,
       color: "success",
       subtitle:
-        bestValueProperties.length > 0
-          ? `Score: ${averageValueScore.toFixed(1)}`
+        minimalRiskProperties.length > 0
+          ? `Avg Risk: ${averageMinimalRiskScore.toFixed(1)}/10`
           : "vs last month",
     },
     {
@@ -414,7 +438,7 @@ const DashboardPage: React.FC = () => {
                   <Button
                     variant="outline"
                     size="sm"
-                    className="group flex items-center gap-2"
+                    className="group flex items-center gap-2 whitespace-nowrap"
                   >
                     <span>View all analyses</span>
                     <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
@@ -445,8 +469,8 @@ const DashboardPage: React.FC = () => {
                     Upload your first contract to experience AI-powered analysis
                     tailored for Australian legal professionals
                   </p>
-                  <div className="space-y-4 max-w-sm mx-auto">
-                    <Link to="/app/analysis">
+                  <div className="max-w-sm mx-auto">
+                    <Link to="/app/analysis" className="block mb-4">
                       <Button
                         variant="primary"
                         size="lg"

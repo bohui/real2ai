@@ -154,7 +154,9 @@ const HistoryPage: React.FC = () => {
                 <div className="text-2xl font-bold text-neutral-900">
                   {recentAnalyses.length}
                 </div>
-                <div className="text-sm text-neutral-500">Total Analyses</div>
+                <div className="text-sm text-neutral-500">
+                  Total Contract Analyses
+                </div>
               </div>
             </div>
           </CardContent>

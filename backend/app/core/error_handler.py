@@ -156,6 +156,20 @@ class ErrorHandler:
                 retry_eligible=True,
                 max_retries=2
             ),
+            "empty_file": EnhancedError(
+                category=ErrorCategory.FILE_PROCESSING,
+                severity=ErrorSeverity.MEDIUM,
+                code="FILE_004",
+                user_message="The uploaded file is empty. Please select a valid document with content.",
+                technical_message="Zero-byte file uploaded",
+                suggested_actions=[
+                    "Select a different file that contains content",
+                    "Check that the file isn't corrupted or empty",
+                    "Ensure the document was saved properly before uploading",
+                    "Try opening the file on your device first to verify it has content"
+                ],
+                retry_eligible=False
+            ),
             
             # Contract Analysis Errors
             "analysis_failed": EnhancedError(
@@ -418,6 +432,8 @@ class ErrorHandler:
             enhanced_error = self.error_mappings["file_format_unsupported"].copy()
         elif "corrupted" in error_str or "unreadable" in error_str:
             enhanced_error = self.error_mappings["file_corrupted"].copy()
+        elif "empty" in error_str and "file" in error_str:
+            enhanced_error = self.error_mappings["empty_file"].copy()
         elif "analysis" in error_str and "failed" in error_str:
             enhanced_error = self.error_mappings["analysis_failed"].copy()
         elif "confidence" in error_str and "low" in error_str:
