@@ -31,17 +31,17 @@ import pypdf
 from docx import Document as DocxDocument
 from unstructured.partition.auto import partition
 
-from app.models.document_models import (
+from app.models.supabase_models import (
     Document,
     DocumentPage,
     DocumentEntity,
     DocumentDiagram,
-    ProcessingStatus,
+    DocumentStatus as ProcessingStatus,  # Alias for compatibility
     ContentType,
     DiagramType,
     EntityType,
 )
-from backend.app.prompts.schema.entity_extraction_schema import (
+from app.prompts.schema.entity_extraction_schema import (
     AustralianState,
     ContractType,
 )

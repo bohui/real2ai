@@ -4,7 +4,7 @@ from typing import Dict, Any, Optional
 from pydantic import BaseModel, EmailStr, field_validator
 from datetime import datetime
 
-from backend.app.schema.enums import AustralianState
+from app.schema.enums import AustralianState
 
 
 class UserRegistrationRequest(BaseModel):

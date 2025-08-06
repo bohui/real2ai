@@ -4,7 +4,7 @@ from typing import Dict, List, Any, Optional
 from pydantic import BaseModel, field_validator
 from datetime import datetime
 
-from backend.app.schema.enums import ContractType
+from app.schema.enums import ContractType
 
 
 class OCRCapabilitiesResponse(BaseModel):

@@ -27,7 +27,7 @@ from app.models.contract_state import (
     update_state_step,
     calculate_confidence_score,
 )
-from backend.app.schema.enums import ProcessingStatus
+from app.schema.enums import ProcessingStatus
 from app.models.workflow_outputs import (
     RiskAnalysisOutput,
     RecommendationsOutput,

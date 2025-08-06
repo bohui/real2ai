@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 import logging
 
 from app.core.auth import get_current_user, User
-from app.core.database import get_database_client
+from app.clients.factory import get_supabase_client
 from app.schema.onboarding import (
     OnboardingStatusResponse,
     OnboardingPreferencesRequest,
@@ -18,7 +18,7 @@ router = APIRouter(prefix="/api/users/onboarding", tags=["onboarding"])
 
 @router.get("/status", response_model=OnboardingStatusResponse)
 async def get_onboarding_status(
-    user: User = Depends(get_current_user), db_client=Depends(get_database_client)
+    user: User = Depends(get_current_user), db_client=Depends(get_supabase_client)
 ):
     """Get user onboarding status"""
     try:
@@ -55,7 +55,7 @@ async def get_onboarding_status(
 async def complete_onboarding(
     request: OnboardingCompleteRequest,
     user: User = Depends(get_current_user),
-    db_client=Depends(get_database_client),
+    db_client=Depends(get_supabase_client),
 ):
     """Complete user onboarding and save preferences"""
     try:
@@ -117,7 +117,7 @@ async def complete_onboarding(
 async def update_onboarding_preferences(
     preferences: OnboardingPreferencesRequest,
     user: User = Depends(get_current_user),
-    db_client=Depends(get_database_client),
+    db_client=Depends(get_supabase_client),
 ):
     """Update user onboarding preferences"""
     try:

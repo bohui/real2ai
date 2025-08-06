@@ -5,7 +5,7 @@ from fastapi.responses import JSONResponse
 import logging
 
 from app.core.auth import get_current_user, User
-from app.core.database import get_database_client
+from app.clients.factory import get_supabase_client
 from app.core.error_handler import (
     handle_api_error, 
     create_error_context, 
@@ -24,7 +24,7 @@ async def start_contract_analysis(
     request: ContractAnalysisRequest,
     background_tasks: BackgroundTasks,
     user: User = Depends(get_current_user),
-    db_client=Depends(get_database_client),
+    db_client=Depends(get_supabase_client),
 ):
     """Start contract analysis with enhanced error handling and validation"""
 
@@ -224,7 +224,7 @@ async def _start_background_analysis(
 async def get_analysis_status(
     contract_id: str,
     user: User = Depends(get_current_user),
-    db_client=Depends(get_database_client),
+    db_client=Depends(get_supabase_client),
 ):
     """Get contract analysis status and progress with enhanced error handling"""
     
@@ -361,7 +361,7 @@ def _calculate_analysis_progress(analysis: dict) -> dict:
 async def get_contract_analysis(
     contract_id: str,
     user: User = Depends(get_current_user),
-    db_client=Depends(get_database_client),
+    db_client=Depends(get_supabase_client),
 ):
     """Get contract analysis results"""
 
@@ -424,7 +424,7 @@ async def download_analysis_report(
     contract_id: str,
     format: str = "pdf",
     user: User = Depends(get_current_user),
-    db_client=Depends(get_database_client),
+    db_client=Depends(get_supabase_client),
 ):
     """Download analysis report"""
 
@@ -453,7 +453,7 @@ async def download_analysis_report(
 async def delete_contract_analysis(
     contract_id: str,
     user: User = Depends(get_current_user),
-    db_client=Depends(get_database_client),
+    db_client=Depends(get_supabase_client),
 ):
     """Delete contract analysis and related data"""
     

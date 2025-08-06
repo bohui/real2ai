@@ -10,34 +10,204 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- Function to update analysis progress updated_at timestamp
+CREATE OR REPLACE FUNCTION update_analysis_progress_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function to get latest progress for a contract
+CREATE OR REPLACE FUNCTION get_latest_analysis_progress(contract_uuid UUID)
+RETURNS analysis_progress AS $$
+DECLARE
+    progress_record analysis_progress;
+BEGIN
+    SELECT * INTO progress_record
+    FROM analysis_progress
+    WHERE contract_id = contract_uuid
+    ORDER BY updated_at DESC
+    LIMIT 1;
+    
+    RETURN progress_record;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function to update analysis progress
+CREATE OR REPLACE FUNCTION update_analysis_progress(
+    p_contract_id UUID,
+    p_analysis_id UUID,
+    p_user_id UUID,
+    p_current_step TEXT,
+    p_progress_percent INTEGER,
+    p_step_description TEXT DEFAULT NULL,
+    p_estimated_completion_minutes INTEGER DEFAULT NULL
+)
+RETURNS UUID AS $$
+DECLARE
+    progress_id UUID;
+    existing_progress analysis_progress;
+    elapsed_seconds INTEGER := 0;
+BEGIN
+    -- Get existing progress record
+    SELECT * INTO existing_progress
+    FROM analysis_progress
+    WHERE contract_id = p_contract_id
+    AND analysis_id = p_analysis_id
+    ORDER BY updated_at DESC
+    LIMIT 1;
+    
+    -- Calculate elapsed time if previous step exists
+    IF existing_progress.id IS NOT NULL THEN
+        elapsed_seconds := EXTRACT(EPOCH FROM (NOW() - existing_progress.step_started_at))::INTEGER;
+        
+        -- Update previous step completion time
+        UPDATE analysis_progress
+        SET step_completed_at = NOW(),
+            total_elapsed_seconds = elapsed_seconds
+        WHERE id = existing_progress.id;
+    END IF;
+    
+    -- Insert new progress record
+    INSERT INTO analysis_progress (
+        contract_id,
+        analysis_id,
+        user_id,
+        current_step,
+        progress_percent,
+        step_description,
+        estimated_completion_minutes,
+        total_elapsed_seconds
+    ) VALUES (
+        p_contract_id,
+        p_analysis_id,
+        p_user_id,
+        p_current_step,
+        p_progress_percent,
+        p_step_description,
+        p_estimated_completion_minutes,
+        COALESCE(existing_progress.total_elapsed_seconds, 0) + COALESCE(elapsed_seconds, 0)
+    )
+    RETURNING id INTO progress_id;
+    
+    RETURN progress_id;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function to mark analysis as completed
+CREATE OR REPLACE FUNCTION complete_analysis_progress(
+    p_contract_id UUID,
+    p_analysis_id UUID,
+    p_final_status TEXT DEFAULT 'completed'
+)
+RETURNS BOOLEAN AS $$
+DECLARE
+    latest_progress analysis_progress;
+    total_time INTEGER;
+BEGIN
+    -- Get latest progress
+    SELECT * INTO latest_progress
+    FROM analysis_progress
+    WHERE contract_id = p_contract_id
+    AND analysis_id = p_analysis_id
+    ORDER BY updated_at DESC
+    LIMIT 1;
+    
+    IF latest_progress.id IS NOT NULL THEN
+        -- Calculate total processing time
+        total_time := EXTRACT(EPOCH FROM (NOW() - latest_progress.created_at))::INTEGER;
+        
+        -- Update final progress record
+        UPDATE analysis_progress
+        SET status = p_final_status,
+            progress_percent = CASE WHEN p_final_status = 'completed' THEN 100 ELSE progress_percent END,
+            step_completed_at = NOW(),
+            total_elapsed_seconds = total_time
+        WHERE id = latest_progress.id;
+        
+        RETURN TRUE;
+    END IF;
+    
+    RETURN FALSE;
+END;
+$$ LANGUAGE plpgsql;
+
 -- Apply updated_at triggers to all relevant tables
+-- Use DROP TRIGGER IF EXISTS to handle cases where triggers already exist from initial schema
+
+-- Profiles
+DROP TRIGGER IF EXISTS update_profiles_updated_at ON public.profiles;
 CREATE TRIGGER update_profiles_updated_at 
     BEFORE UPDATE ON public.profiles 
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+-- Documents (already exists in initial schema)
+DROP TRIGGER IF EXISTS update_documents_updated_at ON documents;
 CREATE TRIGGER update_documents_updated_at 
     BEFORE UPDATE ON documents 
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+-- Contracts
+DROP TRIGGER IF EXISTS update_contracts_updated_at ON contracts;
 CREATE TRIGGER update_contracts_updated_at 
     BEFORE UPDATE ON contracts 
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+-- Contract analyses
+DROP TRIGGER IF EXISTS update_contract_analyses_updated_at ON contract_analyses;
 CREATE TRIGGER update_contract_analyses_updated_at 
     BEFORE UPDATE ON contract_analyses 
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+-- Property data
+DROP TRIGGER IF EXISTS update_property_data_updated_at ON property_data;
 CREATE TRIGGER update_property_data_updated_at 
     BEFORE UPDATE ON property_data 
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+-- User subscriptions
+DROP TRIGGER IF EXISTS update_user_subscriptions_updated_at ON user_subscriptions;
 CREATE TRIGGER update_user_subscriptions_updated_at 
     BEFORE UPDATE ON user_subscriptions 
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+-- Analysis progress
+DROP TRIGGER IF EXISTS update_analysis_progress_updated_at ON analysis_progress;
 CREATE TRIGGER update_analysis_progress_updated_at 
     BEFORE UPDATE ON analysis_progress 
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Document pages
+DROP TRIGGER IF EXISTS update_document_pages_updated_at ON document_pages;
+CREATE TRIGGER update_document_pages_updated_at 
+    BEFORE UPDATE ON document_pages 
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Document entities
+DROP TRIGGER IF EXISTS update_document_entities_updated_at ON document_entities;
+CREATE TRIGGER update_document_entities_updated_at 
+    BEFORE UPDATE ON document_entities 
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Document diagrams
+DROP TRIGGER IF EXISTS update_document_diagrams_updated_at ON document_diagrams;
+CREATE TRIGGER update_document_diagrams_updated_at 
+    BEFORE UPDATE ON document_diagrams 
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Document analyses
+DROP TRIGGER IF EXISTS update_document_analyses_updated_at ON document_analyses;
+CREATE TRIGGER update_document_analyses_updated_at 
+    BEFORE UPDATE ON document_analyses 
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Analysis progress updated_at trigger
+DROP TRIGGER IF EXISTS analysis_progress_updated_at_trigger ON analysis_progress;
+CREATE TRIGGER analysis_progress_updated_at_trigger
+    BEFORE UPDATE ON analysis_progress
+    FOR EACH ROW EXECUTE FUNCTION update_analysis_progress_updated_at();
 
 -- Function to validate Australian postcodes by state
 CREATE OR REPLACE FUNCTION validate_australian_postcode(postcode TEXT, state TEXT)

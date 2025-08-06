@@ -14,7 +14,7 @@ from enum import Enum
 import json
 
 from app.core.config import get_settings
-from app.core.database import get_database_client
+from app.clients.factory import get_supabase_client
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +68,7 @@ class OCRPerformanceService:
 
     def __init__(self):
         self.settings = get_settings()
-        self.db_client = get_database_client()
+        # Database client will be initialized lazily when needed
 
         # Performance tracking
         self.metrics_history: List[OCRPerformanceMetrics] = []

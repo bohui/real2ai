@@ -24,7 +24,7 @@ import os
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
-from app.core.database import get_database_client, init_database
+from app.clients.factory import get_supabase_client
 
 # Load environment variables
 load_dotenv()
@@ -47,12 +47,13 @@ class DatabaseSeeder:
         if not all([self.supabase_url, self.supabase_key]):
             raise ValueError("Missing required environment variables")
 
-        # Use the same database client as the main app
-        self.db_client = get_database_client()
+        # Database client will be initialized in the initialize method
+        self.db_client = None
 
     async def initialize(self):
         """Initialize the database connection"""
-        await init_database()
+        # Initialize the database client
+        self.db_client = await get_supabase_client()
 
     async def get_db_connection(self):
         """Get direct database connection"""

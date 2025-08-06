@@ -32,8 +32,8 @@ backend/app/prompts/
 ### 1. Basic Fragment-Based Composition
 
 ```python
-from backend.app.core.prompts.manager import PromptManager, PromptManagerConfig
-from backend.app.core.prompts.context import PromptContext, ContextType
+from app.core.prompts.manager import PromptManager, PromptManagerConfig
+from app.core.prompts.context import PromptContext, ContextType
 
 # Configure with fragment support
 config = PromptManagerConfig(

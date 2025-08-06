@@ -12,7 +12,7 @@ from fastapi import HTTPException
 
 from app.core.config import get_settings
 from app.core.prompts.service_mixin import PromptEnabledService
-from backend.app.schema.enums import AustralianState, ContractType
+from app.schema.enums import AustralianState, ContractType
 from app.prompts.schema.image_semantics_schema import (
     ImageSemantics,
     ImageType,

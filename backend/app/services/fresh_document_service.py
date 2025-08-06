@@ -18,12 +18,12 @@ import pypdf
 import pymupdf  # pymupdf
 
 from app.core.config import get_settings
-from app.models.document_models import (
+from app.models.supabase_models import (
     Document,
     DocumentPage,
     DocumentEntity,
     DocumentDiagram,
-    ProcessingStatus,
+    DocumentStatus as ProcessingStatus,  # Alias for compatibility
     ContentType,
     DiagramType,
     EntityType,

@@ -5,9 +5,9 @@ from typing import Optional, Dict, Any, List
 import logging
 
 from app.core.auth import get_current_user, User
-from app.core.database import get_database_client
+from app.clients.factory import get_supabase_client
 from app.core.config import get_settings
-from backend.app.schema.enums import ContractType, AustralianState
+from app.schema.enums import ContractType, AustralianState
 from app.services.document_service import DocumentService
 from app.services.websocket_service import WebSocketManager
 from app.schema.document import (
@@ -61,7 +61,7 @@ async def upload_document(
             )
 
         # Get database client first
-        db_client = get_database_client()
+        db_client = await get_supabase_client()
 
         # Ensure database client is initialized
         if not hasattr(db_client, "_client") or db_client._client is None:
@@ -144,7 +144,7 @@ async def upload_document(
 async def get_document(
     document_id: str,
     user: User = Depends(get_current_user),
-    db_client=Depends(get_database_client),
+    db_client=Depends(get_supabase_client),
 ):
     """Get document details"""
 
@@ -176,7 +176,7 @@ async def reprocess_document_with_ocr(
     background_tasks: BackgroundTasks,
     processing_options: Optional[Dict[str, Any]] = None,
     user: User = Depends(get_current_user),
-    db_client=Depends(get_database_client),
+    db_client=Depends(get_supabase_client),
 ):
     """Reprocess document using enhanced OCR for better text extraction"""
 
@@ -264,7 +264,7 @@ async def batch_process_ocr(
     background_tasks: BackgroundTasks,
     batch_options: Optional[Dict[str, Any]] = None,
     user: User = Depends(get_current_user),
-    db_client=Depends(get_database_client),
+    db_client=Depends(get_supabase_client),
 ):
     """Batch process multiple documents with OCR"""
 
@@ -362,7 +362,7 @@ async def batch_process_ocr(
 async def get_ocr_status(
     document_id: str,
     user: User = Depends(get_current_user),
-    db_client=Depends(get_database_client),
+    db_client=Depends(get_supabase_client),
 ):
     """Get detailed OCR processing status for a document"""
 
@@ -429,7 +429,7 @@ async def get_ocr_status(
 async def get_document_processing_progress(
     document_id: str,
     user: User = Depends(get_current_user),
-    db_client=Depends(get_database_client),
+    db_client=Depends(get_supabase_client),
 ):
     """Get real-time processing progress for a document"""
     
@@ -465,7 +465,7 @@ async def get_document_processing_progress(
 async def validate_contract_document(
     document_id: str,
     user: User = Depends(get_current_user),
-    db_client=Depends(get_database_client),
+    db_client=Depends(get_supabase_client),
 ):
     """Validate document specifically for contract processing"""
     
@@ -545,7 +545,7 @@ async def get_ocr_capabilities(
 async def assess_document_quality(
     document_id: str,
     user: User = Depends(get_current_user),
-    db_client=Depends(get_database_client),
+    db_client=Depends(get_supabase_client),
 ):
     """Assess document processing quality and provide recommendations"""
     

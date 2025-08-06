@@ -39,7 +39,8 @@ from app.router.property_profile import router as property_profile_router
 # Initialize services
 settings = get_settings()
 security = HTTPBearer()
-db_client = get_database_client()
+# db_client will be initialized in lifespan function
+db_client = None
 document_service = DocumentService()
 websocket_manager = WebSocketManager()
 
@@ -63,8 +64,9 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("LangSmith tracing disabled")
 
-    # Initialize database connection
-    await db_client.initialize()
+    # Initialize database client and connection
+    global db_client
+    db_client = await get_supabase_client()
 
     # Initialize document service
     await document_service.initialize()

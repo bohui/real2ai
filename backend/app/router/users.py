@@ -5,7 +5,7 @@ from typing import Dict, Any
 import logging
 
 from app.core.auth import get_current_user, User
-from app.core.database import get_database_client
+from app.clients.factory import get_supabase_client
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/users", tags=["users"])
@@ -21,7 +21,7 @@ async def get_user_profile(user: User = Depends(get_current_user)):
 async def update_user_profile(
     user_data: Dict[str, Any], 
     user: User = Depends(get_current_user),
-    db_client=Depends(get_database_client)
+    db_client=Depends(get_supabase_client)
 ):
     """Update user profile"""
     try:
@@ -54,7 +54,7 @@ async def update_user_profile(
 
 @router.put("/preferences")
 async def update_user_preferences(
-    preferences: Dict[str, Any], user: User = Depends(get_current_user), db_client=Depends(get_database_client)
+    preferences: Dict[str, Any], user: User = Depends(get_current_user), db_client=Depends(get_supabase_client)
 ):
     """Update user preferences"""
     try:
@@ -69,7 +69,7 @@ async def update_user_preferences(
 
 
 @router.get("/usage-stats")
-async def get_usage_stats(user: User = Depends(get_current_user), db_client=Depends(get_database_client)):
+async def get_usage_stats(user: User = Depends(get_current_user), db_client=Depends(get_supabase_client)):
     """Get user usage statistics"""
 
     try:

@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from celery.exceptions import Retry, MaxRetriesExceededError
 
 from app.core.celery import celery_app
-from app.core.database import get_database_client
+from app.clients.factory import get_supabase_client
 from app.services.document_service import DocumentService
 from app.services.websocket_service import WebSocketManager
 
@@ -133,7 +133,7 @@ async def _async_process_document_ocr(
 ) -> Dict[str, Any]:
     """Async implementation of OCR processing"""
     
-    db_client = get_database_client()
+    db_client = await get_supabase_client()
     document_service = DocumentService()
     websocket_manager = WebSocketManager()
     
@@ -412,7 +412,7 @@ async def _update_document_status(
     """Update document status in database"""
     
     try:
-        db_client = get_database_client()
+        db_client = await get_supabase_client()
         
         db_client.table("documents").update({
             "status": status,

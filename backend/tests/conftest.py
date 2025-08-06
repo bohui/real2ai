@@ -42,7 +42,7 @@ def settings():
 def client(test_user, mock_db_client, test_settings) -> Generator[TestClient, None, None]:
     """Create a test client for FastAPI app with auth override."""
     from app.core.auth import get_current_user
-    from app.core.database import get_database_client
+    from app.clients.factory import get_supabase_client
     from app.core.config import get_settings
     from app.services.document_service import DocumentService
     from unittest.mock import patch
@@ -52,7 +52,7 @@ def client(test_user, mock_db_client, test_settings) -> Generator[TestClient, No
     def override_get_current_user():
         return test_user
     
-    def override_get_database_client():
+    async def override_get_supabase_client():
         return mock_db_client
     
     def override_get_settings():
@@ -60,17 +60,17 @@ def client(test_user, mock_db_client, test_settings) -> Generator[TestClient, No
     
     from app.main import app as fastapi_app
     fastapi_app.dependency_overrides[get_current_user] = override_get_current_user
-    fastapi_app.dependency_overrides[get_database_client] = override_get_database_client
+    fastapi_app.dependency_overrides[get_supabase_client] = override_get_supabase_client
     fastapi_app.dependency_overrides[get_settings] = override_get_settings
     
     # Mock global db_client used in main module and router modules
     import app.main
-    from app.core.database import get_database_client as real_get_database_client
+    from app.clients.factory import get_supabase_client as real_get_supabase_client
     
     with patch.object(app.main, 'db_client', mock_db_client):
         # Also patch the get_database_client function directly in all modules that import it
-        with patch('app.core.database.get_database_client', return_value=mock_db_client):
-            with patch('app.router.documents.get_database_client', return_value=mock_db_client):
+        with patch('app.clients.factory.get_supabase_client', return_value=mock_db_client):
+            with patch('app.router.documents.get_supabase_client', return_value=mock_db_client):
                 # Mock document service
                 with patch.object(DocumentService, 'upload_file', new_callable=AsyncMock) as mock_upload:
                     mock_upload.return_value = {

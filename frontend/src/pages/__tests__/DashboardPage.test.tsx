@@ -51,7 +51,7 @@ vi.mock('@/store/analysisStore', () => ({
       {
         id: 'contract-1',
         filename: 'test-contract.pdf',
-        upload_timestamp: '2024-01-01T00:00:00Z',
+        created_at: '2024-01-01T00:00:00Z',
         status: 'uploaded',
       },
     ],

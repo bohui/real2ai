@@ -188,7 +188,7 @@ curl http://localhost:8000/health
 4. **Database Connection Issues**
    ```bash
    # Check Supabase connection from backend
-   docker-compose exec backend python -c "from app.core.database import get_database_client; print('Supabase connection test')"
+   docker-compose exec backend python -c "import asyncio; from app.clients.factory import get_supabase_client; asyncio.run(get_supabase_client()); print('Supabase connection test')"
    
    # Check environment variables
    docker-compose exec backend env | grep SUPABASE

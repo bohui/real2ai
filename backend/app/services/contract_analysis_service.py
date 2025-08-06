@@ -15,7 +15,7 @@ from app.config.enhanced_workflow_config import (
 )
 from app.core.prompts import PromptManager, get_prompt_manager
 from app.models.contract_state import create_initial_state, RealEstateAgentState
-from backend.app.schema.enums import AustralianState, ProcessingStatus
+from app.schema.enums import AustralianState, ProcessingStatus
 from app.services.websocket_service import WebSocketManager, WebSocketEvents
 
 logger = logging.getLogger(__name__)

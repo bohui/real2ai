@@ -6,7 +6,7 @@ from typing import Dict, List, Any, Optional
 from langchain.tools import tool
 from decimal import Decimal
 
-from backend.app.schema.enums import AustralianState
+from app.schema.enums import AustralianState
 from app.models.contract_state import StampDutyCalculation
 
 
