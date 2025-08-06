@@ -13,12 +13,13 @@ from datetime import datetime, UTC
 from app.services.semantic_analysis_service import SemanticAnalysisService
 from app.services.document_service import DocumentService
 from app.models.contract_state import AustralianState, ContractType
-from app.prompts.template.image_semantics_schema import ImageType
+from app.prompts.schema.image_semantics_schema import ImageType
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/semantic-analysis", tags=["semantic-analysis"])
+
 
 # Service dependencies
 async def get_semantic_analysis_service():
@@ -27,11 +28,13 @@ async def get_semantic_analysis_service():
     await service.initialize()
     return service
 
+
 async def get_document_service():
     """Get initialized document service"""
     service = DocumentService()
     await service.initialize()
     return service
+
 
 @router.post("/analyze-document")
 async def analyze_document_semantics(
@@ -44,7 +47,7 @@ async def analyze_document_semantics(
     user_experience_level: str = Form(default="novice"),
     image_type: Optional[str] = Form(default=None),
     semantic_service: SemanticAnalysisService = Depends(get_semantic_analysis_service),
-    document_service: DocumentService = Depends(get_document_service)
+    document_service: DocumentService = Depends(get_document_service),
 ):
     """
     Analyze a single document/image for semantic meaning and property risks
@@ -73,7 +76,7 @@ async def analyze_document_semantics(
     """
     if not file:
         raise HTTPException(status_code=400, detail="No file provided")
-    
+
     try:
         # Validate parameters
         try:
@@ -81,32 +84,42 @@ async def analyze_document_semantics(
             contract_type_enum = ContractType(contract_type.upper())
         except ValueError as e:
             raise HTTPException(status_code=400, detail=f"Invalid parameter: {str(e)}")
-        
+
         # Parse risk categories
-        risk_categories_list = [cat.strip() for cat in risk_categories.split(",")] if risk_categories else []
-        
+        risk_categories_list = (
+            [cat.strip() for cat in risk_categories.split(",")]
+            if risk_categories
+            else []
+        )
+
         # Parse image type if provided
         image_type_enum = None
         if image_type:
             try:
                 image_type_enum = ImageType(image_type.upper())
             except ValueError:
-                logger.warning(f"Invalid image type provided: {image_type}, will auto-detect")
-        
+                logger.warning(
+                    f"Invalid image type provided: {image_type}, will auto-detect"
+                )
+
         # Generate unique document ID for tracking
         document_id = str(uuid.uuid4())
-        
+
         # Upload file to storage first
         upload_result = await document_service.upload_file(
             file=file,
             user_id="api_user",  # In real implementation, get from authentication
-            contract_type=contract_type_enum
+            contract_type=contract_type_enum,
         )
-        
+
         storage_path = upload_result["storage_path"]
         filename = upload_result["original_filename"]
-        file_type = upload_result["content_type"].split("/")[-1] if upload_result.get("content_type") else "unknown"
-        
+        file_type = (
+            upload_result["content_type"].split("/")[-1]
+            if upload_result.get("content_type")
+            else "unknown"
+        )
+
         # Prepare contract context
         contract_context = {
             "australian_state": state,
@@ -114,15 +127,15 @@ async def analyze_document_semantics(
             "user_type": user_type,
             "user_experience_level": user_experience_level,
             "document_type": image_type or "diagram",
-            "analysis_timestamp": datetime.now(UTC).isoformat()
+            "analysis_timestamp": datetime.now(UTC).isoformat(),
         }
-        
+
         # Prepare analysis options
         analysis_options = {
             "analysis_focus": analysis_focus,
-            "risk_categories": risk_categories_list
+            "risk_categories": risk_categories_list,
         }
-        
+
         # Perform semantic analysis
         result = await semantic_service.analyze_document_semantics(
             storage_path=storage_path,
@@ -130,9 +143,9 @@ async def analyze_document_semantics(
             filename=filename,
             contract_context=contract_context,
             analysis_options=analysis_options,
-            document_id=document_id
+            document_id=document_id,
         )
-        
+
         # Add API metadata
         result["api_metadata"] = {
             "endpoint": "/analyze-document",
@@ -140,21 +153,22 @@ async def analyze_document_semantics(
             "upload_info": {
                 "original_filename": filename,
                 "file_size": upload_result["file_size"],
-                "storage_path": storage_path
+                "storage_path": storage_path,
             },
             "request_parameters": {
                 "australian_state": state.value,
                 "contract_type": contract_type_enum.value,
                 "analysis_focus": analysis_focus,
-                "risk_categories": risk_categories_list
-            }
+                "risk_categories": risk_categories_list,
+            },
         }
-        
+
         return JSONResponse(content=result)
-        
+
     except Exception as e:
         logger.error(f"Document semantic analysis failed: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+
 
 @router.post("/analyze-contract-diagrams")
 async def analyze_contract_diagrams(
@@ -164,7 +178,7 @@ async def analyze_contract_diagrams(
     property_address: Optional[str] = Form(default=None),
     user_type: str = Form(default="buyer"),
     user_experience_level: str = Form(default="novice"),
-    document_service: DocumentService = Depends(get_document_service)
+    document_service: DocumentService = Depends(get_document_service),
 ):
     """
     Analyze multiple diagrams from a property contract
@@ -193,10 +207,12 @@ async def analyze_contract_diagrams(
     """
     if not files or len(files) == 0:
         raise HTTPException(status_code=400, detail="No files provided")
-    
+
     if len(files) > 10:  # Reasonable limit
-        raise HTTPException(status_code=400, detail="Too many files provided (maximum 10)")
-    
+        raise HTTPException(
+            status_code=400, detail="Too many files provided (maximum 10)"
+        )
+
     try:
         # Validate parameters
         try:
@@ -204,29 +220,31 @@ async def analyze_contract_diagrams(
             contract_type_enum = ContractType(contract_type.upper())
         except ValueError as e:
             raise HTTPException(status_code=400, detail=f"Invalid parameter: {str(e)}")
-        
+
         # Generate unique document ID for tracking
         document_id = str(uuid.uuid4())
-        
+
         # Upload all files and collect storage paths
         diagram_storage_paths = []
         upload_info = []
-        
+
         for i, file in enumerate(files):
             upload_result = await document_service.upload_file(
                 file=file,
                 user_id="api_user",  # In real implementation, get from authentication
-                contract_type=contract_type_enum
+                contract_type=contract_type_enum,
             )
-            
+
             diagram_storage_paths.append(upload_result["storage_path"])
-            upload_info.append({
-                "index": i,
-                "original_filename": upload_result["original_filename"],
-                "file_size": upload_result["file_size"],
-                "storage_path": upload_result["storage_path"]
-            })
-        
+            upload_info.append(
+                {
+                    "index": i,
+                    "original_filename": upload_result["original_filename"],
+                    "file_size": upload_result["file_size"],
+                    "storage_path": upload_result["storage_path"],
+                }
+            )
+
         # Prepare contract context
         contract_context = {
             "australian_state": state,
@@ -235,16 +253,16 @@ async def analyze_contract_diagrams(
             "user_experience_level": user_experience_level,
             "property_address": property_address,
             "analysis_timestamp": datetime.now(UTC).isoformat(),
-            "total_diagrams": len(files)
+            "total_diagrams": len(files),
         }
-        
+
         # Perform contract diagram analysis
         result = await document_service.analyze_contract_diagrams(
             diagram_storage_paths=diagram_storage_paths,
             contract_context=contract_context,
-            document_id=document_id
+            document_id=document_id,
         )
-        
+
         # Add API metadata
         result["api_metadata"] = {
             "endpoint": "/analyze-contract-diagrams",
@@ -253,15 +271,16 @@ async def analyze_contract_diagrams(
             "request_parameters": {
                 "australian_state": state.value,
                 "contract_type": contract_type_enum.value,
-                "total_files": len(files)
-            }
+                "total_files": len(files),
+            },
         }
-        
+
         return JSONResponse(content=result)
-        
+
     except Exception as e:
         logger.error(f"Contract diagram analysis failed: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+
 
 @router.post("/process-complete-contract")
 async def process_complete_contract(
@@ -273,7 +292,7 @@ async def process_complete_contract(
     user_type: str = Form(default="buyer"),
     user_experience_level: str = Form(default="novice"),
     force_ocr: bool = Form(default=False),
-    document_service: DocumentService = Depends(get_document_service)
+    document_service: DocumentService = Depends(get_document_service),
 ):
     """
     Complete contract processing including text extraction and semantic analysis
@@ -304,10 +323,10 @@ async def process_complete_contract(
     """
     if not main_contract:
         raise HTTPException(status_code=400, detail="No main contract provided")
-    
+
     if not diagram_files or len(diagram_files) == 0:
         raise HTTPException(status_code=400, detail="No diagram files provided")
-    
+
     try:
         # Validate parameters
         try:
@@ -315,36 +334,36 @@ async def process_complete_contract(
             contract_type_enum = ContractType(contract_type.upper())
         except ValueError as e:
             raise HTTPException(status_code=400, detail=f"Invalid parameter: {str(e)}")
-        
+
         # Generate unique document ID for tracking
         document_id = str(uuid.uuid4())
-        
+
         # Upload main contract
         main_upload = await document_service.upload_file(
             file=main_contract,
             user_id="api_user",  # In real implementation, get from authentication
-            contract_type=contract_type_enum
+            contract_type=contract_type_enum,
         )
-        
+
         # Upload diagram files
         diagram_storage_paths = []
         diagram_upload_info = []
-        
+
         for i, file in enumerate(diagram_files):
             upload_result = await document_service.upload_file(
-                file=file,
-                user_id="api_user",
-                contract_type=contract_type_enum
+                file=file, user_id="api_user", contract_type=contract_type_enum
             )
-            
+
             diagram_storage_paths.append(upload_result["storage_path"])
-            diagram_upload_info.append({
-                "index": i,
-                "original_filename": upload_result["original_filename"],
-                "file_size": upload_result["file_size"],
-                "storage_path": upload_result["storage_path"]
-            })
-        
+            diagram_upload_info.append(
+                {
+                    "index": i,
+                    "original_filename": upload_result["original_filename"],
+                    "file_size": upload_result["file_size"],
+                    "storage_path": upload_result["storage_path"],
+                }
+            )
+
         # Prepare contract context
         contract_context = {
             "australian_state": state,
@@ -353,25 +372,25 @@ async def process_complete_contract(
             "user_experience_level": user_experience_level,
             "property_address": property_address,
             "analysis_timestamp": datetime.now(UTC).isoformat(),
-            "total_diagrams": len(diagram_files)
+            "total_diagrams": len(diagram_files),
         }
-        
+
         # Prepare processing options
         processing_options = {
             "force_ocr": force_ocr,
             "enable_semantic_analysis": True,
-            "comprehensive_analysis": True
+            "comprehensive_analysis": True,
         }
-        
+
         # Perform complete contract processing
         result = await document_service.process_contract_with_semantic_analysis(
             main_document_path=main_upload["storage_path"],
             diagram_paths=diagram_storage_paths,
             contract_context=contract_context,
             document_id=document_id,
-            processing_options=processing_options
+            processing_options=processing_options,
         )
-        
+
         # Add API metadata
         result["api_metadata"] = {
             "endpoint": "/process-complete-contract",
@@ -379,125 +398,125 @@ async def process_complete_contract(
             "main_contract_info": {
                 "original_filename": main_upload["original_filename"],
                 "file_size": main_upload["file_size"],
-                "storage_path": main_upload["storage_path"]
+                "storage_path": main_upload["storage_path"],
             },
             "diagram_files_info": diagram_upload_info,
             "request_parameters": {
                 "australian_state": state.value,
                 "contract_type": contract_type_enum.value,
                 "total_diagrams": len(diagram_files),
-                "force_ocr": force_ocr
-            }
+                "force_ocr": force_ocr,
+            },
         }
-        
+
         return JSONResponse(content=result)
-        
+
     except Exception as e:
         logger.error(f"Complete contract processing failed: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Processing failed: {str(e)}")
 
+
 @router.get("/capabilities")
 async def get_semantic_analysis_capabilities(
-    semantic_service: SemanticAnalysisService = Depends(get_semantic_analysis_service)
+    semantic_service: SemanticAnalysisService = Depends(get_semantic_analysis_service),
 ):
     """
     Get semantic analysis service capabilities
-    
+
     **Returns:**
     - Service capabilities including supported image types, analysis options, and features
     """
     try:
         capabilities = await semantic_service.get_analysis_capabilities()
-        
+
         # Add API-specific information
         capabilities["api_endpoints"] = [
             {
                 "endpoint": "/analyze-document",
                 "description": "Analyze single document for semantic meaning",
                 "method": "POST",
-                "supports_upload": True
+                "supports_upload": True,
             },
             {
-                "endpoint": "/analyze-contract-diagrams", 
+                "endpoint": "/analyze-contract-diagrams",
                 "description": "Analyze multiple contract diagrams",
                 "method": "POST",
-                "supports_multiple_files": True
+                "supports_multiple_files": True,
             },
             {
                 "endpoint": "/process-complete-contract",
                 "description": "Complete contract processing with text and semantic analysis",
                 "method": "POST",
-                "supports_mixed_files": True
+                "supports_mixed_files": True,
             },
             {
                 "endpoint": "/capabilities",
                 "description": "Get service capabilities",
-                "method": "GET"
+                "method": "GET",
             },
-            {
-                "endpoint": "/health",
-                "description": "Health check",
-                "method": "GET"
-            }
+            {"endpoint": "/health", "description": "Health check", "method": "GET"},
         ]
-        
+
         capabilities["usage_examples"] = {
             "sewer_diagram_analysis": {
                 "description": "Analyze sewer service diagram for infrastructure risks",
                 "parameters": {
                     "analysis_focus": "infrastructure",
                     "risk_categories": "infrastructure,construction",
-                    "expected_results": "Sewer pipe locations, building restrictions, access requirements"
-                }
+                    "expected_results": "Sewer pipe locations, building restrictions, access requirements",
+                },
             },
             "multi_diagram_analysis": {
                 "description": "Comprehensive property risk assessment from multiple diagrams",
                 "parameters": {
                     "files": "sewer_plan.jpg, site_plan.pdf, flood_map.png",
-                    "expected_results": "Consolidated risk assessment, professional consultation recommendations"
-                }
+                    "expected_results": "Consolidated risk assessment, professional consultation recommendations",
+                },
             },
             "complete_contract_processing": {
                 "description": "Full contract analysis with text extraction and semantic analysis",
                 "parameters": {
                     "main_contract": "purchase_agreement.pdf",
                     "diagrams": "Multiple property diagrams",
-                    "expected_results": "Integrated analysis with contract-diagram consistency checks"
-                }
-            }
+                    "expected_results": "Integrated analysis with contract-diagram consistency checks",
+                },
+            },
         }
-        
+
         return JSONResponse(content=capabilities)
-        
+
     except Exception as e:
         logger.error(f"Failed to get capabilities: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Could not retrieve capabilities: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Could not retrieve capabilities: {str(e)}"
+        )
+
 
 @router.get("/health")
 async def health_check(
-    semantic_service: SemanticAnalysisService = Depends(get_semantic_analysis_service)
+    semantic_service: SemanticAnalysisService = Depends(get_semantic_analysis_service),
 ):
     """
     Health check for semantic analysis service
-    
+
     **Returns:**
     - Service health status and dependency information
     """
     try:
         health_status = await semantic_service.health_check()
-        
+
         # Add API-specific health information
         health_status["api_status"] = "healthy"
         health_status["endpoints_available"] = [
             "/analyze-document",
-            "/analyze-contract-diagrams", 
+            "/analyze-contract-diagrams",
             "/process-complete-contract",
             "/capabilities",
-            "/health"
+            "/health",
         ]
-        
+
         return JSONResponse(content=health_status)
-        
+
     except Exception as e:
         logger.error(f"Health check failed: {str(e)}")
         return JSONResponse(
@@ -506,15 +525,16 @@ async def health_check(
                 "service": "SemanticAnalysisAPI",
                 "status": "unhealthy",
                 "error": str(e),
-                "timestamp": datetime.now(UTC).isoformat()
-            }
+                "timestamp": datetime.now(UTC).isoformat(),
+            },
         )
+
 
 @router.get("/supported-image-types")
 async def get_supported_image_types():
     """
     Get list of supported image types for semantic analysis
-    
+
     **Returns:**
     - List of supported image types with descriptions
     """
@@ -522,50 +542,85 @@ async def get_supported_image_types():
         {
             "type": "sewer_service_diagram",
             "description": "Sewer service connection diagrams showing pipe locations and specifications",
-            "typical_risks": ["Infrastructure conflicts", "Building restrictions", "Access requirements"]
+            "typical_risks": [
+                "Infrastructure conflicts",
+                "Building restrictions",
+                "Access requirements",
+            ],
         },
         {
             "type": "site_plan",
             "description": "Overall property site plans showing buildings, boundaries, and access",
-            "typical_risks": ["Setback compliance", "Access adequacy", "Development constraints"]
+            "typical_risks": [
+                "Setback compliance",
+                "Access adequacy",
+                "Development constraints",
+            ],
         },
         {
             "type": "flood_map",
             "description": "Flood risk maps showing flood zones and water flow patterns",
-            "typical_risks": ["Flood damage", "Insurance implications", "Building restrictions"]
+            "typical_risks": [
+                "Flood damage",
+                "Insurance implications",
+                "Building restrictions",
+            ],
         },
         {
             "type": "survey_diagram",
             "description": "Property survey diagrams with boundaries and measurements",
-            "typical_risks": ["Boundary disputes", "Encroachments", "Area discrepancies"]
+            "typical_risks": [
+                "Boundary disputes",
+                "Encroachments",
+                "Area discrepancies",
+            ],
         },
         {
             "type": "bushfire_map",
             "description": "Bushfire risk maps showing fire hazard areas",
-            "typical_risks": ["Fire damage", "Building standards", "Insurance requirements"]
+            "typical_risks": [
+                "Fire damage",
+                "Building standards",
+                "Insurance requirements",
+            ],
         },
         {
             "type": "zoning_map",
             "description": "Planning and zoning maps showing land use restrictions",
-            "typical_risks": ["Development restrictions", "Height limits", "Use limitations"]
+            "typical_risks": [
+                "Development restrictions",
+                "Height limits",
+                "Use limitations",
+            ],
         },
         {
             "type": "utility_plan",
             "description": "Utility infrastructure plans showing services and connections",
-            "typical_risks": ["Service conflicts", "Access requirements", "Connection costs"]
+            "typical_risks": [
+                "Service conflicts",
+                "Access requirements",
+                "Connection costs",
+            ],
         },
         {
             "type": "strata_plan",
             "description": "Strata development plans showing unit boundaries and common areas",
-            "typical_risks": ["Unit boundary issues", "Common property disputes", "Body corporate fees"]
-        }
+            "typical_risks": [
+                "Unit boundary issues",
+                "Common property disputes",
+                "Body corporate fees",
+            ],
+        },
     ]
-    
-    return JSONResponse(content={
-        "supported_image_types": image_types,
-        "auto_detection": "Service can automatically detect image type from filename and context",
-        "manual_override": "Image type can be manually specified in analysis requests"
-    })
+
+    return JSONResponse(
+        content={
+            "supported_image_types": image_types,
+            "auto_detection": "Service can automatically detect image type from filename and context",
+            "manual_override": "Image type can be manually specified in analysis requests",
+        }
+    )
+
 
 # Include router in main application
 # This would be added to the main FastAPI app like:

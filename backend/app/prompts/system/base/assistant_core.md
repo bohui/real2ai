@@ -6,7 +6,7 @@ version: "2.1.0"
 description: "Core AI assistant behavior and personality for Australian real estate contract analysis"
 dependencies: []
 inheritance: null
-model_compatibility: ["gemini-2.5-pro", "gpt-4", "claude-3-opus"]
+model_compatibility: ["gemini-2.5-flash", "gpt-4", "claude-3-opus"]
 max_tokens: 2000
 temperature_range: [0.0, 0.2]
 priority: 100

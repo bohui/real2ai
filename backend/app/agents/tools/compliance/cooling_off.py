@@ -6,7 +6,7 @@ from typing import Dict, List, Any, Optional
 from langchain.tools import tool
 import re
 
-from app.model.enums import AustralianState
+from backend.app.schema.enums import AustralianState
 
 
 @tool

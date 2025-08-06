@@ -4,7 +4,7 @@ from typing import Dict, List, Any, Optional
 from pydantic import BaseModel
 from datetime import datetime
 
-from app.model.enums import AustralianState, RiskLevel
+from backend.app.schema.enums import AustralianState, RiskLevel
 
 
 class AnalysisOptions(BaseModel):

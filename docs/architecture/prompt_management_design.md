@@ -83,7 +83,7 @@ version: "2.1.0"
 description: "Core AI assistant behavior and personality"
 dependencies: []
 inheritance: null
-model_compatibility: ["gemini-2.5-pro", "gpt-4"]
+model_compatibility: ["gemini-2.5-flash", "gpt-4"]
 max_tokens: 2000
 temperature_range: [0.0, 0.2]
 priority: 100  # Loading priority (higher = first)
@@ -136,7 +136,7 @@ required_variables:
 optional_variables:
   - "user_experience_level"
   - "specific_concerns"
-model_compatibility: ["gemini-2.5-pro"]
+model_compatibility: ["gemini-2.5-flash"]
 max_tokens: 12000
 temperature_range: [0.1, 0.4]
 tags: ["contract", "analysis", "user-facing"]

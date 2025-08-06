@@ -9,7 +9,7 @@ import logging
 from typing import Any, Dict, Optional, BinaryIO
 from datetime import datetime, UTC
 from PIL import Image
-import fitz  # PyMuPDF
+import pymupdf  # pymupdf
 from google import genai
 from google.genai.types import Content, Part, GenerateContentConfig
 
@@ -204,8 +204,8 @@ class GeminiOCRClient:
     async def _extract_from_pdf(self, pdf_content: bytes, **kwargs) -> Dict[str, Any]:
         """Extract text from PDF using Gemini OCR."""
         try:
-            # Open PDF with PyMuPDF
-            pdf_document = fitz.open(stream=pdf_content, filetype="pdf")
+            # Open PDF with pymupdf
+            pdf_document = pymupdf.open(stream=pdf_content, filetype="pdf")
 
             extracted_pages = []
             total_confidence = 0.0
@@ -283,7 +283,7 @@ class GeminiOCRClient:
         try:
             # Convert page to image
             pix = page.get_pixmap(
-                matrix=fitz.Matrix(2.0, 2.0)
+                matrix=pymupdf.Matrix(2.0, 2.0)
             )  # 2x scale for better OCR
             img_data = pix.tobytes("png")
 

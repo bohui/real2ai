@@ -5,10 +5,12 @@ Successfully consolidated redundant migration files into a streamlined initial s
 
 ## Changes Made
 
-### 1. Merged Onboarding Tracking (20240101000005)
-- ✅ Onboarding fields already existed in initial schema
-- ✅ Removed redundant safety checks and duplicate migration
-- ✅ Retained backward compatibility features
+### 1. Merged Document Schema Updates (20240101000005_update_documents_schema.sql)
+- ✅ Enhanced documents table with comprehensive processing fields
+- ✅ Added document processing tables: document_pages, document_entities, document_diagrams, document_analyses
+- ✅ Consolidated confidence scoring and processing status fields
+- ✅ Merged timing and quality metrics into documents table
+- ✅ Added new enum types for content and entity classification
 
 ### 2. Enhanced Analysis Progress (20250105000000)
 - ✅ Replaced basic progress table with comprehensive structure
@@ -30,9 +32,9 @@ Successfully consolidated redundant migration files into a streamlined initial s
 - **Documentation**: Comprehensive column comments for clarity
 
 ### 4. Cleanup Results
-- **Before**: 7 migration files
-- **After**: 5 migration files (removed 2 redundant files)
-- **Benefit**: Simplified deployment, reduced migration complexity
+- **Before**: 6 migration files
+- **After**: 5 migration files (removed 1 redundant file)
+- **Benefit**: Simplified deployment, consolidated document processing schema
 
 ## Benefits
 
@@ -65,5 +67,4 @@ Successfully consolidated redundant migration files into a streamlined initial s
 ## Files Modified
 - `20240101000000_initial_schema.sql` - Enhanced with merged functionality
 - `20240101000001_security_policies.sql` - Added view RLS policies
-- Removed: `20240101000005_add_onboarding_tracking.sql`
-- Removed: `20250105000000_analysis_progress.sql`
+- Removed: `20240101000005_update_documents_schema.sql` (merged into initial schema)

@@ -4,7 +4,7 @@ version: "2.0"
 description: "Structured risk analysis with automatic format instructions"
 required_variables: ["document_content", "analysis_focus"]
 optional_variables: ["contract_type", "australian_state", "user_experience"]
-model_compatibility: ["gemini-2.5-pro", "gpt-4", "claude-3-5-sonnet"]
+model_compatibility: ["gemini-2.5-flash", "gpt-4", "claude-3-5-sonnet"]
 max_tokens: 4000
 temperature_range: [0.1, 0.3]
 tags: ["analysis", "risk", "structured", "contract", "parser-enabled"]

@@ -12,7 +12,7 @@ optional_variables:
   - "analysis_focus"
   - "risk_categories"
   - "user_type"
-model_compatibility: ["gemini-2.5-pro", "gpt-4-vision"]
+model_compatibility: ["gemini-2.5-flash", "gpt-4-vision"]
 max_tokens: 8000
 temperature_range: [0.0, 0.3]
 tags: ["image_analysis", "semantics", "property", "risk_assessment", "australian"]

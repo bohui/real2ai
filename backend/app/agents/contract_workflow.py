@@ -27,7 +27,7 @@ from app.models.contract_state import (
     update_state_step,
     calculate_confidence_score,
 )
-from app.model.enums import ProcessingStatus
+from backend.app.schema.enums import ProcessingStatus
 from app.models.workflow_outputs import (
     RiskAnalysisOutput,
     RecommendationsOutput,
@@ -1934,7 +1934,7 @@ class ContractAnalysisWorkflow:
                     logger.info("Falling back to Gemini client")
                     response = await self.gemini_client.generate_content(
                         full_prompt,
-                        model="gemini-2.5-pro",
+                        model="gemini-2.5-flash",
                         temperature=0.1,
                     )
                     return response

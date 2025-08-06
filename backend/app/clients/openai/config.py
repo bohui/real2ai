@@ -9,6 +9,17 @@ from pydantic_settings import BaseSettings
 from ..base.client import ClientConfig
 
 
+AVAILABLE_MODELS = {
+    "deepseek-chat": "deepseek/deepseek-chat-v3-0324:free",
+    "deepseek-reasoner": "deepseek/deepseek-r1-0528:free",
+    "claude-3-5-sonnet": "anthropic/claude-3.5-sonnet",
+    "llama-3-1-405b": "meta-llama/llama-3.1-405b-instruct",
+    "llama-3-1-8b": "meta-llama/llama-3.1-8b-instruct",
+}
+DEFAULT_MODEL = AVAILABLE_MODELS["deepseek-chat"]
+DEFAULT_REASON_MODEL = AVAILABLE_MODELS["deepseek-reasoner"]
+
+
 @dataclass(kw_only=True)
 class OpenAIClientConfig(ClientConfig):
     """Configuration for OpenAI client."""
@@ -16,7 +27,7 @@ class OpenAIClientConfig(ClientConfig):
     # OpenAI API settings
     api_key: str
     api_base: Optional[str] = None
-    model_name: str = "gpt-4"
+    model_name: str = DEFAULT_MODEL
 
     # Model parameters
     temperature: float = 0.1

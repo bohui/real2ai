@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 from app.models.contract_state import RealEstateAgentState, create_initial_state
 from app.agents.contract_workflow import ContractAnalysisWorkflow
 from app.core.config import get_settings
-from app.core.database import get_database_client
+from app.clients.factory import get_supabase_client
 from app.services.document_service import DocumentService
 from app.services.websocket_service import WebSocketManager
 from app.core.langsmith_init import initialize_langsmith, get_langsmith_status

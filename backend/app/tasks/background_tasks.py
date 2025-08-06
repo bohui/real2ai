@@ -63,7 +63,7 @@ def process_document_background(
                     await db_client.initialize()
 
                 # Update document status
-                db_client.table("documents").update({"status": "processing"}).eq(
+                db_client.table("documents").update({"processing_status": "processing"}).eq(
                     "id", document_id
                 ).execute()
 
@@ -805,7 +805,7 @@ async def enhanced_reprocess_document_with_ocr_background(
 
     try:
         # Update document status
-        db_client.table("documents").update({"status": "reprocessing_ocr"}).eq(
+        db_client.table("documents").update({"processing_status": "reprocessing_ocr"}).eq(
             "id", document_id
         ).execute()
 
@@ -853,7 +853,7 @@ async def enhanced_reprocess_document_with_ocr_background(
                 "premium" if processing_options.get("detailed_analysis") else "standard"
             ),
             "contract_context_applied": bool(contract_context),
-            "gemini_model_used": "gemini-2.5-pro",
+            "gemini_model_used": "gemini-2.5-flash",
         }
 
         # Update document with OCR results

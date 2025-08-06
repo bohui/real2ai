@@ -22,7 +22,7 @@ class MyService:
             settings.supabase_url, 
             settings.supabase_anon_key
         )
-        self.gemini = GenerativeModel("gemini-2.5-pro")
+        self.gemini = GenerativeModel("gemini-2.5-flash")
         self.openai = openai.OpenAI(api_key=settings.openai_api_key)
     
     async def some_operation(self):

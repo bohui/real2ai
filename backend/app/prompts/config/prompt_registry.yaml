@@ -213,7 +213,7 @@ registry:
 # Composition compatibility matrix
 compatibility:
   model_requirements:
-    gemini-2.5-pro:
+    gemini-2.5-flash:
       max_tokens: 32000
       supports_system_prompts: true
       optimal_temperature: [0.1, 0.4]

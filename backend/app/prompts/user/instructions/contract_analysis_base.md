@@ -14,7 +14,7 @@ optional_variables:
   - "specific_concerns"
   - "contract_type"
   - "transaction_value"
-model_compatibility: ["gemini-2.5-pro", "gpt-4"]
+model_compatibility: ["gemini-2.5-flash", "gpt-4"]
 max_tokens: 8000
 temperature_range: [0.1, 0.4]
 tags: ["contract", "analysis", "fragment-based", "modular"]

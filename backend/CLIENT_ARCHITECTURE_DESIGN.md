@@ -236,7 +236,7 @@ class SupabaseClientConfig(BaseSettings):
 
 class GeminiClientConfig(BaseSettings):
     api_key: str
-    model_name: str = "gemini-2.5-pro"
+    model_name: str = "gemini-2.5-flash"
     timeout: int = 120
     max_retries: int = 3
     rate_limit_rpm: int = 60

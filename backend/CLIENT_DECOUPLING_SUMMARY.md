@@ -15,7 +15,7 @@ from google.generativeai import GenerativeModel
 class MyService:
     def __init__(self):
         self.supabase = create_client(url, key)  # Hard to mock
-        self.gemini = GenerativeModel("gemini-2.5-pro")  # No error handling
+        self.gemini = GenerativeModel("gemini-2.5-flash")  # No error handling
 ```
 
 ### After: Decoupled Architecture ✅  

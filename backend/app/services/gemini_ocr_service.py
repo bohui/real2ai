@@ -13,7 +13,7 @@ from app.core.config import get_settings
 from app.core.prompts.service_mixin import PromptEnabledService
 from app.core.prompts.output_parser import create_parser, ParsingResult
 from app.models.contract_state import ProcessingStatus, AustralianState, ContractType
-from app.prompts.template.image_semantics_schema import ImageSemantics, ImageType
+from app.prompts.schema.image_semantics_schema import ImageSemantics, ImageType
 from app.clients import get_gemini_client
 from app.clients.base.exceptions import (
     ClientError,
@@ -57,7 +57,9 @@ class GeminiOCRService(PromptEnabledService):
         try:
             self.gemini_client = await get_gemini_client()
             if hasattr(self.gemini_client, "ocr") and self.gemini_client.ocr:
-                logger.info("Gemini OCR service initialized with PromptManager integration")
+                logger.info(
+                    "Gemini OCR service initialized with PromptManager integration"
+                )
                 return True
             else:
                 logger.warning("GeminiClient does not have OCR capabilities")
@@ -77,10 +79,10 @@ class GeminiOCRService(PromptEnabledService):
         contract_type: Optional[str] = None,
         page_number: int = 1,
         is_multi_page: bool = False,
-        **kwargs
+        **kwargs,
     ) -> str:
         """Generate context-aware OCR prompt using PromptManager"""
-        
+
         # Build context for prompt rendering
         context = {
             "document_type": document_type or "general",
@@ -89,41 +91,55 @@ class GeminiOCRService(PromptEnabledService):
             "page_number": page_number,
             "is_multi_page": is_multi_page,
             "is_single_image": not is_multi_page,
-            **kwargs
+            **kwargs,
         }
-        
+
         # Select appropriate template based on context
-        template_name = self._select_ocr_template(document_type, contract_type, australian_state)
-        
+        template_name = self._select_ocr_template(
+            document_type, contract_type, australian_state
+        )
+
         try:
             # Render prompt using PromptManager
             ocr_prompt = await self.render_prompt(
-                template_name=template_name,
-                context=context
+                template_name=template_name, context=context
             )
-            
-            logger.debug(f"Generated OCR prompt using template '{template_name}' for {document_type}")
+
+            logger.debug(
+                f"Generated OCR prompt using template '{template_name}' for {document_type}"
+            )
             return ocr_prompt
-            
+
         except Exception as e:
-            logger.warning(f"Failed to render OCR prompt template '{template_name}': {e}")
+            logger.warning(
+                f"Failed to render OCR prompt template '{template_name}': {e}"
+            )
             # Fallback to basic OCR prompt
             return self._create_fallback_ocr_prompt(context)
-    
+
     def _select_ocr_template(
-        self, 
-        document_type: Optional[str], 
-        contract_type: Optional[str], 
-        australian_state: Optional[str]
+        self,
+        document_type: Optional[str],
+        contract_type: Optional[str],
+        australian_state: Optional[str],
     ) -> str:
         """Select appropriate OCR template based on context"""
-        
+
         # Priority order: contract_type > australian_state > document_type > general
         if contract_type == "purchase_agreement":
             return "ocr/purchase_agreement_extraction"
         elif contract_type == "lease_agreement":
             return "ocr/lease_agreement_extraction"
-        elif australian_state and australian_state.upper() in ["NSW", "VIC", "QLD", "WA", "SA", "TAS", "ACT", "NT"]:
+        elif australian_state and australian_state.upper() in [
+            "NSW",
+            "VIC",
+            "QLD",
+            "WA",
+            "SA",
+            "TAS",
+            "ACT",
+            "NT",
+        ]:
             return f"ocr/state_specific/{australian_state.lower()}_contract_ocr"
         elif document_type == "legal_contract":
             return "ocr/legal_contract_extraction"
@@ -131,7 +147,7 @@ class GeminiOCRService(PromptEnabledService):
             return "ocr/financial_document_extraction"
         else:
             return "ocr/general_document_extraction"
-    
+
     def _create_fallback_ocr_prompt(self, context: Dict[str, Any]) -> str:
         """Create fallback OCR prompt when template rendering fails"""
         base_prompt = """You are an expert OCR system. Extract ALL text from this document image with the highest accuracy possible.
@@ -152,7 +168,9 @@ Focus on accuracy and completeness. Extract all visible text content."""
         if context.get("contract_type"):
             base_prompt += f"\nDocument type: {context['contract_type']}"
         if context.get("is_multi_page") and not context.get("is_single_image"):
-            base_prompt += f"\nThis is page {context['page_number']} of a multi-page document."
+            base_prompt += (
+                f"\nThis is page {context['page_number']} of a multi-page document."
+            )
 
         base_prompt += "\n\nExtracted text:"
         return base_prompt
@@ -166,11 +184,11 @@ Focus on accuracy and completeness. Extract all visible text content."""
         australian_state: Optional[str] = None,
         contract_type: Optional[str] = None,
         use_quick_mode: bool = False,
-        **kwargs
+        **kwargs,
     ) -> Dict[str, Any]:
         """
         Extract structured OCR data from entire document with page references
-        
+
         Args:
             file_content: Document file content as bytes
             file_type: File type (pdf, png, jpg, etc.)
@@ -180,7 +198,7 @@ Focus on accuracy and completeness. Extract all visible text content."""
             contract_type: Specific contract type
             use_quick_mode: Use simplified extraction schema
             **kwargs: Additional context
-            
+
         Returns:
             Structured OCR extraction result with page references
         """
@@ -194,11 +212,14 @@ Focus on accuracy and completeness. Extract all visible text content."""
             self._validate_file(file_content, file_type)
 
             # Import the schema
-            from app.prompts.template.ocr_extraction_schema import OCRExtractionResult, QuickOCRResult
-            
+            from app.prompts.schema.ocr_extraction_schema import (
+                OCRExtractionResult,
+                QuickOCRResult,
+            )
+
             # Choose schema based on mode
             schema_class = QuickOCRResult if use_quick_mode else OCRExtractionResult
-            
+
             # Create Pydantic output parser
             ocr_parser = create_parser(schema_class)
 
@@ -211,7 +232,7 @@ Focus on accuracy and completeness. Extract all visible text content."""
                 "file_type": file_type,
                 "use_quick_mode": use_quick_mode,
                 "process_entire_document": True,
-                **kwargs
+                **kwargs,
             }
 
             # Generate context-aware OCR prompt with structured output
@@ -220,7 +241,7 @@ Focus on accuracy and completeness. Extract all visible text content."""
                 australian_state=australian_state,
                 contract_type=contract_type,
                 is_multi_page=False,  # Processing entire document at once
-                **kwargs
+                **kwargs,
             )
 
             # Render prompt with automatic format instructions for structured output
@@ -232,7 +253,9 @@ Focus on accuracy and completeness. Extract all visible text content."""
                 use_cache=True,
             )
 
-            logger.debug(f"Generated structured OCR prompt for entire document: {filename}")
+            logger.debug(
+                f"Generated structured OCR prompt for entire document: {filename}"
+            )
 
             # Process with Gemini client
             try:
@@ -250,7 +273,7 @@ Focus on accuracy and completeness. Extract all visible text content."""
                         "prompt": structured_prompt,
                         "expects_structured_output": True,
                         "output_format": "json",
-                        "schema_type": schema_class.__name__
+                        "schema_type": schema_class.__name__,
                     },
                 )
 
@@ -264,7 +287,9 @@ Focus on accuracy and completeness. Extract all visible text content."""
 
                 # Handle parsing results
                 if parsing_result.success:
-                    logger.info(f"Successfully extracted structured OCR data from {filename}")
+                    logger.info(
+                        f"Successfully extracted structured OCR data from {filename}"
+                    )
 
                     return {
                         "ocr_extraction": parsing_result.parsed_data.dict(),
@@ -273,7 +298,9 @@ Focus on accuracy and completeness. Extract all visible text content."""
                         "parsing_success": True,
                         "parsing_confidence": parsing_result.confidence_score,
                         "file_processed": filename,
-                        "extraction_mode": "quick" if use_quick_mode else "comprehensive",
+                        "extraction_mode": (
+                            "quick" if use_quick_mode else "comprehensive"
+                        ),
                         "processing_timestamp": datetime.now(UTC).isoformat(),
                         "processing_metadata": {
                             "entire_document_processed": True,
@@ -308,9 +335,7 @@ Focus on accuracy and completeness. Extract all visible text content."""
         except HTTPException:
             raise
         except Exception as e:
-            logger.error(
-                f"Unexpected error during structured OCR extraction: {str(e)}"
-            )
+            logger.error(f"Unexpected error during structured OCR extraction: {str(e)}")
             return {
                 "ocr_extraction": None,
                 "service": "GeminiOCRService",
@@ -323,7 +348,10 @@ Focus on accuracy and completeness. Extract all visible text content."""
             }
 
     async def _handle_ocr_parsing_failure(
-        self, ai_response: Dict[str, Any], parsing_result: 'ParsingResult', filename: str
+        self,
+        ai_response: Dict[str, Any],
+        parsing_result: "ParsingResult",
+        filename: str,
     ) -> Dict[str, Any]:
         """Handle OCR parsing failures with graceful fallback"""
         logger.warning(f"Implementing OCR parsing fallback for {filename}")
@@ -356,7 +384,10 @@ Focus on accuracy and completeness. Extract all visible text content."""
 
         # Return raw response as last resort
         return {
-            "ocr_extraction": {"full_text": ai_response.get("content", ""), "extraction_note": "Raw AI response due to parsing failure"},
+            "ocr_extraction": {
+                "full_text": ai_response.get("content", ""),
+                "extraction_note": "Raw AI response due to parsing failure",
+            },
             "service": "GeminiOCRService",
             "service_version": "v4_ocr_raw_fallback",
             "parsing_success": False,
@@ -370,28 +401,32 @@ Focus on accuracy and completeness. Extract all visible text content."""
             },
         }
 
-    def _create_basic_ocr_structure(self, raw_text: str, filename: str) -> Optional[Dict[str, Any]]:
+    def _create_basic_ocr_structure(
+        self, raw_text: str, filename: str
+    ) -> Optional[Dict[str, Any]]:
         """Create basic OCR structure from raw text when parsing fails"""
         try:
             import re
-            
+
             # Count apparent pages (look for page breaks, headers, footers)
-            page_indicators = re.findall(r'page\s+(\d+)', raw_text.lower())
-            estimated_pages = max([int(p) for p in page_indicators]) if page_indicators else 1
-            
+            page_indicators = re.findall(r"page\s+(\d+)", raw_text.lower())
+            estimated_pages = (
+                max([int(p) for p in page_indicators]) if page_indicators else 1
+            )
+
             # Extract potential financial amounts
-            money_pattern = r'\$[\d,]+(?:\.\d{2})?'
+            money_pattern = r"\$[\d,]+(?:\.\d{2})?"
             financial_amounts = re.findall(money_pattern, raw_text)
-            
+
             # Extract potential dates
             date_patterns = [
-                r'\d{1,2}[/-]\d{1,2}[/-]\d{2,4}',
-                r'\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{2,4}'
+                r"\d{1,2}[/-]\d{1,2}[/-]\d{2,4}",
+                r"\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{2,4}",
             ]
             dates = []
             for pattern in date_patterns:
                 dates.extend(re.findall(pattern, raw_text, re.IGNORECASE))
-            
+
             # Create basic structure
             basic_structure = {
                 "full_text": raw_text,
@@ -401,11 +436,11 @@ Focus on accuracy and completeness. Extract all visible text content."""
                 "text_length": len(raw_text),
                 "word_count": len(raw_text.split()),
                 "extraction_method": "basic_fallback",
-                "confidence": 0.5  # Low confidence for fallback
+                "confidence": 0.5,  # Low confidence for fallback
             }
-            
+
             return basic_structure
-            
+
         except Exception as e:
             logger.error(f"Failed to create basic OCR structure: {e}")
             return None

@@ -1,1 +1,0 @@
-"""Model module for domain models and business logic."""

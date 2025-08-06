@@ -11,7 +11,7 @@ optional_variables:
   - "contract_type"
   - "filename"
   - "use_quick_mode"
-model_compatibility: ["gemini-2.5-pro", "gpt-4"]
+model_compatibility: ["gemini-2.5-flash", "gpt-4"]
 max_tokens: 8000
 temperature_range: [0.0, 0.1]
 tags: ["ocr", "extraction", "structured", "whole-document", "page-references"]

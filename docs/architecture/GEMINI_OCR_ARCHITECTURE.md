@@ -305,7 +305,7 @@ user_satisfaction_score
 ```bash
 # Gemini OCR Configuration
 GEMINI_API_KEY=your_api_key
-GEMINI_MODEL_NAME=gemini-2.5-pro
+GEMINI_MODEL_NAME=gemini-2.5-flash
 ENABLE_GEMINI_OCR=true
 OCR_CONFIDENCE_THRESHOLD=0.7
 

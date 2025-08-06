@@ -16,7 +16,7 @@ optional_variables:
   - "risk_tolerance"
   - "investment_purpose"
 model_compatibility:
-  - "gemini-2.5-pro"
+  - "gemini-2.5-flash"
   - "gpt-4"
 max_tokens: 15000
 temperature_range: [0.2, 0.5]

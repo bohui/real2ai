@@ -13,7 +13,7 @@ optional_variables:
   - "risk_categories"
   - "user_type"
   - "user_experience_level"
-model_compatibility: ["gemini-2.5-pro", "gpt-4-vision"]
+model_compatibility: ["gemini-2.5-flash", "gpt-4-vision"]
 max_tokens: 10000
 temperature_range: [0.1, 0.3]
 tags: ["semantic", "analysis", "property", "diagrams", "images"]

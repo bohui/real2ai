@@ -254,51 +254,51 @@ class DatabaseSeeder:
         sample_documents = [
             {
                 "user_id": available_users[0]["id"],  # demo user
-                "filename": "Demo_Contract_Analysis.pdf",
+                "original_filename": "Demo_Contract_Analysis.pdf",
                 "storage_path": f"{available_users[0]['id']}/2024/01/15/demo_contract_001.pdf",
                 "file_type": "application/pdf",
                 "file_size": 2048576,  # 2MB
-                "status": "processed",
+                "processing_status": "processed",
             },
             {
                 "user_id": available_users[0]["id"],  # demo user
-                "filename": "Demo_Property_Contract.pdf",
+                "original_filename": "Demo_Property_Contract.pdf",
                 "storage_path": f"{available_users[0]['id']}/2024/01/20/demo_contract_002.pdf",
                 "file_type": "application/pdf",
                 "file_size": 3145728,  # 3MB
-                "status": "processed",
+                "processing_status": "processed",
             },
             {
                 "user_id": available_users[1]["id"],  # investor
-                "filename": "Purchase_Agreement_Sydney_Unit.pdf",
+                "original_filename": "Purchase_Agreement_Sydney_Unit.pdf",
                 "storage_path": f"{available_users[1]['id']}/2024/01/15/contract_001.pdf",
                 "file_type": "application/pdf",
                 "file_size": 2048576,  # 2MB
-                "status": "processed",
+                "processing_status": "processed",
             },
             {
                 "user_id": available_users[1]["id"],  # investor
-                "filename": "Off_Plan_Contract_Parramatta.pdf",
+                "original_filename": "Off_Plan_Contract_Parramatta.pdf",
                 "storage_path": f"{available_users[1]['id']}/2024/01/20/contract_002.pdf",
                 "file_type": "application/pdf",
                 "file_size": 3145728,  # 3MB
-                "status": "processed",
+                "processing_status": "processed",
             },
             {
                 "user_id": available_users[2]["id"],  # agent
-                "filename": "Lease_Agreement_Melbourne_CBD.pdf",
+                "original_filename": "Lease_Agreement_Melbourne_CBD.pdf",
                 "storage_path": f"{available_users[2]['id']}/2024/01/18/lease_001.pdf",
                 "file_type": "application/pdf",
                 "file_size": 1572864,  # 1.5MB
-                "status": "processed",
+                "processing_status": "processed",
             },
             {
                 "user_id": available_users[3]["id"],  # buyer
-                "filename": "House_Purchase_Brisbane.pdf",
+                "original_filename": "House_Purchase_Brisbane.pdf",
                 "storage_path": f"{available_users[3]['id']}/2024/01/25/house_001.pdf",
                 "file_type": "application/pdf",
                 "file_size": 2621440,  # 2.5MB
-                "status": "processed",
+                "processing_status": "processed",
             },
         ]
 
@@ -310,17 +310,17 @@ class DatabaseSeeder:
                     doc_id = str(uuid.uuid4())
                     await conn.execute(
                         """
-                        INSERT INTO documents (id, user_id, filename, storage_path, file_type, file_size, status)
+                        INSERT INTO documents (id, user_id, original_filename, storage_path, file_type, file_size, processing_status)
                         VALUES ($1, $2, $3, $4, $5, $6, $7)
                         ON CONFLICT (id) DO NOTHING
                     """,
                         doc_id,
                         doc["user_id"],
-                        doc["filename"],
+                        doc["original_filename"],
                         doc["storage_path"],
                         doc["file_type"],
                         doc["file_size"],
-                        doc["status"],
+                        doc["processing_status"],
                     )
 
                     document_ids.append({**doc, "id": doc_id})
@@ -353,13 +353,13 @@ class DatabaseSeeder:
 
                 # Determine state based on filename or user
                 if (
-                    "sydney" in doc["filename"].lower()
-                    or "parramatta" in doc["filename"].lower()
+                    "sydney" in doc["original_filename"].lower()
+                    or "parramatta" in doc["original_filename"].lower()
                 ):
                     state = "NSW"
-                elif "melbourne" in doc["filename"].lower():
+                elif "melbourne" in doc["original_filename"].lower():
                     state = "VIC"
-                elif "brisbane" in doc["filename"].lower():
+                elif "brisbane" in doc["original_filename"].lower():
                     state = "QLD"
                 else:
                     state = "NSW"  # default

@@ -492,7 +492,7 @@ class OCRPerformanceService:
 
         return {
             "extracted_text": f"Sample contract text from {filename}...",
-            "extraction_method": f"gemini-2.5-pro-{quality_tier.value}",
+            "extraction_method": f"gemini-2.5-flash-{quality_tier.value}",
             "extraction_confidence": adjusted_confidence,
             "character_count": 2500,
             "word_count": 450,
@@ -531,7 +531,7 @@ class OCRPerformanceService:
             ),
             cache_hit=cache_hit,
             quality_tier=quality_tier,
-            gemini_model_used="gemini-2.5-pro",
+            gemini_model_used="gemini-2.5-flash",
             enhancement_applied=ocr_result.get("processing_details", {}).get(
                 "enhancement_applied", []
             ),

@@ -51,7 +51,7 @@ class Settings(BaseSettings):
 
     # Enhanced OCR Settings
     enable_gemini_ocr: bool = True
-    gemini_model_name: str = "gemini-2.5-pro"
+    gemini_model_name: str = "gemini-2.5-flash"
     ocr_confidence_threshold: float = 0.7
     force_ocr_for_scanned_pdfs: bool = True
     ocr_max_file_size_mb: int = 50

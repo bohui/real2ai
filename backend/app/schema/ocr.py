@@ -4,11 +4,12 @@ from typing import Dict, List, Any, Optional
 from pydantic import BaseModel, field_validator
 from datetime import datetime
 
-from app.model.enums import ContractType
+from backend.app.schema.enums import ContractType
 
 
 class OCRCapabilitiesResponse(BaseModel):
     """OCR service capabilities response"""
+
     service_available: bool
     model_name: Optional[str] = None
     supported_formats: List[str] = []
@@ -19,6 +20,7 @@ class OCRCapabilitiesResponse(BaseModel):
 
 class OCRProcessingRequest(BaseModel):
     """OCR processing request"""
+
     document_id: str
     force_reprocess: bool = False
     australian_context: Optional[Dict[str, Any]] = None
@@ -26,6 +28,7 @@ class OCRProcessingRequest(BaseModel):
 
 class OCRProcessingResponse(BaseModel):
     """OCR processing response"""
+
     message: str
     document_id: str
     estimated_completion_minutes: int
@@ -34,6 +37,7 @@ class OCRProcessingResponse(BaseModel):
 
 class OCRExtractionResult(BaseModel):
     """OCR text extraction result"""
+
     extracted_text: str
     extraction_method: str
     extraction_confidence: float
@@ -48,31 +52,33 @@ class OCRExtractionResult(BaseModel):
 
 class BatchOCRRequest(BaseModel):
     """Batch OCR processing request"""
+
     document_ids: List[str]
     contract_type: Optional[ContractType] = ContractType.PURCHASE_AGREEMENT
     processing_priority: str = "standard"  # standard, priority
     include_analysis: bool = True
     batch_options: Optional[Dict[str, Any]] = None
-    
-    @field_validator('document_ids')
+
+    @field_validator("document_ids")
     @classmethod
     def validate_document_ids(cls, v):
         if not v or len(v) == 0:
-            raise ValueError('At least one document ID is required')
+            raise ValueError("At least one document ID is required")
         if len(v) > 20:  # Limit batch size
-            raise ValueError('Maximum 20 documents per batch')
+            raise ValueError("Maximum 20 documents per batch")
         return v
-    
-    @field_validator('processing_priority')
+
+    @field_validator("processing_priority")
     @classmethod
     def validate_priority(cls, v):
-        if v not in ['standard', 'priority', 'express']:
-            raise ValueError('Priority must be standard, priority, or express')
+        if v not in ["standard", "priority", "express"]:
+            raise ValueError("Priority must be standard, priority, or express")
         return v
 
 
 class BatchOCRResponse(BaseModel):
     """Batch OCR processing response"""
+
     message: str
     batch_id: str
     documents_queued: int
@@ -83,6 +89,7 @@ class BatchOCRResponse(BaseModel):
 
 class OCRStatusResponse(BaseModel):
     """Detailed OCR processing status response"""
+
     document_id: str
     filename: str
     status: str  # queued_for_ocr, processing_ocr, processed, ocr_failed
@@ -98,8 +105,9 @@ class OCRStatusResponse(BaseModel):
 
 class EnhancedOCRCapabilities(BaseModel):
     """Enhanced OCR capabilities with Gemini 2.5 Pro features"""
+
     service_available: bool
-    model_name: str = "gemini-2.5-pro"
+    model_name: str = "gemini-2.5-flash"
     supported_formats: List[str]
     max_file_size_mb: float
     features: List[str]
@@ -111,6 +119,7 @@ class EnhancedOCRCapabilities(BaseModel):
 
 class GeminiOCRResult(BaseModel):
     """Enhanced OCR result from Gemini 2.5 Pro"""
+
     extracted_text: str
     extraction_method: str = "gemini_2.5_pro_ocr"
     extraction_confidence: float
@@ -129,6 +138,7 @@ class GeminiOCRResult(BaseModel):
 
 class OCRQueueStatus(BaseModel):
     """OCR processing queue status"""
+
     queue_position: int
     estimated_wait_time_minutes: int
     active_workers: int
@@ -140,6 +150,7 @@ class OCRQueueStatus(BaseModel):
 
 class OCRProcessingOptions(BaseModel):
     """Advanced OCR processing options"""
+
     priority: bool = False
     enhanced_quality: bool = True
     detailed_analysis: bool = False
@@ -152,6 +163,7 @@ class OCRProcessingOptions(BaseModel):
 
 class OCRCostEstimate(BaseModel):
     """OCR processing cost estimate"""
+
     estimated_cost_usd: float
     estimated_time_seconds: int
     complexity_factor: float
@@ -162,6 +174,7 @@ class OCRCostEstimate(BaseModel):
 
 class OCRProgressUpdate(BaseModel):
     """OCR processing progress update via WebSocket"""
+
     document_id: str
     task_id: Optional[str] = None
     current_step: str
@@ -173,6 +186,7 @@ class OCRProgressUpdate(BaseModel):
 
 class BatchOCRProgressUpdate(BaseModel):
     """Batch OCR processing progress update"""
+
     batch_id: str
     completed: int
     total: int
@@ -184,6 +198,7 @@ class BatchOCRProgressUpdate(BaseModel):
 
 class OCRCompletionNotification(BaseModel):
     """OCR processing completion notification"""
+
     document_id: str
     task_id: Optional[str] = None
     extraction_confidence: float
@@ -196,6 +211,7 @@ class OCRCompletionNotification(BaseModel):
 
 class OCRErrorNotification(BaseModel):
     """OCR processing error notification"""
+
     document_id: str
     task_id: Optional[str] = None
     error_message: str

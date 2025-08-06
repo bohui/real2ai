@@ -506,7 +506,7 @@ class EnhancedOCRCapabilities(BaseModel):
     """Enhanced OCR capabilities with Gemini 2.5 Pro features"""
 
     service_available: bool
-    model_name: str = "gemini-2.5-pro"
+    model_name: str = "gemini-2.5-flash"
     supported_formats: List[str]
     max_file_size_mb: float
     features: List[str]
@@ -641,7 +641,7 @@ class OCRErrorNotification(BaseModel):
 
 class PropertyAddress(BaseModel):
     """Australian property address"""
-    
+
     unit_number: Optional[str] = None
     street_number: str
     street_name: str
@@ -664,7 +664,7 @@ class PropertyAddress(BaseModel):
 
 class PropertyDetails(BaseModel):
     """Property physical details"""
-    
+
     property_type: str  # House, Unit, Townhouse, Villa, Land
     bedrooms: Optional[int] = None
     bathrooms: Optional[int] = None
@@ -673,7 +673,7 @@ class PropertyDetails(BaseModel):
     building_area: Optional[float] = None
     year_built: Optional[int] = None
     features: List[str] = []
-    
+
     @field_validator("property_type")
     @classmethod
     def validate_property_type(cls, v):
@@ -685,7 +685,7 @@ class PropertyDetails(BaseModel):
 
 class PropertyValuation(BaseModel):
     """Property valuation data"""
-    
+
     estimated_value: float
     valuation_range_lower: float
     valuation_range_upper: float
@@ -698,7 +698,7 @@ class PropertyValuation(BaseModel):
 
 class PropertyMarketData(BaseModel):
     """Property market analytics"""
-    
+
     median_price: float
     price_growth_12_month: float
     price_growth_3_year: float
@@ -712,7 +712,7 @@ class PropertyMarketData(BaseModel):
 
 class PropertyRiskAssessment(BaseModel):
     """Property investment risk assessment"""
-    
+
     overall_risk: RiskLevel
     liquidity_risk: RiskLevel
     market_risk: RiskLevel
@@ -724,7 +724,7 @@ class PropertyRiskAssessment(BaseModel):
 
 class ComparableSale(BaseModel):
     """Comparable property sale"""
-    
+
     address: str
     sale_date: datetime
     sale_price: float
@@ -736,7 +736,7 @@ class ComparableSale(BaseModel):
 
 class PropertySalesHistory(BaseModel):
     """Property sales history record"""
-    
+
     date: datetime
     price: float
     sale_type: str  # Sold, Auction, Private Sale, etc.
@@ -745,7 +745,7 @@ class PropertySalesHistory(BaseModel):
 
 class PropertyRentalHistory(BaseModel):
     """Property rental history record"""
-    
+
     date: datetime
     weekly_rent: float
     lease_type: str  # Leased, Relisted, etc.
@@ -754,7 +754,7 @@ class PropertyRentalHistory(BaseModel):
 
 class PropertyProfile(BaseModel):
     """Comprehensive property profile"""
-    
+
     address: PropertyAddress
     property_details: PropertyDetails
     valuation: PropertyValuation
@@ -771,7 +771,7 @@ class PropertyProfile(BaseModel):
 
 class PropertySearchRequest(BaseModel):
     """Property search request"""
-    
+
     address: Optional[str] = None
     property_details: Optional[PropertyDetails] = None
     include_valuation: bool = True
@@ -782,7 +782,7 @@ class PropertySearchRequest(BaseModel):
     include_rental_history: bool = False
     force_refresh: bool = False
     max_comparables: int = 10
-    
+
     @field_validator("max_comparables")
     @classmethod
     def validate_max_comparables(cls, v):
@@ -793,7 +793,7 @@ class PropertySearchRequest(BaseModel):
 
 class PropertyProfileResponse(BaseModel):
     """Property profile API response"""
-    
+
     property_profile: PropertyProfile
     processing_time: float
     data_freshness: Dict[str, datetime]
@@ -804,22 +804,24 @@ class PropertyProfileResponse(BaseModel):
 
 class PropertyValuationRequest(BaseModel):
     """Property valuation request"""
-    
+
     address: str
     property_details: Optional[PropertyDetails] = None
     valuation_source: str = "both"  # domain, corelogic, both
-    
+
     @field_validator("valuation_source")
     @classmethod
     def validate_valuation_source(cls, v):
         if v not in ["domain", "corelogic", "both"]:
-            raise ValueError("valuation_source must be 'domain', 'corelogic', or 'both'")
+            raise ValueError(
+                "valuation_source must be 'domain', 'corelogic', or 'both'"
+            )
         return v
 
 
 class PropertyValuationResponse(BaseModel):
     """Property valuation response"""
-    
+
     address: str
     valuations: Dict[str, PropertyValuation]  # keyed by source
     processing_time: float
@@ -830,7 +832,7 @@ class PropertyValuationResponse(BaseModel):
 
 class PropertySearchFilter(BaseModel):
     """Property search filters for listings"""
-    
+
     min_price: Optional[float] = None
     max_price: Optional[float] = None
     min_bedrooms: Optional[int] = None
@@ -841,7 +843,7 @@ class PropertySearchFilter(BaseModel):
     suburbs: List[str] = []
     states: List[AustralianState] = []
     listing_type: str = "Sale"  # Sale, Rent, Sold
-    
+
     @field_validator("listing_type")
     @classmethod
     def validate_listing_type(cls, v):
@@ -852,7 +854,7 @@ class PropertySearchFilter(BaseModel):
 
 class PropertyListing(BaseModel):
     """Property listing information"""
-    
+
     listing_id: int
     address: PropertyAddress
     property_details: PropertyDetails
@@ -866,7 +868,7 @@ class PropertyListing(BaseModel):
 
 class PropertySearchResponse(BaseModel):
     """Property search response"""
-    
+
     total_results: int
     results_returned: int
     listings: List[PropertyListing]
@@ -878,7 +880,7 @@ class PropertySearchResponse(BaseModel):
 
 class PropertyAPIHealthStatus(BaseModel):
     """Property API health status"""
-    
+
     domain_api: Dict[str, Any]
     corelogic_api: Dict[str, Any]
     overall_status: str
@@ -888,7 +890,7 @@ class PropertyAPIHealthStatus(BaseModel):
 
 class PropertyDataValidationResult(BaseModel):
     """Property data validation result"""
-    
+
     is_valid: bool
     validation_score: float
     issues: List[Dict[str, Any]]

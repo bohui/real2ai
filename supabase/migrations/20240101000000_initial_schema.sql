@@ -11,7 +11,10 @@ CREATE TYPE australian_state AS ENUM ('NSW', 'VIC', 'QLD', 'SA', 'WA', 'TAS', 'N
 CREATE TYPE user_type AS ENUM ('buyer', 'investor', 'agent');
 CREATE TYPE subscription_status AS ENUM ('free', 'basic', 'premium', 'enterprise');
 CREATE TYPE contract_type AS ENUM ('purchase_agreement', 'lease_agreement', 'off_plan', 'auction');
-CREATE TYPE document_status AS ENUM ('uploaded', 'processing', 'processed', 'failed');
+CREATE TYPE document_status AS ENUM ('uploaded', 'processing', 'basic_complete', 'analysis_pending', 'analysis_complete', 'failed');
+CREATE TYPE content_type AS ENUM ('text', 'diagram', 'table', 'signature', 'mixed', 'empty');
+CREATE TYPE diagram_type AS ENUM ('site_plan', 'sewer_diagram', 'flood_map', 'bushfire_map', 'title_plan', 'survey_diagram', 'floor_plan', 'elevation', 'unknown');
+CREATE TYPE entity_type AS ENUM ('address', 'property_reference', 'date', 'financial_amount', 'party_name', 'legal_reference', 'contact_info', 'property_details');
 CREATE TYPE analysis_status AS ENUM ('pending', 'processing', 'completed', 'failed');
 
 -- User profiles table (extends auth.users)
@@ -33,18 +36,44 @@ CREATE TABLE profiles (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Documents table for file management
+-- Documents table for file management (enhanced with comprehensive processing fields)
 CREATE TABLE documents (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
-    filename TEXT NOT NULL,
+    original_filename TEXT NOT NULL, -- Renamed from filename
     storage_path TEXT NOT NULL,
     file_type TEXT NOT NULL,
     file_size BIGINT NOT NULL,
-    status document_status NOT NULL DEFAULT 'uploaded',
+    processing_status TEXT NOT NULL DEFAULT 'uploaded', -- Renamed from status, flexible text type
     upload_metadata JSONB DEFAULT '{}',
     processing_results JSONB DEFAULT '{}',
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    
+    -- Processing timing
+    processing_started_at TIMESTAMP WITH TIME ZONE,
+    processing_completed_at TIMESTAMP WITH TIME ZONE,
+    
+    -- Quality and extraction metrics
+    overall_quality_score FLOAT DEFAULT 0.0,
+    extraction_confidence FLOAT DEFAULT 0.0,
+    text_extraction_method VARCHAR(100),
+    
+    -- Document content metrics
+    total_pages INTEGER DEFAULT 0,
+    total_text_length INTEGER DEFAULT 0,
+    total_word_count INTEGER DEFAULT 0,
+    has_diagrams BOOLEAN DEFAULT FALSE,
+    diagram_count INTEGER DEFAULT 0,
+    
+    -- Classification
+    document_type VARCHAR(100),
+    australian_state VARCHAR(10),
+    contract_type VARCHAR(100),
+    
+    -- Processing metadata
+    processing_errors JSONB,
+    processing_notes TEXT,
+    
+    upload_timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW(), -- Renamed from created_at
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -89,6 +118,138 @@ CREATE TABLE contract_analyses (
     error_details JSONB DEFAULT '{}',
     
     analysis_timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Document pages table for page-level analysis
+CREATE TABLE document_pages (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    document_id UUID REFERENCES documents(id) ON DELETE CASCADE NOT NULL,
+    page_number INTEGER NOT NULL,
+    
+    -- Content analysis
+    content_summary TEXT,
+    text_content TEXT,
+    text_length INTEGER DEFAULT 0,
+    word_count INTEGER DEFAULT 0,
+    
+    -- Content classification
+    content_types TEXT[],  -- Array of content types
+    primary_content_type content_type DEFAULT 'empty',
+    
+    -- Quality metrics
+    extraction_confidence FLOAT DEFAULT 0.0,
+    content_quality_score FLOAT DEFAULT 0.0,
+    
+    -- Layout analysis
+    has_header BOOLEAN DEFAULT FALSE,
+    has_footer BOOLEAN DEFAULT FALSE,
+    has_signatures BOOLEAN DEFAULT FALSE,
+    has_handwriting BOOLEAN DEFAULT FALSE,
+    has_diagrams BOOLEAN DEFAULT FALSE,
+    has_tables BOOLEAN DEFAULT FALSE,
+    
+    -- Processing metadata
+    processed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    processing_method VARCHAR(100),
+    
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Document entities table for extracted entities
+CREATE TABLE document_entities (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    document_id UUID REFERENCES documents(id) ON DELETE CASCADE NOT NULL,
+    page_id UUID REFERENCES document_pages(id) ON DELETE CASCADE,
+    page_number INTEGER NOT NULL,
+    
+    -- Entity data
+    entity_type entity_type NOT NULL,
+    entity_value TEXT NOT NULL,
+    normalized_value TEXT,
+    
+    -- Context and quality
+    context TEXT,
+    confidence FLOAT DEFAULT 0.0,
+    extraction_method VARCHAR(100),
+    
+    -- Location metadata
+    position_data JSONB,
+    
+    -- Processing metadata
+    extracted_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Document diagrams table for diagram analysis
+CREATE TABLE document_diagrams (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    document_id UUID REFERENCES documents(id) ON DELETE CASCADE NOT NULL,
+    page_id UUID REFERENCES document_pages(id) ON DELETE CASCADE,
+    page_number INTEGER NOT NULL,
+    
+    -- Classification
+    diagram_type diagram_type DEFAULT 'unknown',
+    classification_confidence FLOAT DEFAULT 0.0,
+    
+    -- Storage and processing
+    extracted_image_path VARCHAR(1024),
+    basic_analysis_completed BOOLEAN DEFAULT FALSE,
+    detailed_analysis_completed BOOLEAN DEFAULT FALSE,
+    
+    -- Analysis results
+    basic_analysis JSONB,
+    
+    -- Quality metrics
+    image_quality_score FLOAT DEFAULT 0.0,
+    clarity_score FLOAT DEFAULT 0.0,
+    
+    -- Metadata
+    detected_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    basic_analysis_at TIMESTAMP WITH TIME ZONE,
+    
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Document analyses table for comprehensive document analysis (separate from contract analysis)
+CREATE TABLE document_analyses (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    document_id UUID REFERENCES documents(id) ON DELETE CASCADE NOT NULL,
+    
+    -- Analysis metadata
+    analysis_type VARCHAR(100) DEFAULT 'contract_analysis',
+    analysis_version VARCHAR(50) DEFAULT 'v1.0',
+    started_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    completed_at TIMESTAMP WITH TIME ZONE,
+    
+    -- Analysis status
+    status VARCHAR(50) DEFAULT 'pending',
+    progress_percentage INTEGER DEFAULT 0 CHECK (progress_percentage >= 0 AND progress_percentage <= 100),
+    current_step VARCHAR(100),
+    
+    -- Results
+    detailed_entities JSONB,
+    diagram_analyses JSONB,
+    compliance_results JSONB,
+    risk_assessment JSONB,
+    recommendations JSONB,
+    
+    -- Quality and confidence
+    overall_confidence FLOAT DEFAULT 0.0,
+    analysis_quality_score FLOAT DEFAULT 0.0,
+    
+    -- Processing metadata
+    processing_time_seconds FLOAT DEFAULT 0.0,
+    langgraph_workflow_id VARCHAR(255),
+    
+    -- Errors and issues
+    analysis_errors JSONB,
+    analysis_warnings JSONB,
+    
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -207,7 +368,11 @@ CREATE INDEX idx_profiles_subscription_status ON profiles(subscription_status);
 CREATE INDEX idx_profiles_onboarding_completed ON profiles(onboarding_completed);
 
 CREATE INDEX idx_documents_user_id ON documents(user_id);
-CREATE INDEX idx_documents_status ON documents(status);
+CREATE INDEX idx_documents_processing_status ON documents(processing_status);
+CREATE INDEX idx_documents_document_type ON documents(document_type);
+CREATE INDEX idx_documents_australian_state ON documents(australian_state);
+CREATE INDEX idx_documents_contract_type ON documents(contract_type);
+CREATE INDEX idx_documents_has_diagrams ON documents(has_diagrams);
 CREATE INDEX idx_documents_created_at ON documents(created_at DESC);
 
 CREATE INDEX idx_contracts_user_id ON contracts(user_id);
@@ -238,12 +403,31 @@ CREATE INDEX idx_analysis_progress_user_id ON analysis_progress(user_id);
 CREATE INDEX idx_analysis_progress_status ON analysis_progress(status);
 CREATE INDEX idx_analysis_progress_created_at ON analysis_progress(created_at);
 
+-- Indexes for new document processing tables
+CREATE INDEX idx_document_pages_document_id ON document_pages(document_id);
+CREATE INDEX idx_document_pages_page_number ON document_pages(page_number);
+CREATE INDEX idx_document_pages_content_type ON document_pages(primary_content_type);
+
+CREATE INDEX idx_document_entities_document_id ON document_entities(document_id);
+CREATE INDEX idx_document_entities_page_id ON document_entities(page_id);
+CREATE INDEX idx_document_entities_page_number ON document_entities(page_number);
+CREATE INDEX idx_document_entities_type ON document_entities(entity_type);
+
+CREATE INDEX idx_document_diagrams_document_id ON document_diagrams(document_id);
+CREATE INDEX idx_document_diagrams_page_id ON document_diagrams(page_id);
+CREATE INDEX idx_document_diagrams_page_number ON document_diagrams(page_number);
+CREATE INDEX idx_document_diagrams_type ON document_diagrams(diagram_type);
+
+CREATE INDEX idx_document_analyses_document_id ON document_analyses(document_id);
+CREATE INDEX idx_document_analyses_status ON document_analyses(status);
+CREATE INDEX idx_document_analyses_analysis_type ON document_analyses(analysis_type);
+
 -- Create partial index for active progress tracking
 CREATE INDEX idx_analysis_progress_active ON analysis_progress(contract_id, updated_at) 
 WHERE status = 'in_progress';
 
 -- Create composite indexes for common queries
-CREATE INDEX idx_documents_user_status ON documents(user_id, status);
+CREATE INDEX idx_documents_user_status ON documents(user_id, processing_status);
 CREATE INDEX idx_contracts_user_type ON contracts(user_id, contract_type);
 CREATE INDEX idx_analyses_user_status ON contract_analyses(user_id, status);
 CREATE INDEX idx_usage_logs_user_timestamp ON usage_logs(user_id, timestamp DESC);
@@ -261,6 +445,21 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER analysis_progress_updated_at_trigger
     BEFORE UPDATE ON analysis_progress
     FOR EACH ROW EXECUTE FUNCTION update_analysis_progress_updated_at();
+
+-- Create update triggers for new document processing tables
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+CREATE TRIGGER update_documents_updated_at BEFORE UPDATE ON documents FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_document_pages_updated_at BEFORE UPDATE ON document_pages FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_document_entities_updated_at BEFORE UPDATE ON document_entities FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_document_diagrams_updated_at BEFORE UPDATE ON document_diagrams FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_document_analyses_updated_at BEFORE UPDATE ON document_analyses FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- Function to get latest progress for a contract
 CREATE OR REPLACE FUNCTION get_latest_analysis_progress(contract_uuid UUID)
@@ -395,6 +594,12 @@ JOIN documents d ON c.document_id = d.id;
 -- Grant permissions on the view
 GRANT SELECT ON analysis_progress_detailed TO authenticated;
 
+-- Grant permissions on new document processing tables
+GRANT ALL ON document_pages TO authenticated;
+GRANT ALL ON document_entities TO authenticated;
+GRANT ALL ON document_diagrams TO authenticated;
+GRANT ALL ON document_analyses TO authenticated;
+
 -- Comments for documentation
 COMMENT ON TABLE analysis_progress IS 'Real-time progress tracking for contract analyses with comprehensive timing and status information';
 COMMENT ON COLUMN analysis_progress.contract_id IS 'Reference to the contract being analyzed';
@@ -408,3 +613,14 @@ COMMENT ON COLUMN analysis_progress.status IS 'Overall status (in_progress, comp
 COMMENT ON COLUMN profiles.onboarding_completed IS 'Tracks if user has completed initial onboarding process';
 COMMENT ON COLUMN profiles.onboarding_completed_at IS 'Timestamp when user completed onboarding';
 COMMENT ON COLUMN profiles.onboarding_preferences IS 'Preferences collected during onboarding process';
+
+-- Comments for new document processing tables
+COMMENT ON TABLE document_pages IS 'Individual page metadata and content from document processing';
+COMMENT ON TABLE document_entities IS 'Basic entities extracted from documents (addresses, dates, amounts, etc.)';
+COMMENT ON TABLE document_diagrams IS 'Diagram detection and basic analysis results';
+COMMENT ON TABLE document_analyses IS 'Comprehensive document analysis results (separate from contract-specific analysis)';
+
+COMMENT ON COLUMN documents.processing_status IS 'Document processing status (uploaded, processing, basic_complete, analysis_pending, analysis_complete, failed)';
+COMMENT ON COLUMN documents.overall_quality_score IS 'Overall document quality score (0.0-1.0)';
+COMMENT ON COLUMN documents.extraction_confidence IS 'Text extraction confidence score (0.0-1.0)';
+COMMENT ON COLUMN documents.text_extraction_method IS 'Method used for text extraction (pymupdf, tesseract_ocr, gemini_ocr, etc.)';

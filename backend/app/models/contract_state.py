@@ -6,7 +6,7 @@ from typing import TypedDict, Optional, Dict, List, Any
 from datetime import datetime
 import uuid
 
-from app.model.enums import AustralianState, ContractType, ProcessingStatus, RiskLevel
+from backend.app.schema.enums import AustralianState, ContractType, ProcessingStatus, RiskLevel
 
 
 class RealEstateAgentState(TypedDict):

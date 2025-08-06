@@ -7,7 +7,7 @@ import logging
 from app.core.auth import get_current_user, User
 from app.core.database import get_database_client
 from app.core.config import get_settings
-from app.model.enums import ContractType, AustralianState
+from backend.app.schema.enums import ContractType, AustralianState
 from app.services.document_service import DocumentService
 from app.services.websocket_service import WebSocketManager
 from app.schema.document import (
@@ -212,7 +212,7 @@ async def reprocess_document_with_ocr(
             "contract_type": "purchase_agreement",
             "user_type": user_profile.get("user_type", "buyer"),
             "document_id": document_id,
-            "filename": document["filename"],
+            "filename": document["original_filename"],
         }
 
         # Enhanced processing options
@@ -274,7 +274,7 @@ async def batch_process_ocr(
         for doc_id in document_ids:
             doc_result = (
                 db_client.table("documents")
-                .select("id, filename, file_type")
+                .select("id, original_filename, file_type")
                 .eq("id", doc_id)
                 .eq("user_id", user.id)
                 .execute()
@@ -408,7 +408,7 @@ async def get_ocr_status(
 
         return {
             "document_id": document_id,
-            "filename": document["filename"],
+            "filename": document["original_filename"],
             "status": status,
             "processing_metrics": metrics,
             "ocr_features_used": processing_results.get("processing_details", {}).get(
@@ -509,7 +509,7 @@ async def validate_contract_document(
         
         return {
             "document_id": document_id,
-            "filename": document["filename"],
+            "filename": document["original_filename"],
             "validation_result": validation_result,
             "contract_context": contract_context,
         }
@@ -593,7 +593,7 @@ async def assess_document_quality(
         
         return {
             "document_id": document_id,
-            "filename": document["filename"],
+            "filename": document["original_filename"],
             "quality_assessment": quality_assessment,
             "processing_results_summary": {
                 "extraction_method": processing_results.get("extraction_method", "unknown"),

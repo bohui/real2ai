@@ -1,4 +1,6 @@
--- Real2.AI Database Schema for Supabase
+-- OBSOLETE: Real2.AI Database Schema for Supabase
+-- This file is outdated and kept for reference only
+-- Use supabase/migrations/*.sql files for the actual schema
 -- Australian Real Estate AI Assistant
 
 -- Enable Row Level Security

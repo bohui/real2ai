@@ -7,7 +7,7 @@ import logging
 from typing import Dict, Any, Optional, List
 from datetime import datetime, UTC
 
-from backend.app.agents.contract_workflow import ContractAnalysisWorkflow
+from app.agents.contract_workflow import ContractAnalysisWorkflow
 from app.config.enhanced_workflow_config import (
     get_enhanced_workflow_config,
     validate_workflow_configuration,
@@ -15,7 +15,7 @@ from app.config.enhanced_workflow_config import (
 )
 from app.core.prompts import PromptManager, get_prompt_manager
 from app.models.contract_state import create_initial_state, RealEstateAgentState
-from app.model.enums import AustralianState, ProcessingStatus
+from backend.app.schema.enums import AustralianState, ProcessingStatus
 from app.services.websocket_service import WebSocketManager, WebSocketEvents
 
 logger = logging.getLogger(__name__)

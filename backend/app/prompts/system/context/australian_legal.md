@@ -6,7 +6,7 @@ version: "2.0.0"
 description: "Australian legal system context and property law framework"
 dependencies: ["legal_specialist"]
 inheritance: "legal_specialist"
-model_compatibility: ["gemini-2.5-pro", "gpt-4"]
+model_compatibility: ["gemini-2.5-flash", "gpt-4"]
 max_tokens: 2500
 temperature_range: [0.0, 0.3]
 priority: 85

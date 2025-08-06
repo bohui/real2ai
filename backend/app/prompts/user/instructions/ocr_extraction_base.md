@@ -14,7 +14,7 @@ optional_variables:
   - "user_context"
   - "enhancement_level"
 model_compatibility:
-  - "gemini-2.5-pro"
+  - "gemini-2.5-flash"
   - "gpt-4"
 max_tokens: 8000
 temperature_range: [0.0, 0.3]

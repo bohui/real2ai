@@ -267,7 +267,7 @@ required_variables:
   - "document_type"
 optional_variables:
   - "quality_requirements"
-model_compatibility: ["gemini-2.5-pro"]
+model_compatibility: ["gemini-2.5-flash"]
 max_tokens: 4000
 ---
 

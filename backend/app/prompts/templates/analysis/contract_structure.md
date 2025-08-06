@@ -13,7 +13,7 @@ optional_variables:
   - "complexity"
   - "analysis_depth"
   - "focus_areas"
-model_compatibility: ["gemini-2.5-pro", "gpt-4"]
+model_compatibility: ["gemini-2.5-flash", "gpt-4"]
 max_tokens: 15000
 temperature_range: [0.1, 0.3]
 tags: ["analysis", "contract", "structure", "australian", "legal"]

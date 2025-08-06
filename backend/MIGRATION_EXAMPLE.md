@@ -20,7 +20,7 @@ class GeminiOCRService:
         if self.settings.gemini_api_key:
             genai.configure(api_key=self.settings.gemini_api_key)
             self.model = genai.GenerativeModel(
-                model_name="gemini-2.5-pro",
+                model_name="gemini-2.5-flash",
                 safety_settings={...}
             )
         else:
@@ -160,7 +160,7 @@ class GeminiOCRService:
     def __init__(self):
         self.settings = get_settings()
         self.api_key = self.settings.gemini_api_key
-        self.model_name = "gemini-2.5-pro"  # Hardcoded
+        self.model_name = "gemini-2.5-flash"  # Hardcoded
         self.timeout = 120  # Hardcoded
 ```
 
@@ -169,7 +169,7 @@ class GeminiOCRService:
 # Centralized, environment-aware configuration
 # Settings come from environment variables:
 # GEMINI_API_KEY=your_key
-# GEMINI_MODEL_NAME=gemini-2.5-pro
+# GEMINI_MODEL_NAME=gemini-2.5-flash
 # GEMINI_PROCESSING_TIMEOUT=120
 # GEMINI_MAX_RETRIES=3
 # GEMINI_CIRCUIT_BREAKER_ENABLED=true

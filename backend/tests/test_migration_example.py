@@ -6,7 +6,7 @@ import pytest
 from unittest.mock import AsyncMock, Mock
 from datetime import datetime, UTC
 
-from app.core.database_v2 import DatabaseService
+# Test file needs to be updated to work with new architecture
 from app.core.auth_v2 import AuthService, TokenData, User
 from app.clients.base.exceptions import ClientError
 

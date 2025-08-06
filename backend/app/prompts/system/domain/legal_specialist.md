@@ -6,7 +6,7 @@ version: "2.0.0"
 description: "Legal domain expertise for Australian property law and contract analysis"
 dependencies: ["assistant_core", "reasoning_framework"]
 inheritance: "assistant_core"
-model_compatibility: ["gemini-2.5-pro", "gpt-4"]
+model_compatibility: ["gemini-2.5-flash", "gpt-4"]
 max_tokens: 3000
 temperature_range: [0.0, 0.3]
 priority: 80

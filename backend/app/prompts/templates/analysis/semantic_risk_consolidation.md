@@ -11,7 +11,7 @@ required_variables:
 optional_variables:
   - "property_address"
   - "total_diagrams"
-model_compatibility: ["gemini-2.5-pro", "gpt-4"]
+model_compatibility: ["gemini-2.5-flash", "gpt-4"]
 max_tokens: 15000
 temperature_range: [0.1, 0.3]
 tags: ["semantic", "risk", "consolidation", "multi-diagram"]

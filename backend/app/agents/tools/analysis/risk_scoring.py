@@ -5,7 +5,7 @@ Comprehensive risk scoring system for Australian property contracts
 from typing import Dict, List, Any, Optional
 from langchain.tools import tool
 
-from app.model.enums import AustralianState, RiskLevel
+from backend.app.schema.enums import AustralianState, RiskLevel
 
 
 @tool

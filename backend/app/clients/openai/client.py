@@ -77,7 +77,7 @@ class OpenAIClient(BaseClient, AIOperations):
         try:
             # Simple test with a minimal completion
             response = self._openai_client.completions.create(
-                model="gpt-3.5-turbo-instruct", prompt="Test", max_tokens=1
+                model=self.config.model_name, prompt="Test", max_tokens=1
             )
 
             if not response.choices:
