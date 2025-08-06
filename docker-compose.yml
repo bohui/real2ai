@@ -14,7 +14,7 @@ services:
       - DEBUG=true
       - PYTHONPATH=/app
       - GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp_key.json
-      - SUPABASE_URL=http://host.docker.internal:54321
+      - SUPABASE_URL=http://kong:8000
       - REDIS_URL=redis://redis:6379
     volumes:
       - ./backend/gcp_key.json:/secrets/gcp_key.json:ro
@@ -24,6 +24,7 @@ services:
       - redis
     networks:
       - real2ai-network
+      - supabase_network_real2ai_supabase
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -63,7 +64,7 @@ services:
       - ENVIRONMENT=development
       - PYTHONPATH=/app
       - C_FORCE_ROOT=1
-      - SUPABASE_URL=http://host.docker.internal:54321
+      - SUPABASE_URL=http://kong:8000
       - REDIS_URL=redis://redis:6379
     volumes:
       - ./backend:/app
@@ -72,6 +73,7 @@ services:
       - redis
     networks:
       - real2ai-network
+      - supabase_network_real2ai_supabase
     restart: unless-stopped
     deploy:
       resources:
@@ -95,7 +97,7 @@ services:
       - C_FORCE_ROOT=1
       - WORKER_TYPE=ocr_specialist
       - GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp_key.json
-      - SUPABASE_URL=http://host.docker.internal:54321
+      - SUPABASE_URL=http://kong:8000
       - REDIS_URL=redis://redis:6379
     volumes:
       - ./backend/gcp_key.json:/secrets/gcp_key.json:ro
@@ -105,6 +107,7 @@ services:
       - redis
     networks:
       - real2ai-network
+      - supabase_network_real2ai_supabase
     restart: unless-stopped
     deploy:
       resources:
@@ -127,7 +130,7 @@ services:
       - PYTHONPATH=/app
       - C_FORCE_ROOT=1
       - WORKER_TYPE=batch_processor
-      - SUPABASE_URL=http://host.docker.internal:54321
+      - SUPABASE_URL=http://kong:8000
       - REDIS_URL=redis://redis:6379
     volumes:
       - ./backend:/app
@@ -136,6 +139,7 @@ services:
       - redis
     networks:
       - real2ai-network
+      - supabase_network_real2ai_supabase
     restart: unless-stopped
     deploy:
       resources:
@@ -156,7 +160,7 @@ services:
     environment:
       - ENVIRONMENT=development
       - PYTHONPATH=/app
-      - SUPABASE_URL=http://host.docker.internal:54321
+      - SUPABASE_URL=http://kong:8000
       - REDIS_URL=redis://redis:6379
     volumes:
       - ./backend:/app
@@ -165,6 +169,7 @@ services:
       - redis
     networks:
       - real2ai-network
+      - supabase_network_real2ai_supabase
     restart: unless-stopped
 
   # Frontend Development Server (Optional)
@@ -213,4 +218,6 @@ volumes:
 
 networks:
   real2ai-network:
-    driver: bridge 
+    driver: bridge
+  supabase_network_real2ai_supabase:
+    external: true 

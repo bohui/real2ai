@@ -1,0 +1,117 @@
+services:
+  # Backend API Service
+  - type: web
+    name: real2ai-backend
+    env: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    rootDir: backend
+    healthCheckPath: /health
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: DEBUG
+        value: false
+      - key: PYTHONPATH
+        value: /opt/render/project/src/backend
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: real2ai-redis
+          property: connectionString
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: CORE_LOGIC_API_KEY
+        sync: false
+      - key: DOMAIN_API_KEY
+        sync: false
+      - key: JWT_SECRET_KEY
+        sync: false
+      - key: CELERY_BROKER_URL
+        fromService:
+          type: redis
+          name: real2ai-redis
+          property: connectionString
+      - key: CELERY_RESULT_BACKEND
+        fromService:
+          type: redis
+          name: real2ai-redis
+          property: connectionString
+
+  # Frontend Service
+  - type: web
+    name: real2ai-frontend
+    env: static
+    plan: starter
+    buildCommand: npm install && npm run build
+    staticPublishPath: ./dist
+    rootDir: frontend
+    envVars:
+      - key: VITE_API_BASE_URL
+        value: https://real2ai-backend.onrender.com
+      - key: VITE_SUPABASE_URL
+        sync: false
+      - key: VITE_SUPABASE_ANON_KEY
+        sync: false
+
+  # Redis Service
+  - type: redis
+    name: real2ai-redis
+    plan: starter
+    maxmemoryPolicy: allkeys-lru
+
+  # Main Celery Worker (combines all worker types)
+  - type: worker
+    name: real2ai-celery-worker
+    env: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: celery -A app.core.celery worker --loglevel=info --concurrency=2
+    rootDir: backend
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: PYTHONPATH
+        value: /opt/render/project/src/backend
+      - key: C_FORCE_ROOT
+        value: "1"
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: real2ai-redis
+          property: connectionString
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: CORE_LOGIC_API_KEY
+        sync: false
+      - key: DOMAIN_API_KEY
+        sync: false
+      - key: JWT_SECRET_KEY
+        sync: false
+      - key: CELERY_BROKER_URL
+        fromService:
+          type: redis
+          name: real2ai-redis
+          property: connectionString
+      - key: CELERY_RESULT_BACKEND
+        fromService:
+          type: redis
+          name: real2ai-redis
+          property: connectionString 

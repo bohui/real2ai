@@ -1,0 +1,15 @@
+User-agent: *
+Allow: /
+
+# Sitemap
+Sitemap: https://real2.ai/sitemap.xml
+
+# Disallow admin/auth pages from search engines
+Disallow: /auth/
+Disallow: /app/settings
+Disallow: /app/analysis/*/private
+
+# Allow important pages
+Allow: /
+Allow: /auth/login
+Allow: /auth/register

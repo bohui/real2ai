@@ -1,0 +1,34 @@
+# Wrangler configuration for Cloudflare Pages
+name = "real2ai-frontend"
+compatibility_date = "2024-08-06"
+
+# Build configuration
+[build]
+command = "npm run build:cloudflare"
+cwd = ""
+watch_dir = "src"
+
+[build.upload]
+format = "modules"
+
+# Environment variables for build
+[vars]
+NODE_ENV = "production"
+VITE_DEPLOYMENT_TARGET = "cloudflare-pages"
+
+# Pages configuration
+[[pages_build_output_dir]]
+directory = "dist"
+
+# Custom domains (update these for your actual domains)
+# [env.production.route]
+# pattern = "real2.ai"
+# zone_name = "real2.ai"
+
+# Development environment
+[env.preview]
+vars = { NODE_ENV = "development", VITE_DEPLOYMENT_TARGET = "cloudflare-pages-preview" }
+
+# Production environment
+[env.production]
+vars = { NODE_ENV = "production", VITE_DEPLOYMENT_TARGET = "cloudflare-pages" }

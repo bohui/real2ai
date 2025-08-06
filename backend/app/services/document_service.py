@@ -12,6 +12,7 @@ Architecture:
 """
 
 import asyncio
+import json
 import logging
 import os
 import re
@@ -146,7 +147,10 @@ class DocumentService:
                 "ensure_bucket_exists", {"bucket_name": self.storage_bucket}
             )
 
-            if result.get("created"):
+            # Parse the JSON string result
+            result_data = json.loads(result)
+
+            if result_data.get("created"):
                 logger.info(f"Created storage bucket: {self.storage_bucket}")
 
         except Exception as e:
