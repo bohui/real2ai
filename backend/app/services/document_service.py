@@ -47,7 +47,8 @@ from app.prompts.schema.entity_extraction_schema import (
 )
 from app.models.contract_state import ContractType as ContractStateType
 from app.services.gemini_ocr_service import GeminiOCRService
-from app.services.semantic_analysis_service import SemanticAnalysisService
+
+# Circular import removed - SemanticAnalysisService will be imported lazily when needed
 from app.clients import get_supabase_client, get_gemini_client
 from app.core.config import get_settings
 from app.core.langsmith_config import langsmith_trace, langsmith_session, log_trace_info
@@ -94,7 +95,7 @@ class DocumentService:
         self.supabase_client = None
         self.gemini_client = None
         self.gemini_ocr_service = None
-        self.semantic_analysis_service = None
+        self.semantic_analysis_service = None  # Will be initialized lazily
 
         # Storage configuration
         self.storage_bucket = "documents"
@@ -122,9 +123,9 @@ class DocumentService:
                 self.gemini_ocr_service = GeminiOCRService()
                 await self.gemini_ocr_service.initialize()
 
-            # Initialize semantic analysis service
-            self.semantic_analysis_service = SemanticAnalysisService()
-            await self.semantic_analysis_service.initialize()
+            # Initialize semantic analysis service lazily to avoid circular imports
+            # Will be initialized when first needed
+            self.semantic_analysis_service = None
 
             # Ensure storage bucket exists
             await self._ensure_bucket_exists()
@@ -150,6 +151,15 @@ class DocumentService:
 
         except Exception as e:
             logger.warning(f"Could not verify/create bucket: {str(e)}")
+
+    async def _get_semantic_analysis_service(self):
+        """Lazy load semantic analysis service to avoid circular imports"""
+        if self.semantic_analysis_service is None:
+            from app.services.semantic_analysis_service import SemanticAnalysisService
+
+            self.semantic_analysis_service = SemanticAnalysisService(self)
+            await self.semantic_analysis_service.initialize()
+        return self.semantic_analysis_service
 
     @langsmith_trace(name="process_document")
     async def process_document(
@@ -854,6 +864,38 @@ class DocumentService:
         except Exception as e:
             logger.error(f"Failed to update document status: {str(e)}")
 
+    async def track_processing_progress(
+        self,
+        document_id: str,
+        stage: str,
+        progress_percent: int,
+        message: str,
+        metadata: Optional[Dict[str, Any]] = None,
+    ):
+        """Track processing progress for a document"""
+        try:
+            update_data = {
+                "processing_status": f"processing_{stage}",
+                "processing_progress": progress_percent,
+                "last_updated": datetime.now(UTC).isoformat(),
+            }
+
+            if metadata:
+                update_data["processing_metadata"] = metadata
+
+            await self.supabase_client.update(
+                "documents", {"id": document_id}, update_data
+            )
+
+            logger.info(
+                f"Progress tracked for document {document_id}: {stage} - {progress_percent}% - {message}"
+            )
+
+        except Exception as e:
+            logger.warning(
+                f"Failed to track progress for document {document_id}: {str(e)}"
+            )
+
     def _create_success_response(
         self,
         document_id: str,
@@ -914,6 +956,277 @@ class DocumentService:
             ],
         }
 
+    async def health_check(self) -> Dict[str, Any]:
+        """
+        Health check for DocumentService
+
+        Returns:
+            Health status with dependencies and capabilities
+        """
+        health_status = {
+            "service": "DocumentService",
+            "status": "healthy",
+            "dependencies": {},
+            "capabilities": [
+                "document_upload",
+                "text_extraction",
+                "file_validation",
+                "storage_management",
+                "semantic_analysis_integration",
+                "australian_contract_patterns",
+            ],
+            "timestamp": datetime.now(UTC).isoformat(),
+        }
+
+        # Check Supabase client
+        if self.supabase_client:
+            try:
+                # Test basic connection
+                test_result = await self.supabase_client.execute_rpc("health_check", {})
+                health_status["dependencies"]["supabase"] = {
+                    "status": "healthy",
+                    "connection": "ok",
+                }
+            except Exception as e:
+                health_status["dependencies"]["supabase"] = {
+                    "status": "error",
+                    "error": str(e),
+                }
+                health_status["status"] = "degraded"
+        else:
+            health_status["dependencies"]["supabase"] = {
+                "status": "not_initialized",
+            }
+            health_status["status"] = "degraded"
+
+        # Check Gemini client
+        if self.gemini_client:
+            try:
+                gemini_health = await self.gemini_client.health_check()
+                health_status["dependencies"]["gemini"] = {
+                    "status": gemini_health.get("status", "unknown"),
+                    "model": gemini_health.get("model", "unknown"),
+                }
+                if gemini_health.get("status") != "healthy":
+                    health_status["status"] = "degraded"
+            except Exception as e:
+                health_status["dependencies"]["gemini"] = {
+                    "status": "error",
+                    "error": str(e),
+                }
+                health_status["status"] = "degraded"
+        else:
+            health_status["dependencies"]["gemini"] = {
+                "status": "not_initialized",
+            }
+            health_status["status"] = "degraded"
+
+        # Check Gemini OCR service
+        if self.gemini_ocr_service:
+            try:
+                ocr_health = await self.gemini_ocr_service.health_check()
+                health_status["dependencies"]["gemini_ocr"] = {
+                    "status": ocr_health.get("status", "unknown"),
+                }
+                if ocr_health.get("status") != "healthy":
+                    health_status["status"] = "degraded"
+            except Exception as e:
+                health_status["dependencies"]["gemini_ocr"] = {
+                    "status": "error",
+                    "error": str(e),
+                }
+                health_status["status"] = "degraded"
+        else:
+            health_status["dependencies"]["gemini_ocr"] = {
+                "status": "not_initialized",
+            }
+            health_status["status"] = "degraded"
+
+        # Check semantic analysis service
+        if self.semantic_analysis_service:
+            try:
+                semantic_health = await self.semantic_analysis_service.health_check()
+                health_status["dependencies"]["semantic_analysis"] = {
+                    "status": semantic_health.get("status", "unknown"),
+                }
+                if semantic_health.get("status") != "healthy":
+                    health_status["status"] = "degraded"
+            except Exception as e:
+                health_status["dependencies"]["semantic_analysis"] = {
+                    "status": "error",
+                    "error": str(e),
+                }
+                health_status["status"] = "degraded"
+        else:
+            health_status["dependencies"]["semantic_analysis"] = {
+                "status": "not_initialized",
+            }
+            health_status["status"] = "degraded"
+
+        # Check storage directories
+        try:
+            storage_dirs = [
+                self.storage_base_path,
+                self.storage_base_path / "originals",
+                self.storage_base_path / "diagrams",
+                self.storage_base_path / "pages",
+                self.storage_base_path / "temp",
+            ]
+
+            storage_status = {}
+            for dir_path in storage_dirs:
+                storage_status[str(dir_path)] = {
+                    "exists": dir_path.exists(),
+                    "writable": (
+                        os.access(dir_path, os.W_OK) if dir_path.exists() else False
+                    ),
+                }
+
+            health_status["dependencies"]["storage"] = {
+                "status": (
+                    "healthy"
+                    if all(
+                        s["exists"] and s["writable"] for s in storage_status.values()
+                    )
+                    else "degraded"
+                ),
+                "directories": storage_status,
+            }
+
+            if not all(s["exists"] and s["writable"] for s in storage_status.values()):
+                health_status["status"] = "degraded"
+
+        except Exception as e:
+            health_status["dependencies"]["storage"] = {
+                "status": "error",
+                "error": str(e),
+            }
+            health_status["status"] = "degraded"
+
+        return health_status
+
+    async def get_file_content(self, storage_path: str) -> bytes:
+        """
+        Download file content from storage
+
+        Args:
+            storage_path: Path to file in storage
+
+        Returns:
+            File content as bytes
+
+        Raises:
+            ValueError: If file not found or download fails
+        """
+        try:
+            if not self.supabase_client:
+                raise ValueError("Supabase client not initialized")
+
+            file_content = await self.supabase_client.download_file(
+                bucket=self.storage_bucket, path=storage_path
+            )
+
+            if not file_content:
+                raise ValueError(
+                    f"Failed to download file from storage: {storage_path}"
+                )
+
+            return file_content
+
+        except Exception as e:
+            logger.error(f"Failed to get file content for {storage_path}: {str(e)}")
+            raise ValueError(f"Failed to get file content: {str(e)}")
+
+    async def upload_file(
+        self,
+        file: UploadFile,
+        user_id: str,
+        contract_type: Optional[str] = None,
+        australian_state: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Upload file to storage and create document record
+
+        Args:
+            file: UploadFile object
+            user_id: User ID
+            contract_type: Optional contract type
+            australian_state: Optional Australian state
+
+        Returns:
+            Upload result with document_id and storage_path
+        """
+        try:
+            # Validate file
+            validation_result = await self._validate_uploaded_file(file)
+            if not validation_result["valid"]:
+                return {"success": False, "error": validation_result["error"]}
+
+            # Upload and create record
+            upload_result = await self._upload_and_create_document_record(
+                file,
+                user_id,
+                validation_result["file_info"],
+                contract_type,
+                australian_state,
+            )
+
+            return upload_result
+
+        except Exception as e:
+            logger.error(f"File upload failed: {str(e)}")
+            return {"success": False, "error": f"Upload failed: {str(e)}"}
+
+    async def extract_text(
+        self,
+        storage_path: str,
+        file_type: str,
+        contract_context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Extract text from document using comprehensive analysis
+
+        Args:
+            storage_path: Path to file in storage
+            file_type: Type of file (pdf, docx, etc.)
+            contract_context: Optional contract context for analysis
+
+        Returns:
+            Text extraction result with metadata
+        """
+        try:
+            # Get file content
+            file_content = await self.get_file_content(storage_path)
+
+            # Extract text based on file type
+            if file_type == "pdf":
+                result = await self._extract_pdf_text_comprehensive(file_content)
+            elif file_type == "docx":
+                result = await self._extract_docx_text_comprehensive(file_content)
+            elif file_type in ["png", "jpg", "jpeg", "tiff", "bmp"]:
+                result = await self._extract_image_text_comprehensive(file_content)
+            else:
+                raise ValueError(
+                    f"Unsupported file type for text extraction: {file_type}"
+                )
+
+            # Add contract context if provided
+            if contract_context and result.get("success"):
+                result["contract_context"] = contract_context
+
+            return result
+
+        except Exception as e:
+            logger.error(f"Text extraction failed for {storage_path}: {str(e)}")
+            return {
+                "success": False,
+                "error": str(e),
+                "full_text": "",
+                "pages": [],
+                "extraction_method": "failed",
+                "confidence": 0.0,
+            }
+
     # Placeholder methods for future implementation
     async def _extract_docx_text_comprehensive(
         self, file_content: bytes
@@ -963,9 +1276,25 @@ class DocumentService:
     async def _run_semantic_analysis(
         self, document_id: str, full_text: str
     ) -> Optional[Dict[str, Any]]:
-        """Run semantic analysis - placeholder for future implementation"""
-        # Implementation would go here
-        return None
+        """Run semantic analysis using lazy-loaded service"""
+        try:
+            semantic_service = await self._get_semantic_analysis_service()
+            if semantic_service:
+                # Run semantic analysis on the full text
+                result = await semantic_service.analyze_document_semantics(
+                    storage_path="",  # Not needed for text analysis
+                    file_type="text",
+                    filename=f"document_{document_id}.txt",
+                    contract_context={"document_id": document_id},
+                    document_id=document_id,
+                )
+                return result
+            return None
+        except Exception as e:
+            logger.error(
+                f"Semantic analysis failed for document {document_id}: {str(e)}"
+            )
+            return None
 
     async def _finalize_document_processing(self, document_id: str, *args) -> None:
         """Finalize document processing - placeholder for future implementation"""

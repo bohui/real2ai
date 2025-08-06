@@ -41,7 +41,7 @@ class MigrationManager:
             raise ValueError("Missing required environment variables: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY")
         
         self.supabase: Client = create_client(self.supabase_url, self.supabase_key)
-        self.migrations_dir = Path(__file__).parent.parent / "supabase" / "migrations"
+        self.migrations_dir = Path(__file__).parent.parent.parent / "supabase" / "migrations"
         
         # Ensure migrations directory exists
         self.migrations_dir.mkdir(parents=True, exist_ok=True)

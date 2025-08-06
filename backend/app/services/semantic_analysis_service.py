@@ -35,14 +35,14 @@ class SemanticAnalysisWorkflow:
         self.document_service = None
         self.settings = get_settings()
 
-    async def initialize(self):
+    async def initialize(self, document_service=None):
         """Initialize all required services"""
         try:
             self.ocr_service = GeminiOCRService()
             await self.ocr_service.initialize()
 
-            self.document_service = DocumentService()
-            await self.document_service.initialize()
+            # Use dependency injection for document service
+            self.document_service = document_service
 
             logger.info("Semantic analysis workflow initialized successfully")
 
@@ -54,13 +54,19 @@ class SemanticAnalysisWorkflow:
 class SemanticAnalysisService(PromptEnabledService):
     """Service for semantic analysis of property diagrams and images"""
 
-    def __init__(self):
+    def __init__(self, document_service=None):
         super().__init__()
         self.workflow = SemanticAnalysisWorkflow()
+        self._document_service = document_service
 
     async def initialize(self):
         """Initialize the semantic analysis service"""
-        await self.workflow.initialize()
+        await self.workflow.initialize(self._document_service)
+
+    async def set_document_service(self, document_service):
+        """Set document service after initialization to avoid circular imports"""
+        self._document_service = document_service
+        self.workflow.document_service = document_service
 
     async def analyze_document_semantics(
         self,
@@ -110,6 +116,13 @@ class SemanticAnalysisService(PromptEnabledService):
             if document_id:
                 await self._track_progress(
                     document_id, "semantic_processing", 10, "Starting semantic analysis"
+                )
+
+            # Check if document service is available
+            if not self.workflow.document_service:
+                raise HTTPException(
+                    status_code=503,
+                    detail="Document service not available for semantic analysis",
                 )
 
             file_content = await self.workflow.document_service.get_file_content(
