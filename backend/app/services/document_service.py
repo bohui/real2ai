@@ -378,7 +378,6 @@ class DocumentService:
                 "file_size": file_info["file_size"],
                 "content_hash": file_info["content_hash"],
                 "processing_status": ProcessingStatus.UPLOADED.value,
-                "updated_at": datetime.now(UTC).isoformat(),
                 "contract_type": contract_type,
                 "australian_state": australian_state,
                 "text_extraction_method": "pending",
@@ -843,7 +842,6 @@ class DocumentService:
         try:
             update_data = {
                 "processing_status": status,
-                "updated_at": datetime.now(UTC).isoformat(),
             }
 
             if error_details:

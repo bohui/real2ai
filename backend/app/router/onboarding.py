@@ -79,7 +79,6 @@ async def complete_onboarding(
             "onboarding_preferences": request.onboarding_preferences.model_dump(
                 exclude_unset=True
             ),
-            "updated_at": datetime.now(timezone.utc).isoformat(),
         }
 
         db_client.table("profiles").update(update_data).eq("id", user.id).execute()
@@ -124,7 +123,6 @@ async def update_onboarding_preferences(
     try:
         update_data = {
             "onboarding_preferences": preferences.model_dump(exclude_unset=True),
-            "updated_at": datetime.now(timezone.utc).isoformat(),
         }
 
         db_client.table("profiles").update(update_data).eq("id", user.id).execute()

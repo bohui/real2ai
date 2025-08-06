@@ -417,7 +417,6 @@ async def _update_document_status(
         db_client.table("documents").update({
             "status": status,
             "processing_results": processing_results,
-            "updated_at": datetime.now(timezone.utc).isoformat()
         }).eq("id", document_id).execute()
         
     except Exception as e:
