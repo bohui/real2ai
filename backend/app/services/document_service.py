@@ -161,23 +161,54 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
                 "ensure_bucket_exists", {"bucket_name": self.storage_bucket}
             )
 
-            # RPC function returns JSONB, which Supabase client already parses
-            # No need to json.loads() - result is already a dict/object
-            result_data = result
+            # Handle the JSON response properly
+            if isinstance(result, dict):
+                result_data = result
+            elif isinstance(result, str):
+                try:
+                    result_data = json.loads(result)
+                except json.JSONDecodeError:
+                    self.logger.warning(f"Could not parse RPC response: {result}")
+                    return
+            else:
+                self.logger.warning(f"Unexpected RPC response type: {type(result)}")
+                return
 
+            # Log appropriate message based on result
             if result_data.get("created"):
                 self.logger.info(f"Created storage bucket: {self.storage_bucket}")
-            else:
+            elif result_data.get("message") == "Bucket already exists":
                 self.logger.debug(f"Storage bucket already exists: {self.storage_bucket}")
+            else:
+                self.logger.info(f"Bucket operation result: {result_data.get('message', 'Unknown')}")
 
             self.log_operation(
                 "system_bucket_ensure", "storage_bucket", self.storage_bucket
             )
 
         except Exception as e:
-            # This is expected when bucket already exists, just log as debug
-            self.logger.debug(f"Bucket verification completed with message: {str(e)}")
-            # Don't treat this as an error - service can continue normally
+            # Parse the error message to extract actual result if available
+            error_str = str(e)
+            if "Bucket already exists" in error_str:
+                self.logger.debug(f"Storage bucket already exists: {self.storage_bucket}")
+            elif "JSON could not be generated" in error_str and "details" in error_str:
+                # Extract the JSON from the error details
+                import re
+                json_match = re.search(r"details.*?b'({.*?})'", error_str)
+                if json_match:
+                    try:
+                        result_data = json.loads(json_match.group(1))
+                        if result_data.get("message") == "Bucket already exists":
+                            self.logger.debug(f"Storage bucket already exists: {self.storage_bucket}")
+                        else:
+                            self.logger.info(f"Bucket operation: {result_data.get('message', 'Unknown')}")
+                    except json.JSONDecodeError:
+                        self.logger.warning(f"Bucket verification had parsing issues (service will continue): {error_str}")
+                else:
+                    self.logger.warning(f"Bucket verification failed (service will continue): {error_str}")
+            else:
+                self.logger.warning(f"Bucket verification failed (service will continue): {error_str}")
+            # Don't raise - service can function without bucket verification
 
     @langsmith_trace(name="process_document")
     async def process_document(

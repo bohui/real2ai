@@ -317,6 +317,43 @@ class SupabaseDatabaseClient(DatabaseOperations):
                 original_error=e,
             )
 
+    @with_retry(max_retries=3, backoff_factor=1.0)
+    async def select(
+        self, table: str, columns: str = "*", filters: Dict[str, Any] = None
+    ) -> Dict[str, Any]:
+        """Select records with optional filtering - used by contract router."""
+        try:
+            self.logger.debug(f"Selecting from table '{table}' columns '{columns}' with filters: {filters}")
+            
+            query = self.supabase_client.table(table).select(columns)
+            
+            # Apply filters if provided
+            if filters:
+                for key, value in filters.items():
+                    query = query.eq(key, value)
+            
+            result = query.execute()
+            
+            return {
+                "data": result.data or [],
+                "count": len(result.data) if result.data else 0
+            }
+            
+        except APIError as e:
+            self.logger.error(f"API error selecting from table '{table}': {e}")
+            raise ClientError(
+                f"Failed to select from table '{table}': {str(e)}",
+                client_name=self.client_name,
+                original_error=e,
+            )
+        except Exception as e:
+            self.logger.error(f"Unexpected error selecting from table '{table}': {e}")
+            raise ClientError(
+                f"Unexpected error selecting from table '{table}': {str(e)}",
+                client_name=self.client_name,
+                original_error=e,
+            )
+
     def table(self, table_name: str):
         """Get direct access to table for complex queries."""
         return self.supabase_client.table(table_name)

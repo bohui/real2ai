@@ -377,6 +377,7 @@ class NotificationSystem:
             priority=priority,
             title=title,
             message=message,
+            timestamp=datetime.now(UTC),
             user_id=user_id,
             contract_id=contract_id,
             session_id=session_id,
