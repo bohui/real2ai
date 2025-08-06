@@ -88,6 +88,18 @@ class SupabaseAuthClient(AuthOperations):
 
         except AuthError as e:
             self.logger.error(f"Auth error authenticating user: {e}")
+            
+            # Check if this is a JWT expiration error
+            error_str = str(e).lower()
+            if 'expired' in error_str or 'invalid_token' in error_str or 'jwt' in error_str:
+                self.logger.info("JWT expiration or invalid token detected in auth client")
+                raise ClientAuthenticationError(
+                    f"Token expired or invalid: {str(e)}",
+                    client_name=self.client_name,
+                    original_error=e,
+                )
+            
+            # For other auth errors
             raise ClientAuthenticationError(
                 f"Authentication failed: {str(e)}",
                 client_name=self.client_name,

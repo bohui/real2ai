@@ -16,6 +16,38 @@ from app.clients.base.exceptions import ClientError
 
 logger = logging.getLogger(__name__)
 
+
+def is_jwt_expired_error(error: Exception) -> bool:
+    """Check if the error indicates JWT expiration."""
+    error_str = str(error).lower()
+    error_details = getattr(error, 'details', None) or getattr(error, 'message', None)
+    
+    # Check main error message
+    jwt_indicators = [
+        'jwt expired',
+        'pgrst301',
+        'token expired',
+        'unauthorized',
+        'invalid_token',
+        'expired'
+    ]
+    
+    if any(indicator in error_str for indicator in jwt_indicators):
+        return True
+    
+    # Check error details/message if available
+    if error_details:
+        details_str = str(error_details).lower()
+        if any(indicator in details_str for indicator in jwt_indicators):
+            return True
+    
+    # Check if error has original_error with JWT indicators
+    original_error = getattr(error, 'original_error', None)
+    if original_error:
+        return is_jwt_expired_error(original_error)
+        
+    return False
+
 # Security scheme for JWT tokens
 security = HTTPBearer()
 
@@ -100,8 +132,19 @@ class AuthService:
 
         except ClientError as e:
             logger.error(f"Token verification error: {str(e)}")
+            
+            # Check if this is a JWT expiration error
+            if is_jwt_expired_error(e):
+                logger.info("JWT expiration detected during token verification")
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED, 
+                    detail="Token has expired. Please log in again."
+                )
+            
+            # For other authentication errors
             raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
+                status_code=status.HTTP_401_UNAUTHORIZED, 
+                detail="Invalid token"
             )
         except Exception as e:
             logger.error(f"Unexpected token verification error: {str(e)}")
@@ -139,11 +182,22 @@ class AuthService:
 
         except ClientError as e:
             logger.error(f"Database error getting user: {str(e)}")
+            
+            # Check if this is a JWT expiration error
+            if is_jwt_expired_error(e):
+                logger.info(f"JWT expiration detected for user {token_data.user_id}")
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Token has expired. Please log in again.",
+                )
+            
+            # For other database errors, return 500
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Could not retrieve user data",
             )
         except HTTPException:
+            # Re-raise HTTP exceptions as-is
             raise
         except Exception as e:
             logger.error(f"Unexpected authentication error: {str(e)}")

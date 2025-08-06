@@ -19,6 +19,36 @@ from .config import SupabaseClientConfig
 logger = logging.getLogger(__name__)
 
 
+def is_jwt_expired_error(error: Exception) -> bool:
+    """Check if the error indicates JWT expiration."""
+    error_str = str(error).lower()
+    error_details = getattr(error, 'details', None) or getattr(error, 'message', None)
+    
+    # Check main error message
+    jwt_indicators = [
+        'jwt expired',
+        'pgrst301',
+        'token expired',
+        'unauthorized',
+        'invalid_token'
+    ]
+    
+    if any(indicator in error_str for indicator in jwt_indicators):
+        return True
+    
+    # Check error details/message if available
+    if error_details:
+        details_str = str(error_details).lower()
+        if any(indicator in details_str for indicator in jwt_indicators):
+            return True
+    
+    # Check if error code is PGRST301 specifically
+    if hasattr(error, 'code') and error.code == 'PGRST301':
+        return True
+        
+    return False
+
+
 class SupabaseDatabaseClient(DatabaseOperations):
     """Supabase database operations client."""
 
@@ -93,6 +123,17 @@ class SupabaseDatabaseClient(DatabaseOperations):
 
         except APIError as e:
             self.logger.error(f"API error creating record in table '{table}': {e}")
+            
+            # Check if this is a JWT expiration error
+            if is_jwt_expired_error(e):
+                self.logger.info(f"JWT expiration detected in database create operation for table '{table}'")
+                raise ClientError(
+                    f"JWT expired: {str(e)}",
+                    client_name=self.client_name,
+                    original_error=e,
+                )
+            
+            # For other API errors
             raise ClientError(
                 f"Failed to create record in table '{table}': {str(e)}",
                 client_name=self.client_name,
@@ -136,6 +177,17 @@ class SupabaseDatabaseClient(DatabaseOperations):
 
         except APIError as e:
             self.logger.error(f"API error reading from table '{table}': {e}")
+            
+            # Check if this is a JWT expiration error
+            if is_jwt_expired_error(e):
+                self.logger.info(f"JWT expiration detected in database read operation for table '{table}'")
+                raise ClientError(
+                    f"JWT expired: {str(e)}",
+                    client_name=self.client_name,
+                    original_error=e,
+                )
+            
+            # For other API errors
             raise ClientError(
                 f"Failed to read from table '{table}': {str(e)}",
                 client_name=self.client_name,
@@ -178,6 +230,17 @@ class SupabaseDatabaseClient(DatabaseOperations):
             self.logger.error(
                 f"API error updating record {record_id} in table '{table}': {e}"
             )
+            
+            # Check if this is a JWT expiration error
+            if is_jwt_expired_error(e):
+                self.logger.info(f"JWT expiration detected in database update operation for table '{table}'")
+                raise ClientError(
+                    f"JWT expired: {str(e)}",
+                    client_name=self.client_name,
+                    original_error=e,
+                )
+            
+            # For other API errors
             raise ClientError(
                 f"Failed to update record {record_id} in table '{table}': {str(e)}",
                 client_name=self.client_name,
@@ -368,6 +431,17 @@ class SupabaseDatabaseClient(DatabaseOperations):
             
         except APIError as e:
             self.logger.error(f"API error selecting from table '{table}': {e}")
+            
+            # Check if this is a JWT expiration error
+            if is_jwt_expired_error(e):
+                self.logger.info(f"JWT expiration detected in database select operation for table '{table}'")
+                raise ClientError(
+                    f"JWT expired: {str(e)}",
+                    client_name=self.client_name,
+                    original_error=e,
+                )
+            
+            # For other API errors
             raise ClientError(
                 f"Failed to select from table '{table}': {str(e)}",
                 client_name=self.client_name,

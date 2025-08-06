@@ -1,9 +1,10 @@
 """Authentication router."""
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Header
+from typing import Optional
 import logging
 
-from app.core.auth import User
+from app.core.auth import User, get_current_user_token
 from app.clients.factory import get_service_supabase_client
 from app.schema.auth import UserRegistrationRequest, UserLoginRequest
 from app.core.error_handler import handle_api_error, create_error_context, ErrorCategory
@@ -95,3 +96,108 @@ async def login_user(login_data: UserLoginRequest, db_client=Depends(get_service
     except Exception as e:
         logger.error(f"Login error: {str(e)}")
         raise HTTPException(status_code=401, detail="Authentication failed")
+
+
+@router.post("/refresh")
+async def refresh_token(
+    refresh_token: Optional[str] = Header(None, alias="X-Refresh-Token"),
+    db_client=Depends(get_service_supabase_client)
+):
+    """Refresh access token using refresh token"""
+    
+    context = create_error_context(
+        user_id="unknown",
+        operation="refresh_token",
+        metadata={"has_refresh_token": refresh_token is not None}
+    )
+    
+    try:
+        if not refresh_token:
+            raise HTTPException(
+                status_code=400, 
+                detail="Refresh token required. Please provide X-Refresh-Token header."
+            )
+        
+        logger.info("Attempting token refresh")
+        
+        # Use Supabase refresh session
+        refresh_result = db_client.auth.refresh_session(refresh_token)
+        
+        if refresh_result.session and refresh_result.user:
+            logger.info(f"Token refresh successful for user {refresh_result.user.id}")
+            
+            # Get updated user profile
+            profile_result = (
+                db_client.table("profiles")
+                .select("*")
+                .eq("id", refresh_result.user.id)
+                .execute()
+            )
+            
+            user_profile = profile_result.data[0] if profile_result.data else None
+            
+            return {
+                "access_token": refresh_result.session.access_token,
+                "refresh_token": refresh_result.session.refresh_token,
+                "user_profile": user_profile,
+                "expires_in": refresh_result.session.expires_in,
+                "message": "Token refreshed successfully"
+            }
+        else:
+            logger.warning("Token refresh failed: No session or user returned")
+            raise HTTPException(
+                status_code=401, 
+                detail="Invalid refresh token. Please log in again."
+            )
+    
+    except HTTPException:
+        # Re-raise HTTPExceptions
+        raise
+    except Exception as e:
+        logger.error(f"Token refresh error: {str(e)}")
+        
+        # Check if this is a refresh token expiration
+        error_str = str(e).lower()
+        if any(indicator in error_str for indicator in ['expired', 'invalid', 'unauthorized']):
+            raise HTTPException(
+                status_code=401, 
+                detail="Refresh token expired or invalid. Please log in again."
+            )
+        
+        # Use enhanced error handling for other errors
+        raise handle_api_error(e, context, ErrorCategory.AUTHENTICATION)
+
+
+@router.post("/logout")
+async def logout_user(
+    current_token: str = Depends(get_current_user_token),
+    db_client=Depends(get_service_supabase_client)
+):
+    """Logout user and invalidate tokens"""
+    
+    context = create_error_context(
+        user_id="unknown",
+        operation="logout",
+        metadata={"has_token": current_token is not None}
+    )
+    
+    try:
+        logger.info("User logout attempt")
+        
+        # Sign out from Supabase (this invalidates the refresh token)
+        db_client.auth.sign_out()
+        
+        logger.info("User logout successful")
+        
+        return {
+            "message": "Logged out successfully",
+            "status": "success"
+        }
+    
+    except Exception as e:
+        logger.error(f"Logout error: {str(e)}")
+        # Even if logout fails, we can return success since the client should clear tokens
+        return {
+            "message": "Logged out (with warnings)",
+            "status": "success"
+        }

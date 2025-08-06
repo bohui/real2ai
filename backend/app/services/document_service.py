@@ -274,8 +274,15 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
                 )
             )
 
-            # Continue with other processing steps...
-            # All operations automatically use user context
+            # Step 5: Aggregate diagram detection results from pages
+            diagram_processing_result = self._aggregate_diagram_detections(
+                text_extraction_result
+            )
+
+            # Step 6: Create page processing summary
+            page_processing_result = self._create_page_processing_summary(
+                text_extraction_result
+            )
 
             processing_time = (datetime.now(UTC) - processing_start).total_seconds()
 
@@ -283,9 +290,9 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
                 document_id,
                 processing_time,
                 text_extraction_result,
-                {},  # page_processing_result
+                page_processing_result,
                 {},  # entity_extraction_result
-                {},  # diagram_processing_result
+                diagram_processing_result,
                 {},  # document_analysis_result
                 {},  # semantic_result
             )
@@ -960,10 +967,16 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
                 "boundary",
                 "title plan",
                 "sewer diagram",
+                "sewerage diagram",
+                "service diagram",
+                "utilities diagram",
                 "flood map",
                 "bushfire",
                 "drainage",
                 "contour",
+                "easement",
+                "zoning map",
+                "cadastral",
             ]
             text_lower = text_content.lower()
             return any(keyword in text_lower for keyword in diagram_keywords)
@@ -1048,6 +1061,109 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
             indicators["readability_score"] = max(0.0, indicators["readability_score"])
 
         return indicators
+
+    def _aggregate_diagram_detections(self, text_extraction_result: Dict[str, Any]) -> Dict[str, Any]:
+        """Aggregate diagram detection results from page-level analysis"""
+        if not text_extraction_result.get("success") or not text_extraction_result.get("pages"):
+            return {
+                "total_diagrams": 0,
+                "diagram_pages": [],
+                "diagram_types": {},
+                "detection_summary": {
+                    "embedded_images": 0,
+                    "vector_graphics": 0,
+                    "text_indicators": 0,
+                    "mixed_content": 0
+                }
+            }
+
+        diagram_pages = []
+        diagram_types = {}
+        detection_summary = {
+            "embedded_images": 0,
+            "vector_graphics": 0, 
+            "text_indicators": 0,
+            "mixed_content": 0
+        }
+
+        for page in text_extraction_result["pages"]:
+            page_analysis = page.get("content_analysis", {})
+            layout_features = page_analysis.get("layout_features", {})
+            
+            if layout_features.get("has_diagrams", False):
+                page_num = page.get("page_number", 0)
+                diagram_pages.append({
+                    "page_number": page_num,
+                    "content_types": page_analysis.get("content_types", []),
+                    "primary_type": page_analysis.get("primary_type", "unknown"),
+                    "confidence": page.get("confidence", 0.0)
+                })
+
+                # Count diagram types based on content analysis
+                primary_type = page_analysis.get("primary_type", "unknown")
+                if primary_type == "diagram":
+                    diagram_types["diagram"] = diagram_types.get("diagram", 0) + 1
+                elif primary_type == "mixed" and "diagram" in page_analysis.get("content_types", []):
+                    diagram_types["mixed"] = diagram_types.get("mixed", 0) + 1
+                    detection_summary["mixed_content"] += 1
+                else:
+                    diagram_types["other"] = diagram_types.get("other", 0) + 1
+
+                # Increment detection summary (this is a simplified heuristic)
+                # In a full implementation, we'd track detection method per page
+                detection_summary["text_indicators"] += 1
+
+        total_diagrams = len(diagram_pages)
+
+        return {
+            "total_diagrams": total_diagrams,
+            "diagram_pages": diagram_pages,
+            "diagram_types": diagram_types,
+            "detection_summary": detection_summary,
+            "processing_notes": [
+                f"Detected diagrams on {total_diagrams} pages",
+                f"Primary detection method: text-based indicators",
+                f"Diagram types found: {list(diagram_types.keys())}" if diagram_types else "No specific diagram types classified"
+            ]
+        }
+
+    def _create_page_processing_summary(self, text_extraction_result: Dict[str, Any]) -> Dict[str, Any]:
+        """Create summary of page processing results"""
+        if not text_extraction_result.get("success") or not text_extraction_result.get("pages"):
+            return {
+                "pages": [],
+                "total_pages_processed": 0,
+                "content_type_distribution": {},
+                "average_confidence": 0.0
+            }
+
+        pages = text_extraction_result["pages"]
+        content_type_distribution = {}
+        total_confidence = 0.0
+
+        for page in pages:
+            page_analysis = page.get("content_analysis", {})
+            primary_type = page_analysis.get("primary_type", "unknown")
+            
+            content_type_distribution[primary_type] = content_type_distribution.get(primary_type, 0) + 1
+            total_confidence += page.get("confidence", 0.0)
+
+        average_confidence = total_confidence / len(pages) if pages else 0.0
+
+        return {
+            "pages": pages,
+            "total_pages_processed": len(pages),
+            "content_type_distribution": content_type_distribution,
+            "average_confidence": average_confidence,
+            "processing_summary": {
+                "text_pages": content_type_distribution.get("text", 0),
+                "diagram_pages": content_type_distribution.get("diagram", 0),
+                "mixed_pages": content_type_distribution.get("mixed", 0),
+                "table_pages": content_type_distribution.get("table", 0),
+                "signature_pages": content_type_distribution.get("signature", 0),
+                "empty_pages": content_type_distribution.get("empty", 0)
+            }
+        }
 
     # Placeholder implementations
     async def _extract_docx_text_comprehensive(
