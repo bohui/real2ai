@@ -12,6 +12,7 @@ from fastapi import HTTPException
 
 from app.core.config import get_settings
 from app.core.prompts.service_mixin import PromptEnabledService
+from app.services.base.user_aware_service import UserAwareService
 from app.schema.enums import AustralianState, ContractType
 from app.prompts.schema.image_semantics_schema import (
     ImageSemantics,
@@ -27,36 +28,46 @@ from app.clients.base.exceptions import ClientError
 logger = logging.getLogger(__name__)
 
 
-class SemanticAnalysisWorkflow:
+class SemanticAnalysisWorkflow(UserAwareService):
     """Workflow orchestrator for semantic image analysis"""
 
-    def __init__(self):
+    def __init__(self, user_client=None):
+        super().__init__(user_client=user_client)
         self.ocr_service = None
         self.document_service = None
         self.settings = get_settings()
 
     async def initialize(self, document_service=None):
-        """Initialize all required services"""
+        """Initialize all required services - USER AWARE OPERATION"""
         try:
-            self.ocr_service = GeminiOCRService()
+            # Pass user client to OCR service for user-aware operations
+            if self.is_user_authenticated():
+                user_client = await self.get_user_client()
+                self.ocr_service = GeminiOCRService(user_client=user_client)
+            else:
+                # For system-level operations, don't pass user client
+                self.ocr_service = GeminiOCRService()
+            
             await self.ocr_service.initialize()
 
             # Use dependency injection for document service
             self.document_service = document_service
 
             logger.info("Semantic analysis workflow initialized successfully")
+            self.log_operation("initialize", "semantic_workflow", None)
 
         except Exception as e:
             logger.error(f"Failed to initialize semantic analysis workflow: {str(e)}")
             raise
 
 
-class SemanticAnalysisService(PromptEnabledService):
+class SemanticAnalysisService(PromptEnabledService, UserAwareService):
     """Service for semantic analysis of property diagrams and images"""
 
-    def __init__(self, document_service=None):
-        super().__init__()
-        self.workflow = SemanticAnalysisWorkflow()
+    def __init__(self, document_service=None, user_client=None):
+        PromptEnabledService.__init__(self)
+        UserAwareService.__init__(self, user_client=user_client)
+        self.workflow = SemanticAnalysisWorkflow(user_client=user_client)
         self._document_service = document_service
 
     async def initialize(self):
@@ -112,6 +123,9 @@ class SemanticAnalysisService(PromptEnabledService):
         }
 
         try:
+            # Log semantic analysis operation
+            self.log_operation("analyze_semantics", "document", document_id or storage_path)
+            
             # Stage 1: Document Processing and OCR
             if document_id:
                 await self._track_progress(
@@ -128,6 +142,9 @@ class SemanticAnalysisService(PromptEnabledService):
             file_content = await self.workflow.document_service.get_file_content(
                 storage_path
             )
+            
+            # Log file access for audit trail
+            self.log_operation("read", "document_content", storage_path)
 
             # Stage 2: Image Semantic Extraction
             if document_id:
@@ -335,6 +352,9 @@ class SemanticAnalysisService(PromptEnabledService):
         }
 
         try:
+            # Log contract diagram analysis operation
+            self.log_operation("analyze_contract_diagrams", "document", document_id or "batch_analysis")
+            
             # Analyze each diagram individually
             for i, storage_path in enumerate(storage_paths):
                 if document_id:
@@ -996,7 +1016,11 @@ class SemanticAnalysisService(PromptEnabledService):
 
     async def health_check(self) -> Dict[str, Any]:
         """Health check for semantic analysis service"""
+        # Get base health check from UserAwareService
+        base_health = await super().health_check() if hasattr(super(), 'health_check') else {}
+        
         health_status = {
+            **base_health,
             "service": "SemanticAnalysisService",
             "status": "healthy",
             "dependencies": {},
@@ -1006,6 +1030,7 @@ class SemanticAnalysisService(PromptEnabledService):
                 "risk_assessment_integration",
                 "prompt_engineering_enhancement",
                 "progress_tracking",
+                "user_context_aware",
             ],
             "timestamp": datetime.now(UTC).isoformat(),
         }

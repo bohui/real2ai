@@ -1,6 +1,9 @@
 """
 Celery tasks for OCR processing with Gemini 2.5 Pro
 Scalable background processing for document analysis
+
+MIGRATED VERSION: Now uses user-aware architecture with proper context propagation.
+All tasks use @user_aware_task decorator to maintain user authentication context.
 """
 
 import asyncio
@@ -10,8 +13,9 @@ from datetime import datetime, timezone
 from celery.exceptions import Retry, MaxRetriesExceededError
 
 from app.core.celery import celery_app
-from app.clients.factory import get_supabase_client
-from app.services.document_service import DocumentService
+from app.core.task_context import user_aware_task
+from app.core.auth_context import AuthContext
+from app.services.document_service_migrated import DocumentService
 from app.services.websocket_service import WebSocketManager
 
 logger = logging.getLogger(__name__)
@@ -25,7 +29,8 @@ logger = logging.getLogger(__name__)
     retry_backoff_max=600,
     retry_jitter=True
 )
-def process_document_ocr(
+@user_aware_task
+async def process_document_ocr(
     self,
     document_id: str,
     user_id: str,
@@ -33,20 +38,39 @@ def process_document_ocr(
     processing_options: Optional[Dict[str, Any]] = None
 ):
     """
-    Process document with OCR using Gemini 2.5 Pro
+    Process document with OCR using Gemini 2.5 Pro - USER AWARE VERSION
+    
+    This task maintains user authentication context throughout execution,
+    ensuring all database operations respect RLS policies.
     
     Args:
         document_id: Document ID to process
-        user_id: User ID for security
+        user_id: User ID for security and context validation
         contract_context: Context for contract analysis
         processing_options: Additional processing options
     """
     
     try:
-        # Run async function in sync context
-        return asyncio.run(_async_process_document_ocr(
-            document_id, user_id, contract_context, processing_options, self.request.id
-        ))
+        # Verify user context matches expected user
+        context_user_id = AuthContext.get_user_id()
+        if context_user_id != user_id:
+            raise ValueError(f"User context mismatch: expected {user_id}, got {context_user_id}")
+            
+        logger.info(f"Starting OCR processing for user {user_id}, document {document_id}")
+        
+        # Initialize user-aware document service
+        document_service = DocumentService()
+        await document_service.initialize()
+        
+        # Process document using user context (all operations respect RLS)
+        result = await document_service.process_document_internal(
+            document_id=document_id,
+            user_id=user_id,
+            processing_options=processing_options or {}
+        )
+        
+        logger.info(f"OCR processing completed for document {document_id}")
+        return result
         
     except Exception as e:
         logger.error(f"OCR task failed for document {document_id}: {str(e)}")

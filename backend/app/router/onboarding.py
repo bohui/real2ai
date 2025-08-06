@@ -5,7 +5,8 @@ from datetime import datetime, timezone
 import logging
 
 from app.core.auth import get_current_user, User
-from app.clients.factory import get_supabase_client
+from app.core.auth_context import AuthContext
+from app.core.error_handler import handle_api_error, create_error_context, ErrorCategory
 from app.schema.onboarding import (
     OnboardingStatusResponse,
     OnboardingPreferencesRequest,
@@ -18,10 +19,13 @@ router = APIRouter(prefix="/api/users/onboarding", tags=["onboarding"])
 
 @router.get("/status", response_model=OnboardingStatusResponse)
 async def get_onboarding_status(
-    user: User = Depends(get_current_user), db_client=Depends(get_supabase_client)
+    user: User = Depends(get_current_user)
 ):
     """Get user onboarding status"""
     try:
+        # Get authenticated client
+        db_client = await AuthContext.get_authenticated_client(require_auth=True)
+        
         profile_result = (
             db_client.table("profiles")
             .select(
@@ -55,10 +59,12 @@ async def get_onboarding_status(
 async def complete_onboarding(
     request: OnboardingCompleteRequest,
     user: User = Depends(get_current_user),
-    db_client=Depends(get_supabase_client),
 ):
     """Complete user onboarding and save preferences"""
     try:
+        # Get authenticated client
+        db_client = await AuthContext.get_authenticated_client(require_auth=True)
+        
         # Check if already completed
         profile_result = (
             db_client.table("profiles")
@@ -117,10 +123,12 @@ async def complete_onboarding(
 async def update_onboarding_preferences(
     preferences: OnboardingPreferencesRequest,
     user: User = Depends(get_current_user),
-    db_client=Depends(get_supabase_client),
 ):
     """Update user onboarding preferences"""
     try:
+        # Get authenticated client
+        db_client = await AuthContext.get_authenticated_client(require_auth=True)
+        
         update_data = {
             "onboarding_preferences": preferences.model_dump(exclude_unset=True),
         }

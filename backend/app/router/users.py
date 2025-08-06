@@ -5,7 +5,8 @@ from typing import Dict, Any
 import logging
 
 from app.core.auth import get_current_user, User
-from app.clients.factory import get_supabase_client
+from app.core.auth_context import AuthContext
+from app.core.error_handler import handle_api_error, create_error_context, ErrorCategory
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/users", tags=["users"])
@@ -21,10 +22,12 @@ async def get_user_profile(user: User = Depends(get_current_user)):
 async def update_user_profile(
     user_data: Dict[str, Any], 
     user: User = Depends(get_current_user),
-    db_client=Depends(get_supabase_client)
 ):
     """Update user profile"""
     try:
+        # Get authenticated client
+        db_client = await AuthContext.get_authenticated_client(require_auth=True)
+        
         # Update user profile in database
         allowed_fields = [
             "full_name", "phone_number", "organization", 
@@ -54,10 +57,13 @@ async def update_user_profile(
 
 @router.put("/preferences")
 async def update_user_preferences(
-    preferences: Dict[str, Any], user: User = Depends(get_current_user), db_client=Depends(get_supabase_client)
+    preferences: Dict[str, Any], user: User = Depends(get_current_user)
 ):
     """Update user preferences"""
     try:
+        # Get authenticated client
+        db_client = await AuthContext.get_authenticated_client(require_auth=True)
+        
         db_client.table("profiles").update({"preferences": preferences}).eq(
             "id", user.id
         ).execute()
@@ -69,10 +75,13 @@ async def update_user_preferences(
 
 
 @router.get("/usage-stats")
-async def get_usage_stats(user: User = Depends(get_current_user), db_client=Depends(get_supabase_client)):
+async def get_usage_stats(user: User = Depends(get_current_user)):
     """Get user usage statistics"""
 
     try:
+        # Get authenticated client
+        db_client = await AuthContext.get_authenticated_client(require_auth=True)
+        
         # Get usage logs
         usage_result = (
             db_client.table("usage_logs")

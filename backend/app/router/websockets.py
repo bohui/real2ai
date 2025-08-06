@@ -1,24 +1,24 @@
-"""WebSocket router for real-time contract analysis updates."""
+"""WebSocket router with proper ASGI compliance and user-aware architecture"""
 
 import json
 import asyncio
 import logging
 from typing import Dict, Any
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, Query
-from fastapi.security import HTTPBearer
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
 from datetime import datetime, UTC
 
 from app.core.auth import get_current_user_ws
-from app.services.websocket_service import WebSocketEvents
-from app.services.websocket_singleton import websocket_manager
-from app.clients.factory import get_service_supabase_client
-from app.services.redis_pubsub import redis_pubsub_service
-
-# Database client will be initialized lazily when needed
-db_client = None
+from app.services.websocket_service import WebSocketManager, WebSocketEvents
+from app.core.error_handler import (
+    handle_api_error, 
+    create_error_context, 
+    ErrorCategory
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/ws", tags=["websockets"])
+
+websocket_manager = WebSocketManager()
 
 
 @router.websocket("/contracts/{contract_id}")
@@ -28,49 +28,45 @@ async def contract_analysis_websocket(
     token: str = Query(..., description="Authentication token"),
 ):
     """
-    WebSocket endpoint for real-time contract analysis updates.
-
-    ASGI-compliant WebSocket lifecycle: accept → authenticate → connect → handle messages
-    This prevents ASGI protocol violations by accepting before any close operations.
+    ASGI-Compliant WebSocket endpoint for real-time contract analysis updates.
+    
+    Proper ASGI WebSocket lifecycle:
+    1. ALWAYS accept() first (required by ASGI protocol)
+    2. Authenticate after accepting
+    3. Close with proper error codes if auth fails
+    4. Handle messages in connected state
     """
     
     user = None
-    connection_established = False
-    authenticated = False
-
+    
     try:
-        # Step 1: Log connection attempt
-        logger.info(f"WebSocket connection requested for contract {contract_id} by user token")
-        
-        # Step 2: ACCEPT FIRST (required by ASGI protocol)
-        # Must accept before any other operations to establish proper ASGI state
+        # STEP 1: ALWAYS accept the WebSocket connection first (ASGI requirement)
         await websocket.accept()
-        logger.info("WebSocket connection accepted, proceeding with authentication")
-        connection_established = True
-
-        # Step 3: Authenticate AFTER accepting (ASGI compliant)
-        try:
-            user = await get_current_user_ws(token)
-            if not user:
-                logger.error(f"WebSocket authentication failed for contract {contract_id}")
-                await websocket.close(code=4001, reason="Authentication failed")
-                return
+        logger.info(f"WebSocket connection accepted for contract {contract_id}")
+        
+        # STEP 2: Authenticate AFTER accepting (security check)
+        user = await get_current_user_ws(token)
+        if not user:
+            logger.error(f"WebSocket authentication failed for contract {contract_id}")
             
-            authenticated = True
-            logger.info(
-                f"WebSocket authentication successful for contract {contract_id} by user {user.id}"
-            )
-        except Exception as auth_error:
-            logger.error(f"WebSocket authentication error for contract {contract_id}: {str(auth_error)}")
+            # Send error message before closing (now we can send because it's accepted)
+            await websocket.send_text(json.dumps({
+                "event_type": "authentication_error",
+                "timestamp": datetime.now(UTC).isoformat(),
+                "data": {
+                    "error": "Authentication failed",
+                    "code": 4001,
+                    "message": "Invalid or missing authentication token"
+                }
+            }))
+            
+            # Now we can safely close (WebSocket is in CONNECTED state)
             await websocket.close(code=4001, reason="Authentication failed")
             return
 
-        # Initialize database client for this connection
-        global db_client
-        if db_client is None:
-            db_client = await get_service_supabase_client()
-        
-        # Step 4: Register with connection manager (websocket accepted and authenticated)
+        logger.info(f"Authentication successful for contract {contract_id} by user {user.id}")
+
+        # STEP 3: Register with connection manager (connection is accepted and authenticated)
         await websocket_manager.connect(
             websocket,
             contract_id,
@@ -78,7 +74,6 @@ async def contract_analysis_websocket(
                 "user_id": str(user.id),
                 "contract_id": contract_id,
                 "connected_at": datetime.now(UTC).isoformat(),
-                "authenticated": True,
             },
         )
 
@@ -96,94 +91,81 @@ async def contract_analysis_websocket(
                 },
             },
         )
+
+        # STEP 4: Handle client messages in message loop
+        await handle_websocket_messages(websocket, contract_id, user.id)
+
+    except WebSocketDisconnect:
+        logger.info(f"WebSocket disconnected for contract {contract_id}")
+    except Exception as e:
+        # Create error context for WebSocket errors
+        context = create_error_context(
+            user_id=user.id if user else None,
+            operation="websocket_connection",
+            metadata={"contract_id": contract_id}
+        )
         
-        # Start Redis subscription for progress updates
-        async def handle_redis_message(message_data: Dict[str, Any]):
-            """Handle messages received from Redis Pub/Sub"""
+        # Log enhanced error (but don't raise since this is WebSocket)
+        try:
+            handle_api_error(e, context, ErrorCategory.NETWORK)
+        except Exception:
+            # Just log the enhanced error, don't re-raise for WebSocket
+            pass
+            
+        logger.error(f"WebSocket error for contract {contract_id}: {str(e)}")
+        try:
+            # Safe error handling - only close if not already closed
+            if websocket.client_state.name != "DISCONNECTED":
+                await websocket.close(code=4000, reason="Internal server error")
+        except Exception as close_error:
+            logger.error(f"Error closing WebSocket: {str(close_error)}")
+    finally:
+        # Cleanup - disconnect from manager
+        if user:  # Only cleanup if we had a successful authentication
+            websocket_manager.disconnect(websocket, contract_id)
+            logger.info(f"WebSocket cleanup completed for contract {contract_id}")
+
+
+async def handle_websocket_messages(websocket: WebSocket, contract_id: str, user_id: str):
+    """
+    Handle WebSocket messages in a separate function for better separation of concerns.
+    This ensures the main WebSocket handler focuses on connection lifecycle.
+    """
+    try:
+        while True:
+            # Wait for client messages (heartbeat, commands, etc.)
+            message = await websocket.receive_text()
+
             try:
-                # Forward the message directly to the WebSocket
+                data = json.loads(message)
+                await handle_client_message(websocket, contract_id, user_id, data)
+            except json.JSONDecodeError:
+                logger.warning(f"Invalid JSON received from client: {message}")
                 await websocket_manager.send_personal_message(
                     contract_id,
                     websocket,
-                    message_data
-                )
-                
-                # Check if this is a completion/failure message to stop subscription
-                event_type = message_data.get("event_type")
-                if event_type in ["analysis_completed", "analysis_failed"]:
-                    logger.info(f"Analysis {event_type} for contract {contract_id}, will close subscription")
-                    
-            except Exception as e:
-                logger.error(f"Error handling Redis message: {str(e)}")
-        
-        # Subscribe to Redis channel for this contract
-        subscription_task = await redis_pubsub_service.subscribe_to_progress(
-            contract_id, 
-            handle_redis_message
-        )
-        
-        # Keep connection alive and handle client messages
-        try:
-            while True:
-                # Wait for client messages (heartbeat, commands, etc.)
-                message = await websocket.receive_text()
-
-                try:
-                    data = json.loads(message)
-                    await handle_client_message(websocket, contract_id, user.id, data)
-                except json.JSONDecodeError:
-                    logger.warning(f"Invalid JSON received from client: {message}")
-                    await websocket_manager.send_personal_message(
-                        contract_id,
-                        websocket,
-                        {
-                            "event_type": "error",
-                            "timestamp": datetime.now(UTC).isoformat(),
-                            "data": {
-                                "message": "Invalid message format",
-                                "expected": "JSON",
-                            },
+                    {
+                        "event_type": "error",
+                        "timestamp": datetime.now(UTC).isoformat(),
+                        "data": {
+                            "message": "Invalid message format",
+                            "expected": "JSON",
                         },
-                    )
-
-        except WebSocketDisconnect:
-            logger.info(f"WebSocket disconnected for contract {contract_id}")
-            # Unsubscribe from Redis channel
-            await redis_pubsub_service.unsubscribe_from_progress(contract_id)
-
+                    },
+                )
+    except WebSocketDisconnect:
+        # Normal disconnection - let it bubble up
+        raise
     except Exception as e:
-        logger.error(f"WebSocket error for contract {contract_id}: {str(e)}")
-        # Only attempt to close if connection was properly established and authenticated
-        if connection_established and authenticated:
-            try:
-                await websocket.close(code=4000, reason="Internal server error")
-            except Exception as close_error:
-                logger.error(f"Error closing WebSocket: {str(close_error)}")
-        elif connection_established:
-            # Connection accepted but not authenticated - close with auth error
-            try:
-                await websocket.close(code=4001, reason="Authentication required")
-            except Exception as close_error:
-                logger.error(f"Error closing unauthenticated WebSocket: {str(close_error)}")
-
-    finally:
-        # Cleanup - only register/disconnect if properly authenticated
-        if connection_established and authenticated and user:
-            websocket_manager.disconnect(websocket, contract_id)
-            logger.info(f"WebSocket cleanup completed for contract {contract_id}")
-        else:
-            logger.info(f"WebSocket cleanup skipped - connection not fully established for contract {contract_id}")
-        
-        # Ensure Redis subscription is cancelled  
-        if 'subscription_task' in locals():
-            await redis_pubsub_service.unsubscribe_from_progress(contract_id)
+        logger.error(f"Error handling WebSocket messages: {str(e)}")
+        raise
 
 
 async def handle_client_message(
     websocket: WebSocket, contract_id: str, user_id: str, data: Dict[str, Any]
 ):
     """Handle messages received from WebSocket clients."""
-
+    
     message_type = data.get("type")
 
     if message_type == "heartbeat":
@@ -194,116 +176,11 @@ async def handle_client_message(
 
     elif message_type == "get_status":
         # Request current analysis status
-        from app.clients.factory import get_service_supabase_client
-
-        try:
-            db_client = await get_service_supabase_client()
-
-            # First try to get detailed progress from analysis_progress table
-            progress_result = (
-                db_client.table("analysis_progress")
-                .select("*")
-                .eq("contract_id", contract_id)
-                .eq("user_id", user_id)
-                .order("updated_at", desc=True)
-                .limit(1)
-                .execute()
-            )
-
-            if progress_result.data:
-                progress = progress_result.data[0]
-                status_message = {
-                    "event_type": "analysis_progress",
-                    "timestamp": datetime.now(UTC).isoformat(),
-                    "data": {
-                        "contract_id": contract_id,
-                        "current_step": progress["current_step"],
-                        "progress_percent": progress["progress_percent"],
-                        "step_description": progress["step_description"],
-                        "status": progress["status"],
-                        "estimated_completion_minutes": progress[
-                            "estimated_completion_minutes"
-                        ],
-                        "last_updated": progress["updated_at"],
-                        "total_elapsed_seconds": progress["total_elapsed_seconds"],
-                    },
-                }
-            else:
-                # Fallback to contract_analyses table
-                analysis_result = (
-                    db_client.table("contract_analyses")
-                    .select("*")
-                    .eq("contract_id", contract_id)
-                    .eq("user_id", user_id)
-                    .order("created_at", desc=True)
-                    .limit(1)
-                    .execute()
-                )
-
-                if analysis_result.data:
-                    analysis = analysis_result.data[0]
-                    status_message = {
-                        "event_type": "status_update",
-                        "timestamp": datetime.now(UTC).isoformat(),
-                        "data": {
-                            "contract_id": contract_id,
-                            "status": analysis["status"],
-                            "progress_percent": get_progress_from_status(
-                                analysis["status"]
-                            ),
-                            "last_updated": analysis["updated_at"],
-                        },
-                    }
-                else:
-                    status_message = {
-                        "event_type": "status_update",
-                        "timestamp": datetime.now(UTC).isoformat(),
-                        "data": {
-                            "contract_id": contract_id,
-                            "status": "not_found",
-                            "message": "No analysis found for this contract",
-                        },
-                    }
-
-            await websocket_manager.send_personal_message(
-                contract_id, websocket, status_message
-            )
-
-        except Exception as e:
-            logger.error(f"Error getting analysis status: {str(e)}")
-            await websocket_manager.send_personal_message(
-                contract_id,
-                websocket,
-                {
-                    "event_type": "error",
-                    "timestamp": datetime.now(UTC).isoformat(),
-                    "data": {
-                        "message": "Failed to get analysis status",
-                        "error": str(e),
-                    },
-                },
-            )
+        await handle_status_request(websocket, contract_id, user_id)
 
     elif message_type == "cancel_analysis":
         # Handle analysis cancellation request
-        logger.info(
-            f"Analysis cancellation requested for contract {contract_id} by user {user_id}"
-        )
-
-        # TODO: Implement cancellation logic
-        await websocket_manager.send_personal_message(
-            contract_id,
-            websocket,
-            {
-                "event_type": "cancellation_received",
-                "timestamp": datetime.now(UTC).isoformat(),
-                "data": {
-                    "contract_id": contract_id,
-                    "message": "Cancellation request received",
-                    "note": "Analysis will stop at the next checkpoint",
-                },
-            },
-        )
+        await handle_cancellation_request(websocket, contract_id, user_id)
 
     else:
         logger.warning(f"Unknown message type received: {message_type}")
@@ -319,6 +196,110 @@ async def handle_client_message(
                 },
             },
         )
+
+
+async def handle_status_request(websocket: WebSocket, contract_id: str, user_id: str):
+    """Handle status request with user context (RLS enforced)."""
+    from app.core.auth_context import AuthContext
+
+    try:
+        # Get user-authenticated client (respects RLS)
+        user_client = await AuthContext.get_authenticated_client(require_auth=True)
+
+        # Get detailed progress from analysis_progress table (user context - RLS enforced)
+        progress_result = await user_client.database.select(
+            "analysis_progress",
+            columns="*",
+            filters={"contract_id": contract_id, "user_id": user_id},
+            order_by="updated_at DESC",
+            limit=1
+        )
+
+        if progress_result.get("data"):
+            progress = progress_result["data"][0]
+            status_message = {
+                "event_type": "analysis_progress",
+                "timestamp": datetime.now(UTC).isoformat(),
+                "data": {
+                    "contract_id": contract_id,
+                    "current_step": progress["current_step"],
+                    "progress_percent": progress["progress_percent"],
+                    "step_description": progress["step_description"],
+                    "status": progress["status"],
+                    "estimated_completion_minutes": progress["estimated_completion_minutes"],
+                    "last_updated": progress["updated_at"],
+                    "total_elapsed_seconds": progress["total_elapsed_seconds"],
+                },
+            }
+        else:
+            # Fallback to contract_analyses table (user context - RLS enforced)
+            analysis_result = await user_client.database.select(
+                "contract_analyses",
+                columns="*",
+                filters={"contract_id": contract_id, "user_id": user_id},
+                order_by="created_at DESC",
+                limit=1
+            )
+
+            if analysis_result.get("data"):
+                analysis = analysis_result["data"][0]
+                status_message = {
+                    "event_type": "status_update",
+                    "timestamp": datetime.now(UTC).isoformat(),
+                    "data": {
+                        "contract_id": contract_id,
+                        "status": analysis["status"],
+                        "progress_percent": get_progress_from_status(analysis["status"]),
+                        "last_updated": analysis["updated_at"],
+                    },
+                }
+            else:
+                status_message = {
+                    "event_type": "status_update",
+                    "timestamp": datetime.now(UTC).isoformat(),
+                    "data": {
+                        "contract_id": contract_id,
+                        "status": "not_found",
+                        "message": "No analysis found for this contract",
+                    },
+                }
+
+        await websocket_manager.send_personal_message(contract_id, websocket, status_message)
+
+    except Exception as e:
+        logger.error(f"Error getting analysis status: {str(e)}")
+        await websocket_manager.send_personal_message(
+            contract_id,
+            websocket,
+            {
+                "event_type": "error",
+                "timestamp": datetime.now(UTC).isoformat(),
+                "data": {
+                    "message": "Failed to get analysis status",
+                    "error": str(e),
+                },
+            },
+        )
+
+
+async def handle_cancellation_request(websocket: WebSocket, contract_id: str, user_id: str):
+    """Handle analysis cancellation request."""
+    logger.info(f"Analysis cancellation requested for contract {contract_id} by user {user_id}")
+
+    # TODO: Implement actual cancellation logic
+    await websocket_manager.send_personal_message(
+        contract_id,
+        websocket,
+        {
+            "event_type": "cancellation_received",
+            "timestamp": datetime.now(UTC).isoformat(),
+            "data": {
+                "contract_id": contract_id,
+                "message": "Cancellation request received",
+                "note": "Analysis will stop at the next checkpoint",
+            },
+        },
+    )
 
 
 def get_progress_from_status(status: str) -> int:
@@ -347,9 +328,7 @@ async def websocket_health():
 
 # Get connection info for a specific contract
 @router.get("/contracts/{contract_id}/info")
-async def get_contract_connection_info(
-    contract_id: str, user=Depends(get_current_user_ws)
-):
+async def get_contract_connection_info(contract_id: str, user=None):
     """Get WebSocket connection information for a contract."""
     if not user:
         return {"error": "Authentication required"}

@@ -220,8 +220,19 @@ def get_client_factory() -> ClientFactory:
 
 
 # Convenience functions for commonly used clients
-async def get_supabase_client() -> SupabaseClient:
-    """Get initialized Supabase client."""
+async def get_supabase_client(use_service_role: bool = False) -> SupabaseClient:
+    """Get initialized Supabase client.
+    
+    Args:
+        use_service_role: If True, returns a service role client.
+                         If False (default), returns a client suitable for RLS.
+    
+    Returns:
+        SupabaseClient instance configured appropriately.
+    """
+    if use_service_role:
+        return await get_service_supabase_client()
+    
     factory = get_client_factory()
     client = factory.get_client("supabase")
     if not client.is_initialized:

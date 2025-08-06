@@ -3,7 +3,7 @@ Main Supabase client implementation.
 """
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
 from supabase import create_client, Client
 from postgrest import APIError
 
@@ -22,107 +22,122 @@ logger = logging.getLogger(__name__)
 
 class SupabaseClient(BaseClient):
     """Supabase client wrapper providing database and auth operations."""
-    
+
     def __init__(self, config: SupabaseClientConfig):
         super().__init__(config, "SupabaseClient")
         self.config: SupabaseClientConfig = config
         self._supabase_client: Optional[Client] = None
         self._auth_client: Optional[SupabaseAuthClient] = None
         self._db_client: Optional[SupabaseDatabaseClient] = None
-    
+
     @property
     def supabase_client(self) -> Client:
         """Get the underlying Supabase client."""
         if not self._supabase_client:
             raise ClientError("Supabase client not initialized", self.client_name)
         return self._supabase_client
-    
+
     @property
     def auth(self) -> SupabaseAuthClient:
         """Get the auth client."""
         if not self._auth_client:
             raise ClientError("Auth client not initialized", self.client_name)
         return self._auth_client
-    
+
     @property
     def database(self) -> SupabaseDatabaseClient:
         """Get the database client."""
         if not self._db_client:
             raise ClientError("Database client not initialized", self.client_name)
         return self._db_client
-    
+
     @with_retry(max_retries=3, backoff_factor=1.0)
     async def initialize(self) -> None:
         """Initialize Supabase client and sub-clients."""
         try:
             self.logger.info("Initializing Supabase client...")
-            
+
             # Create main Supabase client
-            self._supabase_client = create_client(
-                self.config.url,
-                self.config.anon_key
-            )
-            
+            self._supabase_client = create_client(self.config.url, self.config.anon_key)
+
             # Test connection with a simple query
             await self._test_connection()
-            
+
             # Initialize sub-clients
             self._auth_client = SupabaseAuthClient(self._supabase_client, self.config)
             self._db_client = SupabaseDatabaseClient(self._supabase_client, self.config)
-            
+
             await self._auth_client.initialize()
             await self._db_client.initialize()
-            
+
             self._initialized = True
             self.logger.info("Supabase client initialized successfully")
-            
+
         except Exception as e:
             self.logger.error(f"Failed to initialize Supabase client: {e}")
             raise ClientConnectionError(
                 f"Failed to initialize Supabase client: {str(e)}",
                 client_name=self.client_name,
-                original_error=e
+                original_error=e,
             )
-    
+
     async def _test_connection(self) -> None:
         """Test Supabase connection."""
         try:
             # Try a simple query to test connection
             # Use profiles table as it's likely to exist
-            result = self._supabase_client.table("profiles").select("count", count="exact").limit(1).execute()
+            result = (
+                self._supabase_client.table("profiles")
+                .select("count", count="exact")
+                .limit(1)
+                .execute()
+            )
             self.logger.debug(f"Connection test successful: {result.count is not None}")
-            
+
         except APIError as e:
             if "relation" in str(e).lower() and "does not exist" in str(e).lower():
                 # Table doesn't exist but connection works
-                self.logger.debug("Connection test successful (table doesn't exist but connection works)")
+                self.logger.debug(
+                    "Connection test successful (table doesn't exist but connection works)"
+                )
                 return
             raise ClientConnectionError(
                 f"Supabase connection test failed: {str(e)}",
                 client_name=self.client_name,
-                original_error=e
+                original_error=e,
             )
         except Exception as e:
             raise ClientConnectionError(
                 f"Supabase connection test failed: {str(e)}",
                 client_name=self.client_name,
-                original_error=e
+                original_error=e,
             )
-    
+
     async def health_check(self) -> Dict[str, Any]:
         """Perform health check on Supabase client."""
         try:
             # Test connection
             await self._test_connection()
-            
+
             # Check sub-clients
-            auth_health = await self._auth_client.health_check() if self._auth_client else {"status": "not_initialized"}
-            db_health = await self._db_client.health_check() if self._db_client else {"status": "not_initialized"}
-            
+            auth_health = (
+                await self._auth_client.health_check()
+                if self._auth_client
+                else {"status": "not_initialized"}
+            )
+            db_health = (
+                await self._db_client.health_check()
+                if self._db_client
+                else {"status": "not_initialized"}
+            )
+
             overall_status = "healthy"
-            if auth_health.get("status") != "healthy" or db_health.get("status") != "healthy":
+            if (
+                auth_health.get("status") != "healthy"
+                or db_health.get("status") != "healthy"
+            ):
                 overall_status = "degraded"
-            
+
             return {
                 "status": overall_status,
                 "client_name": self.client_name,
@@ -131,12 +146,16 @@ class SupabaseClient(BaseClient):
                 "auth_status": auth_health.get("status", "unknown"),
                 "database_status": db_health.get("status", "unknown"),
                 "config": {
-                    "url": self.config.url[:50] + "..." if len(self.config.url) > 50 else self.config.url,
+                    "url": (
+                        self.config.url[:50] + "..."
+                        if len(self.config.url) > 50
+                        else self.config.url
+                    ),
                     "timeout": self.config.timeout,
                     "max_retries": self.config.max_retries,
-                }
+                },
             }
-            
+
         except Exception as e:
             self.logger.error(f"Health check failed: {e}")
             return {
@@ -145,55 +164,240 @@ class SupabaseClient(BaseClient):
                 "error": str(e),
                 "initialized": self._initialized,
             }
-    
+
     async def close(self) -> None:
         """Close Supabase client and clean up resources."""
         try:
             if self._auth_client:
                 await self._auth_client.close()
                 self._auth_client = None
-            
+
             if self._db_client:
                 await self._db_client.close()
                 self._db_client = None
-            
+
             if self._supabase_client:
                 # Supabase client doesn't require explicit closing
                 self._supabase_client = None
-            
+
             self._initialized = False
             self.logger.info("Supabase client closed successfully")
-            
+
         except Exception as e:
             self.logger.error(f"Error closing Supabase client: {e}")
             raise ClientError(
                 f"Error closing Supabase client: {str(e)}",
                 client_name=self.client_name,
-                original_error=e
+                original_error=e,
             )
-    
+
     # Convenience methods that delegate to sub-clients
-    
+
     def table(self, table_name: str):
         """Get table client (database operation)."""
         return self.database.table(table_name)
-    
+
     def from_(self, table_name: str):
         """Get table client using from_ syntax."""
         return self.database.from_(table_name)
-    
+
     def storage(self):
         """Get storage client."""
         return self.supabase_client.storage
-    
+
     async def execute_rpc(self, function_name: str, params: Dict[str, Any] = None):
         """Execute RPC function."""
         return await self.database.execute_rpc(function_name, params)
-    
+
     async def authenticate_user(self, token: str):
         """Authenticate user with token."""
         return await self.auth.authenticate_user(token)
-    
+
     async def get_user(self, user_id: str):
         """Get user by ID."""
         return await self.auth.get_user(user_id)
+
+    def set_user_token(self, token: str):
+        """Set user JWT token for RLS-enabled operations."""
+        try:
+            # Set the auth header for all subsequent requests
+            if self._supabase_client:
+                # Update the auth header in the underlying client
+                self._supabase_client.auth.set_session(token, None)
+                # Also update the postgrest client headers for database operations
+                self._supabase_client.postgrest.auth(token)
+                self.logger.debug("User JWT token set for RLS operations")
+            else:
+                raise ClientError("Supabase client not initialized", self.client_name)
+        except Exception as e:
+            self.logger.error(f"Failed to set user token: {e}")
+            raise ClientError(f"Failed to set user token: {str(e)}", self.client_name)
+    
+    def set_auth_token(self, token: str):
+        """Alias for set_user_token for consistency with auth context."""
+        self.set_user_token(token)
+    
+    def clear_auth_token(self):
+        """Clear the auth token to revert to anon key."""
+        try:
+            if self._supabase_client:
+                # Clear auth by setting back to anon key
+                self._supabase_client.postgrest.auth(self.config.anon_key)
+                self.logger.debug("Auth token cleared, using anon key")
+        except Exception as e:
+            self.logger.error(f"Failed to clear auth token: {e}")
+            raise ClientError(f"Failed to clear auth token: {str(e)}", self.client_name)
+
+    # Storage operations
+    async def upload_file(
+        self, bucket: str, path: str, file: bytes, content_type: str = None
+    ) -> Dict[str, Any]:
+        """Upload a file to Supabase storage."""
+        try:
+            self.logger.debug(f"Uploading file to bucket '{bucket}' at path '{path}'")
+
+            # Get storage client
+            storage = self.storage()
+
+            # Upload file using Supabase storage API
+            # The correct method is storage.from_(bucket).upload(path, file)
+            result = storage.from_(bucket).upload(path, file)
+
+            self.logger.debug(f"File uploaded successfully to '{path}'")
+            return {"success": True, "path": path}
+
+        except Exception as e:
+            self.logger.error(f"Failed to upload file to '{path}': {e}")
+            return {"success": False, "error": str(e)}
+
+    async def download_file(self, bucket: str, path: str) -> bytes:
+        """Download a file from Supabase storage."""
+        try:
+            self.logger.debug(
+                f"Downloading file from bucket '{bucket}' at path '{path}'"
+            )
+
+            # Get storage client
+            storage = self.storage()
+
+            # Download file using Supabase storage API
+            # The correct method is storage.from_(bucket).download(path)
+            result = storage.from_(bucket).download(path)
+
+            self.logger.debug(f"File downloaded successfully from '{path}'")
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Failed to download file from '{path}': {e}")
+            raise ValueError(f"Failed to download file: {str(e)}")
+
+    async def delete_file(self, bucket: str, path: str) -> bool:
+        """Delete a file from Supabase storage."""
+        try:
+            self.logger.debug(f"Deleting file from bucket '{bucket}' at path '{path}'")
+
+            # Get storage client
+            storage = self.storage()
+
+            # Delete file using Supabase storage API
+            # The correct method is storage.from_(bucket).remove([path])
+            storage.from_(bucket).remove([path])
+
+            self.logger.debug(f"File deleted successfully from '{path}'")
+            return True
+
+        except Exception as e:
+            self.logger.error(f"Failed to delete file from '{path}': {e}")
+            return False
+
+    async def list_files(
+        self, bucket: str, prefix: str = None, limit: Optional[int] = None
+    ) -> List[Dict[str, Any]]:
+        """List files in a bucket with optional prefix filter."""
+        try:
+            self.logger.debug(
+                f"Listing files in bucket '{bucket}' with prefix '{prefix}'"
+            )
+
+            # Get storage client
+            storage = self.storage()
+
+            # List files using Supabase storage API
+            # The correct method is storage.from_(bucket).list(path=prefix)
+            result = storage.from_(bucket).list(path=prefix or "")
+
+            files = []
+            for item in result:
+                files.append(
+                    {
+                        "name": item.name,
+                        "id": item.id,
+                        "updated_at": item.updated_at,
+                        "created_at": item.created_at,
+                        "last_accessed_at": item.last_accessed_at,
+                        "metadata": item.metadata,
+                    }
+                )
+
+            # Apply limit if specified
+            if limit:
+                files = files[:limit]
+
+            self.logger.debug(f"Found {len(files)} files in bucket '{bucket}'")
+            return files
+
+        except Exception as e:
+            self.logger.error(f"Failed to list files in bucket '{bucket}': {e}")
+            return []
+
+    async def generate_signed_url(
+        self, bucket: str, path: str, expires_in: int = 3600
+    ) -> str:
+        """Generate a signed URL for file access."""
+        try:
+            self.logger.debug(
+                f"Generating signed URL for '{path}' in bucket '{bucket}'"
+            )
+
+            # Get storage client
+            storage = self.storage()
+
+            # Generate signed URL using Supabase storage API
+            # The correct method is storage.from_(bucket).create_signed_url(path, expires_in)
+            result = storage.from_(bucket).create_signed_url(path, expires_in)
+
+            self.logger.debug(f"Generated signed URL for '{path}'")
+            return result.signed_url
+
+        except Exception as e:
+            self.logger.error(f"Failed to generate signed URL for '{path}': {e}")
+            raise ValueError(f"Failed to generate signed URL: {str(e)}")
+
+    async def get_file_info(self, bucket: str, path: str) -> Dict[str, Any]:
+        """Get file metadata and information."""
+        try:
+            self.logger.debug(f"Getting file info for '{path}' in bucket '{bucket}'")
+
+            # Get storage client
+            storage = self.storage()
+
+            # Get file info using Supabase storage API
+            # The correct method is storage.from_(bucket).list(path=path)
+            result = storage.from_(bucket).list(path=path)
+
+            if not result:
+                raise ValueError(f"File not found: {path}")
+
+            file_info = result[0]
+            return {
+                "name": file_info.name,
+                "id": file_info.id,
+                "updated_at": file_info.updated_at,
+                "created_at": file_info.created_at,
+                "last_accessed_at": file_info.last_accessed_at,
+                "metadata": file_info.metadata,
+            }
+
+        except Exception as e:
+            self.logger.error(f"Failed to get file info for '{path}': {e}")
+            raise ValueError(f"Failed to get file info: {str(e)}")

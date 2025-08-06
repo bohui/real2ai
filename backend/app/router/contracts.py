@@ -5,7 +5,8 @@ from fastapi.responses import JSONResponse
 import logging
 
 from app.core.auth import get_current_user, User
-from app.clients.factory import get_supabase_client
+from app.core.auth_context import AuthContext
+from app.services.document_service_migrated import DocumentService
 from app.core.error_handler import (
     handle_api_error, 
     create_error_context, 
@@ -19,12 +20,23 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/contracts", tags=["contracts"])
 
 
+# Dependency function to get user-aware document service  
+async def get_user_document_service(
+    user: User = Depends(get_current_user),
+) -> DocumentService:
+    """Get document service with user authentication context"""
+    user_client = await AuthContext.get_authenticated_client(require_auth=True)
+    service = DocumentService(user_client=user_client)
+    await service.initialize()
+    return service
+
+
 @router.post("/analyze", response_model=ContractAnalysisResponse)
 async def start_contract_analysis(
     request: ContractAnalysisRequest,
     background_tasks: BackgroundTasks,
     user: User = Depends(get_current_user),
-    db_client=Depends(get_supabase_client),
+    document_service: DocumentService = Depends(get_user_document_service),
 ):
     """Start contract analysis with enhanced error handling and validation"""
 
@@ -43,27 +55,27 @@ async def start_contract_analysis(
         if not user.australian_state:
             raise ValueError("Australian state is required for accurate contract analysis")
 
-        # Ensure database client is initialized with retry
-        await _initialize_database_client(db_client)
-
         # Check user credits with user-friendly messaging
         if user.credits_remaining <= 0 and user.subscription_status == "free":
             raise ValueError("You don't have enough credits to analyze this contract")
 
-        # Get document with retry mechanism
-        document = await _get_user_document(db_client, request.document_id, user.id)
+        # Get user-authenticated client through document service
+        user_client = await document_service.get_user_client()
+        
+        # Get document with user context (RLS enforced)
+        document = await _get_user_document(user_client, request.document_id, user.id)
         
         # Validate document is suitable for analysis
         if not _is_valid_contract_document(document):
             raise ValueError("This file doesn't appear to be a property contract")
 
-        # Create contract record with retry
+        # Create contract record with user context (RLS enforced)
         contract_id = await _create_contract_record(
-            db_client, request.document_id, document, user
+            user_client, request.document_id, document, user
         )
 
-        # Create analysis record with retry
-        analysis_id = await _create_analysis_record(db_client, contract_id, user.id)
+        # Create analysis record with user context (RLS enforced)
+        analysis_id = await _create_analysis_record(user_client, contract_id, user.id)
 
         # Start background analysis with proper error handling
         task_id = await _start_background_analysis(
@@ -111,20 +123,18 @@ async def _initialize_database_client(db_client):
 
 
 @retry_database_operation(max_attempts=3)
-async def _get_user_document(db_client, document_id: str, user_id: str):
-    """Get user document with retry logic"""
-    doc_result = (
-        db_client.table("documents")
-        .select("*")
-        .eq("id", document_id)
-        .eq("user_id", user_id)
-        .execute()
+async def _get_user_document(user_client, document_id: str, user_id: str):
+    """Get user document with user context (RLS enforced)"""
+    doc_result = await user_client.database.select(
+        "documents",
+        columns="*",
+        filters={"id": document_id, "user_id": user_id}
     )
 
-    if not doc_result.data:
+    if not doc_result.get("data"):
         raise ValueError(f"Document not found or you don't have access to it")
 
-    return doc_result.data[0]
+    return doc_result["data"][0]
 
 
 def _is_valid_contract_document(document) -> bool:
@@ -161,12 +171,12 @@ async def _create_contract_record(db_client, document_id: str, document: dict, u
         "user_id": user.id,
     }
 
-    contract_result = db_client.table("contracts").insert(contract_data).execute()
+    contract_result = await db_client.database.insert("contracts", contract_data)
     
-    if not contract_result.data:
+    if not contract_result.get("success") or not contract_result.get("data"):
         raise ValueError("Failed to create contract record")
     
-    return contract_result.data[0]["id"]
+    return contract_result["data"]["id"]
 
 
 @retry_database_operation(max_attempts=3)
@@ -179,14 +189,12 @@ async def _create_analysis_record(db_client, contract_id: str, user_id: str) -> 
         "status": "pending",
     }
 
-    analysis_result = (
-        db_client.table("contract_analyses").insert(analysis_data).execute()
-    )
+    analysis_result = await db_client.database.insert("contract_analyses", analysis_data)
     
-    if not analysis_result.data:
+    if not analysis_result.get("success") or not analysis_result.get("data"):
         raise ValueError("Failed to create analysis record")
     
-    return analysis_result.data[0]["id"]
+    return analysis_result["data"]["id"]
 
 
 @retry_api_call(max_attempts=2)
@@ -224,7 +232,6 @@ async def _start_background_analysis(
 async def get_analysis_status(
     contract_id: str,
     user: User = Depends(get_current_user),
-    db_client=Depends(get_supabase_client),
 ):
     """Get contract analysis status and progress with enhanced error handling"""
     
@@ -238,6 +245,9 @@ async def get_analysis_status(
         # Validate contract ID format
         if not contract_id or not contract_id.strip():
             raise ValueError("Contract ID is required")
+
+        # Get authenticated client
+        db_client = await AuthContext.get_authenticated_client(require_auth=True)
 
         # Initialize database client with retry
         await _initialize_database_client(db_client)
@@ -361,11 +371,13 @@ def _calculate_analysis_progress(analysis: dict) -> dict:
 async def get_contract_analysis(
     contract_id: str,
     user: User = Depends(get_current_user),
-    db_client=Depends(get_supabase_client),
 ):
     """Get contract analysis results"""
 
     try:
+        # Get authenticated client
+        db_client = await AuthContext.get_authenticated_client(require_auth=True)
+        
         # Ensure database client is initialized
         if not hasattr(db_client, "_client") or db_client._client is None:
             await db_client.initialize()
@@ -424,13 +436,15 @@ async def download_analysis_report(
     contract_id: str,
     format: str = "pdf",
     user: User = Depends(get_current_user),
-    db_client=Depends(get_supabase_client),
 ):
     """Download analysis report"""
 
     try:
+        # Get authenticated client
+        db_client = await AuthContext.get_authenticated_client(require_auth=True)
+        
         # Get analysis data
-        analysis_data = await get_contract_analysis(contract_id, user, db_client)
+        analysis_data = await get_contract_analysis(contract_id, user)
 
         if format == "pdf":
             # Generate PDF report (would implement with reportlab or similar)
@@ -453,11 +467,13 @@ async def download_analysis_report(
 async def delete_contract_analysis(
     contract_id: str,
     user: User = Depends(get_current_user),
-    db_client=Depends(get_supabase_client),
 ):
     """Delete contract analysis and related data"""
     
     try:
+        # Get authenticated client
+        db_client = await AuthContext.get_authenticated_client(require_auth=True)
+        
         # Ensure database client is initialized
         if not hasattr(db_client, "_client") or db_client._client is None:
             await db_client.initialize()

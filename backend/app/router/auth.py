@@ -4,15 +4,16 @@ from fastapi import APIRouter, HTTPException, Depends
 import logging
 
 from app.core.auth import User
-from app.clients.factory import get_supabase_client
+from app.clients.factory import get_service_supabase_client
 from app.schema.auth import UserRegistrationRequest, UserLoginRequest
+from app.core.error_handler import handle_api_error, create_error_context, ErrorCategory
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/auth", tags=["authentication"])
 
 
 @router.post("/register")
-async def register_user(user_data: UserRegistrationRequest, db_client=Depends(get_supabase_client)):
+async def register_user(user_data: UserRegistrationRequest, db_client=Depends(get_service_supabase_client)):
     """Register a new user"""
     try:
         # Create user in Supabase
@@ -63,7 +64,7 @@ async def register_user(user_data: UserRegistrationRequest, db_client=Depends(ge
 
 
 @router.post("/login")
-async def login_user(login_data: UserLoginRequest, db_client=Depends(get_supabase_client)):
+async def login_user(login_data: UserLoginRequest, db_client=Depends(get_service_supabase_client)):
     """Authenticate user"""
     try:
         auth_result = db_client.auth.sign_in_with_password(

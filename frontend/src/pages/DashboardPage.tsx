@@ -88,6 +88,61 @@ const DashboardPage: React.FC = () => {
     (a) => a.executive_summary.overall_risk_score >= 7
   ).length;
 
+  // Calculate best value properties
+  const bestValueProperties = recentAnalyses
+    .filter((analysis) => {
+      // Only include completed analyses with property data
+      return (
+        analysis.analysis_status === "completed" &&
+        analysis.contract_terms?.property_address &&
+        analysis.executive_summary?.overall_risk_score !== undefined
+      );
+    })
+    .map((analysis) => {
+      const riskScore = analysis.executive_summary.overall_risk_score;
+      const propertyAddress = analysis.contract_terms.property_address;
+      const purchasePrice =
+        analysis.contract_terms?.financial_terms?.purchase_price;
+      const marketValue =
+        analysis.contract_terms?.property_details?.market_value;
+
+      // Calculate value score (lower risk = better value, higher price-to-value ratio = better value)
+      let valueScore = 0;
+
+      // Risk factor (lower is better) - 40% weight
+      const riskFactor = Math.max(0, 10 - riskScore) / 10;
+      valueScore += riskFactor * 0.4;
+
+      // Price-to-value ratio (if available) - 30% weight
+      if (purchasePrice && marketValue && marketValue > 0) {
+        const priceToValueRatio = purchasePrice / marketValue;
+        const valueRatio = priceToValueRatio < 1 ? 1 - priceToValueRatio : 0; // Better if purchase price < market value
+        valueScore += valueRatio * 0.3;
+      }
+
+      // Market trend factor (based on risk assessment) - 30% weight
+      const marketTrendFactor = riskScore < 5 ? 1 : riskScore < 7 ? 0.5 : 0;
+      valueScore += marketTrendFactor * 0.3;
+
+      return {
+        address: propertyAddress,
+        riskScore,
+        purchasePrice,
+        marketValue,
+        valueScore,
+        analysis,
+      };
+    })
+    .sort((a, b) => b.valueScore - a.valueScore)
+    .slice(0, 3); // Top 3 best value properties
+
+  const bestValueCount = bestValueProperties.length;
+  const averageValueScore =
+    bestValueProperties.length > 0
+      ? bestValueProperties.reduce((sum, p) => sum + p.valueScore, 0) /
+        bestValueProperties.length
+      : 0;
+
   const stats = [
     {
       title: "Total Analyses",
@@ -98,12 +153,24 @@ const DashboardPage: React.FC = () => {
       color: "primary",
     },
     {
-      title: "Average Risk Score",
-      value: averageRiskScore.toFixed(1),
-      change: "-0.3",
-      trend: "down",
+      title: "Best Value Properties",
+      value: bestValueCount,
+      change:
+        bestValueProperties.length > 0
+          ? bestValueProperties[0].address.split(",")[0] // Show first property address
+          : "+2",
+      trend:
+        averageValueScore > 0.7
+          ? "up"
+          : averageValueScore > 0.4
+          ? "neutral"
+          : "down",
       icon: TrendingUp,
       color: "success",
+      subtitle:
+        bestValueProperties.length > 0
+          ? `Score: ${averageValueScore.toFixed(1)}`
+          : "vs last month",
     },
     {
       title: "High Risk Contracts",
@@ -217,6 +284,14 @@ const DashboardPage: React.FC = () => {
                 variant="elevated"
                 interactive
                 className="hover:shadow-xl group transition-all duration-300"
+                title={
+                  stat.title === "Best Value Properties" &&
+                  bestValueProperties.length > 0
+                    ? `Top properties: ${bestValueProperties
+                        .map((p) => p.address.split(",")[0])
+                        .join(", ")}`
+                    : undefined
+                }
               >
                 <CardContent padding="lg">
                   <div className="flex items-center justify-between">
@@ -241,7 +316,7 @@ const DashboardPage: React.FC = () => {
                           {stat.change}
                         </span>
                         <span className="text-neutral-500 text-xs ml-2">
-                          vs last month
+                          {stat.subtitle || "vs last month"}
                         </span>
                       </div>
                     </div>

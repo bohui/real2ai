@@ -5,10 +5,15 @@ from typing import Optional, Dict, Any, List
 import logging
 
 from app.core.auth import get_current_user, User
-from app.clients.factory import get_supabase_client
+from app.core.auth_context import AuthContext
 from app.core.config import get_settings
+from app.core.error_handler import (
+    handle_api_error, 
+    create_error_context, 
+    ErrorCategory
+)
 from app.schema.enums import ContractType, AustralianState
-from app.services.document_service import DocumentService
+from app.services.document_service_migrated import DocumentService
 from app.services.websocket_service import WebSocketManager
 from app.schema.document import (
     DocumentUploadResponse,
@@ -31,8 +36,53 @@ router = APIRouter(prefix="/api/documents", tags=["documents"])
 
 # Initialize services (these would typically be dependency injected)
 settings = get_settings()
-document_service = DocumentService()
+
+
+# Dependency function to get initialized document service
+async def get_document_service(
+    user: User = Depends(get_current_user),
+) -> DocumentService:
+    """Get initialized document service with user-aware architecture"""
+    logger.info(f"Creating DocumentService instance for user {user.id}...")
+    
+    # Get user-authenticated client for dependency injection
+    user_client = await AuthContext.get_authenticated_client(require_auth=True)
+    
+    # Initialize service with user client injection
+    service = DocumentService(user_client=user_client)
+    await service.initialize()
+    logger.info("DocumentService initialized with user-aware authentication")
+    return service
+
+
 websocket_manager = WebSocketManager()
+
+
+@router.get("/test-document-service")
+async def test_document_service(
+    user: User = Depends(get_current_user),
+):
+    """Test endpoint to check DocumentService initialization with auth context"""
+    try:
+        # Create a document service instance with user client injection
+        user_client = await AuthContext.get_authenticated_client(require_auth=True)
+        service = DocumentService(user_client=user_client)
+        await service.initialize()
+        
+        # Test auth context
+        from app.core.auth_context import AuthContext
+        
+        return {
+            "status": "success",
+            "message": "DocumentService initialized successfully",
+            "auth_context": {
+                "is_authenticated": AuthContext.is_authenticated(),
+                "user_id": AuthContext.get_user_id() or user.id,
+            },
+            "service_initialized": True,
+        }
+    except Exception as e:
+        return {"error": str(e)}
 
 
 @router.post("/upload", response_model=DocumentUploadResponse)
@@ -42,8 +92,19 @@ async def upload_document(
     contract_type: ContractType = ContractType.PURCHASE_AGREEMENT,
     australian_state: AustralianState = AustralianState.NSW,
     user: User = Depends(get_current_user),
+    document_service: DocumentService = Depends(get_document_service),
 ):
     """Upload contract document for analysis"""
+    
+    context = create_error_context(
+        user_id=str(user.id),
+        operation="upload_document",
+        metadata={
+            "filename": file.filename,
+            "contract_type": contract_type.value,
+            "australian_state": australian_state.value
+        }
+    )
 
     try:
         # Validate file
@@ -60,17 +121,21 @@ async def upload_document(
                 detail=f"Invalid file type. Allowed: {', '.join(settings.allowed_file_types_list)}",
             )
 
-        # Get database client first
-        db_client = await get_supabase_client()
-
-        # Ensure database client is initialized
-        if not hasattr(db_client, "_client") or db_client._client is None:
-            await db_client.initialize()
-
-        # Upload to Supabase Storage (this includes validation)
+        # Upload to Supabase Storage (this includes validation and database insertion)
+        # The document service handles all operations using auth context internally
         upload_result = await document_service.upload_file(
             file=file, user_id=user.id, contract_type=contract_type
         )
+
+        # Check if upload was successful
+        if not upload_result.get("success"):
+            logger.error(
+                f"File upload failed: {upload_result.get('error', 'Unknown error')}"
+            )
+            raise HTTPException(
+                status_code=500,
+                detail=f"File upload failed: {upload_result.get('error', 'Unknown error')}",
+            )
 
         # Verify file was actually uploaded successfully
         try:
@@ -80,38 +145,6 @@ async def upload_document(
             logger.error(f"File upload verification failed: {str(verification_error)}")
             raise HTTPException(
                 status_code=500, detail="File upload failed - please try again"
-            )
-
-        # Store document metadata in database only after successful upload verification
-        document_data = {
-            "id": upload_result["document_id"],
-            "user_id": user.id,
-            "filename": file.filename,
-            "storage_path": upload_result["storage_path"],
-            "file_type": file_extension,
-            "file_size": file.size,
-            "status": "uploaded",
-        }
-
-        # Insert to database with error handling
-        try:
-            db_client.table("documents").insert(document_data).execute()
-        except Exception as db_error:
-            # If database insert fails, try to clean up the uploaded file
-            logger.error(f"Database insert failed: {str(db_error)}")
-            try:
-                storage = db_client.storage()
-                storage.from_(document_service.storage_bucket).remove(
-                    [upload_result["storage_path"]]
-                )
-                logger.info(
-                    f"Cleaned up orphaned file: {upload_result['storage_path']}"
-                )
-            except Exception as cleanup_error:
-                logger.warning(f"Failed to cleanup orphaned file: {str(cleanup_error)}")
-
-            raise HTTPException(
-                status_code=500, detail="Failed to save document metadata"
             )
 
         # Start background processing via Celery
@@ -136,24 +169,32 @@ async def upload_document(
         # Re-raise HTTPExceptions (validation errors) without modification
         raise
     except Exception as e:
-        logger.error(f"Document upload error: {str(e)}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+        # Use enhanced error handling
+        raise handle_api_error(e, context, ErrorCategory.FILE_PROCESSING)
 
 
 @router.get("/{document_id}")
 async def get_document(
     document_id: str,
     user: User = Depends(get_current_user),
-    db_client=Depends(get_supabase_client),
 ):
     """Get document details"""
+    
+    context = create_error_context(
+        user_id=str(user.id),
+        operation="get_document",
+        metadata={"document_id": document_id}
+    )
 
     try:
+        # Get authenticated client through context
+        supabase_client = await AuthContext.get_authenticated_client()
+        
+        # RLS will automatically filter by authenticated user
         result = (
-            db_client.table("documents")
+            supabase_client.table("documents")
             .select("*")
             .eq("id", document_id)
-            .eq("user_id", user.id)
             .execute()
         )
 
@@ -166,8 +207,8 @@ async def get_document(
         # Re-raise HTTPExceptions (validation errors) without modification
         raise
     except Exception as e:
-        logger.error(f"Get document error: {str(e)}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+        # Use enhanced error handling
+        raise handle_api_error(e, context, ErrorCategory.DATABASE)
 
 
 @router.post("/{document_id}/reprocess-ocr")
@@ -176,17 +217,17 @@ async def reprocess_document_with_ocr(
     background_tasks: BackgroundTasks,
     processing_options: Optional[Dict[str, Any]] = None,
     user: User = Depends(get_current_user),
-    db_client=Depends(get_supabase_client),
+    document_service: DocumentService = Depends(get_document_service),
 ):
     """Reprocess document using enhanced OCR for better text extraction"""
 
     try:
-        # Verify document ownership
+        # Verify document ownership - RLS will handle access control
+        supabase_client = await AuthContext.get_authenticated_client()
         doc_result = (
-            db_client.table("documents")
+            supabase_client.table("documents")
             .select("*")
             .eq("id", document_id)
-            .eq("user_id", user.id)
             .execute()
         )
 
@@ -200,9 +241,9 @@ async def reprocess_document_with_ocr(
         if not ocr_capabilities["service_available"]:
             raise HTTPException(status_code=503, detail="OCR service not available")
 
-        # Get user profile for context
+        # Get user profile for context - RLS ensures we only get our own profile
         user_result = (
-            db_client.table("profiles").select("*").eq("id", user.id).execute()
+            supabase_client.table("profiles").select("*").execute()
         )
         user_profile = user_result.data[0] if user_result.data else {}
 
@@ -264,19 +305,19 @@ async def batch_process_ocr(
     background_tasks: BackgroundTasks,
     batch_options: Optional[Dict[str, Any]] = None,
     user: User = Depends(get_current_user),
-    db_client=Depends(get_supabase_client),
+    document_service: DocumentService = Depends(get_document_service),
 ):
     """Batch process multiple documents with OCR"""
 
     try:
-        # Validate document ownership
+        # Validate document ownership - RLS handles access control
+        supabase_client = await AuthContext.get_authenticated_client()
         verified_docs = []
         for doc_id in document_ids:
             doc_result = (
-                db_client.table("documents")
+                supabase_client.table("documents")
                 .select("id, original_filename, file_type")
                 .eq("id", doc_id)
-                .eq("user_id", user.id)
                 .execute()
             )
 
@@ -291,9 +332,9 @@ async def batch_process_ocr(
         if not ocr_capabilities["service_available"]:
             raise HTTPException(status_code=503, detail="OCR service not available")
 
-        # Get user profile
+        # Get user profile - RLS ensures we only get our own profile
         user_result = (
-            db_client.table("profiles").select("*").eq("id", user.id).execute()
+            supabase_client.table("profiles").select("*").execute()
         )
         user_profile = user_result.data[0] if user_result.data else {}
 
@@ -362,17 +403,16 @@ async def batch_process_ocr(
 async def get_ocr_status(
     document_id: str,
     user: User = Depends(get_current_user),
-    db_client=Depends(get_supabase_client),
 ):
     """Get detailed OCR processing status for a document"""
 
     try:
-        # Verify document ownership
+        # Verify document ownership - RLS will handle access control
+        supabase_client = await AuthContext.get_authenticated_client()
         doc_result = (
-            db_client.table("documents")
+            supabase_client.table("documents")
             .select("*")
             .eq("id", document_id)
-            .eq("user_id", user.id)
             .execute()
         )
 
@@ -429,31 +469,28 @@ async def get_ocr_status(
 async def get_document_processing_progress(
     document_id: str,
     user: User = Depends(get_current_user),
-    db_client=Depends(get_supabase_client),
+    document_service: DocumentService = Depends(get_document_service),
 ):
     """Get real-time processing progress for a document"""
-    
+
     try:
-        # Verify document ownership
+        # Verify document ownership - RLS will handle access control
+        supabase_client = await AuthContext.get_authenticated_client()
         doc_result = (
-            db_client.table("documents")
+            supabase_client.table("documents")
             .select("*")
             .eq("id", document_id)
-            .eq("user_id", user.id)
             .execute()
         )
-        
+
         if not doc_result.data:
             raise HTTPException(status_code=404, detail="Document not found")
-        
-        # Initialize document service
-        await document_service.initialize()
-        
+
         # Get processing progress
         progress = await document_service.get_processing_progress(document_id)
-        
+
         return progress
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -465,55 +502,52 @@ async def get_document_processing_progress(
 async def validate_contract_document(
     document_id: str,
     user: User = Depends(get_current_user),
-    db_client=Depends(get_supabase_client),
+    document_service: DocumentService = Depends(get_document_service),
 ):
     """Validate document specifically for contract processing"""
-    
+
     try:
-        # Verify document ownership
+        # Verify document ownership - RLS will handle access control
+        supabase_client = await AuthContext.get_authenticated_client()
         doc_result = (
-            db_client.table("documents")
+            supabase_client.table("documents")
             .select("*")
             .eq("id", document_id)
-            .eq("user_id", user.id)
             .execute()
         )
-        
+
         if not doc_result.data:
             raise HTTPException(status_code=404, detail="Document not found")
-        
+
         document = doc_result.data[0]
-        
-        # Get user profile for context
+
+        # Get user profile for context - RLS ensures we only get our own profile
         user_result = (
-            db_client.table("profiles").select("*").eq("id", user.id).execute()
+            supabase_client.table("profiles").select("*").execute()
         )
         user_profile = user_result.data[0] if user_result.data else {}
-        
+
         # Create contract context
         contract_context = {
             "australian_state": user_profile.get("australian_state", "NSW"),
             "contract_type": "purchase_agreement",
             "user_type": user_profile.get("user_type", "buyer"),
         }
-        
-        # Initialize document service
-        await document_service.initialize()
-        
+
         # Validate contract document
         validation_result = await document_service.validate_contract_document(
             document["storage_path"],
             document["file_type"],
             contract_context,
         )
-        
+
         return {
             "document_id": document_id,
             "filename": document["original_filename"],
             "validation_result": validation_result,
             "contract_context": contract_context,
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -524,18 +558,16 @@ async def validate_contract_document(
 @router.get("/ocr/capabilities")
 async def get_ocr_capabilities(
     user: User = Depends(get_current_user),
+    document_service: DocumentService = Depends(get_document_service),
 ):
     """Get OCR service capabilities and status"""
-    
+
     try:
-        # Initialize document service
-        await document_service.initialize()
-        
         # Get OCR capabilities
         capabilities = await document_service.get_ocr_capabilities()
-        
+
         return capabilities
-        
+
     except Exception as e:
         logger.error(f"OCR capabilities error: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
@@ -545,42 +577,39 @@ async def get_ocr_capabilities(
 async def assess_document_quality(
     document_id: str,
     user: User = Depends(get_current_user),
-    db_client=Depends(get_supabase_client),
+    document_service: DocumentService = Depends(get_document_service),
 ):
     """Assess document processing quality and provide recommendations"""
-    
+
     try:
-        # Verify document ownership
+        # Verify document ownership - RLS will handle access control
+        supabase_client = await AuthContext.get_authenticated_client()
         doc_result = (
-            db_client.table("documents")
+            supabase_client.table("documents")
             .select("*")
             .eq("id", document_id)
-            .eq("user_id", user.id)
             .execute()
         )
-        
+
         if not doc_result.data:
             raise HTTPException(status_code=404, detail="Document not found")
-        
+
         document = doc_result.data[0]
         processing_results = document.get("processing_results", {})
-        
-        # Get user profile for context
+
+        # Get user profile for context - RLS ensures we only get our own profile
         user_result = (
-            db_client.table("profiles").select("*").eq("id", user.id).execute()
+            supabase_client.table("profiles").select("*").execute()
         )
         user_profile = user_result.data[0] if user_result.data else {}
-        
+
         # Create contract context
         contract_context = {
             "australian_state": user_profile.get("australian_state", "NSW"),
             "contract_type": "purchase_agreement",
             "user_type": user_profile.get("user_type", "buyer"),
         }
-        
-        # Initialize document service
-        await document_service.initialize()
-        
+
         # Assess document quality
         quality_assessment = document_service.assess_document_quality(
             processing_results.get("extracted_text", ""),
@@ -590,19 +619,23 @@ async def assess_document_quality(
             processing_results.get("extraction_confidence", 0.0),
             contract_context,
         )
-        
+
         return {
             "document_id": document_id,
             "filename": document["original_filename"],
             "quality_assessment": quality_assessment,
             "processing_results_summary": {
-                "extraction_method": processing_results.get("extraction_method", "unknown"),
-                "extraction_confidence": processing_results.get("extraction_confidence", 0.0),
+                "extraction_method": processing_results.get(
+                    "extraction_method", "unknown"
+                ),
+                "extraction_confidence": processing_results.get(
+                    "extraction_confidence", 0.0
+                ),
                 "character_count": processing_results.get("character_count", 0),
                 "word_count": processing_results.get("word_count", 0),
             },
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:

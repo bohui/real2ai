@@ -1,4 +1,8 @@
-"""Background tasks for document processing and contract analysis."""
+"""Background tasks for document processing and contract analysis.
+
+MIGRATED VERSION: Now uses user-aware architecture with proper context propagation.
+All tasks use @user_aware_task decorator to maintain user authentication context.
+"""
 
 import asyncio
 import time
@@ -7,6 +11,8 @@ from typing import Dict, Any, List
 from datetime import datetime, timezone
 
 from app.core.celery import celery_app
+from app.core.task_context import user_aware_task, task_manager
+from app.core.auth_context import AuthContext
 from app.models.contract_state import (
     RealEstateAgentState,
     AustralianState,
@@ -14,8 +20,7 @@ from app.models.contract_state import (
     create_initial_state,
 )
 from app.agents.contract_workflow import ContractAnalysisWorkflow
-from app.clients.factory import get_service_supabase_client
-from app.services.document_service import DocumentService
+from app.services.document_service_migrated import DocumentService
 from app.services.websocket_service import WebSocketEvents
 from app.services.websocket_singleton import websocket_manager
 from app.services.redis_pubsub import publish_progress_sync
@@ -23,25 +28,38 @@ from app.core.langsmith_config import langsmith_session, log_trace_info
 
 logger = logging.getLogger(__name__)
 
-# Initialize services with service role for elevated permissions
-document_service = DocumentService(use_service_role=True)
-
 
 @celery_app.task(
     bind=True,
     autoretry_for=(Exception,),
     retry_kwargs={"max_retries": 3, "countdown": 60},
 )
-def process_document_background(
+@user_aware_task
+async def process_document_background(
     self,
     document_id: str,
     user_id: str,
     australian_state: str,
     contract_type: str,
 ):
-    """Background task for document processing"""
+    """Background task for document processing - USER AWARE VERSION
 
-    async def _async_process_document():
+    This task maintains user authentication context throughout execution,
+    ensuring all database operations respect RLS policies.
+    """
+    task_start = datetime.now(timezone.utc)
+
+    try:
+        # Verify user context matches expected user
+        context_user_id = AuthContext.get_user_id()
+        if context_user_id != user_id:
+            raise ValueError(
+                f"User context mismatch: expected {user_id}, got {context_user_id}"
+            )
+
+        logger.info(
+            f"Starting document processing for user {user_id}, document {document_id}"
+        )
         async with langsmith_session(
             "background_document_processing",
             document_id=document_id,
@@ -57,39 +75,49 @@ def process_document_background(
                     australian_state=australian_state,
                     contract_type=contract_type,
                 )
-                # Get service database client (has elevated permissions)
-                db_client = await get_service_supabase_client()
-                if not hasattr(db_client, "_client") or db_client._client is None:
-                    await db_client.initialize()
+                # Initialize user-aware document service
+                document_service = DocumentService()
+                await document_service.initialize()
 
-                # Update document status
-                db_client.table("documents").update({"processing_status": "processing"}).eq(
-                    "id", document_id
-                ).execute()
+                # Get user-authenticated client (respects RLS)
+                user_client = await document_service.get_user_client()
 
-                # Get document metadata
-                doc_result = (
-                    db_client.table("documents")
-                    .select("*")
-                    .eq("id", document_id)
-                    .execute()
+                # Update document status (user context - RLS enforced)
+                await user_client.update(
+                    "documents",
+                    {"id": document_id},
+                    {"processing_status": "processing"},
                 )
-                if not doc_result.data:
-                    raise Exception("Document not found")
 
-                document = doc_result.data[0]
+                # Get document metadata (user context - RLS enforced)
+                doc_result = await user_client.database.select(
+                    "documents", columns="*", filters={"id": document_id}
+                )
+                if not doc_result.get("data"):
+                    raise Exception("Document not found or access denied")
 
-                # Verify file exists in storage before processing
+                document = doc_result["data"][0]
+
+                # Log the operation for audit trail
+                document_service.log_operation("process", "document", document_id)
+
+                # Verify file exists in storage before processing (user context)
                 try:
-                    await document_service.get_file_content(document["storage_path"])
+                    file_content = await user_client.download_file(
+                        bucket="documents", path=document["storage_path"]
+                    )
+                    if not file_content:
+                        raise Exception("Empty file content")
                 except Exception as storage_error:
                     # If file doesn't exist, mark document as failed and clean up
                     logger.error(
                         f"File not found in storage for document {document_id}: {document['storage_path']}"
                     )
 
-                    # Mark document as failed with specific error
-                    db_client.table("documents").update(
+                    # Mark document as failed with specific error (user context - RLS enforced)
+                    await user_client.update(
+                        "documents",
+                        {"id": document_id},
                         {
                             "status": "failed",
                             "processing_results": {
@@ -97,30 +125,35 @@ def process_document_background(
                                 "storage_path": document["storage_path"],
                                 "cleanup_required": True,
                             },
-                        }
-                    ).eq("id", document_id).execute()
+                        },
+                    )
 
                     raise Exception(
                         f"File not found in storage: {document['storage_path']}"
                     )
 
-                # Extract text from document with contract context
+                # Extract text from document with contract context (user context preserved)
                 contract_context = {
                     "australian_state": australian_state,
                     "contract_type": contract_type,
                     "user_type": "buyer",  # Could be derived from user profile
                 }
 
-                extraction_result = await document_service.extract_text(
-                    document["storage_path"],
-                    document["file_type"],
-                    contract_context=contract_context,
+                # Use the migrated DocumentService method (preserves user context)
+                extraction_result = (
+                    await document_service._extract_text_with_comprehensive_analysis(
+                        document_id=document_id,
+                        storage_path=document["storage_path"],
+                        file_type=document["file_type"],
+                    )
                 )
 
-                # Update document with extraction results
-                db_client.table("documents").update(
-                    {"status": "processed", "processing_results": extraction_result}
-                ).eq("id", document_id).execute()
+                # Update document with extraction results (user context - RLS enforced)
+                await user_client.update(
+                    "documents",
+                    {"id": document_id},
+                    {"status": "processed", "processing_results": extraction_result},
+                )
 
                 # Send WebSocket notification via Redis Pub/Sub
                 publish_progress_sync(
@@ -163,9 +196,16 @@ def process_document_background(
 
             except Exception as e:
                 logger.error(f"Document processing failed for {document_id}: {str(e)}")
-                db_client.table("documents").update(
-                    {"status": "failed", "processing_results": {"error": str(e)}}
-                ).eq("id", document_id).execute()
+
+                # Update document status to failed (user context - RLS enforced)
+                try:
+                    await user_client.update(
+                        "documents",
+                        {"id": document_id},
+                        {"status": "failed", "processing_results": {"error": str(e)}},
+                    )
+                except Exception as update_error:
+                    logger.error(f"Failed to update document status: {update_error}")
 
                 # Send error notification via Redis Pub/Sub
                 publish_progress_sync(
@@ -186,8 +226,19 @@ def process_document_background(
                     },
                 )
 
-    # Run the async function
-    return asyncio.run(_async_process_document())
+                # Re-raise the exception to trigger task retry
+                raise Exception(f"Document processing failed: {str(e)}")
+
+    except Exception as e:
+        processing_time = (datetime.now(timezone.utc) - task_start).total_seconds()
+
+        logger.error(
+            f"Document processing failed for user {user_id}, document {document_id}: {e}",
+            exc_info=True,
+        )
+
+        # Return error result for task status
+        raise Exception(f"Document processing failed: {str(e)}")
 
 
 @celery_app.task(
@@ -195,7 +246,8 @@ def process_document_background(
     autoretry_for=(Exception,),
     retry_kwargs={"max_retries": 2, "countdown": 30},
 )
-def analyze_contract_background(
+@user_aware_task
+async def analyze_contract_background(
     self,
     contract_id: str,
     analysis_id: str,
@@ -203,9 +255,22 @@ def analyze_contract_background(
     document: Dict[str, Any],
     analysis_options: Dict[str, Any],
 ):
-    """Background task for contract analysis"""
+    """Background task for contract analysis - USER AWARE VERSION
 
-    async def _async_analyze_contract():
+    This task maintains user authentication context throughout execution,
+    ensuring all database operations respect RLS policies.
+    """
+    try:
+        # Verify user context matches expected user
+        context_user_id = AuthContext.get_user_id()
+        if context_user_id != user_id:
+            raise ValueError(
+                f"User context mismatch: expected {user_id}, got {context_user_id}"
+            )
+
+        logger.info(
+            f"Starting contract analysis for user {user_id}, contract {contract_id}"
+        )
         from app.core.config import get_settings
 
         settings = get_settings()
@@ -215,599 +280,631 @@ def analyze_contract_background(
             openai_api_base=settings.openai_api_base,
         )
 
+        # Initialize user-aware document service
+        document_service = DocumentService()
+        await document_service.initialize()
+
+        # Get user-authenticated client (respects RLS)
+        user_client = await document_service.get_user_client()
+
+        # Update analysis status (user context - RLS enforced)
+        await user_client.update(
+            "contract_analyses", {"id": analysis_id}, {"status": "processing"}
+        )
+
+        # Log the operation for audit trail
+        document_service.log_operation("analyze", "contract", contract_id)
+
+        # Send analysis_started event via Redis Pub/Sub
+        publish_progress_sync(
+            contract_id,
+            {
+                "event_type": "analysis_started",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "data": {
+                    "contract_id": contract_id,
+                    "estimated_time_minutes": 5,
+                    "message": "Analysis started",
+                },
+            },
+        )
+
+        # Also send via WebSocket manager for immediate delivery (if connected)
+        await websocket_manager.send_message(
+            contract_id,
+            WebSocketEvents.analysis_started(contract_id, estimated_time=5),
+        )
+
+        # Get user profile for context
+        user_result = await user_client.database.select(
+            "profiles", columns="*", filters={"id": user_id}
+        )
+        user_profile = user_result.get("data", [{}])[0] if user_result.get("data") else {}
+
+        # Check user credits before processing
+        if user_profile.get("subscription_status") == "free":
+            credits_remaining = user_profile.get("credits_remaining", 0)
+            if credits_remaining <= 0:
+                raise Exception("quota_error - Insufficient credits or quota exceeded.")
+
+        # Progress update: Initial validation complete via Redis Pub/Sub
+        publish_progress_sync(
+            contract_id,
+            {
+                "event_type": "analysis_progress",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "data": {
+                    "contract_id": contract_id,
+                    "current_step": "validating_input",
+                    "progress_percent": 10,
+                    "step_description": "Validating user credentials and document access",
+                    "estimated_completion_minutes": 5,
+                },
+            },
+        )
+
+        # Also send via WebSocket manager for immediate delivery (if connected)
+        await websocket_manager.send_message(
+            contract_id,
+            WebSocketEvents.analysis_progress(
+                contract_id,
+                "validating_input",
+                10,
+                "Validating user credentials and document access",
+            ),
+        )
+
+        # Save progress to database
         try:
-            # Get service database client (has elevated permissions)
-            db_client = await get_service_supabase_client()
-            if not hasattr(db_client, "_client") or db_client._client is None:
-                await db_client.initialize()
-
-            # Update analysis status
-            db_client.table("contract_analyses").update({"status": "processing"}).eq(
-                "id", analysis_id
-            ).execute()
-
-            # Send analysis_started event via Redis Pub/Sub
-            publish_progress_sync(
-                contract_id,
+            await user_client.execute_rpc(
+                "update_analysis_progress",
                 {
-                    "event_type": "analysis_started",
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                    "data": {
-                        "contract_id": contract_id,
-                        "estimated_time_minutes": 5,
-                        "message": "Analysis started",
-                    },
+                    "p_contract_id": contract_id,
+                    "p_analysis_id": analysis_id,
+                    "p_user_id": user_id,
+                    "p_current_step": "validating_input",
+                    "p_progress_percent": 10,
+                    "p_step_description": "Validating user credentials and document access",
+                    "p_estimated_completion_minutes": 5,
                 },
             )
-
-            # Also send via WebSocket manager for immediate delivery (if connected)
-            await websocket_manager.send_message(
-                contract_id,
-                WebSocketEvents.analysis_started(contract_id, estimated_time=5),
+        except Exception as progress_error:
+            logger.warning(
+                f"Failed to save progress to database: {str(progress_error)}"
             )
 
-            # Get user profile for context
-            user_result = (
-                db_client.table("profiles").select("*").eq("id", user_id).execute()
+        # Verify document file exists in storage before processing
+        try:
+            await document_service.get_file_content(document["storage_path"])
+        except Exception as storage_error:
+            logger.error(
+                f"Document file not found in storage: {document['storage_path']}"
             )
-            user_profile = user_result.data[0] if user_result.data else {}
+            # Continue with analysis if we have extracted text, otherwise fail
+            if not document.get("processing_results", {}).get("extracted_text"):
+                raise Exception(
+                    f"File not found and no extracted text available: {document['storage_path']}"
+                )
 
-            # Check user credits before processing
-            if user_profile.get("subscription_status") == "free":
-                credits_remaining = user_profile.get("credits_remaining", 0)
-                if credits_remaining <= 0:
-                    raise Exception(
-                        "quota_error - Insufficient credits or quota exceeded."
-                    )
+        # Progress update: Setting up analysis context via Redis Pub/Sub
+        publish_progress_sync(
+            contract_id,
+            {
+                "event_type": "analysis_progress",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "data": {
+                    "contract_id": contract_id,
+                    "current_step": "processing_document",
+                    "progress_percent": 20,
+                    "step_description": "Setting up analysis context and extracting document content",
+                    "estimated_completion_minutes": 4,
+                },
+            },
+        )
 
-            # Progress update: Initial validation complete via Redis Pub/Sub
-            publish_progress_sync(
+        # Also send via WebSocket manager for immediate delivery (if connected)
+        await websocket_manager.send_message(
+            contract_id,
+            WebSocketEvents.analysis_progress(
                 contract_id,
+                "processing_document",
+                20,
+                "Setting up analysis context and extracting document content",
+            ),
+        )
+
+        # Save progress to database
+        try:
+            await user_client.execute_rpc(
+                "update_analysis_progress",
                 {
-                    "event_type": "analysis_progress",
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                    "data": {
-                        "contract_id": contract_id,
-                        "current_step": "validating_input",
-                        "progress_percent": 10,
-                        "step_description": "Validating user credentials and document access",
-                        "estimated_completion_minutes": 5,
-                    },
+                    "p_contract_id": contract_id,
+                    "p_analysis_id": analysis_id,
+                    "p_user_id": user_id,
+                    "p_current_step": "processing_document",
+                    "p_progress_percent": 20,
+                    "p_step_description": "Setting up analysis context and extracting document content",
+                    "p_estimated_completion_minutes": 4,
                 },
             )
-
-            # Also send via WebSocket manager for immediate delivery (if connected)
-            await websocket_manager.send_message(
-                contract_id,
-                WebSocketEvents.analysis_progress(
-                    contract_id,
-                    "validating_input",
-                    10,
-                    "Validating user credentials and document access",
-                ),
+        except Exception as progress_error:
+            logger.warning(
+                f"Failed to save progress to database: {str(progress_error)}"
             )
 
-            # Save progress to database
-            try:
-                await db_client.execute_rpc(
-                    "update_analysis_progress",
-                    {
-                        "p_contract_id": contract_id,
-                        "p_analysis_id": analysis_id,
-                        "p_user_id": user_id,
-                        "p_current_step": "validating_input",
-                        "p_progress_percent": 10,
-                        "p_step_description": "Validating user credentials and document access",
-                        "p_estimated_completion_minutes": 5,
-                    },
-                )
-            except Exception as progress_error:
-                logger.warning(
-                    f"Failed to save progress to database: {str(progress_error)}"
-                )
+        # Create initial state
+        initial_state = create_initial_state(
+            user_id=user_id,
+            australian_state=AustralianState(
+                user_profile.get("australian_state", "NSW")
+            ),
+            user_type=user_profile.get("user_type", "buyer"),
+            user_preferences=user_profile.get("preferences", {}),
+        )
 
-            # Verify document file exists in storage before processing
-            try:
-                await document_service.get_file_content(document["storage_path"])
-            except Exception as storage_error:
-                logger.error(
-                    f"Document file not found in storage: {document['storage_path']}"
-                )
-                # Continue with analysis if we have extracted text, otherwise fail
-                if not document.get("processing_results", {}).get("extracted_text"):
-                    raise Exception(
-                        f"File not found and no extracted text available: {document['storage_path']}"
-                    )
+        # Get processed document content
+        processing_results = document.get("processing_results", {})
+        extracted_text = processing_results.get("extracted_text", "")
+        extraction_confidence = processing_results.get("extraction_confidence", 0.0)
 
-            # Progress update: Setting up analysis context via Redis Pub/Sub
-            publish_progress_sync(
-                contract_id,
-                {
-                    "event_type": "analysis_progress",
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                    "data": {
-                        "contract_id": contract_id,
-                        "current_step": "processing_document",
-                        "progress_percent": 20,
-                        "step_description": "Setting up analysis context and extracting document content",
-                        "estimated_completion_minutes": 4,
-                    },
-                },
-            )
-
-            # Also send via WebSocket manager for immediate delivery (if connected)
-            await websocket_manager.send_message(
-                contract_id,
-                WebSocketEvents.analysis_progress(
-                    contract_id,
-                    "processing_document",
-                    20,
-                    "Setting up analysis context and extracting document content",
-                ),
-            )
-
-            # Save progress to database
-            try:
-                await db_client.execute_rpc(
-                    "update_analysis_progress",
-                    {
-                        "p_contract_id": contract_id,
-                        "p_analysis_id": analysis_id,
-                        "p_user_id": user_id,
-                        "p_current_step": "processing_document",
-                        "p_progress_percent": 20,
-                        "p_step_description": "Setting up analysis context and extracting document content",
-                        "p_estimated_completion_minutes": 4,
-                    },
-                )
-            except Exception as progress_error:
-                logger.warning(
-                    f"Failed to save progress to database: {str(progress_error)}"
-                )
-
-            # Create initial state
-            initial_state = create_initial_state(
-                user_id=user_id,
-                australian_state=AustralianState(
-                    user_profile.get("australian_state", "NSW")
-                ),
-                user_type=user_profile.get("user_type", "buyer"),
-                user_preferences=user_profile.get("preferences", {}),
-            )
-
-            # Get processed document content
-            processing_results = document.get("processing_results", {})
-            extracted_text = processing_results.get("extracted_text", "")
-            extraction_confidence = processing_results.get("extraction_confidence", 0.0)
-
-            if not extracted_text or extraction_confidence < 0.5:
-                # If no extracted text or low confidence, try enhanced extraction
-                contract_context = {
-                    "australian_state": user_profile.get("australian_state", "NSW"),
-                    "contract_type": "purchase_agreement",
-                    "user_type": user_profile.get("user_type", "buyer"),
-                }
-
-                # Use OCR if confidence is low or text is missing
-                force_ocr = extraction_confidence < 0.5
-                extraction_result = await document_service.extract_text(
-                    document["storage_path"],
-                    document["file_type"],
-                    contract_context=contract_context,
-                    force_ocr=force_ocr,
-                )
-                extracted_text = extraction_result.get("extracted_text", "")
-
-                # Update document with improved extraction results
-                if (
-                    extraction_result.get("extraction_confidence", 0)
-                    > extraction_confidence
-                ):
-                    db_client.table("documents").update(
-                        {"processing_results": extraction_result}
-                    ).eq("id", document["id"]).execute()
-
-            # Progress update: Preparing document for analysis via Redis Pub/Sub
-            publish_progress_sync(
-                contract_id,
-                {
-                    "event_type": "analysis_progress",
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                    "data": {
-                        "contract_id": contract_id,
-                        "current_step": "extracting_terms",
-                        "progress_percent": 40,
-                        "step_description": "Preparing document content for AI analysis",
-                        "estimated_completion_minutes": 3,
-                    },
-                },
-            )
-
-            # Also send via WebSocket manager for immediate delivery (if connected)
-            await websocket_manager.send_message(
-                contract_id,
-                WebSocketEvents.analysis_progress(
-                    contract_id,
-                    "extracting_terms",
-                    40,
-                    "Preparing document content for AI analysis",
-                ),
-            )
-
-            # Save progress to database
-            try:
-                await db_client.execute_rpc(
-                    "update_analysis_progress",
-                    {
-                        "p_contract_id": contract_id,
-                        "p_analysis_id": analysis_id,
-                        "p_user_id": user_id,
-                        "p_current_step": "extracting_terms",
-                        "p_progress_percent": 40,
-                        "p_step_description": "Preparing document content for AI analysis",
-                        "p_estimated_completion_minutes": 3,
-                    },
-                )
-            except Exception as progress_error:
-                logger.warning(
-                    f"Failed to save progress to database: {str(progress_error)}"
-                )
-
-            # Add document data to state
-            initial_state["document_data"] = {
-                "document_id": document["id"],
-                "filename": document["filename"],
-                "content": extracted_text,
-                "storage_path": document["storage_path"],
-                "file_type": document["file_type"],
+        if not extracted_text or extraction_confidence < 0.5:
+            # If no extracted text or low confidence, try enhanced extraction
+            contract_context = {
+                "australian_state": user_profile.get("australian_state", "NSW"),
+                "contract_type": "purchase_agreement",
+                "user_type": user_profile.get("user_type", "buyer"),
             }
 
-            # Progress update: Starting AI analysis via Redis Pub/Sub
-            publish_progress_sync(
+            # Use OCR if confidence is low or text is missing
+            force_ocr = extraction_confidence < 0.5
+            extraction_result = await document_service.extract_text(
+                document["storage_path"],
+                document["file_type"],
+                contract_context=contract_context,
+                force_ocr=force_ocr,
+            )
+            extracted_text = extraction_result.get("extracted_text", "")
+
+            # Update document with improved extraction results
+            if (
+                extraction_result.get("extraction_confidence", 0)
+                > extraction_confidence
+            ):
+                await user_client.update(
+                    "documents",
+                    {"id": document["id"]},
+                    {"processing_results": extraction_result}
+                )
+
+        # Progress update: Preparing document for analysis via Redis Pub/Sub
+        publish_progress_sync(
+            contract_id,
+            {
+                "event_type": "analysis_progress",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "data": {
+                    "contract_id": contract_id,
+                    "current_step": "extracting_terms",
+                    "progress_percent": 40,
+                    "step_description": "Preparing document content for AI analysis",
+                    "estimated_completion_minutes": 3,
+                },
+            },
+        )
+
+        # Also send via WebSocket manager for immediate delivery (if connected)
+        await websocket_manager.send_message(
+            contract_id,
+            WebSocketEvents.analysis_progress(
                 contract_id,
+                "extracting_terms",
+                40,
+                "Preparing document content for AI analysis",
+            ),
+        )
+
+        # Save progress to database
+        try:
+            await user_client.execute_rpc(
+                "update_analysis_progress",
                 {
-                    "event_type": "analysis_progress",
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                    "data": {
-                        "contract_id": contract_id,
-                        "current_step": "analyzing_compliance",
-                        "progress_percent": 60,
-                        "step_description": "AI is analyzing contract terms and compliance requirements",
-                        "estimated_completion_minutes": 2,
-                    },
+                    "p_contract_id": contract_id,
+                    "p_analysis_id": analysis_id,
+                    "p_user_id": user_id,
+                    "p_current_step": "extracting_terms",
+                    "p_progress_percent": 40,
+                    "p_step_description": "Preparing document content for AI analysis",
+                    "p_estimated_completion_minutes": 3,
                 },
             )
-
-            # Also send via WebSocket manager for immediate delivery (if connected)
-            await websocket_manager.send_message(
-                contract_id,
-                WebSocketEvents.analysis_progress(
-                    contract_id,
-                    "analyzing_compliance",
-                    60,
-                    "AI is analyzing contract terms and compliance requirements",
-                ),
+        except Exception as progress_error:
+            logger.warning(
+                f"Failed to save progress to database: {str(progress_error)}"
             )
 
-            # Save progress to database
-            try:
-                await db_client.execute_rpc(
-                    "update_analysis_progress",
-                    {
-                        "p_contract_id": contract_id,
-                        "p_analysis_id": analysis_id,
-                        "p_user_id": user_id,
-                        "p_current_step": "analyzing_compliance",
-                        "p_progress_percent": 60,
-                        "p_step_description": "AI is analyzing contract terms and compliance requirements",
-                        "p_estimated_completion_minutes": 2,
-                    },
-                )
-            except Exception as progress_error:
-                logger.warning(
-                    f"Failed to save progress to database: {str(progress_error)}"
-                )
+        # Add document data to state
+        initial_state["document_data"] = {
+            "document_id": document["id"],
+            "filename": document["filename"],
+            "content": extracted_text,
+            "storage_path": document["storage_path"],
+            "file_type": document["file_type"],
+        }
 
-            # Run analysis workflow
-            final_state = await contract_workflow.analyze_contract(initial_state)
+        # Progress update: Starting AI analysis via Redis Pub/Sub
+        publish_progress_sync(
+            contract_id,
+            {
+                "event_type": "analysis_progress",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "data": {
+                    "contract_id": contract_id,
+                    "current_step": "analyzing_compliance",
+                    "progress_percent": 60,
+                    "step_description": "AI is analyzing contract terms and compliance requirements",
+                    "estimated_completion_minutes": 2,
+                },
+            },
+        )
 
-            # Progress update: Generating risk assessment via Redis Pub/Sub
-            publish_progress_sync(
+        # Also send via WebSocket manager for immediate delivery (if connected)
+        await websocket_manager.send_message(
+            contract_id,
+            WebSocketEvents.analysis_progress(
                 contract_id,
+                "analyzing_compliance",
+                60,
+                "AI is analyzing contract terms and compliance requirements",
+            ),
+        )
+
+        # Save progress to database
+        try:
+            await user_client.execute_rpc(
+                "update_analysis_progress",
                 {
-                    "event_type": "analysis_progress",
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                    "data": {
-                        "contract_id": contract_id,
-                        "current_step": "assessing_risks",
-                        "progress_percent": 80,
-                        "step_description": "Evaluating potential risks and generating insights",
-                        "estimated_completion_minutes": 1,
-                    },
+                    "p_contract_id": contract_id,
+                    "p_analysis_id": analysis_id,
+                    "p_user_id": user_id,
+                    "p_current_step": "analyzing_compliance",
+                    "p_progress_percent": 60,
+                    "p_step_description": "AI is analyzing contract terms and compliance requirements",
+                    "p_estimated_completion_minutes": 2,
                 },
             )
-
-            # Also send via WebSocket manager for immediate delivery (if connected)
-            await websocket_manager.send_message(
-                contract_id,
-                WebSocketEvents.analysis_progress(
-                    contract_id,
-                    "assessing_risks",
-                    80,
-                    "Evaluating potential risks and generating insights",
-                ),
+        except Exception as progress_error:
+            logger.warning(
+                f"Failed to save progress to database: {str(progress_error)}"
             )
 
-            # Save progress to database
-            try:
-                await db_client.execute_rpc(
-                    "update_analysis_progress",
-                    {
-                        "p_contract_id": contract_id,
-                        "p_analysis_id": analysis_id,
-                        "p_user_id": user_id,
-                        "p_current_step": "assessing_risks",
-                        "p_progress_percent": 80,
-                        "p_step_description": "Evaluating potential risks and generating insights",
-                        "p_estimated_completion_minutes": 1,
-                    },
-                )
-            except Exception as progress_error:
-                logger.warning(
-                    f"Failed to save progress to database: {str(progress_error)}"
-                )
+        # Run analysis workflow
+        final_state = await contract_workflow.analyze_contract(initial_state)
 
-            # Progress update: Compiling final report via Redis Pub/Sub
-            publish_progress_sync(
+        # Progress update: Generating risk assessment via Redis Pub/Sub
+        publish_progress_sync(
+            contract_id,
+            {
+                "event_type": "analysis_progress",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "data": {
+                    "contract_id": contract_id,
+                    "current_step": "assessing_risks",
+                    "progress_percent": 80,
+                    "step_description": "Evaluating potential risks and generating insights",
+                    "estimated_completion_minutes": 1,
+                },
+            },
+        )
+
+        # Also send via WebSocket manager for immediate delivery (if connected)
+        await websocket_manager.send_message(
+            contract_id,
+            WebSocketEvents.analysis_progress(
                 contract_id,
+                "assessing_risks",
+                80,
+                "Evaluating potential risks and generating insights",
+            ),
+        )
+
+        # Save progress to database
+        try:
+            await user_client.execute_rpc(
+                "update_analysis_progress",
                 {
-                    "event_type": "analysis_progress",
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                    "data": {
-                        "contract_id": contract_id,
-                        "current_step": "compiling_report",
-                        "progress_percent": 95,
-                        "step_description": "Finalizing analysis report and recommendations",
-                        "estimated_completion_minutes": 0,
-                    },
+                    "p_contract_id": contract_id,
+                    "p_analysis_id": analysis_id,
+                    "p_user_id": user_id,
+                    "p_current_step": "assessing_risks",
+                    "p_progress_percent": 80,
+                    "p_step_description": "Evaluating potential risks and generating insights",
+                    "p_estimated_completion_minutes": 1,
                 },
             )
-
-            # Also send via WebSocket manager for immediate delivery (if connected)
-            await websocket_manager.send_message(
-                contract_id,
-                WebSocketEvents.analysis_progress(
-                    contract_id,
-                    "compiling_report",
-                    95,
-                    "Finalizing analysis report and recommendations",
-                ),
+        except Exception as progress_error:
+            logger.warning(
+                f"Failed to save progress to database: {str(progress_error)}"
             )
 
-            # Save progress to database
-            try:
-                await db_client.execute_rpc(
-                    "update_analysis_progress",
-                    {
-                        "p_contract_id": contract_id,
-                        "p_analysis_id": analysis_id,
-                        "p_user_id": user_id,
-                        "p_current_step": "compiling_report",
-                        "p_progress_percent": 95,
-                        "p_step_description": "Finalizing analysis report and recommendations",
-                        "p_estimated_completion_minutes": 0,
-                    },
-                )
-            except Exception as progress_error:
-                logger.warning(
-                    f"Failed to save progress to database: {str(progress_error)}"
-                )
+        # Progress update: Compiling final report via Redis Pub/Sub
+        publish_progress_sync(
+            contract_id,
+            {
+                "event_type": "analysis_progress",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "data": {
+                    "contract_id": contract_id,
+                    "current_step": "compiling_report",
+                    "progress_percent": 95,
+                    "step_description": "Finalizing analysis report and recommendations",
+                    "estimated_completion_minutes": 0,
+                },
+            },
+        )
 
-            # Update analysis results
-            analysis_result = final_state.get("analysis_results", {})
+        # Also send via WebSocket manager for immediate delivery (if connected)
+        await websocket_manager.send_message(
+            contract_id,
+            WebSocketEvents.analysis_progress(
+                contract_id,
+                "compiling_report",
+                95,
+                "Finalizing analysis report and recommendations",
+            ),
+        )
 
-            # Update with both old and new column names for compatibility
-            db_client.table("contract_analyses").update(
+        # Save progress to database
+        try:
+            await user_client.execute_rpc(
+                "update_analysis_progress",
                 {
-                    "status": "completed",
-                    "analysis_result": analysis_result,
-                    "executive_summary": analysis_result.get("executive_summary", {}),
-                    "risk_assessment": analysis_result.get("risk_assessment", {}),
-                    "compliance_check": analysis_result.get("compliance_check", {}),
-                    "recommendations": analysis_result.get("recommendations", []),
-                    "risk_score": analysis_result.get("risk_assessment", {}).get(
-                        "overall_risk_score", 0
-                    ),
-                    "overall_risk_score": analysis_result.get(
-                        "risk_assessment", {}
-                    ).get("overall_risk_score", 0),
-                    "confidence_score": analysis_result.get(
-                        "executive_summary", {}
-                    ).get("confidence_level", 0),
-                    "confidence_level": analysis_result.get(
-                        "executive_summary", {}
-                    ).get("confidence_level", 0),
-                    "processing_time": final_state.get("processing_time", 0),
-                    "processing_time_seconds": final_state.get("processing_time", 0),
-                }
-            ).eq("id", analysis_id).execute()
+                    "p_contract_id": contract_id,
+                    "p_analysis_id": analysis_id,
+                    "p_user_id": user_id,
+                    "p_current_step": "compiling_report",
+                    "p_progress_percent": 95,
+                    "p_step_description": "Finalizing analysis report and recommendations",
+                    "p_estimated_completion_minutes": 0,
+                },
+            )
+        except Exception as progress_error:
+            logger.warning(
+                f"Failed to save progress to database: {str(progress_error)}"
+            )
 
-            # Deduct user credit only if analysis was successful
-            if user_profile.get("subscription_status") == "free":
-                new_credits = max(0, user_profile.get("credits_remaining", 0) - 1)
-                db_client.table("profiles").update(
-                    {"credits_remaining": new_credits}
-                ).eq("id", user_id).execute()
+        # Update analysis results
+        analysis_result = final_state.get("analysis_results", {})
 
-                # Log usage only if deduction was successful
-                try:
-                    db_client.table("usage_logs").insert(
-                        {
-                            "user_id": user_id,
-                            "action_type": "contract_analysis",
-                            "credits_used": 1,
-                            "credits_remaining": new_credits,
-                        }
-                    ).execute()
-                except Exception as log_error:
-                    logger.warning(
-                        f"Failed to log usage for user {user_id}: {str(log_error)}"
-                    )
-
-            # Send completion update via Redis Pub/Sub
-            analysis_summary = {
+        # Update with both old and new column names for compatibility
+        await user_client.update(
+            "contract_analyses",
+            {"id": analysis_id},
+            {
+                "status": "completed",
+                "analysis_result": analysis_result,
+                "executive_summary": analysis_result.get("executive_summary", {}),
+                "risk_assessment": analysis_result.get("risk_assessment", {}),
+                "compliance_check": analysis_result.get("compliance_check", {}),
+                "recommendations": analysis_result.get("recommendations", []),
+                "risk_score": analysis_result.get("risk_assessment", {}).get(
+                    "overall_risk_score", 0
+                ),
                 "overall_risk_score": analysis_result.get("risk_assessment", {}).get(
                     "overall_risk_score", 0
                 ),
-                "total_recommendations": len(
-                    analysis_result.get("recommendations", [])
+                "confidence_score": analysis_result.get("executive_summary", {}).get(
+                    "confidence_level", 0
                 ),
-                "compliance_status": (
-                    "compliant"
-                    if analysis_result.get("compliance_check", {}).get(
-                        "state_compliance", False
-                    )
-                    else "non-compliant"
+                "confidence_level": analysis_result.get("executive_summary", {}).get(
+                    "confidence_level", 0
                 ),
+                "processing_time": final_state.get("processing_time", 0),
                 "processing_time_seconds": final_state.get("processing_time", 0),
             }
+        )
 
-            publish_progress_sync(
-                contract_id,
+        # Deduct user credit only if analysis was successful
+        if user_profile.get("subscription_status") == "free":
+            new_credits = max(0, user_profile.get("credits_remaining", 0) - 1)
+            await user_client.update(
+                "profiles",
+                {"id": user_id},
+                {"credits_remaining": new_credits}
+            )
+
+            # Log usage only if deduction was successful
+            try:
+                await user_client.insert(
+                    "usage_logs",
+                    {
+                        "user_id": user_id,
+                        "action_type": "contract_analysis",
+                        "credits_used": 1,
+                        "credits_remaining": new_credits,
+                    }
+                )
+            except Exception as log_error:
+                logger.warning(
+                    f"Failed to log usage for user {user_id}: {str(log_error)}"
+                )
+
+        # Send completion update via Redis Pub/Sub
+        analysis_summary = {
+            "overall_risk_score": analysis_result.get("risk_assessment", {}).get(
+                "overall_risk_score", 0
+            ),
+            "total_recommendations": len(analysis_result.get("recommendations", [])),
+            "compliance_status": (
+                "compliant"
+                if analysis_result.get("compliance_check", {}).get(
+                    "state_compliance", False
+                )
+                else "non-compliant"
+            ),
+            "processing_time_seconds": final_state.get("processing_time", 0),
+        }
+
+        publish_progress_sync(
+            contract_id,
+            {
+                "event_type": "analysis_completed",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "data": {
+                    "contract_id": contract_id,
+                    "status": "completed",
+                    "analysis_summary": analysis_summary,
+                },
+            },
+        )
+
+        # Also send via WebSocket manager for immediate delivery (if connected)
+        await websocket_manager.send_message(
+            contract_id,
+            WebSocketEvents.analysis_completed(contract_id, analysis_summary),
+        )
+
+        # Mark analysis as completed in database
+        try:
+            await user_client.execute_rpc(
+                "complete_analysis_progress",
                 {
-                    "event_type": "analysis_completed",
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                    "data": {
-                        "contract_id": contract_id,
-                        "status": "completed",
-                        "analysis_summary": analysis_summary,
-                    },
+                    "p_contract_id": contract_id,
+                    "p_analysis_id": analysis_id,
+                    "p_final_status": "completed",
                 },
             )
-
-            # Also send via WebSocket manager for immediate delivery (if connected)
-            await websocket_manager.send_message(
-                contract_id,
-                WebSocketEvents.analysis_completed(contract_id, analysis_summary),
+        except Exception as progress_error:
+            logger.warning(
+                f"Failed to mark analysis as completed in database: {str(progress_error)}"
             )
 
-            # Mark analysis as completed in database
-            try:
-                await db_client.execute_rpc(
-                    "complete_analysis_progress",
-                    {
-                        "p_contract_id": contract_id,
-                        "p_analysis_id": analysis_id,
-                        "p_final_status": "completed",
-                    },
-                )
-            except Exception as progress_error:
-                logger.warning(
-                    f"Failed to mark analysis as completed in database: {str(progress_error)}"
-                )
+        logger.info(f"Contract analysis {analysis_id} completed successfully")
 
-            logger.info(f"Contract analysis {analysis_id} completed successfully")
+    except Exception as e:
+        error_message = str(e)
+        error_type = "general_error"
 
-        except Exception as e:
-            error_message = str(e)
-            error_type = "general_error"
+        # Classify error types for better handling
+        if "openrouter" in error_message.lower() or "api" in error_message.lower():
+            error_type = "llm_api_error"
+            error_message = "LLM service temporarily unavailable. Please try again."
+        elif "timeout" in error_message.lower():
+            error_type = "timeout_error"
+            error_message = "Analysis timed out. Document may be too complex."
+        elif "rate limit" in error_message.lower():
+            error_type = "rate_limit_error"
+            error_message = "API rate limit reached. Please try again in a few minutes."
+        elif "quota" in error_message.lower() or "credit" in error_message.lower():
+            error_type = "quota_error"
+            error_message = "Insufficient credits or quota exceeded."
 
-            # Classify error types for better handling
-            if "openrouter" in error_message.lower() or "api" in error_message.lower():
-                error_type = "llm_api_error"
-                error_message = "LLM service temporarily unavailable. Please try again."
-            elif "timeout" in error_message.lower():
-                error_type = "timeout_error"
-                error_message = "Analysis timed out. Document may be too complex."
-            elif "rate limit" in error_message.lower():
-                error_type = "rate_limit_error"
-                error_message = (
-                    "API rate limit reached. Please try again in a few minutes."
-                )
-            elif "quota" in error_message.lower() or "credit" in error_message.lower():
-                error_type = "quota_error"
-                error_message = "Insufficient credits or quota exceeded."
+        logger.error(
+            f"Contract analysis failed for {analysis_id}: {error_type} - {error_message}"
+        )
 
-            logger.error(
-                f"Contract analysis failed for {analysis_id}: {error_type} - {error_message}"
-            )
+        # Update analysis status to failed with error details
+        await user_client.update(
+            "contract_analyses",
+            {"id": analysis_id},
+            {
+                "status": "failed",
+                "analysis_result": {
+                    "error": {
+                        "type": error_type,
+                        "message": error_message,
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    }
+                },
+            }
+        )
 
-            # Update analysis status to failed with error details
-            db_client.table("contract_analyses").update(
-                {
+        # Send detailed error update via Redis Pub/Sub
+        retry_available = error_type in [
+            "llm_api_error",
+            "timeout_error",
+            "rate_limit_error",
+        ]
+        publish_progress_sync(
+            contract_id,
+            {
+                "event_type": "analysis_failed",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "data": {
+                    "contract_id": contract_id,
                     "status": "failed",
-                    "analysis_result": {
-                        "error": {
-                            "type": error_type,
-                            "message": error_message,
-                            "timestamp": datetime.now(timezone.utc).isoformat(),
-                        }
-                    },
-                }
-            ).eq("id", analysis_id).execute()
+                    "error_message": error_message,
+                    "error_type": error_type,
+                    "retry_available": retry_available,
+                },
+            },
+        )
 
-            # Send detailed error update via Redis Pub/Sub
-            retry_available = error_type in [
-                "llm_api_error",
-                "timeout_error",
-                "rate_limit_error",
-            ]
-            publish_progress_sync(
-                contract_id,
+        # Also send via WebSocket manager for immediate delivery (if connected)
+        await websocket_manager.send_message(
+            contract_id,
+            WebSocketEvents.analysis_failed(
+                contract_id, error_message, retry_available
+            ),
+        )
+
+        # Mark analysis as failed in database
+        try:
+            await user_client.execute_rpc(
+                "complete_analysis_progress",
                 {
-                    "event_type": "analysis_failed",
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                    "data": {
-                        "contract_id": contract_id,
-                        "status": "failed",
-                        "error_message": error_message,
-                        "error_type": error_type,
-                        "retry_available": retry_available,
-                    },
+                    "p_contract_id": contract_id,
+                    "p_analysis_id": analysis_id,
+                    "p_final_status": "failed",
                 },
             )
-
-            # Also send via WebSocket manager for immediate delivery (if connected)
-            await websocket_manager.send_message(
-                contract_id,
-                WebSocketEvents.analysis_failed(
-                    contract_id, error_message, retry_available
-                ),
+        except Exception as progress_error:
+            logger.warning(
+                f"Failed to mark analysis as failed in database: {str(progress_error)}"
             )
 
-            # Mark analysis as failed in database
-            try:
-                await db_client.execute_rpc(
-                    "complete_analysis_progress",
-                    {
-                        "p_contract_id": contract_id,
-                        "p_analysis_id": analysis_id,
-                        "p_final_status": "failed",
-                    },
-                )
-            except Exception as progress_error:
-                logger.warning(
-                    f"Failed to mark analysis as failed in database: {str(progress_error)}"
-                )
-
-    # Run the async function
-    return asyncio.run(_async_analyze_contract())
 
 
+@celery_app.task(
+    bind=True,
+    autoretry_for=(Exception,),
+    retry_kwargs={"max_retries": 2, "countdown": 30},
+)
+@user_aware_task
 async def enhanced_reprocess_document_with_ocr_background(
+    self,
     document_id: str,
     user_id: str,
     document: Dict[str, Any],
     contract_context: Dict[str, Any],
     processing_options: Dict[str, Any],
 ):
-    """Background task for OCR reprocessing"""
+    """Background task for OCR reprocessing - USER AWARE VERSION
+    
+    This task maintains user authentication context throughout execution,
+    ensuring all database operations respect RLS policies.
+    """
 
     try:
+        # Verify user context matches expected user
+        context_user_id = AuthContext.get_user_id()
+        if context_user_id != user_id:
+            raise ValueError(
+                f"User context mismatch: expected {user_id}, got {context_user_id}"
+            )
+
+        # Initialize user-aware document service
+        document_service = DocumentService()
+        await document_service.initialize()
+        
+        # Get user-authenticated client (respects RLS)
+        user_client = await document_service.get_user_client()
+        
         # Update document status
-        db_client.table("documents").update({"processing_status": "reprocessing_ocr"}).eq(
-            "id", document_id
-        ).execute()
+        await user_client.update(
+            "documents",
+            {"id": document_id},
+            {"processing_status": "reprocessing_ocr"}
+        )
 
         # Send WebSocket notification
         await websocket_manager.send_message(
@@ -857,9 +954,11 @@ async def enhanced_reprocess_document_with_ocr_background(
         }
 
         # Update document with OCR results
-        db_client.table("documents").update(
+        await user_client.update(
+            "documents",
+            {"id": document_id},
             {"status": "processed", "processing_results": extraction_result}
-        ).eq("id", document_id).execute()
+        )
 
         # Send enhanced completion notification
         await websocket_manager.send_message(
@@ -895,10 +994,12 @@ async def enhanced_reprocess_document_with_ocr_background(
     except Exception as e:
         logger.error(f"OCR reprocessing failed for {document_id}: {str(e)}")
 
-        # Update status to failed
-        db_client.table("documents").update(
+        # Update status to failed  
+        await user_client.update(
+            "documents",
+            {"id": document_id},
             {"status": "ocr_failed", "processing_results": {"error": str(e)}}
-        ).eq("id", document_id).execute()
+        )
 
         # Send error notification
         await websocket_manager.send_message(
@@ -910,13 +1011,24 @@ async def enhanced_reprocess_document_with_ocr_background(
         )
 
 
+@celery_app.task(
+    bind=True,
+    autoretry_for=(Exception,),
+    retry_kwargs={"max_retries": 2, "countdown": 30},
+)
+@user_aware_task
 async def batch_ocr_processing_background(
+    self,
     document_ids: List[str],
     user_id: str,
     batch_context: Dict[str, Any],
     processing_options: Dict[str, Any],
 ):
-    """Background task for batch OCR processing with intelligent optimization"""
+    """Background task for batch OCR processing with intelligent optimization - USER AWARE VERSION
+    
+    This task maintains user authentication context throughout execution,
+    ensuring all database operations respect RLS policies.
+    """
 
     batch_id = batch_context["batch_id"]
     total_docs = len(document_ids)
@@ -924,6 +1036,20 @@ async def batch_ocr_processing_background(
     start_time = time.time()
 
     try:
+        # Verify user context matches expected user
+        context_user_id = AuthContext.get_user_id()
+        if context_user_id != user_id:
+            raise ValueError(
+                f"User context mismatch: expected {user_id}, got {context_user_id}"
+            )
+
+        # Initialize user-aware document service
+        document_service = DocumentService()
+        await document_service.initialize()
+        
+        # Get user-authenticated client (respects RLS)
+        user_client = await document_service.get_user_client()
+        
         logger.info(f"Starting batch OCR processing for {total_docs} documents")
 
         # Initialize batch processing
@@ -953,25 +1079,24 @@ async def batch_ocr_processing_background(
                 async with semaphore:
                     try:
                         # Get document details
-                        doc_result = (
-                            db_client.table("documents")
-                            .select("*")
-                            .eq("id", doc_id)
-                            .execute()
+                        doc_result = await user_client.database.select(
+                            "documents", columns="*", filters={"id": doc_id}
                         )
 
-                        if not doc_result.data:
+                        if not doc_result.get("data"):
                             logger.warning(
                                 f"Document {doc_id} not found in batch processing"
                             )
                             return
 
-                        document = doc_result.data[0]
+                        document = doc_result["data"][0]
 
                         # Update document status
-                        db_client.table("documents").update(
+                        await user_client.update(
+                            "documents",
+                            {"id": doc_id},
                             {"status": "processing_ocr"}
-                        ).eq("id", doc_id).execute()
+                        )
 
                         # Process with OCR
                         extraction_result = (
@@ -983,12 +1108,14 @@ async def batch_ocr_processing_background(
                         )
 
                         # Update document with results
-                        db_client.table("documents").update(
+                        await user_client.update(
+                            "documents",
+                            {"id": doc_id},
                             {
                                 "status": "processed",
                                 "processing_results": extraction_result,
                             }
-                        ).eq("id", doc_id).execute()
+                        )
 
                         processed_docs += 1
 
@@ -998,12 +1125,14 @@ async def batch_ocr_processing_background(
                         )
 
                         # Update document status to failed
-                        db_client.table("documents").update(
+                        await user_client.update(
+                            "documents",
+                            {"id": doc_id},
                             {
                                 "status": "ocr_failed",
                                 "processing_results": {"error": str(e)},
                             }
-                        ).eq("id", doc_id).execute()
+                        )
 
             # Execute parallel processing
             tasks = [
@@ -1016,22 +1145,21 @@ async def batch_ocr_processing_background(
             for i, doc_id in enumerate(document_ids):
                 try:
                     # Get document details
-                    doc_result = (
-                        db_client.table("documents")
-                        .select("*")
-                        .eq("id", doc_id)
-                        .execute()
+                    doc_result = await user_client.database.select(
+                        "documents", columns="*", filters={"id": doc_id}
                     )
 
-                    if not doc_result.data:
+                    if not doc_result.get("data"):
                         continue
 
-                    document = doc_result.data[0]
+                    document = doc_result["data"][0]
 
                     # Update document status
-                    db_client.table("documents").update(
+                    await user_client.update(
+                        "documents",
+                        {"id": doc_id},
                         {"status": "processing_ocr"}
-                    ).eq("id", doc_id).execute()
+                    )
 
                     # Process with OCR
                     extraction_result = await document_service.extract_text_with_ocr(
@@ -1041,9 +1169,11 @@ async def batch_ocr_processing_background(
                     )
 
                     # Update document with results
-                    db_client.table("documents").update(
+                    await user_client.update(
+                        "documents",
+                        {"id": doc_id},
                         {"status": "processed", "processing_results": extraction_result}
-                    ).eq("id", doc_id).execute()
+                    )
 
                     processed_docs += 1
 
@@ -1108,7 +1238,46 @@ async def batch_ocr_processing_background(
         )
 
 
-async def generate_pdf_report(analysis_data: Dict[str, Any]) -> bytes:
-    """Generate PDF report from analysis data"""
-    # Placeholder - would implement with reportlab or similar
-    return b"PDF report content"
+@celery_app.task(bind=True)
+@user_aware_task
+async def generate_pdf_report(self, analysis_data: Dict[str, Any]) -> bytes:
+    """Generate PDF report from analysis data - USER AWARE VERSION
+    
+    This task generates a PDF report from contract analysis results,
+    maintaining user authentication context throughout execution.
+    """
+    try:
+        logger.info("Starting PDF report generation")
+        
+        # Verify user context if user_id is provided in analysis_data
+        if "user_id" in analysis_data:
+            context_user_id = AuthContext.get_user_id()
+            if context_user_id != analysis_data["user_id"]:
+                raise ValueError(
+                    f"User context mismatch: expected {analysis_data['user_id']}, got {context_user_id}"
+                )
+        
+        # For now, return a structured text report until reportlab is added
+        report_content = f"""
+CONTRACT ANALYSIS REPORT
+========================
+
+Document: {analysis_data.get('filename', 'Unknown')}
+Analysis Date: {analysis_data.get('analysis_date', 'Unknown')}
+Risk Score: {analysis_data.get('risk_score', 'N/A')}
+
+Executive Summary:
+{analysis_data.get('executive_summary', 'No summary available')}
+
+Recommendations:
+{chr(10).join(f'- {rec}' for rec in analysis_data.get('recommendations', []))}
+
+Generated by Real2.AI Contract Analysis Platform
+        """.strip()
+        
+        logger.info("PDF report generation completed")
+        return report_content.encode('utf-8')
+        
+    except Exception as e:
+        logger.error(f"PDF report generation failed: {str(e)}")
+        raise Exception(f"Report generation failed: {str(e)}")

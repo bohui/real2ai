@@ -53,6 +53,8 @@ from app.services.gemini_ocr_service import GeminiOCRService
 from app.clients import get_supabase_client, get_gemini_client
 from app.core.config import get_settings
 from app.core.langsmith_config import langsmith_trace, langsmith_session, log_trace_info
+from app.core.auth_context import AuthContext
+from app.services.base.user_aware_service import UserAwareService, ServiceInitializationMixin
 from app.clients.base.exceptions import (
     ClientError,
     ClientConnectionError,
@@ -62,7 +64,7 @@ from app.clients.base.exceptions import (
 logger = logging.getLogger(__name__)
 
 
-class DocumentService:
+class DocumentService(UserAwareService, ServiceInitializationMixin):
     """
     Unified Document Service combining best features from both implementations
 
@@ -83,17 +85,16 @@ class DocumentService:
         enable_advanced_ocr: bool = True,
         enable_gemini_ocr: bool = True,
         max_file_size_mb: int = 50,
-        use_service_role: bool = False,
+        user_client=None,  # For dependency injection
     ):
+        super().__init__(user_client=user_client)
         self.settings = get_settings()
         self.storage_base_path = Path(storage_base_path)
         self.enable_advanced_ocr = enable_advanced_ocr
         self.enable_gemini_ocr = enable_gemini_ocr
         self.max_file_size_mb = max_file_size_mb
-        self.use_service_role = use_service_role
 
         # Client instances
-        self.supabase_client = None
         self.gemini_client = None
         self.gemini_ocr_service = None
         self.semantic_analysis_service = None  # Will be initialized lazily
@@ -115,20 +116,29 @@ class DocumentService:
     async def initialize(self):
         """Initialize all service components"""
         try:
-            # Initialize clients
-            self.supabase_client = await get_supabase_client()
+            logger.info("Starting DocumentService initialization...")
+
+            # Initialize clients - Note: Supabase client is now created per-request
+            # with proper authentication context
+            logger.info("Service initialization - clients will be created per-request with auth context")
+
+            logger.info("Initializing Gemini client...")
             self.gemini_client = await get_gemini_client()
+            logger.info(f"Gemini client initialized: {self.gemini_client is not None}")
 
             # Initialize OCR services
             if self.enable_gemini_ocr:
+                logger.info("Initializing Gemini OCR service...")
                 self.gemini_ocr_service = GeminiOCRService()
                 await self.gemini_ocr_service.initialize()
+                logger.info("Gemini OCR service initialized")
 
             # Initialize semantic analysis service lazily to avoid circular imports
             # Will be initialized when first needed
             self.semantic_analysis_service = None
 
             # Ensure storage bucket exists
+            logger.info("Ensuring storage bucket exists...")
             await self._ensure_bucket_exists()
 
             logger.info("Unified Document Service initialized successfully")
@@ -141,11 +151,15 @@ class DocumentService:
             self.enable_gemini_ocr = False  # Fallback mode
 
     async def _ensure_bucket_exists(self):
-        """Ensure Supabase storage bucket exists"""
+        """Ensure Supabase storage bucket exists - SYSTEM OPERATION"""
         try:
-            result = await self.supabase_client.execute_rpc(
+            # This is a legitimate system operation - bucket creation requires admin privileges
+            system_client = await self.get_system_client()
+            result = await system_client.execute_rpc(
                 "ensure_bucket_exists", {"bucket_name": self.storage_bucket}
             )
+            
+            self.log_operation("system_bucket_ensure", "storage_bucket", self.storage_bucket)
 
             # Parse the JSON string result
             result_data = json.loads(result)
@@ -369,6 +383,24 @@ class DocumentService:
             file_extension = Path(file_info["original_filename"]).suffix.lower()
             storage_filename = f"{document_id}{file_extension}"
             storage_path = f"documents/{user_id}/{storage_filename}"
+
+            # Debug logging
+            logger.debug(f"Supabase client type: {type(self.supabase_client)}")
+            logger.debug(
+                f"Supabase client initialized: {self.supabase_client is not None}"
+            )
+            if self.supabase_client:
+                logger.debug(f"Supabase client methods: {dir(self.supabase_client)}")
+                # Check if upload_file method exists
+                if hasattr(self.supabase_client, "upload_file"):
+                    logger.debug("upload_file method found on Supabase client")
+                else:
+                    logger.error("upload_file method NOT found on Supabase client")
+                    logger.error(
+                        f"Available methods: {[m for m in dir(self.supabase_client) if not m.startswith('_')]}"
+                    )
+            else:
+                logger.error("Supabase client is None!")
 
             # Upload to Supabase storage
             file_content = await file.read()
@@ -861,7 +893,10 @@ class DocumentService:
             if error_details:
                 update_data["processing_errors"] = error_details
 
-            await self.supabase_client.update(
+            user_client = await self.get_user_client()
+            self.log_operation("update", "document", document_id)
+            
+            await user_client.update(
                 "documents", {"id": document_id}, update_data
             )
 
@@ -887,7 +922,8 @@ class DocumentService:
             if metadata:
                 update_data["processing_metadata"] = metadata
 
-            await self.supabase_client.update(
+            user_client = await self.get_user_client()
+            await user_client.update(
                 "documents", {"id": document_id}, update_data
             )
 
@@ -982,24 +1018,38 @@ class DocumentService:
             "timestamp": datetime.now(UTC).isoformat(),
         }
 
-        # Check Supabase client
-        if self.supabase_client:
+        # Check user client if authenticated
+        if self.is_user_authenticated():
             try:
-                # Test basic connection
-                test_result = await self.supabase_client.execute_rpc("health_check", {})
-                health_status["dependencies"]["supabase"] = {
+                user_client = await self.get_user_client()
+                test_result = await user_client.execute_rpc("health_check", {})
+                health_status["dependencies"]["user_client"] = {
                     "status": "healthy",
                     "connection": "ok",
                 }
             except Exception as e:
-                health_status["dependencies"]["supabase"] = {
+                health_status["dependencies"]["user_client"] = {
                     "status": "error",
                     "error": str(e),
                 }
                 health_status["status"] = "degraded"
         else:
-            health_status["dependencies"]["supabase"] = {
-                "status": "not_initialized",
+            health_status["dependencies"]["user_client"] = {
+                "status": "no_auth_context",
+            }
+        
+        # Check system client
+        try:
+            system_client = await self.get_system_client()
+            test_result = await system_client.execute_rpc("health_check", {})
+            health_status["dependencies"]["system_client"] = {
+                "status": "healthy",
+                "connection": "ok",
+            }
+        except Exception as e:
+            health_status["dependencies"]["system_client"] = {
+                "status": "error",
+                "error": str(e),
             }
             health_status["status"] = "degraded"
 
@@ -1123,10 +1173,10 @@ class DocumentService:
             ValueError: If file not found or download fails
         """
         try:
-            if not self.supabase_client:
-                raise ValueError("Supabase client not initialized")
-
-            file_content = await self.supabase_client.download_file(
+            user_client = await self.get_user_client()
+            self.log_operation("read", "file", storage_path)
+            
+            file_content = await user_client.download_file(
                 bucket=self.storage_bucket, path=storage_path
             )
 
@@ -1312,7 +1362,6 @@ def create_document_service(
     enable_advanced_ocr: bool = True,
     enable_gemini_ocr: bool = True,
     max_file_size_mb: int = 50,
-    use_service_role: bool = False,
 ) -> DocumentService:
     """Create unified document service with specified configuration"""
 
@@ -1321,5 +1370,4 @@ def create_document_service(
         enable_advanced_ocr=enable_advanced_ocr,
         enable_gemini_ocr=enable_gemini_ocr,
         max_file_size_mb=max_file_size_mb,
-        use_service_role=use_service_role,
     )

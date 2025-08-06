@@ -35,6 +35,7 @@ from app.router.ocr import router as ocr_router
 from app.router.health import router as health_router
 from app.router.websockets import router as websockets_router
 from app.router.property_profile import router as property_profile_router
+from app.middleware.auth_middleware import setup_auth_middleware
 
 # Initialize services
 settings = get_settings()
@@ -138,6 +139,8 @@ app.add_middleware(
     max_age=3600,  # Cache preflight responses for 1 hour
 )
 
+# Add authentication middleware
+setup_auth_middleware(app, validate_token=False)
 
 # Include routers
 app.include_router(health_router)

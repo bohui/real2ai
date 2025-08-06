@@ -4,19 +4,42 @@ from fastapi import APIRouter, HTTPException, Depends
 import logging
 
 from app.core.auth import get_current_user, User
-from app.services.document_service import DocumentService
+from app.core.auth_context import AuthContext
+from app.services.document_service_migrated import DocumentService
 from app.schema.ocr import OCRCapabilitiesResponse, EnhancedOCRCapabilities, OCRQueueStatus
+from app.core.error_handler import (
+    handle_api_error, 
+    create_error_context, 
+    ErrorCategory
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/ocr", tags=["ocr"])
 
-# Initialize services
-document_service = DocumentService()
+
+# Dependency function to get initialized document service
+async def get_document_service(
+    user: User = Depends(get_current_user),
+) -> DocumentService:
+    """Get initialized document service with user-aware architecture"""
+    user_client = await AuthContext.get_authenticated_client(require_auth=True)
+    service = DocumentService(user_client=user_client)
+    await service.initialize()
+    return service
 
 
 @router.get("/capabilities")
-async def get_ocr_capabilities():
+async def get_ocr_capabilities(
+    user: User = Depends(get_current_user),
+    document_service: DocumentService = Depends(get_document_service),
+):
     """Get comprehensive OCR service capabilities and status"""
+    
+    context = create_error_context(
+        user_id=str(user.id),
+        operation="get_ocr_capabilities"
+    )
+    
     try:
         capabilities = await document_service.get_ocr_capabilities()
         
@@ -49,13 +72,21 @@ async def get_ocr_capabilities():
         return enhanced_capabilities
         
     except Exception as e:
-        logger.error(f"OCR capabilities error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        # Use enhanced error handling
+        raise handle_api_error(e, context, ErrorCategory.EXTERNAL_API)
 
 
 @router.get("/queue-status")
-async def get_ocr_queue_status(user: User = Depends(get_current_user)):
+async def get_ocr_queue_status(
+    user: User = Depends(get_current_user),
+    document_service: DocumentService = Depends(get_document_service),
+):
     """Get current OCR processing queue status"""
+    
+    context = create_error_context(
+        user_id=str(user.id),
+        operation="get_ocr_queue_status"
+    )
     
     try:
         # This would integrate with Celery to get real queue status
@@ -76,5 +107,5 @@ async def get_ocr_queue_status(user: User = Depends(get_current_user)):
         return queue_status
         
     except Exception as e:
-        logger.error(f"Queue status error: {str(e)}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+        # Use enhanced error handling
+        raise handle_api_error(e, context, ErrorCategory.SYSTEM)

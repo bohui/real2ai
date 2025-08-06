@@ -12,6 +12,7 @@ from fastapi import HTTPException
 from app.core.config import get_settings
 from app.core.prompts.service_mixin import PromptEnabledService
 from app.core.prompts.output_parser import create_parser, ParsingResult
+from app.services.base.user_aware_service import UserAwareService
 from app.models.contract_state import ProcessingStatus, AustralianState, ContractType
 from app.prompts.schema.image_semantics_schema import ImageSemantics, ImageType
 from app.clients import get_gemini_client
@@ -24,7 +25,7 @@ from app.clients.base.exceptions import (
 logger = logging.getLogger(__name__)
 
 
-class GeminiOCRService(PromptEnabledService):
+class GeminiOCRService(PromptEnabledService, UserAwareService):
     """
     Advanced OCR service with integrated Pydantic output parsing
 
@@ -35,9 +36,10 @@ class GeminiOCRService(PromptEnabledService):
     - Improved reliability and maintainability
     """
 
-    def __init__(self):
-        super().__init__()
-
+    def __init__(self, user_client=None):
+        PromptEnabledService.__init__(self)
+        UserAwareService.__init__(self, user_client=user_client)
+        
         self.settings = get_settings()
         self.gemini_client = None
         self.max_file_size = 50 * 1024 * 1024  # 50MB limit
