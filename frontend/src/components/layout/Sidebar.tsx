@@ -8,7 +8,10 @@ import {
   Upload,
   BarChart3,
   Zap,
-  HelpCircle
+  HelpCircle,
+  Building,
+  TrendingUp,
+  Calculator
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 
@@ -47,6 +50,27 @@ const Sidebar: React.FC = () => {
       current: location.pathname === '/app/reports'
     },
     {
+      name: 'Property Intelligence',
+      href: '/app/property-intelligence',
+      icon: Building,
+      current: location.pathname === '/app/property-intelligence',
+      badge: 'NEW'
+    },
+    {
+      name: 'Market Analysis',
+      href: '/app/market-analysis',
+      icon: TrendingUp,
+      current: location.pathname === '/app/market-analysis',
+      badge: 'NEW'
+    },
+    {
+      name: 'Financial Analysis',
+      href: '/app/financial-analysis',
+      icon: Calculator,
+      current: location.pathname === '/app/financial-analysis',
+      badge: 'NEW'
+    },
+    {
       name: 'Settings',
       href: '/app/settings',
       icon: Settings,
@@ -71,7 +95,7 @@ const Sidebar: React.FC = () => {
         </div>
         <div>
           <h1 className="text-xl font-bold text-neutral-900">Real2.AI</h1>
-          <p className="text-xs text-neutral-500">Contract Analysis</p>
+          <p className="text-xs text-neutral-500">Property & Contract AI</p>
         </div>
       </div>
 
@@ -107,6 +131,8 @@ const Sidebar: React.FC = () => {
                     'inline-flex items-center px-2 py-1 rounded-full text-xs font-medium',
                     item.name === 'New Analysis' && isAnalyzing
                       ? 'bg-success-100 text-success-700'
+                      : item.badge === 'NEW'
+                      ? 'bg-accent-100 text-accent-700'
                       : item.current
                       ? 'bg-primary-100 text-primary-700'
                       : 'bg-neutral-100 text-neutral-600'

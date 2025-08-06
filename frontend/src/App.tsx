@@ -15,6 +15,9 @@ import AnalysisPage from '@/pages/AnalysisPage'
 import HistoryPage from '@/pages/HistoryPage'
 import SettingsPage from '@/pages/SettingsPage'
 import ReportsPage from '@/pages/ReportsPage'
+import PropertyIntelligencePage from '@/pages/PropertyIntelligencePage'
+import MarketAnalysisPage from '@/pages/MarketAnalysisPage'
+import FinancialAnalysisPage from '@/pages/FinancialAnalysisPage'
 
 // Components
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
@@ -146,6 +149,9 @@ const App: React.FC = () => {
               <Route path="analysis/:contractId" element={<AnalysisPage />} />
               <Route path="history" element={<HistoryPage />} />
               <Route path="reports" element={<ReportsPage />} />
+              <Route path="property-intelligence" element={<PropertyIntelligencePage />} />
+              <Route path="market-analysis" element={<MarketAnalysisPage />} />
+              <Route path="financial-analysis" element={<FinancialAnalysisPage />} />
               <Route path="settings" element={<SettingsPage />} />
               <Route index element={<Navigate to="/app/dashboard" replace />} />
             </Route>

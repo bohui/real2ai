@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Search,
@@ -29,107 +29,294 @@ import Button from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import StatusBadge from "@/components/ui/StatusBadge";
 import { cn } from "@/utils";
+import { propertyIntelligenceService } from "@/services/propertyIntelligence";
+import {
+  PropertySearchRequest,
+  PropertySearchResponse,
+  PropertyListing,
+  PropertyMarketInsight,
+  PropertyWatchlistItem,
+  AustralianState
+} from "@/types";
 
-// Mock data for demonstration
-const mockProperties = [
-  {
-    id: "1",
-    address: "45 Collins Street, Melbourne VIC 3000",
-    suburb: "Melbourne",
-    state: "VIC",
-    propertyType: "Apartment",
-    bedrooms: 2,
-    bathrooms: 2,
-    carSpaces: 1,
-    currentValue: 850000,
-    confidence: 92,
-    riskScore: 2.8,
-    investmentScore: 8.2,
-    growthRate: 5.2,
-    yield: 4.1,
-    isSaved: false,
-    lastUpdated: "2024-01-15T10:30:00Z",
-    priceChange: 12000,
-    daysOnMarket: 21,
-    schoolScore: 9.2,
-    amenityScore: 8.8,
-    transportScore: 9.5,
-    environmentalRisk: "Low",
-  },
-  {
-    id: "2",
-    address: "123 George Street, Sydney NSW 2000",
-    suburb: "Sydney",
-    state: "NSW",
-    propertyType: "House",
-    bedrooms: 3,
-    bathrooms: 2,
-    carSpaces: 2,
-    currentValue: 1200000,
-    confidence: 88,
-    riskScore: 4.5,
-    investmentScore: 7.8,
-    growthRate: 3.8,
-    yield: 3.2,
-    isSaved: true,
-    lastUpdated: "2024-01-14T15:45:00Z",
-    priceChange: -5000,
-    daysOnMarket: 45,
-    schoolScore: 8.7,
-    amenityScore: 9.1,
-    transportScore: 8.9,
-    environmentalRisk: "Medium",
-  },
-  {
-    id: "3",
-    address: "67 Queen Street, Brisbane QLD 4000",
-    suburb: "Brisbane",
-    state: "QLD",
-    propertyType: "Townhouse",
-    bedrooms: 3,
-    bathrooms: 2,
-    carSpaces: 2,
-    currentValue: 720000,
-    confidence: 85,
-    riskScore: 3.2,
-    investmentScore: 8.5,
-    growthRate: 6.1,
-    yield: 4.8,
-    isSaved: true,
-    lastUpdated: "2024-01-13T09:15:00Z",
-    priceChange: 18000,
-    daysOnMarket: 12,
-    schoolScore: 8.5,
-    amenityScore: 7.9,
-    transportScore: 8.2,
-    environmentalRisk: "Low",
-  },
-];
+// Property display interface for UI compatibility
+interface PropertyDisplay {
+  id: string;
+  address: string;
+  suburb?: string;
+  state?: string;
+  propertyType: string;
+  bedrooms: number;
+  bathrooms: number;
+  carSpaces: number;
+  currentValue: number;
+  confidence?: number;
+  riskScore?: number;
+  investmentScore: number;
+  growthRate?: number;
+  yield?: number;
+  isSaved: boolean;
+  lastUpdated?: string;
+  priceChange?: number;
+  daysOnMarket?: number;
+  schoolScore?: number;
+  amenityScore?: number;
+  transportScore?: number;
+  environmentalRisk?: string;
+  estimated_rental?: number;
+}
 
-const mockMarketInsights = {
-  nationalGrowth: 5.2,
-  interestRate: 4.25,
-  averageSettlement: 28,
-  hotSuburbs: ["Teneriffe, QLD", "Richmond, VIC", "Paddington, NSW"],
-  marketTrend: "rising",
-  confidenceIndex: 78,
-};
+interface MarketInsights {
+  nationalGrowth: number;
+  interestRate: number;
+  averageSettlement: number;
+  hotSuburbs: string[];
+  marketTrend: string;
+  confidenceIndex: number;
+}
 
 const PropertyIntelligencePage: React.FC = () => {
+  // UI State
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedView, setSelectedView] = useState<"grid" | "list">("grid");
   const [selectedProperty, setSelectedProperty] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
-  const [savedProperties, setSavedProperties] = useState<string[]>(
-    mockProperties.filter(p => p.isSaved).map(p => p.id)
-  );
+  
+  // Data State
+  const [properties, setProperties] = useState<PropertyDisplay[]>([]);
+  const [marketInsights, setMarketInsights] = useState<MarketInsights | null>(null);
+  const [watchlist, setWatchlist] = useState<PropertyWatchlistItem[]>([]);
+  const [hotSuburbs, setHotSuburbs] = useState<PropertyMarketInsight[]>([]);
+  
+  // Loading and Error States
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  
+  // Filter States
+  const [filters, setFilters] = useState({
+    propertyType: "",
+    bedrooms: "",
+    priceRange: "",
+    riskLevel: ""
+  });
+  
+  // Saved properties from watchlist
+  const [savedProperties, setSavedProperties] = useState<string[]>([]);
 
-  const toggleSaveProperty = (propertyId: string) => {
-    setSavedProperties(prev => 
-      prev.includes(propertyId) 
-        ? prev.filter(id => id !== propertyId)
-        : [...prev, propertyId]
-    );
+  // Load initial data
+  useEffect(() => {
+    loadInitialData();
+  }, []);
+  
+  const loadInitialData = async () => {
+    setIsLoading(true);
+    try {
+      // Load watchlist
+      const watchlistData = await propertyIntelligenceService.getWatchlist(50);
+      setWatchlist(watchlistData);
+      setSavedProperties(watchlistData.map(item => item.id));
+      
+      // Load market insights for trending suburbs
+      const insights = await propertyIntelligenceService.getMarketInsights(
+        "Australia", 
+        ["trends", "forecasts"], 
+        10
+      );
+      setHotSuburbs(insights.filter(insight => insight.insight_type === "trend").slice(0, 3));
+      
+      // Set mock market insights (replace with real API call when available)
+      setMarketInsights({
+        nationalGrowth: 5.2,
+        interestRate: 4.25,
+        averageSettlement: 28,
+        hotSuburbs: insights.map(insight => 
+          insight.affected_areas[0] || "Unknown Location"
+        ).slice(0, 3),
+        marketTrend: "rising",
+        confidenceIndex: 78
+      });
+      
+      // Load initial property search (default search)
+      await searchProperties();
+      
+    } catch (error) {
+      console.error("Failed to load initial data:", error);
+      setError("Failed to load property data. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  const searchProperties = async () => {
+    if (!searchQuery && !hasActiveFilters()) {
+      // Load sample properties for initial view
+      await loadSampleProperties();
+      return;
+    }
+    
+    setIsSearching(true);
+    setError(null);
+    
+    try {
+      const searchRequest: PropertySearchRequest = {
+        query: searchQuery,
+        filters: {
+          property_types: filters.propertyType ? [filters.propertyType] : [],
+          min_bedrooms: filters.bedrooms ? parseInt(filters.bedrooms) : undefined,
+          min_price: getPriceRangeMin(filters.priceRange),
+          max_price: getPriceRangeMax(filters.priceRange),
+          suburbs: [],
+          states: [],
+          features_required: []
+        },
+        location: searchQuery,
+        radius_km: 10.0,
+        limit: 20,
+        sort_by: 'relevance',
+        include_off_market: false,
+        include_historical: false
+      };
+      
+      const response = await propertyIntelligenceService.searchProperties(searchRequest);
+      const transformedProperties = transformPropertyListings(response.properties);
+      setProperties(transformedProperties);
+      
+    } catch (error) {
+      console.error("Property search failed:", error);
+      setError("Search failed. Please try again.");
+      // Fallback to sample properties
+      await loadSampleProperties();
+    } finally {
+      setIsSearching(false);
+    }
+  };
+  
+  const loadSampleProperties = async () => {
+    try {
+      // Search for properties in major Australian cities
+      const locations = ["Melbourne, VIC", "Sydney, NSW", "Brisbane, QLD"];
+      let allProperties: PropertyDisplay[] = [];
+      
+      for (const location of locations) {
+        try {
+          const response = await propertyIntelligenceService.searchPropertiesAdvanced({
+            location,
+            limit: 5
+          });
+          const transformed = transformPropertyListings(response.properties);
+          allProperties = [...allProperties, ...transformed];
+        } catch (error) {
+          console.error(`Failed to load properties for ${location}:`, error);
+        }
+      }
+      
+      setProperties(allProperties.slice(0, 12)); // Limit to 12 properties
+    } catch (error) {
+      console.error("Failed to load sample properties:", error);
+      // Set empty array if all fails
+      setProperties([]);
+    }
+  };
+  
+  const transformPropertyListings = (listings: PropertyListing[]): PropertyDisplay[] => {
+    return listings.map(listing => ({
+      id: listing.id,
+      address: listing.address,
+      suburb: listing.address.split(",")[1]?.trim(),
+      state: listing.address.split(",")[2]?.trim(),
+      propertyType: listing.property_type,
+      bedrooms: listing.bedrooms,
+      bathrooms: listing.bathrooms,
+      carSpaces: listing.carspaces,
+      currentValue: listing.price,
+      confidence: Math.round(listing.market_score * 10), // Convert 0-10 to percentage-like
+      riskScore: Math.max(1, 10 - listing.investment_score), // Inverse of investment score
+      investmentScore: listing.investment_score,
+      growthRate: Math.random() * 8 + 2, // Mock data - replace with real calculation
+      yield: (listing.estimated_rental * 52 / listing.price) * 100,
+      isSaved: savedProperties.includes(listing.id),
+      lastUpdated: listing.listing_date,
+      priceChange: Math.random() * 20000 - 10000, // Mock data
+      daysOnMarket: Math.floor(Math.random() * 60) + 7,
+      schoolScore: Math.random() * 3 + 7, // Mock data 7-10
+      amenityScore: Math.random() * 3 + 7,
+      transportScore: Math.random() * 3 + 7,
+      environmentalRisk: Math.random() > 0.7 ? "Medium" : "Low",
+      estimated_rental: listing.estimated_rental
+    }));
+  };
+  
+  const hasActiveFilters = (): boolean => {
+    return Object.values(filters).some(value => value !== "");
+  };
+  
+  const getPriceRangeMin = (range: string): number | undefined => {
+    switch (range) {
+      case "500k-1m": return 500000;
+      case "1m-2m": return 1000000;
+      case "2m+": return 2000000;
+      default: return undefined;
+    }
+  };
+  
+  const getPriceRangeMax = (range: string): number | undefined => {
+    switch (range) {
+      case "0-500k": return 500000;
+      case "500k-1m": return 1000000;
+      case "1m-2m": return 2000000;
+      default: return undefined;
+    }
+  };
+  
+  const toggleSaveProperty = async (propertyId: string) => {
+    try {
+      const property = properties.find(p => p.id === propertyId);
+      if (!property) return;
+      
+      if (savedProperties.includes(propertyId)) {
+        // Remove from watchlist
+        const watchlistItem = watchlist.find(w => w.property.address.full_address === property.address);
+        if (watchlistItem) {
+          await propertyIntelligenceService.removeFromWatchlist(watchlistItem.id);
+        }
+        setSavedProperties(prev => prev.filter(id => id !== propertyId));
+      } else {
+        // Add to watchlist
+        await propertyIntelligenceService.addToWatchlist({
+          address: property.address,
+          notes: "Added from Property Intelligence search",
+          tags: ["search_result"],
+          alert_preferences: {}
+        });
+        setSavedProperties(prev => [...prev, propertyId]);
+      }
+      
+      // Update property in local state
+      setProperties(prev => prev.map(p => 
+        p.id === propertyId ? { ...p, isSaved: !p.isSaved } : p
+      ));
+      
+    } catch (error) {
+      console.error("Failed to toggle property save:", error);
+      setError("Failed to update saved properties. Please try again.");
+    }
+  };
+  
+  const handleSearch = () => {
+    searchProperties();
+  };
+  
+  const handleFilterChange = (filterName: string, value: string) => {
+    setFilters(prev => ({
+      ...prev,
+      [filterName]: value
+    }));
+  };
+  
+  const applyFilters = () => {
+    searchProperties();
+    setShowFilters(false);
   };
 
   const getRiskColor = (score: number) => {
@@ -199,8 +386,14 @@ const PropertyIntelligencePage: React.FC = () => {
                   <Filter className="w-5 h-5 mr-2" />
                   Filters
                 </Button>
-                <Button variant="primary" size="lg" className="px-8">
-                  Search Properties
+                <Button 
+                  variant="primary" 
+                  size="lg" 
+                  className="px-8"
+                  onClick={handleSearch}
+                  disabled={isSearching}
+                >
+                  {isSearching ? "Searching..." : "Search Properties"}
                 </Button>
               </div>
             </div>
@@ -221,11 +414,13 @@ const PropertyIntelligencePage: React.FC = () => {
                 <TrendingUp className="w-6 h-6 text-primary-600" />
                 Australian Market Intelligence
               </CardTitle>
-              <StatusBadge
-                status={mockMarketInsights.marketTrend === "rising" ? "success" : "warning"}
-                label={`Market ${mockMarketInsights.marketTrend}`}
-                variant="dot"
-              />
+              {marketInsights && (
+                <StatusBadge
+                  status={marketInsights.marketTrend === "rising" ? "success" : "warning"}
+                  label={`Market ${marketInsights.marketTrend}`}
+                  variant="dot"
+                />
+              )}
             </div>
           </CardHeader>
           <CardContent padding="lg">
@@ -235,7 +430,7 @@ const PropertyIntelligencePage: React.FC = () => {
                   <TrendingUp className="w-8 h-8 text-primary-600" />
                 </div>
                 <div className="text-3xl font-heading font-bold text-primary-600 mb-1">
-                  +{mockMarketInsights.nationalGrowth}%
+                  {marketInsights ? `+${marketInsights.nationalGrowth}%` : "--"}
                 </div>
                 <div className="font-medium text-neutral-700">National Growth</div>
                 <div className="text-sm text-neutral-500">12 months</div>
@@ -246,7 +441,7 @@ const PropertyIntelligencePage: React.FC = () => {
                   <Calculator className="w-8 h-8 text-warning-600" />
                 </div>
                 <div className="text-3xl font-heading font-bold text-warning-600 mb-1">
-                  {mockMarketInsights.interestRate}%
+                  {marketInsights ? `${marketInsights.interestRate}%` : "--"}
                 </div>
                 <div className="font-medium text-neutral-700">Cash Rate</div>
                 <div className="text-sm text-neutral-500">RBA Current</div>
@@ -257,7 +452,7 @@ const PropertyIntelligencePage: React.FC = () => {
                   <Calendar className="w-8 h-8 text-success-600" />
                 </div>
                 <div className="text-3xl font-heading font-bold text-success-600 mb-1">
-                  {mockMarketInsights.averageSettlement}
+                  {marketInsights ? marketInsights.averageSettlement : "--"}
                 </div>
                 <div className="font-medium text-neutral-700">Days Settlement</div>
                 <div className="text-sm text-neutral-500">Average</div>
@@ -268,7 +463,7 @@ const PropertyIntelligencePage: React.FC = () => {
                   <BarChart3 className="w-8 h-8 text-trust-600" />
                 </div>
                 <div className="text-3xl font-heading font-bold text-trust-600 mb-1">
-                  {mockMarketInsights.confidenceIndex}
+                  {marketInsights ? marketInsights.confidenceIndex : "--"}
                 </div>
                 <div className="font-medium text-neutral-700">Confidence Index</div>
                 <div className="text-sm text-neutral-500">Market Sentiment</div>
@@ -295,12 +490,16 @@ const PropertyIntelligencePage: React.FC = () => {
                     <label className="block text-sm font-medium text-neutral-700 mb-2">
                       Property Type
                     </label>
-                    <select className="w-full px-3 py-2 border border-neutral-200 rounded-lg focus:ring-2 focus:ring-primary-500">
+                    <select 
+                      className="w-full px-3 py-2 border border-neutral-200 rounded-lg focus:ring-2 focus:ring-primary-500"
+                      value={filters.propertyType}
+                      onChange={(e) => handleFilterChange('propertyType', e.target.value)}
+                    >
                       <option value="">Any</option>
-                      <option value="house">House</option>
-                      <option value="apartment">Apartment</option>
-                      <option value="townhouse">Townhouse</option>
-                      <option value="unit">Unit</option>
+                      <option value="House">House</option>
+                      <option value="Apartment">Apartment</option>
+                      <option value="Townhouse">Townhouse</option>
+                      <option value="Unit">Unit</option>
                     </select>
                   </div>
                   
@@ -308,7 +507,11 @@ const PropertyIntelligencePage: React.FC = () => {
                     <label className="block text-sm font-medium text-neutral-700 mb-2">
                       Bedrooms
                     </label>
-                    <select className="w-full px-3 py-2 border border-neutral-200 rounded-lg focus:ring-2 focus:ring-primary-500">
+                    <select 
+                      className="w-full px-3 py-2 border border-neutral-200 rounded-lg focus:ring-2 focus:ring-primary-500"
+                      value={filters.bedrooms}
+                      onChange={(e) => handleFilterChange('bedrooms', e.target.value)}
+                    >
                       <option value="">Any</option>
                       <option value="1">1+</option>
                       <option value="2">2+</option>
@@ -321,7 +524,11 @@ const PropertyIntelligencePage: React.FC = () => {
                     <label className="block text-sm font-medium text-neutral-700 mb-2">
                       Price Range
                     </label>
-                    <select className="w-full px-3 py-2 border border-neutral-200 rounded-lg focus:ring-2 focus:ring-primary-500">
+                    <select 
+                      className="w-full px-3 py-2 border border-neutral-200 rounded-lg focus:ring-2 focus:ring-primary-500"
+                      value={filters.priceRange}
+                      onChange={(e) => handleFilterChange('priceRange', e.target.value)}
+                    >
                       <option value="">Any</option>
                       <option value="0-500k">Under $500K</option>
                       <option value="500k-1m">$500K - $1M</option>
@@ -334,7 +541,11 @@ const PropertyIntelligencePage: React.FC = () => {
                     <label className="block text-sm font-medium text-neutral-700 mb-2">
                       Risk Level
                     </label>
-                    <select className="w-full px-3 py-2 border border-neutral-200 rounded-lg focus:ring-2 focus:ring-primary-500">
+                    <select 
+                      className="w-full px-3 py-2 border border-neutral-200 rounded-lg focus:ring-2 focus:ring-primary-500"
+                      value={filters.riskLevel}
+                      onChange={(e) => handleFilterChange('riskLevel', e.target.value)}
+                    >
                       <option value="">Any</option>
                       <option value="low">Low Risk (1-3)</option>
                       <option value="medium">Medium Risk (4-6)</option>
@@ -343,7 +554,7 @@ const PropertyIntelligencePage: React.FC = () => {
                   </div>
                   
                   <div className="flex items-end">
-                    <Button variant="primary" fullWidth>
+                    <Button variant="primary" fullWidth onClick={applyFilters}>
                       Apply Filters
                     </Button>
                   </div>
@@ -392,7 +603,7 @@ const PropertyIntelligencePage: React.FC = () => {
               <CardTitle>Property Search Results</CardTitle>
               <div className="flex items-center gap-3">
                 <span className="text-sm text-neutral-500">
-                  {mockProperties.length} properties found
+                  {properties.length} properties found
                 </span>
                 <div className="flex rounded-lg border border-neutral-200">
                   <button
@@ -422,13 +633,49 @@ const PropertyIntelligencePage: React.FC = () => {
             </div>
           </CardHeader>
           <CardContent padding="lg">
-            <div className={cn(
-              "gap-6",
-              selectedView === "grid" 
-                ? "grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3" 
-                : "space-y-4"
-            )}>
-              {mockProperties.map((property, index) => (
+            {/* Error Display */}
+            {error && (
+              <div className="mb-4 p-4 bg-danger-50 border border-danger-200 rounded-lg">
+                <div className="flex items-center gap-2 text-danger-700">
+                  <AlertTriangle className="w-5 h-5" />
+                  <span className="font-medium">{error}</span>
+                </div>
+              </div>
+            )}
+            
+            {/* Loading State */}
+            {isLoading && (
+              <div className="text-center py-8">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4"></div>
+                <p className="text-neutral-600">Loading property intelligence...</p>
+              </div>
+            )}
+            
+            {/* Empty State */}
+            {!isLoading && properties.length === 0 && !error && (
+              <div className="text-center py-8">
+                <Building className="w-16 h-16 text-neutral-300 mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-neutral-700 mb-2">No Properties Found</h3>
+                <p className="text-neutral-500 mb-4">Try adjusting your search criteria or filters.</p>
+                <Button variant="primary" onClick={() => {
+                  setSearchQuery("");
+                  setFilters({ propertyType: "", bedrooms: "", priceRange: "", riskLevel: "" });
+                  loadSampleProperties();
+                }}>
+                  Load Sample Properties
+                </Button>
+              </div>
+            )}
+            
+            {/* Properties Grid/List */}
+            {!isLoading && properties.length > 0 && (
+              <div className={cn(
+                "gap-6",
+                selectedView === "grid" 
+                  ? "grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3" 
+                  : "space-y-4"
+              )}>
+                {properties.map((property, index) => (
                 <motion.div
                   key={property.id}
                   initial={{ opacity: 0, y: 20 }}
@@ -582,8 +829,9 @@ const PropertyIntelligencePage: React.FC = () => {
                     </CardContent>
                   </Card>
                 </motion.div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </motion.div>
@@ -603,17 +851,23 @@ const PropertyIntelligencePage: React.FC = () => {
           </CardHeader>
           <CardContent padding="lg">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {mockMarketInsights.hotSuburbs.map((suburb, index) => (
-                <div key={suburb} className="flex items-center gap-3 p-4 bg-white/60 rounded-xl">
-                  <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center text-primary-600 font-bold text-sm">
-                    {index + 1}
+              {marketInsights && marketInsights.hotSuburbs.length > 0 ? (
+                marketInsights.hotSuburbs.map((suburb, index) => (
+                  <div key={suburb} className="flex items-center gap-3 p-4 bg-white/60 rounded-xl">
+                    <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center text-primary-600 font-bold text-sm">
+                      {index + 1}
+                    </div>
+                    <div>
+                      <div className="font-medium text-neutral-900">{suburb}</div>
+                      <div className="text-sm text-neutral-500">High Growth Area</div>
+                    </div>
                   </div>
-                  <div>
-                    <div className="font-medium text-neutral-900">{suburb}</div>
-                    <div className="text-sm text-neutral-500">High Growth Area</div>
-                  </div>
+                ))
+              ) : (
+                <div className="col-span-3 text-center py-4 text-neutral-500">
+                  Loading market insights...
                 </div>
-              ))}
+              )}
             </div>
           </CardContent>
         </Card>

@@ -636,7 +636,106 @@ class OCRErrorNotification(BaseModel):
     support_contact: Optional[str] = None
 
 
-# Property Profile Models - Domain API & CoreLogic Integration
+# Property Intelligence Models - Enhanced Property Analysis
+
+# Property Search and Analysis Models
+
+class PropertySearchFilters(BaseModel):
+    """Advanced property search filters"""
+    
+    min_price: Optional[float] = None
+    max_price: Optional[float] = None
+    min_bedrooms: Optional[int] = None
+    max_bedrooms: Optional[int] = None
+    min_bathrooms: Optional[int] = None
+    max_bathrooms: Optional[int] = None
+    min_carspaces: Optional[int] = None
+    property_types: List[str] = []
+    suburbs: List[str] = []
+    states: List[AustralianState] = []
+    min_land_area: Optional[float] = None
+    max_land_area: Optional[float] = None
+    features_required: List[str] = []
+    
+    @field_validator("property_types")
+    @classmethod
+    def validate_property_types(cls, v):
+        valid_types = ["House", "Unit", "Apartment", "Townhouse", "Villa", "Land"]
+        for prop_type in v:
+            if prop_type not in valid_types:
+                raise ValueError(f"Invalid property type: {prop_type}")
+        return v
+
+class PropertyInvestmentAnalysis(BaseModel):
+    """Property investment analysis results"""
+    
+    rental_yield: float
+    capital_growth_forecast_1_year: float
+    capital_growth_forecast_3_year: float
+    capital_growth_forecast_5_year: float
+    cash_flow_monthly: float
+    roi_percentage: float
+    payback_period_years: float
+    investment_score: float  # 0-100
+    investment_grade: str  # A+, A, B+, B, C+, C, D
+    comparable_roi: float  # compared to market
+    depreciation_benefits: Optional[Dict[str, float]] = None
+    tax_implications: Optional[Dict[str, Any]] = None
+    
+class PropertyFinancialBreakdown(BaseModel):
+    """Detailed property financial analysis"""
+    
+    purchase_price: float
+    stamp_duty: float
+    legal_fees: float
+    inspection_costs: float
+    loan_application_fees: float
+    building_inspection: float
+    pest_inspection: float
+    strata_report_cost: Optional[float] = None
+    total_upfront_costs: float
+    
+    # Ongoing costs
+    council_rates_annual: float
+    strata_fees_quarterly: Optional[float] = None
+    land_tax_annual: float
+    insurance_annual: float
+    property_management_annual: Optional[float] = None
+    maintenance_reserve_annual: float
+    total_annual_costs: float
+    
+class PropertyMarketTrends(BaseModel):
+    """Market trends and forecasts"""
+    
+    suburb: str
+    state: AustralianState
+    property_type: str
+    median_price_current: float
+    median_price_12_months_ago: float
+    price_change_percentage: float
+    price_volatility_score: float  # 0-100
+    market_activity_score: float  # 0-100
+    demand_supply_ratio: float
+    auction_clearance_rate: Optional[float] = None
+    days_on_market_average: int
+    sales_volume_trend: str  # increasing, stable, declining
+    market_segment_performance: str  # outperforming, inline, underperforming
+    forecast_confidence: float  # 0-1
+    
+class PropertyNeighborhoodAnalysis(BaseModel):
+    """Neighborhood analysis and demographics"""
+    
+    walkability_score: Optional[int] = None
+    transport_score: Optional[int] = None
+    schools_nearby: List[Dict[str, Any]] = []
+    shopping_centers_nearby: List[Dict[str, Any]] = []
+    parks_recreation: List[Dict[str, Any]] = []
+    crime_statistics: Optional[Dict[str, Any]] = None
+    demographic_profile: Optional[Dict[str, Any]] = None
+    future_development_plans: List[str] = []
+    noise_pollution_level: Optional[str] = None
+    flood_risk: Optional[str] = None
+    fire_risk: Optional[str] = None
 
 
 class PropertyAddress(BaseModel):
@@ -896,3 +995,153 @@ class PropertyDataValidationResult(BaseModel):
     issues: List[Dict[str, Any]]
     data_sources_compared: List[str]
     cross_validation_passed: bool
+
+# Enhanced Property Intelligence Models
+
+class PropertyWatchlistRequest(BaseModel):
+    """Add property to user watchlist"""
+    
+    address: str
+    notes: Optional[str] = None
+    tags: List[str] = []
+    alert_preferences: Dict[str, Any] = {}
+    
+class PropertyWatchlistResponse(BaseModel):
+    """User's property watchlist item"""
+    
+    id: str
+    property: PropertyProfile
+    saved_at: datetime
+    notes: Optional[str] = None
+    tags: List[str] = []
+    alert_preferences: Dict[str, Any] = {}
+    is_favorite: bool = False
+    price_alerts_triggered: int = 0
+    last_price_change: Optional[datetime] = None
+    
+class PropertyAlertSettings(BaseModel):
+    """Property alert configuration"""
+    
+    price_change_threshold: float = 5.0  # percentage
+    market_insight_alerts: bool = True
+    new_listings_nearby: bool = True
+    comparable_sales_alerts: bool = True
+    rental_market_alerts: bool = False
+    email_notifications: bool = True
+    push_notifications: bool = True
+    
+class PropertyComparisonResult(BaseModel):
+    """Property comparison analysis result"""
+    
+    comparison_id: str
+    properties: List[PropertyProfile]
+    comparison_matrix: Dict[str, Dict[str, Any]]
+    rankings: Dict[str, List[str]]  # category -> ordered property IDs
+    summary_insights: List[str]
+    recommendation: Optional[str] = None
+    created_at: datetime
+    
+class PropertyInvestmentRecommendation(BaseModel):
+    """AI-powered investment recommendation"""
+    
+    recommendation_type: str  # buy, hold, sell, avoid
+    confidence_score: float  # 0-100
+    reasoning: List[str]
+    key_factors: List[str]
+    risk_warnings: List[str]
+    optimal_holding_period: Optional[str] = None
+    expected_return_range: Optional[Dict[str, float]] = None
+    alternative_suggestions: List[str] = []
+    
+class PropertyMarketInsight(BaseModel):
+    """Market insight and trend analysis"""
+    
+    insight_id: str
+    insight_type: str  # trend, forecast, opportunity, warning
+    title: str
+    description: str
+    impact_level: str  # low, medium, high, critical
+    affected_areas: List[str]
+    time_horizon: str  # short_term, medium_term, long_term
+    confidence_level: str  # low, medium, high
+    data_sources: List[str]
+    created_at: datetime
+    expires_at: Optional[datetime] = None
+    
+class PropertyAnalyticsRequest(BaseModel):
+    """Advanced property analytics request"""
+    
+    properties: List[str]  # property addresses or IDs
+    analysis_type: str = "comprehensive"  # basic, standard, comprehensive, investment
+    include_forecasting: bool = True
+    include_neighborhood_analysis: bool = True
+    include_investment_metrics: bool = True
+    include_risk_analysis: bool = True
+    comparison_properties: List[str] = []
+    custom_parameters: Dict[str, Any] = {}
+    
+class PropertyAnalyticsResponse(BaseModel):
+    """Advanced property analytics response"""
+    
+    request_id: str
+    properties_analyzed: int
+    analysis_type: str
+    property_profiles: List[PropertyProfile]
+    investment_analysis: Optional[List[PropertyInvestmentAnalysis]] = None
+    market_trends: Optional[List[PropertyMarketTrends]] = None
+    neighborhood_analysis: Optional[List[PropertyNeighborhoodAnalysis]] = None
+    financial_breakdown: Optional[List[PropertyFinancialBreakdown]] = None
+    comparison_result: Optional[PropertyComparisonResult] = None
+    recommendations: List[PropertyInvestmentRecommendation] = []
+    market_insights: List[PropertyMarketInsight] = []
+    data_quality_score: float
+    processing_time: float
+    total_cost: float
+    created_at: datetime
+    
+class BulkPropertyAnalysisRequest(BaseModel):
+    """Bulk property analysis for portfolio management"""
+    
+    properties: List[str]  # up to 50 properties
+    analysis_depth: str = "standard"  # basic, standard, detailed
+    include_portfolio_metrics: bool = True
+    include_diversification_analysis: bool = True
+    include_market_correlation: bool = True
+    output_format: str = "json"  # json, csv, pdf
+    
+    @field_validator("properties")
+    @classmethod
+    def validate_properties_count(cls, v):
+        if len(v) > 50:
+            raise ValueError("Maximum 50 properties allowed for bulk analysis")
+        if len(v) < 2:
+            raise ValueError("Minimum 2 properties required for bulk analysis")
+        return v
+        
+class PropertyPortfolioMetrics(BaseModel):
+    """Portfolio-level property metrics"""
+    
+    total_properties: int
+    total_value: float
+    total_rental_income_annual: float
+    average_yield: float
+    portfolio_growth_12_month: float
+    geographic_distribution: Dict[str, int]
+    property_type_distribution: Dict[str, int]
+    risk_distribution: Dict[str, int]
+    diversification_score: float  # 0-100
+    correlation_matrix: Dict[str, Dict[str, float]]
+    performance_vs_market: float
+    
+class PropertySubscriptionTier(BaseModel):
+    """Property intelligence subscription tier"""
+    
+    tier_name: str
+    monthly_cost: float
+    analysis_credits: int
+    advanced_analytics: bool
+    bulk_analysis: bool
+    api_access: bool
+    real_time_alerts: bool
+    custom_reports: bool
+    portfolio_tracking: bool

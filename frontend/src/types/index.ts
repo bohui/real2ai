@@ -278,3 +278,309 @@ export interface UsageStats {
   }>;
   usage_trend?: Record<string, number>;
 }
+
+// Property Intelligence Types
+export interface PropertyAddress {
+  unit_number?: string;
+  street_number: string;
+  street_name: string;
+  street_type: string;
+  suburb: string;
+  state: AustralianState;
+  postcode: string;
+  full_address?: string;
+  latitude?: number;
+  longitude?: number;
+}
+
+export interface PropertyDetails {
+  property_type: 'House' | 'Unit' | 'Apartment' | 'Townhouse' | 'Villa' | 'Land';
+  bedrooms?: number;
+  bathrooms?: number;
+  carspaces?: number;
+  land_area?: number;
+  building_area?: number;
+  year_built?: number;
+  features: string[];
+}
+
+export interface PropertyValuation {
+  estimated_value: number;
+  valuation_range_lower: number;
+  valuation_range_upper: number;
+  confidence: number;
+  valuation_date: string;
+  valuation_source: string;
+  methodology: string;
+}
+
+export interface PropertyMarketData {
+  median_price: number;
+  price_growth_12_month: number;
+  price_growth_3_year: number;
+  days_on_market: number;
+  sales_volume_12_month: number;
+  market_outlook: string;
+  median_rent?: number;
+  rental_yield?: number;
+  vacancy_rate?: number;
+}
+
+export interface PropertyRiskAssessment {
+  overall_risk: RiskLevel;
+  liquidity_risk: RiskLevel;
+  market_risk: RiskLevel;
+  structural_risk: RiskLevel;
+  risk_factors: string[];
+  confidence: number;
+  risk_score?: number;
+}
+
+export interface PropertyInvestmentAnalysis {
+  rental_yield: number;
+  capital_growth_forecast_1_year: number;
+  capital_growth_forecast_3_year: number;
+  capital_growth_forecast_5_year: number;
+  cash_flow_monthly: number;
+  roi_percentage: number;
+  payback_period_years: number;
+  investment_score: number;
+  investment_grade: string;
+  comparable_roi: number;
+}
+
+export interface PropertyProfile {
+  address: PropertyAddress;
+  property_details: PropertyDetails;
+  valuation: PropertyValuation;
+  market_data: PropertyMarketData;
+  risk_assessment: PropertyRiskAssessment;
+  investment_analysis?: PropertyInvestmentAnalysis;
+  comparable_sales: ComparableSale[];
+  sales_history: PropertySalesHistory[];
+  rental_history: PropertyRentalHistory[];
+  data_sources: string[];
+  profile_created_at: string;
+  profile_confidence: number;
+}
+
+export interface ComparableSale {
+  address: string;
+  sale_date: string;
+  sale_price: number;
+  property_details: PropertyDetails;
+  similarity_score: number;
+  adjusted_price?: number;
+  adjustments?: Record<string, number>;
+}
+
+export interface PropertySalesHistory {
+  date: string;
+  price: number;
+  sale_type: string;
+  days_on_market?: number;
+}
+
+export interface PropertyRentalHistory {
+  date: string;
+  weekly_rent: number;
+  lease_type: string;
+  lease_duration?: string;
+}
+
+export interface PropertySearchFilters {
+  min_price?: number;
+  max_price?: number;
+  min_bedrooms?: number;
+  max_bedrooms?: number;
+  min_bathrooms?: number;
+  max_bathrooms?: number;
+  min_carspaces?: number;
+  property_types: string[];
+  suburbs: string[];
+  states: AustralianState[];
+  min_land_area?: number;
+  max_land_area?: number;
+  features_required: string[];
+}
+
+export interface PropertySearchRequest {
+  query?: string;
+  filters: PropertySearchFilters;
+  location?: string;
+  radius_km: number;
+  limit: number;
+  sort_by: 'relevance' | 'price_asc' | 'price_desc' | 'size_asc' | 'size_desc' | 'date_asc' | 'date_desc';
+  include_off_market: boolean;
+  include_historical: boolean;
+}
+
+export interface PropertySearchResponse {
+  search_id: string;
+  query?: string;
+  total_results: number;
+  results_returned: number;
+  search_time_ms: number;
+  properties: PropertyListing[];
+  facets: {
+    price_ranges: Record<string, number>;
+    property_types: Record<string, number>;
+    bedrooms: Record<string, number>;
+  };
+  market_summary: {
+    median_price: number;
+    price_trend: string;
+    market_activity: string;
+  };
+}
+
+export interface PropertyListing {
+  id: string;
+  address: string;
+  price: number;
+  bedrooms: number;
+  bathrooms: number;
+  carspaces: number;
+  property_type: string;
+  land_area?: number;
+  building_area: number;
+  market_score: number;
+  investment_score: number;
+  listing_date: string;
+  estimated_rental: number;
+}
+
+export interface PropertyAnalyticsRequest {
+  properties: string[];
+  analysis_type: 'basic' | 'standard' | 'comprehensive' | 'investment';
+  include_forecasting: boolean;
+  include_neighborhood_analysis: boolean;
+  include_investment_metrics: boolean;
+  include_risk_analysis: boolean;
+  comparison_properties: string[];
+  custom_parameters: Record<string, any>;
+}
+
+export interface PropertyAnalyticsResponse {
+  request_id: string;
+  properties_analyzed: number;
+  analysis_type: string;
+  property_profiles: PropertyProfile[];
+  investment_analysis?: PropertyInvestmentAnalysis[];
+  market_trends?: PropertyMarketTrends[];
+  neighborhood_analysis?: PropertyNeighborhoodAnalysis[];
+  financial_breakdown?: PropertyFinancialBreakdown[];
+  comparison_result?: PropertyComparisonResult;
+  recommendations: PropertyInvestmentRecommendation[];
+  market_insights: PropertyMarketInsight[];
+  data_quality_score: number;
+  processing_time: number;
+  total_cost: number;
+  created_at: string;
+}
+
+export interface PropertyMarketTrends {
+  suburb: string;
+  state: AustralianState;
+  property_type: string;
+  median_price_current: number;
+  median_price_12_months_ago: number;
+  price_change_percentage: number;
+  price_volatility_score: number;
+  market_activity_score: number;
+  demand_supply_ratio: number;
+  auction_clearance_rate?: number;
+  days_on_market_average: number;
+  sales_volume_trend: string;
+  market_segment_performance: string;
+  forecast_confidence: number;
+}
+
+export interface PropertyNeighborhoodAnalysis {
+  walkability_score?: number;
+  transport_score?: number;
+  schools_nearby: Array<Record<string, any>>;
+  shopping_centers_nearby: Array<Record<string, any>>;
+  parks_recreation: Array<Record<string, any>>;
+  crime_statistics?: Record<string, any>;
+  demographic_profile?: Record<string, any>;
+  future_development_plans: string[];
+  noise_pollution_level?: string;
+  flood_risk?: string;
+  fire_risk?: string;
+}
+
+export interface PropertyFinancialBreakdown {
+  purchase_price: number;
+  stamp_duty: number;
+  legal_fees: number;
+  inspection_costs: number;
+  loan_application_fees: number;
+  building_inspection: number;
+  pest_inspection: number;
+  strata_report_cost?: number;
+  total_upfront_costs: number;
+  council_rates_annual: number;
+  strata_fees_quarterly?: number;
+  land_tax_annual: number;
+  insurance_annual: number;
+  property_management_annual?: number;
+  maintenance_reserve_annual: number;
+  total_annual_costs: number;
+}
+
+export interface PropertyComparisonResult {
+  comparison_id: string;
+  properties: PropertyProfile[];
+  comparison_matrix: Record<string, Record<string, any>>;
+  rankings: Record<string, string[]>;
+  summary_insights: string[];
+  recommendation?: string;
+  created_at: string;
+}
+
+export interface PropertyInvestmentRecommendation {
+  recommendation_type: string;
+  confidence_score: number;
+  reasoning: string[];
+  key_factors: string[];
+  risk_warnings: string[];
+  optimal_holding_period?: string;
+  expected_return_range?: Record<string, number>;
+  alternative_suggestions: string[];
+}
+
+export interface PropertyMarketInsight {
+  insight_id: string;
+  insight_type: string;
+  title: string;
+  description: string;
+  impact_level: string;
+  affected_areas: string[];
+  time_horizon: string;
+  confidence_level: string;
+  data_sources: string[];
+  created_at: string;
+  expires_at?: string;
+}
+
+export interface PropertyWatchlistItem {
+  id: string;
+  property: PropertyProfile;
+  saved_at: string;
+  notes?: string;
+  tags: string[];
+  alert_preferences: Record<string, any>;
+  is_favorite: boolean;
+  price_alerts_triggered: number;
+  last_price_change?: string;
+}
+
+export interface BulkPropertyAnalysisRequest {
+  properties: string[];
+  analysis_depth: 'basic' | 'standard' | 'detailed';
+  include_portfolio_metrics: boolean;
+  include_diversification_analysis: boolean;
+  include_market_correlation: boolean;
+  output_format: 'json' | 'csv' | 'pdf';
+}

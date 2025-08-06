@@ -482,3 +482,68 @@ COMMENT ON COLUMN documents.processing_status IS 'Document processing status (up
 COMMENT ON COLUMN documents.overall_quality_score IS 'Overall document quality score (0.0-1.0)';
 COMMENT ON COLUMN documents.extraction_confidence IS 'Text extraction confidence score (0.0-1.0)';
 COMMENT ON COLUMN documents.text_extraction_method IS 'Method used for text extraction (pymupdf, tesseract_ocr, gemini_ocr, etc.)';
+
+-- Storage bucket management function
+-- Ensures Supabase storage bucket exists for document uploads
+CREATE OR REPLACE FUNCTION ensure_bucket_exists(bucket_name TEXT)
+RETURNS JSON AS $$
+DECLARE
+    bucket_exists BOOLEAN;
+    result JSON;
+BEGIN
+    -- Check if bucket exists
+    SELECT EXISTS(
+        SELECT 1 FROM storage.buckets WHERE id = bucket_name
+    ) INTO bucket_exists;
+    
+    IF bucket_exists THEN
+        -- Bucket already exists
+        result := json_build_object(
+            'created', false,
+            'bucket_name', bucket_name,
+            'message', 'Bucket already exists'
+        );
+    ELSE
+        -- Create the bucket
+        INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+        VALUES (
+            bucket_name,
+            bucket_name,
+            false,  -- Private bucket
+            52428800,  -- 50MB limit
+            ARRAY[
+                'application/pdf',
+                'application/msword',
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                'text/plain',
+                'image/jpeg',
+                'image/png',
+                'image/gif',
+                'image/webp'
+            ]
+        );
+        
+        result := json_build_object(
+            'created', true,
+            'bucket_name', bucket_name,
+            'message', 'Bucket created successfully'
+        );
+    END IF;
+    
+    RETURN result;
+EXCEPTION
+    WHEN OTHERS THEN
+        -- Return error information
+        result := json_build_object(
+            'created', false,
+            'bucket_name', bucket_name,
+            'error', SQLERRM,
+            'message', 'Failed to create bucket'
+        );
+        RETURN result;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Grant permissions on bucket function
+GRANT EXECUTE ON FUNCTION ensure_bucket_exists(TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION ensure_bucket_exists(TEXT) TO service_role;
