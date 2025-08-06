@@ -13,7 +13,7 @@ from app.core.error_handler import (
     ErrorCategory
 )
 from app.schema.enums import ContractType, AustralianState
-from app.services.document_service_migrated import DocumentService
+from app.services.document_service import DocumentService
 from app.services.websocket_service import WebSocketManager
 from app.schema.document import (
     DocumentUploadResponse,
@@ -131,54 +131,56 @@ async def upload_document(
                 detail=f"Invalid file type. Allowed: {', '.join(settings.allowed_file_types_list)}",
             )
 
-        # Upload to Supabase Storage (this includes validation and database insertion)
+        # Process document (this includes upload, validation and database insertion)
         # The document service handles all operations using auth context internally
-        upload_result = await document_service.upload_file(
-            file=file, user_id=user.id, contract_type=contract_type
-        )
+        logger.info("Starting document processing...")
+        try:
+            upload_result = await document_service.process_document(
+                file=file, 
+                user_id=str(user.id), 
+                contract_type=contract_type.value if contract_type else None,
+                australian_state=australian_state.value if australian_state else None
+            )
+            logger.info(f"Document processing result: {upload_result}")
+        except Exception as process_error:
+            logger.error(f"Document service processing failed: {str(process_error)}", exc_info=True)
+            raise
 
-        # Check if upload was successful
+        # Check if processing was successful
         if not upload_result.get("success"):
             logger.error(
-                f"File upload failed: {upload_result.get('error', 'Unknown error')}"
+                f"Document processing failed: {upload_result.get('error', 'Unknown error')}"
             )
             raise HTTPException(
                 status_code=500,
-                detail=f"File upload failed: {upload_result.get('error', 'Unknown error')}",
+                detail=f"Document processing failed: {upload_result.get('error', 'Unknown error')}",
             )
 
-        # Verify file was actually uploaded successfully
+        logger.info("Document processing completed successfully")
+
+        logger.info("Preparing upload response...")
         try:
-            # Try to get file content to verify upload worked
-            await document_service.get_file_content(upload_result["storage_path"])
-        except Exception as verification_error:
-            logger.error(f"File upload verification failed: {str(verification_error)}")
-            raise HTTPException(
-                status_code=500, detail="File upload failed - please try again"
+            response = DocumentUploadResponse(
+                document_id=upload_result["document_id"],
+                filename=file.filename,
+                file_size=file.size,
+                upload_status="processed",  # Changed to "processed" since document is fully processed
+                processing_time=upload_result.get("processing_time", 0.0),
             )
-
-        # Start background processing via Celery
-        from app.tasks.background_tasks import process_document_background
-
-        task = process_document_background.delay(
-            upload_result["document_id"],
-            user.id,
-            australian_state,
-            contract_type,
-        )
-
-        return DocumentUploadResponse(
-            document_id=upload_result["document_id"],
-            filename=file.filename,
-            file_size=file.size,
-            upload_status="uploaded",
-            processing_time=0.0,
-        )
+            logger.info(f"Document processing successful - document_id: {upload_result['document_id']}")
+            return response
+        except Exception as response_error:
+            logger.error(f"Response creation failed: {str(response_error)}", exc_info=True)
+            raise
 
     except HTTPException:
         # Re-raise HTTPExceptions (validation errors) without modification
         raise
     except Exception as e:
+        # Log the full exception details before handling
+        logger.error(f"Unhandled exception in upload_document: {str(e)}", exc_info=True)
+        logger.error(f"Exception type: {type(e).__name__}")
+        logger.error(f"Exception args: {e.args}")
         # Use enhanced error handling
         raise handle_api_error(e, context, ErrorCategory.FILE_PROCESSING)
 

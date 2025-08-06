@@ -15,7 +15,7 @@ from celery.exceptions import Retry, MaxRetriesExceededError
 from app.core.celery import celery_app
 from app.core.task_context import user_aware_task
 from app.core.auth_context import AuthContext
-from app.services.document_service_migrated import DocumentService
+from app.services.document_service import DocumentService
 from app.services.websocket_service import WebSocketManager
 
 logger = logging.getLogger(__name__)

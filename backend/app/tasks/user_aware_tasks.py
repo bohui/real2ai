@@ -16,7 +16,7 @@ from datetime import datetime, UTC
 from celery import Celery
 from app.core.task_context import user_aware_task, task_manager, get_task_store
 from app.core.auth_context import AuthContext
-from app.services.document_service_migrated import DocumentService
+from app.services.document_service import DocumentService
 from app.services.base.user_aware_service import UserAwareService
 
 logger = logging.getLogger(__name__)

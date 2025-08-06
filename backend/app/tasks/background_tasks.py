@@ -20,7 +20,7 @@ from app.models.contract_state import (
     create_initial_state,
 )
 from app.agents.contract_workflow import ContractAnalysisWorkflow
-from app.services.document_service_migrated import DocumentService
+from app.services.document_service import DocumentService
 from app.services.websocket_service import WebSocketEvents
 from app.services.websocket_singleton import websocket_manager
 from app.services.redis_pubsub import publish_progress_sync
@@ -319,7 +319,9 @@ async def analyze_contract_background(
         user_result = await user_client.database.select(
             "profiles", columns="*", filters={"id": user_id}
         )
-        user_profile = user_result.get("data", [{}])[0] if user_result.get("data") else {}
+        user_profile = (
+            user_result.get("data", [{}])[0] if user_result.get("data") else {}
+        )
 
         # Check user credits before processing
         if user_profile.get("subscription_status") == "free":
@@ -473,7 +475,7 @@ async def analyze_contract_background(
                 await user_client.update(
                     "documents",
                     {"id": document["id"]},
-                    {"processing_results": extraction_result}
+                    {"processing_results": extraction_result},
                 )
 
         # Progress update: Preparing document for analysis via Redis Pub/Sub
@@ -700,16 +702,14 @@ async def analyze_contract_background(
                 ),
                 "processing_time": final_state.get("processing_time", 0),
                 "processing_time_seconds": final_state.get("processing_time", 0),
-            }
+            },
         )
 
         # Deduct user credit only if analysis was successful
         if user_profile.get("subscription_status") == "free":
             new_credits = max(0, user_profile.get("credits_remaining", 0) - 1)
             await user_client.update(
-                "profiles",
-                {"id": user_id},
-                {"credits_remaining": new_credits}
+                "profiles", {"id": user_id}, {"credits_remaining": new_credits}
             )
 
             # Log usage only if deduction was successful
@@ -721,7 +721,7 @@ async def analyze_contract_background(
                         "action_type": "contract_analysis",
                         "credits_used": 1,
                         "credits_remaining": new_credits,
-                    }
+                    },
                 )
             except Exception as log_error:
                 logger.warning(
@@ -815,7 +815,7 @@ async def analyze_contract_background(
                         "timestamp": datetime.now(timezone.utc).isoformat(),
                     }
                 },
-            }
+            },
         )
 
         # Send detailed error update via Redis Pub/Sub
@@ -863,7 +863,6 @@ async def analyze_contract_background(
             )
 
 
-
 @celery_app.task(
     bind=True,
     autoretry_for=(Exception,),
@@ -879,7 +878,7 @@ async def enhanced_reprocess_document_with_ocr_background(
     processing_options: Dict[str, Any],
 ):
     """Background task for OCR reprocessing - USER AWARE VERSION
-    
+
     This task maintains user authentication context throughout execution,
     ensuring all database operations respect RLS policies.
     """
@@ -895,15 +894,13 @@ async def enhanced_reprocess_document_with_ocr_background(
         # Initialize user-aware document service
         document_service = DocumentService()
         await document_service.initialize()
-        
+
         # Get user-authenticated client (respects RLS)
         user_client = await document_service.get_user_client()
-        
+
         # Update document status
         await user_client.update(
-            "documents",
-            {"id": document_id},
-            {"processing_status": "reprocessing_ocr"}
+            "documents", {"id": document_id}, {"processing_status": "reprocessing_ocr"}
         )
 
         # Send WebSocket notification
@@ -957,7 +954,7 @@ async def enhanced_reprocess_document_with_ocr_background(
         await user_client.update(
             "documents",
             {"id": document_id},
-            {"status": "processed", "processing_results": extraction_result}
+            {"status": "processed", "processing_results": extraction_result},
         )
 
         # Send enhanced completion notification
@@ -994,11 +991,11 @@ async def enhanced_reprocess_document_with_ocr_background(
     except Exception as e:
         logger.error(f"OCR reprocessing failed for {document_id}: {str(e)}")
 
-        # Update status to failed  
+        # Update status to failed
         await user_client.update(
             "documents",
             {"id": document_id},
-            {"status": "ocr_failed", "processing_results": {"error": str(e)}}
+            {"status": "ocr_failed", "processing_results": {"error": str(e)}},
         )
 
         # Send error notification
@@ -1025,7 +1022,7 @@ async def batch_ocr_processing_background(
     processing_options: Dict[str, Any],
 ):
     """Background task for batch OCR processing with intelligent optimization - USER AWARE VERSION
-    
+
     This task maintains user authentication context throughout execution,
     ensuring all database operations respect RLS policies.
     """
@@ -1046,10 +1043,10 @@ async def batch_ocr_processing_background(
         # Initialize user-aware document service
         document_service = DocumentService()
         await document_service.initialize()
-        
+
         # Get user-authenticated client (respects RLS)
         user_client = await document_service.get_user_client()
-        
+
         logger.info(f"Starting batch OCR processing for {total_docs} documents")
 
         # Initialize batch processing
@@ -1093,9 +1090,7 @@ async def batch_ocr_processing_background(
 
                         # Update document status
                         await user_client.update(
-                            "documents",
-                            {"id": doc_id},
-                            {"status": "processing_ocr"}
+                            "documents", {"id": doc_id}, {"status": "processing_ocr"}
                         )
 
                         # Process with OCR
@@ -1114,7 +1109,7 @@ async def batch_ocr_processing_background(
                             {
                                 "status": "processed",
                                 "processing_results": extraction_result,
-                            }
+                            },
                         )
 
                         processed_docs += 1
@@ -1131,7 +1126,7 @@ async def batch_ocr_processing_background(
                             {
                                 "status": "ocr_failed",
                                 "processing_results": {"error": str(e)},
-                            }
+                            },
                         )
 
             # Execute parallel processing
@@ -1156,9 +1151,7 @@ async def batch_ocr_processing_background(
 
                     # Update document status
                     await user_client.update(
-                        "documents",
-                        {"id": doc_id},
-                        {"status": "processing_ocr"}
+                        "documents", {"id": doc_id}, {"status": "processing_ocr"}
                     )
 
                     # Process with OCR
@@ -1172,7 +1165,10 @@ async def batch_ocr_processing_background(
                     await user_client.update(
                         "documents",
                         {"id": doc_id},
-                        {"status": "processed", "processing_results": extraction_result}
+                        {
+                            "status": "processed",
+                            "processing_results": extraction_result,
+                        },
                     )
 
                     processed_docs += 1
@@ -1242,13 +1238,13 @@ async def batch_ocr_processing_background(
 @user_aware_task
 async def generate_pdf_report(self, analysis_data: Dict[str, Any]) -> bytes:
     """Generate PDF report from analysis data - USER AWARE VERSION
-    
+
     This task generates a PDF report from contract analysis results,
     maintaining user authentication context throughout execution.
     """
     try:
         logger.info("Starting PDF report generation")
-        
+
         # Verify user context if user_id is provided in analysis_data
         if "user_id" in analysis_data:
             context_user_id = AuthContext.get_user_id()
@@ -1256,7 +1252,7 @@ async def generate_pdf_report(self, analysis_data: Dict[str, Any]) -> bytes:
                 raise ValueError(
                     f"User context mismatch: expected {analysis_data['user_id']}, got {context_user_id}"
                 )
-        
+
         # For now, return a structured text report until reportlab is added
         report_content = f"""
 CONTRACT ANALYSIS REPORT
@@ -1274,10 +1270,10 @@ Recommendations:
 
 Generated by Real2.AI Contract Analysis Platform
         """.strip()
-        
+
         logger.info("PDF report generation completed")
-        return report_content.encode('utf-8')
-        
+        return report_content.encode("utf-8")
+
     except Exception as e:
         logger.error(f"PDF report generation failed: {str(e)}")
         raise Exception(f"Report generation failed: {str(e)}")

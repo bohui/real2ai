@@ -6,21 +6,21 @@ import logging
 
 from app.core.auth import get_current_user, User
 from app.core.auth_context import AuthContext
-from app.services.document_service_migrated import DocumentService
-from app.core.error_handler import (
-    handle_api_error, 
-    create_error_context, 
-    ErrorCategory
-)
+from app.services.document_service import DocumentService
+from app.core.error_handler import handle_api_error, create_error_context, ErrorCategory
 from app.core.retry_manager import retry_database_operation, retry_api_call
-from app.core.notification_system import notification_system, notify_user_error, notify_user_success
+from app.core.notification_system import (
+    notification_system,
+    notify_user_error,
+    notify_user_success,
+)
 from app.schema.contract import ContractAnalysisRequest, ContractAnalysisResponse
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/contracts", tags=["contracts"])
 
 
-# Dependency function to get user-aware document service  
+# Dependency function to get user-aware document service
 async def get_user_document_service(
     user: User = Depends(get_current_user),
 ) -> DocumentService:
@@ -44,16 +44,18 @@ async def start_contract_analysis(
     context = create_error_context(
         user_id=str(user.id),
         operation="start_contract_analysis",
-        document_id=request.document_id
+        document_id=request.document_id,
     )
 
     try:
         # Validate request parameters
         if not request.document_id:
             raise ValueError("Document ID is required")
-        
+
         if not user.australian_state:
-            raise ValueError("Australian state is required for accurate contract analysis")
+            raise ValueError(
+                "Australian state is required for accurate contract analysis"
+            )
 
         # Check user credits with user-friendly messaging
         if user.credits_remaining <= 0 and user.subscription_status == "free":
@@ -61,10 +63,10 @@ async def start_contract_analysis(
 
         # Get user-authenticated client through document service
         user_client = await document_service.get_user_client()
-        
+
         # Get document with user context (RLS enforced)
         document = await _get_user_document(user_client, request.document_id, user.id)
-        
+
         # Validate document is suitable for analysis
         if not _is_valid_contract_document(document):
             raise ValueError("This file doesn't appear to be a property contract")
@@ -87,7 +89,7 @@ async def start_contract_analysis(
             template_name="analysis_started",
             user_id=str(user.id),
             contract_id=contract_id,
-            session_id=context.session_id or f"contract_{contract_id}"
+            session_id=context.session_id or f"contract_{contract_id}",
         )
 
         return ContractAnalysisResponse(
@@ -108,9 +110,9 @@ async def start_contract_analysis(
             title="Analysis Failed",
             message=str(e),
             session_id=context.session_id or f"contract_error_{user.id}",
-            contract_id=context.contract_id
+            contract_id=context.contract_id,
         )
-        
+
         # Use enhanced error handler
         raise handle_api_error(e, context, ErrorCategory.CONTRACT_ANALYSIS)
 
@@ -126,9 +128,7 @@ async def _initialize_database_client(db_client):
 async def _get_user_document(user_client, document_id: str, user_id: str):
     """Get user document with user context (RLS enforced)"""
     doc_result = await user_client.database.select(
-        "documents",
-        columns="*",
-        filters={"id": document_id, "user_id": user_id}
+        "documents", columns="*", filters={"id": document_id, "user_id": user_id}
     )
 
     if not doc_result.get("data"):
@@ -142,27 +142,31 @@ def _is_valid_contract_document(document) -> bool:
     # Check file size (basic validation)
     if document.get("file_size", 0) > 10 * 1024 * 1024:  # 10MB limit
         raise ValueError("File is too large. Please use a file smaller than 10MB")
-    
+
     # Check file type
     allowed_types = [
-        "application/pdf", 
+        "application/pdf",
         "application/msword",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     ]
-    
+
     file_type = document.get("file_type", "").lower()
     if file_type and file_type not in allowed_types:
-        raise ValueError("This file format isn't supported. Please upload a PDF, DOC, or DOCX file")
-    
+        raise ValueError(
+            "This file format isn't supported. Please upload a PDF, DOC, or DOCX file"
+        )
+
     # Check if document has content
     if not document.get("content") and not document.get("file_path"):
         raise ValueError("The document appears to be empty or corrupted")
-    
+
     return True
 
 
 @retry_database_operation(max_attempts=3)
-async def _create_contract_record(db_client, document_id: str, document: dict, user: User) -> str:
+async def _create_contract_record(
+    db_client, document_id: str, document: dict, user: User
+) -> str:
     """Create contract record with retry logic"""
     contract_data = {
         "document_id": document_id,
@@ -172,10 +176,10 @@ async def _create_contract_record(db_client, document_id: str, document: dict, u
     }
 
     contract_result = await db_client.database.insert("contracts", contract_data)
-    
+
     if not contract_result.get("success") or not contract_result.get("data"):
         raise ValueError("Failed to create contract record")
-    
+
     return contract_result["data"]["id"]
 
 
@@ -189,21 +193,19 @@ async def _create_analysis_record(db_client, contract_id: str, user_id: str) -> 
         "status": "pending",
     }
 
-    analysis_result = await db_client.database.insert("contract_analyses", analysis_data)
-    
+    analysis_result = await db_client.database.insert(
+        "contract_analyses", analysis_data
+    )
+
     if not analysis_result.get("success") or not analysis_result.get("data"):
         raise ValueError("Failed to create analysis record")
-    
+
     return analysis_result["data"]["id"]
 
 
 @retry_api_call(max_attempts=2)
 async def _start_background_analysis(
-    contract_id: str, 
-    analysis_id: str, 
-    user_id: str, 
-    document: dict, 
-    analysis_options
+    contract_id: str, analysis_id: str, user_id: str, document: dict, analysis_options
 ) -> str:
     """Start background analysis with retry logic"""
     try:
@@ -216,16 +218,18 @@ async def _start_background_analysis(
             document,
             analysis_options.model_dump(),
         )
-        
+
         if not task or not task.id:
             raise ValueError("Failed to queue contract analysis")
-        
+
         return task.id
-        
+
     except Exception as e:
         # Log the specific error for debugging
         logger.error(f"Background task creation failed: {str(e)}")
-        raise ValueError("Our AI service is temporarily busy. Please try again in a few minutes")
+        raise ValueError(
+            "Our AI service is temporarily busy. Please try again in a few minutes"
+        )
 
 
 @router.get("/{contract_id}/status")
@@ -234,13 +238,11 @@ async def get_analysis_status(
     user: User = Depends(get_current_user),
 ):
     """Get contract analysis status and progress with enhanced error handling"""
-    
+
     context = create_error_context(
-        user_id=str(user.id),
-        contract_id=contract_id,
-        operation="get_analysis_status"
+        user_id=str(user.id), contract_id=contract_id, operation="get_analysis_status"
     )
-    
+
     try:
         # Validate contract ID format
         if not contract_id or not contract_id.strip():
@@ -270,7 +272,7 @@ async def get_analysis_status(
             "updated_at": analysis["updated_at"],
             "estimated_completion": progress_info["estimated_completion"],
             "status_message": progress_info["status_message"],
-            "next_update_in_seconds": progress_info.get("next_update_in_seconds")
+            "next_update_in_seconds": progress_info.get("next_update_in_seconds"),
         }
 
     except HTTPException:
@@ -280,9 +282,11 @@ async def get_analysis_status(
 
 
 @retry_database_operation(max_attempts=3)
-async def _get_analysis_status_with_validation(db_client, contract_id: str, user_id: str):
+async def _get_analysis_status_with_validation(
+    db_client, contract_id: str, user_id: str
+):
     """Get analysis status with validation and retry logic"""
-    
+
     # First verify the contract belongs to the user
     contract_result = (
         db_client.table("contracts")
@@ -290,10 +294,10 @@ async def _get_analysis_status_with_validation(db_client, contract_id: str, user
         .eq("id", contract_id)
         .execute()
     )
-    
+
     if not contract_result.data:
         raise ValueError("Contract not found")
-    
+
     contract = contract_result.data[0]
     if contract["user_id"] != user_id:
         raise ValueError("You don't have access to this contract")
@@ -316,55 +320,58 @@ async def _get_analysis_status_with_validation(db_client, contract_id: str, user
 
 def _calculate_analysis_progress(analysis: dict) -> dict:
     """Calculate detailed progress information"""
-    
+
     status = analysis["status"]
-    
+
     # Enhanced progress mapping with more granular updates
     progress_mapping = {
         "pending": {
             "progress": 0,
             "status_message": "Your contract analysis is queued and will start shortly",
             "estimated_completion": "2-5 minutes",
-            "next_update_in_seconds": 30
+            "next_update_in_seconds": 30,
         },
         "queued": {
             "progress": 5,
             "status_message": "Analysis has been queued and will begin processing soon",
-            "estimated_completion": "2-5 minutes", 
-            "next_update_in_seconds": 15
+            "estimated_completion": "2-5 minutes",
+            "next_update_in_seconds": 15,
         },
         "processing": {
             "progress": 50,
             "status_message": "Our AI is analyzing your contract - this may take a few minutes",
             "estimated_completion": "1-3 minutes",
-            "next_update_in_seconds": 10
+            "next_update_in_seconds": 10,
         },
         "completed": {
             "progress": 100,
             "status_message": "Analysis complete! You can now view your results",
             "estimated_completion": None,
-            "next_update_in_seconds": None
+            "next_update_in_seconds": None,
         },
         "failed": {
             "progress": 0,
             "status_message": "Analysis failed. Please try again or contact support",
             "estimated_completion": None,
-            "next_update_in_seconds": None
+            "next_update_in_seconds": None,
         },
         "cancelled": {
             "progress": 0,
-            "status_message": "Analysis was cancelled", 
+            "status_message": "Analysis was cancelled",
             "estimated_completion": None,
-            "next_update_in_seconds": None
-        }
+            "next_update_in_seconds": None,
+        },
     }
-    
-    return progress_mapping.get(status, {
-        "progress": 0,
-        "status_message": "Analysis status unknown",
-        "estimated_completion": None,
-        "next_update_in_seconds": 30
-    })
+
+    return progress_mapping.get(
+        status,
+        {
+            "progress": 0,
+            "status_message": "Analysis status unknown",
+            "estimated_completion": None,
+            "next_update_in_seconds": 30,
+        },
+    )
 
 
 @router.get("/{contract_id}/analysis")
@@ -377,7 +384,7 @@ async def get_contract_analysis(
     try:
         # Get authenticated client
         db_client = await AuthContext.get_authenticated_client(require_auth=True)
-        
+
         # Ensure database client is initialized
         if not hasattr(db_client, "_client") or db_client._client is None:
             await db_client.initialize()
@@ -442,7 +449,7 @@ async def download_analysis_report(
     try:
         # Get authenticated client
         db_client = await AuthContext.get_authenticated_client(require_auth=True)
-        
+
         # Get analysis data
         analysis_data = await get_contract_analysis(contract_id, user)
 
@@ -469,28 +476,25 @@ async def delete_contract_analysis(
     user: User = Depends(get_current_user),
 ):
     """Delete contract analysis and related data"""
-    
+
     try:
         # Get authenticated client
         db_client = await AuthContext.get_authenticated_client(require_auth=True)
-        
+
         # Ensure database client is initialized
         if not hasattr(db_client, "_client") or db_client._client is None:
             await db_client.initialize()
 
         # Verify user owns this contract
         contract_result = (
-            db_client.table("contracts")
-            .select("*")
-            .eq("id", contract_id)
-            .execute()
+            db_client.table("contracts").select("*").eq("id", contract_id).execute()
         )
-        
+
         if not contract_result.data:
             raise HTTPException(status_code=404, detail="Contract not found")
-            
+
         contract = contract_result.data[0]
-        
+
         # Verify ownership through document
         doc_result = (
             db_client.table("documents")
@@ -498,10 +502,10 @@ async def delete_contract_analysis(
             .eq("id", contract["document_id"])
             .execute()
         )
-        
+
         if not doc_result.data or doc_result.data[0]["user_id"] != user.id:
             raise HTTPException(status_code=403, detail="Access denied")
-        
+
         # Delete contract analyses first (foreign key constraint)
         analyses_result = (
             db_client.table("contract_analyses")
@@ -509,24 +513,25 @@ async def delete_contract_analysis(
             .eq("contract_id", contract_id)
             .execute()
         )
-        
+
         # Delete the contract
         contract_delete_result = (
-            db_client.table("contracts")
-            .delete()
-            .eq("id", contract_id)
-            .execute()
+            db_client.table("contracts").delete().eq("id", contract_id).execute()
         )
-        
+
         if not contract_delete_result.data:
-            raise HTTPException(status_code=404, detail="Contract not found or already deleted")
-        
+            raise HTTPException(
+                status_code=404, detail="Contract not found or already deleted"
+            )
+
         return {
             "message": "Contract analysis deleted successfully",
             "contract_id": contract_id,
-            "analyses_deleted": len(analyses_result.data) if analyses_result.data else 0
+            "analyses_deleted": (
+                len(analyses_result.data) if analyses_result.data else 0
+            ),
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -536,23 +541,21 @@ async def delete_contract_analysis(
 
 @router.get("/notifications")
 async def get_user_notifications(
-    user: User = Depends(get_current_user),
-    include_acknowledged: bool = False
+    user: User = Depends(get_current_user), include_acknowledged: bool = False
 ):
     """Get user notifications with enhanced feedback"""
-    
+
     try:
         notifications = await notification_system.get_user_notifications(
-            user_id=str(user.id),
-            include_acknowledged=include_acknowledged
+            user_id=str(user.id), include_acknowledged=include_acknowledged
         )
-        
+
         return {
             "notifications": [n.to_dict() for n in notifications],
             "total_count": len(notifications),
-            "unread_count": len([n for n in notifications if not n.acknowledged])
+            "unread_count": len([n for n in notifications if not n.acknowledged]),
         }
-        
+
     except Exception as e:
         logger.error(f"Error getting notifications for user {user.id}: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to get notifications")
@@ -560,19 +563,17 @@ async def get_user_notifications(
 
 @router.post("/notifications/{notification_id}/dismiss")
 async def dismiss_notification(
-    notification_id: str,
-    user: User = Depends(get_current_user)
+    notification_id: str, user: User = Depends(get_current_user)
 ):
     """Dismiss a user notification"""
-    
+
     try:
         await notification_system.dismiss_notification(
-            user_id=str(user.id),
-            notification_id=notification_id
+            user_id=str(user.id), notification_id=notification_id
         )
-        
+
         return {"message": "Notification dismissed successfully"}
-        
+
     except Exception as e:
         logger.error(f"Error dismissing notification {notification_id}: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to dismiss notification")

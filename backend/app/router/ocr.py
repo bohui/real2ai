@@ -5,7 +5,7 @@ import logging
 
 from app.core.auth import get_current_user, User
 from app.core.auth_context import AuthContext
-from app.services.document_service_migrated import DocumentService
+from app.services.document_service import DocumentService
 from app.schema.ocr import OCRCapabilitiesResponse, EnhancedOCRCapabilities, OCRQueueStatus
 from app.core.error_handler import (
     handle_api_error, 
