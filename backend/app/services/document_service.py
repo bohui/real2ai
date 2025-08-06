@@ -1,12 +1,13 @@
 """
-Document Service V2 - Refactored to use client architecture
-Handles document upload, storage, and processing with proper client integration
+Document Service V3 - Enhanced with Supabase persistence and page-level analysis
+Handles document upload, storage, processing, and metadata persistence using Supabase
 """
 
 import os
 import uuid
 import asyncio
 import logging
+import re
 from typing import Dict, Any, Optional, BinaryIO, List
 from datetime import datetime, UTC
 from pathlib import Path
@@ -33,7 +34,16 @@ logger = logging.getLogger(__name__)
 
 
 class DocumentService:
-    """Service for handling document upload and processing using client architecture"""
+    """
+    Enhanced Document Service with Supabase persistence and page-level analysis
+    
+    New capabilities:
+    - Document metadata persistence in Supabase
+    - Page-level content analysis and storage
+    - Basic entity extraction with page references
+    - Diagram detection and classification
+    - Quality metrics and processing status tracking
+    """
 
     def __init__(self, use_service_role: bool = False):
         self.settings = get_settings()
@@ -1799,3 +1809,1107 @@ class DocumentService:
                 "extraction_timestamp": datetime.now(UTC).isoformat(),
                 "processing_failed": True,
             }
+
+    # Enhanced Document Processing with Persistence
+    async def process_document_enhanced(
+        self,
+        file: UploadFile,
+        user_id: str,
+        australian_state: Optional[str] = None,
+        contract_type: Optional[str] = None,
+        document_type: Optional[str] = None,
+        processing_options: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        Enhanced document processing with page-level analysis and Supabase persistence
+        
+        This method:
+        1. Uploads file and creates document record
+        2. Extracts text with page references using structured OCR
+        3. Analyzes each page for content type and quality
+        4. Detects and classifies diagrams
+        5. Extracts basic entities (addresses, dates, amounts, parties)
+        6. Persists all metadata to Supabase
+        7. Marks document ready for detailed contract analysis
+        
+        Args:
+            file: Uploaded document file
+            user_id: User identifier
+            australian_state: Australian state for context
+            contract_type: Type of contract (purchase_agreement, lease_agreement, etc.)
+            document_type: General document type
+            processing_options: Additional processing options
+            
+        Returns:
+            Comprehensive processing results with database references
+        """
+        processing_start = datetime.now(UTC)
+        processing_options = processing_options or {}
+        
+        try:
+            # Step 1: Upload file and create document record
+            document_id = str(uuid.uuid4())
+            logger.info(f"Starting enhanced processing for document {document_id}")
+            
+            upload_result = await self._upload_and_create_document_record(
+                file, user_id, document_id, australian_state, contract_type, document_type
+            )
+            
+            # Step 2: Extract text with structured OCR (page references)
+            extraction_result = await self._extract_text_with_page_analysis(
+                document_id, upload_result["storage_path"], upload_result["file_type"]
+            )
+            
+            # Step 3: Process and store page-level metadata
+            page_result = await self._process_and_store_pages(
+                document_id, extraction_result
+            )
+            
+            # Step 4: Detect and classify diagrams
+            diagram_result = await self._detect_and_store_diagrams(
+                document_id, extraction_result, page_result
+            )
+            
+            # Step 5: Extract and store basic entities
+            entity_result = await self._extract_and_store_basic_entities(
+                document_id, extraction_result, page_result
+            )
+            
+            # Step 6: Update document with final metadata and mark ready
+            await self._finalize_document_processing(
+                document_id, extraction_result, page_result, diagram_result, entity_result, processing_start
+            )
+            
+            # Step 7: Generate comprehensive response
+            final_result = await self._generate_enhanced_processing_response(document_id)
+            
+            logger.info(f"Enhanced processing completed for document {document_id}")
+            return final_result
+            
+        except Exception as e:
+            logger.error(f"Enhanced document processing failed: {e}")
+            
+            # Mark document as failed if it exists
+            if 'document_id' in locals():
+                await self._mark_document_failed_in_supabase(document_id, str(e))
+            
+            raise HTTPException(status_code=500, detail=f"Document processing failed: {str(e)}")
+    
+    async def _upload_and_create_document_record(
+        self, 
+        file: UploadFile, 
+        user_id: str, 
+        document_id: str,
+        australian_state: Optional[str],
+        contract_type: Optional[str],
+        document_type: Optional[str]
+    ) -> Dict[str, Any]:
+        """Upload file and create initial document record in Supabase"""
+        
+        # Read and validate file
+        file_content = await file.read()
+        self._validate_file(file_content, file.filename)
+        
+        # Generate storage path
+        file_extension = Path(file.filename).suffix.lower()
+        storage_path = f"{user_id}/{document_id}{file_extension}"
+        
+        # Upload to storage
+        upload_result = await self.supabase_client.upload_file(
+            bucket=self.storage_bucket,
+            file_path=storage_path,
+            content=file_content,
+            content_type=file.content_type or mimetypes.guess_type(file.filename)[0]
+        )
+        
+        # Create document record in Supabase
+        document_data = {
+            "id": document_id,
+            "user_id": user_id,
+            "original_filename": file.filename,
+            "file_type": file_extension.lstrip('.'),
+            "storage_path": storage_path,
+            "file_size": len(file_content),
+            "upload_timestamp": datetime.now(UTC).isoformat(),
+            "processing_status": "processing",
+            "processing_started_at": datetime.now(UTC).isoformat(),
+            "document_type": document_type,
+            "australian_state": australian_state,
+            "contract_type": contract_type,
+            "overall_quality_score": 0.0,
+            "extraction_confidence": 0.0,
+            "total_pages": 0,
+            "total_text_length": 0,
+            "total_word_count": 0,
+            "has_diagrams": False,
+            "diagram_count": 0
+        }
+        
+        result = await self.supabase_client.insert("documents", document_data)
+        
+        return {
+            "document_id": document_id,
+            "storage_path": storage_path,
+            "file_type": file_extension.lstrip('.'),
+            "upload_url": upload_result.get("url")
+        }
+    
+    async def _extract_text_with_page_analysis(
+        self, 
+        document_id: str, 
+        storage_path: str, 
+        file_type: str
+    ) -> Dict[str, Any]:
+        """Extract text using structured OCR with detailed page analysis"""
+        
+        try:
+            # Get file content
+            file_content = await self.supabase_client.download_file(
+                bucket=self.storage_bucket, 
+                file_path=storage_path
+            )
+            
+            # Use enhanced structured OCR extraction
+            ocr_result = await self.ocr_service.extract_structured_ocr(
+                file_content=file_content,
+                file_type=file_type,
+                filename=Path(storage_path).name,
+                use_quick_mode=False  # Use comprehensive mode for detailed analysis
+            )
+            
+            if not ocr_result.get("parsing_success"):
+                logger.warning(f"OCR parsing failed for document {document_id}, using fallback")
+                # Try fallback OCR method
+                return await self._fallback_text_extraction(document_id, file_content, file_type)
+            
+            extraction_data = ocr_result["ocr_extraction"]
+            
+            return {
+                "extraction_successful": True,
+                "full_text": extraction_data.get("full_text", ""),
+                "text_blocks": extraction_data.get("text_blocks", []),
+                "key_value_pairs": extraction_data.get("key_value_pairs", []),
+                "financial_amounts": extraction_data.get("financial_amounts", []),
+                "important_dates": extraction_data.get("important_dates", []),
+                "document_structure": extraction_data.get("document_structure", {}),
+                "extraction_confidence": extraction_data.get("extraction_confidence", 0.0),
+                "processing_notes": extraction_data.get("processing_notes", []),
+                "detected_legal_terms": extraction_data.get("detected_legal_terms", [])
+            }
+            
+        except Exception as e:
+            logger.error(f"Structured text extraction failed for document {document_id}: {e}")
+            return await self._fallback_text_extraction(document_id, file_content, file_type)
+    
+    async def _fallback_text_extraction(self, document_id: str, file_content: bytes, file_type: str) -> Dict[str, Any]:
+        """Fallback text extraction when structured OCR fails"""
+        
+        try:
+            # Use traditional extraction method
+            if file_type.lower() == "pdf":
+                text = await self._extract_pdf_text(file_content)
+            else:
+                # Try basic OCR with Gemini
+                text = await self._basic_ocr_extraction(file_content, file_type)
+            
+            return {
+                "extraction_successful": True,
+                "full_text": text,
+                "text_blocks": [{"text": text, "page_number": 1, "section_type": "body", "confidence": 0.5}],
+                "key_value_pairs": [],
+                "financial_amounts": [],
+                "important_dates": [],
+                "document_structure": {"total_pages": 1, "has_signatures": False, "has_handwritten_notes": False},
+                "extraction_confidence": 0.5,
+                "processing_notes": ["Used fallback extraction method"],
+                "detected_legal_terms": []
+            }
+            
+        except Exception as e:
+            logger.error(f"Fallback extraction failed for document {document_id}: {e}")
+            return {
+                "extraction_successful": False,
+                "error": str(e),
+                "full_text": "",
+                "text_blocks": [],
+                "document_structure": {"total_pages": 0}
+            }
+    
+    async def _basic_ocr_extraction(self, file_content: bytes, file_type: str) -> str:
+        """Basic OCR extraction using existing OCR service"""
+        
+        try:
+            content_type = f"image/{file_type}" if file_type != "pdf" else "application/pdf"
+            
+            ocr_result = await self.ocr_service.extract_text(
+                content=file_content,
+                content_type=content_type
+            )
+            
+            return ocr_result.get("extracted_text", "")
+            
+        except Exception as e:
+            logger.error(f"Basic OCR extraction failed: {e}")
+            return ""
+    
+    async def _process_and_store_pages(
+        self, 
+        document_id: str, 
+        extraction_result: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Process page-level data and store in Supabase"""
+        
+        try:
+            if not extraction_result.get("extraction_successful"):
+                return {"pages_processed": 0, "error": "Extraction failed"}
+            
+            text_blocks = extraction_result.get("text_blocks", [])
+            document_structure = extraction_result.get("document_structure", {})
+            
+            # Group text blocks by page
+            pages_data = {}
+            for block in text_blocks:
+                page_num = block.get("page_number", 1)
+                if page_num not in pages_data:
+                    pages_data[page_num] = {
+                        "text_content": "",
+                        "content_types": set(),
+                        "has_signatures": False,
+                        "has_handwriting": False,
+                        "has_diagrams": False,
+                        "has_tables": False,
+                        "confidence_scores": []
+                    }
+                
+                # Accumulate page data
+                page_data = pages_data[page_num]
+                page_data["text_content"] += block.get("text", "") + "\n"
+                page_data["content_types"].add(block.get("section_type", "text"))
+                page_data["confidence_scores"].append(block.get("confidence", 0.0))
+                
+                # Check for special content types
+                section_type = block.get("section_type", "").lower()
+                if "signature" in section_type:
+                    page_data["has_signatures"] = True
+                elif "table" in section_type:
+                    page_data["has_tables"] = True
+                elif "diagram" in section_type or "image" in section_type:
+                    page_data["has_diagrams"] = True
+            
+            # Store page records in Supabase
+            page_records = []
+            for page_num, page_data in pages_data.items():
+                content_types_list = list(page_data["content_types"])
+                primary_content_type = self._determine_primary_content_type(content_types_list)
+                
+                text_content = page_data["text_content"].strip()
+                confidence_scores = page_data["confidence_scores"]
+                avg_confidence = sum(confidence_scores) / len(confidence_scores) if confidence_scores else 0.0
+                
+                page_summary = self._generate_page_summary(text_content, content_types_list)
+                
+                page_record = {
+                    "id": str(uuid.uuid4()),
+                    "document_id": document_id,
+                    "page_number": page_num,
+                    "content_summary": page_summary,
+                    "text_content": text_content,
+                    "text_length": len(text_content),
+                    "word_count": len(text_content.split()) if text_content else 0,
+                    "content_types": content_types_list,
+                    "primary_content_type": primary_content_type,
+                    "extraction_confidence": avg_confidence,
+                    "content_quality_score": self._calculate_content_quality(text_content, avg_confidence),
+                    "has_signatures": page_data["has_signatures"] or document_structure.get("has_signatures", False),
+                    "has_handwriting": document_structure.get("has_handwritten_notes", False),
+                    "has_diagrams": page_data["has_diagrams"],
+                    "has_tables": page_data["has_tables"],
+                    "processed_at": datetime.now(UTC).isoformat(),
+                    "processing_method": "structured_ocr"
+                }
+                
+                page_records.append(page_record)
+            
+            # Batch insert pages
+            if page_records:
+                await self.supabase_client.insert("document_pages", page_records)
+            
+            return {
+                "pages_processed": len(page_records),
+                "total_pages": len(pages_data),
+                "pages_data": pages_data
+            }
+            
+        except Exception as e:
+            logger.error(f"Page processing failed for document {document_id}: {e}")
+            return {"pages_processed": 0, "error": str(e)}
+    
+    def _determine_primary_content_type(self, content_types: List[str]) -> str:
+        """Determine primary content type for a page"""
+        
+        # Priority order for content types
+        priority = {
+            "diagram": "diagram",
+            "image": "diagram", 
+            "table": "table",
+            "signature": "signature",
+            "text": "text",
+            "body": "text",
+            "header": "text",
+            "footer": "text"
+        }
+        
+        for content_type in priority.keys():
+            if content_type in content_types:
+                return priority[content_type]
+        
+        return "mixed" if content_types else "empty"
+    
+    def _generate_page_summary(self, text_content: str, content_types: List[str]) -> str:
+        """Generate a summary of page content"""
+        
+        if not text_content.strip():
+            if "diagram" in content_types or "image" in content_types:
+                return "Page contains diagrams or images with minimal text"
+            elif "signature" in content_types:
+                return "Page contains signatures and minimal text"
+            else:
+                return "Page appears to be empty or contains no readable text"
+        
+        word_count = len(text_content.split())
+        
+        if word_count < 20:
+            return f"Brief page with {word_count} words, contains: {', '.join(content_types)}"
+        elif word_count < 100:
+            return f"Short page with {word_count} words, appears to contain administrative or header information"
+        elif word_count < 500:
+            return f"Medium page with {word_count} words, likely contains contract terms or property details"
+        else:
+            return f"Long page with {word_count} words, contains substantial contract content and terms"
+    
+    def _calculate_content_quality(self, text_content: str, confidence: float) -> float:
+        """Calculate content quality score for a page"""
+        
+        if not text_content.strip():
+            return 0.0
+        
+        # Base quality from confidence
+        quality = confidence * 0.6
+        
+        # Text length factor
+        word_count = len(text_content.split())
+        if word_count > 50:
+            quality += 0.2
+        elif word_count > 10:
+            quality += 0.1
+        
+        # Check for contract-relevant content
+        contract_indicators = [
+            "agreement", "contract", "purchase", "sale", "property",
+            "vendor", "purchaser", "settlement", "deposit", "clause"
+        ]
+        
+        text_lower = text_content.lower()
+        indicator_count = sum(1 for indicator in contract_indicators if indicator in text_lower)
+        
+        if indicator_count > 0:
+            quality += min(0.2, indicator_count * 0.05)
+        
+        return min(1.0, quality)
+    
+    async def _detect_and_store_diagrams(
+        self, 
+        document_id: str, 
+        extraction_result: Dict[str, Any],
+        page_result: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Detect diagrams and store metadata in Supabase"""
+        
+        try:
+            if not extraction_result.get("extraction_successful"):
+                return {"diagrams_detected": 0, "classifications": []}
+            
+            text_blocks = extraction_result.get("text_blocks", [])
+            diagram_blocks = [
+                block for block in text_blocks 
+                if block.get("section_type", "").lower() in ["diagram", "image", "figure"]
+            ]
+            
+            # Also check pages that were marked as having diagrams
+            pages_data = page_result.get("pages_data", {})
+            for page_num, page_data in pages_data.items():
+                if page_data.get("has_diagrams") and not any(b.get("page_number") == page_num for b in diagram_blocks):
+                    # Add a diagram block for this page
+                    diagram_blocks.append({
+                        "page_number": page_num,
+                        "text": page_data.get("text_content", ""),
+                        "section_type": "diagram",
+                        "confidence": 0.7
+                    })
+            
+            diagram_records = []
+            classifications = []
+            
+            for diagram_block in diagram_blocks:
+                page_number = diagram_block.get("page_number", 1)
+                
+                # Classify diagram type
+                diagram_type = self._classify_diagram_type(diagram_block)
+                
+                diagram_record = {
+                    "id": str(uuid.uuid4()),
+                    "document_id": document_id,
+                    "page_number": page_number,
+                    "diagram_type": diagram_type,
+                    "classification_confidence": diagram_block.get("confidence", 0.0),
+                    "basic_analysis_completed": True,
+                    "detailed_analysis_completed": False,
+                    "basic_analysis": {
+                        "detected_content": diagram_block.get("text", ""),
+                        "context": diagram_block.get("position_hint", ""),
+                        "classification_reason": f"Classified as {diagram_type} based on content analysis"
+                    },
+                    "image_quality_score": diagram_block.get("confidence", 0.0),
+                    "clarity_score": diagram_block.get("confidence", 0.0),
+                    "detected_at": datetime.now(UTC).isoformat()
+                }
+                
+                diagram_records.append(diagram_record)
+                
+                classifications.append({
+                    "page_number": page_number,
+                    "diagram_type": diagram_type,
+                    "confidence": diagram_block.get("confidence", 0.0)
+                })
+            
+            # Batch insert diagrams
+            if diagram_records:
+                await self.supabase_client.insert("document_diagrams", diagram_records)
+            
+            return {
+                "diagrams_detected": len(diagram_records),
+                "classifications": classifications
+            }
+            
+        except Exception as e:
+            logger.error(f"Diagram detection failed for document {document_id}: {e}")
+            return {"diagrams_detected": 0, "error": str(e)}
+    
+    def _classify_diagram_type(self, diagram_block: Dict[str, Any]) -> str:
+        """Classify diagram type based on content and context"""
+        
+        text_content = diagram_block.get("text", "").lower()
+        
+        # Keyword-based classification
+        if any(keyword in text_content for keyword in ["sewer", "drainage", "service"]):
+            return "sewer_diagram"
+        elif any(keyword in text_content for keyword in ["site", "plan", "layout"]):
+            return "site_plan"
+        elif any(keyword in text_content for keyword in ["flood", "water", "inundation"]):
+            return "flood_map"
+        elif any(keyword in text_content for keyword in ["fire", "bushfire", "hazard"]):
+            return "bushfire_map"
+        elif any(keyword in text_content for keyword in ["title", "lot", "survey"]):
+            return "title_plan"
+        elif any(keyword in text_content for keyword in ["survey", "boundary"]):
+            return "survey_diagram"
+        elif any(keyword in text_content for keyword in ["floor", "building", "elevation"]):
+            return "floor_plan"
+        else:
+            return "unknown"
+    
+    async def _extract_and_store_basic_entities(
+        self, 
+        document_id: str, 
+        extraction_result: Dict[str, Any],
+        page_result: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Extract basic entities and store in Supabase"""
+        
+        try:
+            if not extraction_result.get("extraction_successful"):
+                return {"entities_extracted": 0, "entities_by_type": {}}
+            
+            # Use structured extraction data if available
+            structured_entities = []
+            
+            # Process key-value pairs
+            for kv_pair in extraction_result.get("key_value_pairs", []):
+                structured_entities.append({
+                    "type": "key_value_pair",
+                    "value": f"{kv_pair.get('key', '')}: {kv_pair.get('value', '')}",
+                    "normalized": kv_pair.get('value', ''),
+                    "page_number": kv_pair.get("page_number", 1),
+                    "confidence": kv_pair.get("confidence", 0.8),
+                    "context": kv_pair.get('key', '')
+                })
+            
+            # Process financial amounts
+            for amount in extraction_result.get("financial_amounts", []):
+                structured_entities.append({
+                    "type": "financial_amount",
+                    "value": amount.get("amount", ""),
+                    "normalized": amount.get("amount", ""),
+                    "page_number": amount.get("page_number", 1),
+                    "confidence": amount.get("confidence", 0.8),
+                    "context": amount.get("context", "")
+                })
+            
+            # Process important dates
+            for date_item in extraction_result.get("important_dates", []):
+                structured_entities.append({
+                    "type": "date",
+                    "value": date_item.get("date_text", ""),
+                    "normalized": date_item.get("date_text", ""),
+                    "page_number": date_item.get("page_number", 1),
+                    "confidence": date_item.get("confidence", 0.8),
+                    "context": date_item.get("date_type", "")
+                })
+            
+            # Extract additional entities using regex patterns
+            pages_data = page_result.get("pages_data", {})
+            for page_num, page_data in pages_data.items():
+                page_text = page_data.get("text_content", "")
+                if page_text.strip():
+                    # Extract different entity types
+                    addresses = self._extract_addresses(page_text, page_num)
+                    parties = self._extract_party_names(page_text, page_num)
+                    
+                    structured_entities.extend(addresses + parties)
+            
+            # Store entities in Supabase
+            entity_records = []
+            entities_by_type = {}
+            
+            for entity in structured_entities:
+                entity_record = {
+                    "id": str(uuid.uuid4()),
+                    "document_id": document_id,
+                    "page_number": entity["page_number"],
+                    "entity_type": entity["type"],
+                    "entity_value": entity["value"],
+                    "normalized_value": entity.get("normalized", entity["value"]),
+                    "context": entity.get("context", ""),
+                    "confidence": entity.get("confidence", 0.7),
+                    "extraction_method": "structured_ocr_and_regex",
+                    "extracted_at": datetime.now(UTC).isoformat()
+                }
+                
+                entity_records.append(entity_record)
+                
+                # Group by type for response
+                entity_type = entity["type"]
+                if entity_type not in entities_by_type:
+                    entities_by_type[entity_type] = []
+                entities_by_type[entity_type].append(entity)
+            
+            # Batch insert entities
+            if entity_records:
+                await self.supabase_client.insert("document_entities", entity_records)
+            
+            return {
+                "entities_extracted": len(entity_records),
+                "entities_by_type": entities_by_type
+            }
+            
+        except Exception as e:
+            logger.error(f"Entity extraction failed for document {document_id}: {e}")
+            return {"entities_extracted": 0, "error": str(e)}
+    
+    def _extract_addresses(self, text: str, page_number: int) -> List[Dict[str, Any]]:
+        """Extract Australian addresses using regex patterns"""
+        
+        addresses = []
+        
+        # Australian address patterns
+        patterns = [
+            r'\b\d+\s+[A-Za-z\s]+(?:Street|St|Road|Rd|Avenue|Ave|Drive|Dr|Lane|Ln|Place|Pl|Court|Ct|Crescent|Cres|Way|Highway|Hwy)\b[,\s]*[A-Za-z\s]*[,\s]*(?:NSW|VIC|QLD|WA|SA|TAS|ACT|NT)?\s*\d{4}?',
+            r'\b(?:Lot|Unit)\s+\d+[A-Za-z]?\s*[,/]?\s*\d+\s+[A-Za-z\s]+(?:Street|St|Road|Rd|Avenue|Ave|Drive|Dr|Lane|Ln|Place|Pl|Court|Ct|Crescent|Cres|Way)\b'
+        ]
+        
+        for pattern in patterns:
+            matches = re.finditer(pattern, text, re.IGNORECASE)
+            for match in matches:
+                address_text = match.group().strip()
+                addresses.append({
+                    "type": "address",
+                    "value": address_text,
+                    "normalized": address_text.title(),
+                    "page_number": page_number,
+                    "confidence": 0.8,
+                    "context": self._get_context(text, match.start(), match.end())
+                })
+        
+        return addresses
+    
+    def _extract_party_names(self, text: str, page_number: int) -> List[Dict[str, Any]]:
+        """Extract party names using patterns and keywords"""
+        
+        parties = []
+        
+        # Look for patterns indicating party names
+        party_keywords = [
+            r'(?:Vendor|Purchaser|Landlord|Tenant|Party)[:\s]+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)',
+            r'([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+(?:as|being)\s+(?:Vendor|Purchaser|Landlord|Tenant)',
+            r'(?:Mr|Mrs|Ms|Dr|Professor|Prof)\.?\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)'
+        ]
+        
+        for pattern in party_keywords:
+            matches = re.finditer(pattern, text, re.IGNORECASE)
+            for match in matches:
+                name = match.group(1).strip() if len(match.groups()) > 0 else match.group().strip()
+                if len(name) > 2:  # Avoid single letters
+                    parties.append({
+                        "type": "party_name",
+                        "value": name,
+                        "page_number": page_number,
+                        "confidence": 0.6,
+                        "context": self._get_context(text, match.start(), match.end())
+                    })
+        
+        return parties
+    
+    def _get_context(self, text: str, start: int, end: int, context_length: int = 50) -> str:
+        """Get surrounding context for an entity"""
+        
+        context_start = max(0, start - context_length)
+        context_end = min(len(text), end + context_length)
+        context = text[context_start:context_end].strip()
+        
+        # Clean up context
+        context = ' '.join(context.split())  # Remove extra whitespace
+        return context
+    
+    async def _finalize_document_processing(
+        self,
+        document_id: str,
+        extraction_result: Dict[str, Any],
+        page_result: Dict[str, Any],
+        diagram_result: Dict[str, Any],
+        entity_result: Dict[str, Any],
+        processing_start: datetime
+    ):
+        """Update document with final processing results in Supabase"""
+        
+        processing_time = (datetime.now(UTC) - processing_start).total_seconds()
+        
+        # Calculate overall quality score
+        overall_quality = self._calculate_overall_quality_score(
+            extraction_result, page_result, diagram_result, entity_result
+        )
+        
+        # Prepare update data
+        update_data = {
+            "processing_status": "basic_complete",
+            "processing_completed_at": datetime.now(UTC).isoformat(),
+            "total_pages": extraction_result.get("document_structure", {}).get("total_pages", page_result.get("total_pages", 0)),
+            "total_text_length": len(extraction_result.get("full_text", "")),
+            "total_word_count": len(extraction_result.get("full_text", "").split()),
+            "extraction_confidence": extraction_result.get("extraction_confidence", 0.0),
+            "text_extraction_method": "structured_ocr",
+            "has_diagrams": diagram_result.get("diagrams_detected", 0) > 0,
+            "diagram_count": diagram_result.get("diagrams_detected", 0),
+            "overall_quality_score": overall_quality
+        }
+        
+        # Add processing notes
+        notes = []
+        if extraction_result.get("processing_notes"):
+            notes.extend(extraction_result["processing_notes"])
+        if diagram_result.get("error"):
+            notes.append(f"Diagram detection error: {diagram_result['error']}")
+        if entity_result.get("error"):
+            notes.append(f"Entity extraction error: {entity_result['error']}")
+        
+        if notes:
+            update_data["processing_notes"] = "\n".join(notes)
+        
+        # Update document in Supabase
+        await self.supabase_client.update(
+            "documents", 
+            update_data, 
+            {"id": document_id}
+        )
+    
+    def _calculate_overall_quality_score(
+        self,
+        extraction_result: Dict[str, Any],
+        page_result: Dict[str, Any],
+        diagram_result: Dict[str, Any],
+        entity_result: Dict[str, Any]
+    ) -> float:
+        """Calculate overall document quality score"""
+        
+        scores = []
+        
+        # Text extraction quality (40%)
+        if extraction_result.get("extraction_successful"):
+            extraction_confidence = extraction_result.get("extraction_confidence", 0.0)
+            text_length = len(extraction_result.get("full_text", ""))
+            
+            text_score = extraction_confidence * 0.7
+            if text_length > 1000:
+                text_score += 0.3
+            elif text_length > 100:
+                text_score += 0.2
+            elif text_length > 10:
+                text_score += 0.1
+            
+            scores.append(text_score * 0.4)
+        
+        # Page processing quality (30%)
+        pages_processed = page_result.get("pages_processed", 0)
+        if pages_processed > 0:
+            page_score = min(1.0, pages_processed / 5)  # Normalize based on expected pages
+            scores.append(page_score * 0.3)
+        else:
+            scores.append(0.1)
+        
+        # Entity extraction quality (20%)
+        entities_extracted = entity_result.get("entities_extracted", 0)
+        if entities_extracted > 0:
+            entity_score = min(1.0, entities_extracted / 10)  # Normalize based on expected entities
+            scores.append(entity_score * 0.2)
+        else:
+            scores.append(0.05)
+        
+        # Diagram detection quality (10%)
+        diagrams_detected = diagram_result.get("diagrams_detected", 0)
+        if diagrams_detected > 0:
+            diagram_score = min(1.0, diagrams_detected / 3)  # Normalize based on expected diagrams
+            scores.append(diagram_score * 0.1)
+        else:
+            scores.append(0.05)
+        
+        return sum(scores) if scores else 0.0
+    
+    async def _mark_document_failed_in_supabase(self, document_id: str, error_message: str):
+        """Mark document as failed in Supabase"""
+        
+        try:
+            update_data = {
+                "processing_status": "failed",
+                "processing_errors": {
+                    "error": error_message,
+                    "timestamp": datetime.now(UTC).isoformat()
+                }
+            }
+            
+            await self.supabase_client.update(
+                "documents", 
+                update_data, 
+                {"id": document_id}
+            )
+            
+        except Exception as e:
+            logger.error(f"Failed to mark document as failed in Supabase: {e}")
+    
+    async def _generate_enhanced_processing_response(self, document_id: str) -> Dict[str, Any]:
+        """Generate comprehensive processing response with Supabase data"""
+        
+        try:
+            # Get document record
+            document_result = await self.supabase_client.select(
+                "documents", 
+                "*", 
+                {"id": document_id}
+            )
+            
+            if not document_result:
+                raise Exception(f"Document {document_id} not found")
+            
+            document = document_result[0]
+            
+            # Get pages
+            pages_result = await self.supabase_client.select(
+                "document_pages",
+                "*",
+                {"document_id": document_id, "order": "page_number"}
+            )
+            
+            # Get entities
+            entities_result = await self.supabase_client.select(
+                "document_entities",
+                "*",
+                {"document_id": document_id}
+            )
+            
+            # Get diagrams
+            diagrams_result = await self.supabase_client.select(
+                "document_diagrams",
+                "*",
+                {"document_id": document_id}
+            )
+            
+            # Organize entities by type
+            entities_by_type = {}
+            for entity in entities_result:
+                entity_type = entity["entity_type"]
+                if entity_type not in entities_by_type:
+                    entities_by_type[entity_type] = []
+                entities_by_type[entity_type].append({
+                    "value": entity["entity_value"],
+                    "normalized_value": entity["normalized_value"],
+                    "page_number": entity["page_number"],
+                    "confidence": entity["confidence"],
+                    "context": entity["context"]
+                })
+            
+            # Organize diagrams by page
+            diagrams_by_page = {}
+            for diagram in diagrams_result:
+                page_num = diagram["page_number"]
+                if page_num not in diagrams_by_page:
+                    diagrams_by_page[page_num] = []
+                diagrams_by_page[page_num].append({
+                    "id": diagram["id"],
+                    "type": diagram["diagram_type"],
+                    "confidence": diagram["classification_confidence"],
+                    "basic_analysis": diagram["basic_analysis"]
+                })
+            
+            # Generate page summaries
+            page_summaries = [
+                {
+                    "page_number": page["page_number"],
+                    "summary": page["content_summary"],
+                    "content_types": page["content_types"],
+                    "primary_type": page["primary_content_type"],
+                    "word_count": page["word_count"],
+                    "quality_score": page["content_quality_score"],
+                    "has_diagrams": page["has_diagrams"],
+                    "has_tables": page["has_tables"],
+                    "has_signatures": page["has_signatures"]
+                }
+                for page in pages_result
+            ]
+            
+            return {
+                "document_id": document["id"],
+                "processing_status": document["processing_status"],
+                "processing_completed": document["processing_status"] == "basic_complete",
+                
+                # Document metadata
+                "document_metadata": {
+                    "filename": document["original_filename"],
+                    "file_type": document["file_type"],
+                    "file_size": document["file_size"],
+                    "total_pages": document["total_pages"],
+                    "processing_time": self._calculate_processing_time(document),
+                    "quality_score": document["overall_quality_score"],
+                    "extraction_confidence": document["extraction_confidence"],
+                    "australian_state": document["australian_state"],
+                    "contract_type": document["contract_type"],
+                    "document_type": document["document_type"]
+                },
+                
+                # Content analysis
+                "content_analysis": {
+                    "total_text_length": document["total_text_length"],
+                    "total_word_count": document["total_word_count"],
+                    "has_diagrams": document["has_diagrams"],
+                    "diagram_count": document["diagram_count"],
+                    "entities_extracted": len(entities_result),
+                    "pages_analyzed": len(pages_result)
+                },
+                
+                # Page-level data
+                "pages": page_summaries,
+                "entities_by_type": entities_by_type,
+                "diagrams_by_page": diagrams_by_page,
+                
+                # Processing metadata
+                "processing_metadata": {
+                    "extraction_method": document["text_extraction_method"],
+                    "processing_notes": document.get("processing_notes"),
+                    "ready_for_detailed_analysis": document["processing_status"] == "basic_complete",
+                    "analysis_pending": document["processing_status"] == "basic_complete"
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to generate enhanced processing response: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to generate response: {str(e)}")
+    
+    def _calculate_processing_time(self, document: Dict[str, Any]) -> Optional[float]:
+        """Calculate processing time from document timestamps"""
+        
+        try:
+            if document.get("processing_completed_at") and document.get("processing_started_at"):
+                start = datetime.fromisoformat(document["processing_started_at"].replace('Z', '+00:00'))
+                end = datetime.fromisoformat(document["processing_completed_at"].replace('Z', '+00:00'))
+                return (end - start).total_seconds()
+        except Exception:
+            pass
+        
+        return None
+    
+    # Public API methods for accessing stored data
+    async def get_document_metadata_enhanced(self, document_id: str, user_id: str) -> Dict[str, Any]:
+        """Get enhanced document metadata from Supabase"""
+        
+        # Verify document ownership
+        document_result = await self.supabase_client.select(
+            "documents",
+            "*",
+            {"id": document_id, "user_id": user_id}
+        )
+        
+        if not document_result:
+            raise HTTPException(status_code=404, detail="Document not found")
+        
+        return await self._generate_enhanced_processing_response(document_id)
+    
+    async def get_document_page_content_enhanced(self, document_id: str, page_number: int, user_id: str) -> Dict[str, Any]:
+        """Get enhanced page content with entities and diagrams"""
+        
+        # Verify document ownership
+        document_result = await self.supabase_client.select(
+            "documents",
+            "id",
+            {"id": document_id, "user_id": user_id}
+        )
+        
+        if not document_result:
+            raise HTTPException(status_code=404, detail="Document not found")
+        
+        # Get page data
+        page_result = await self.supabase_client.select(
+            "document_pages",
+            "*",
+            {"document_id": document_id, "page_number": page_number}
+        )
+        
+        if not page_result:
+            raise HTTPException(status_code=404, detail="Page not found")
+        
+        page = page_result[0]
+        
+        # Get entities for this page
+        entities_result = await self.supabase_client.select(
+            "document_entities",
+            "*",
+            {"document_id": document_id, "page_number": page_number}
+        )
+        
+        # Get diagrams for this page
+        diagrams_result = await self.supabase_client.select(
+            "document_diagrams",
+            "*",
+            {"document_id": document_id, "page_number": page_number}
+        )
+        
+        return {
+            "page_number": page["page_number"],
+            "content_summary": page["content_summary"],
+            "text_content": page["text_content"],
+            "content_types": page["content_types"],
+            "primary_content_type": page["primary_content_type"],
+            "quality_metrics": {
+                "extraction_confidence": page["extraction_confidence"],
+                "content_quality_score": page["content_quality_score"],
+                "word_count": page["word_count"],
+                "text_length": page["text_length"]
+            },
+            "page_features": {
+                "has_diagrams": page["has_diagrams"],
+                "has_tables": page["has_tables"],
+                "has_signatures": page["has_signatures"],
+                "has_handwriting": page["has_handwriting"]
+            },
+            "entities": [
+                {
+                    "type": entity["entity_type"],
+                    "value": entity["entity_value"],
+                    "normalized_value": entity["normalized_value"],
+                    "confidence": entity["confidence"],
+                    "context": entity["context"]
+                }
+                for entity in entities_result
+            ],
+            "diagrams": [
+                {
+                    "id": diagram["id"],
+                    "type": diagram["diagram_type"],
+                    "confidence": diagram["classification_confidence"],
+                    "basic_analysis": diagram["basic_analysis"]
+                }
+                for diagram in diagrams_result
+            ]
+        }
+    
+    async def get_document_entities_by_type(self, document_id: str, user_id: str) -> Dict[str, List[Dict[str, Any]]]:
+        """Get all entities organized by type"""
+        
+        # Verify document ownership
+        document_result = await self.supabase_client.select(
+            "documents",
+            "id",
+            {"id": document_id, "user_id": user_id}
+        )
+        
+        if not document_result:
+            raise HTTPException(status_code=404, detail="Document not found")
+        
+        # Get all entities
+        entities_result = await self.supabase_client.select(
+            "document_entities",
+            "*",
+            {"document_id": document_id}
+        )
+        
+        # Organize by type
+        entities_by_type = {}
+        for entity in entities_result:
+            entity_type = entity["entity_type"]
+            if entity_type not in entities_by_type:
+                entities_by_type[entity_type] = []
+            
+            entities_by_type[entity_type].append({
+                "id": entity["id"],
+                "value": entity["entity_value"],
+                "normalized_value": entity["normalized_value"],
+                "page_number": entity["page_number"],
+                "confidence": entity["confidence"],
+                "context": entity["context"],
+                "extraction_method": entity["extraction_method"]
+            })
+        
+        return entities_by_type
+    
+    async def get_document_diagrams_for_analysis(self, document_id: str, user_id: str) -> List[Dict[str, Any]]:
+        """Get diagram metadata prepared for detailed analysis"""
+        
+        # Verify document ownership
+        document_result = await self.supabase_client.select(
+            "documents",
+            "id,storage_path",
+            {"id": document_id, "user_id": user_id}
+        )
+        
+        if not document_result:
+            raise HTTPException(status_code=404, detail="Document not found")
+        
+        document = document_result[0]
+        
+        # Get all diagrams
+        diagrams_result = await self.supabase_client.select(
+            "document_diagrams",
+            "*",
+            {"document_id": document_id, "order": "page_number"}
+        )
+        
+        # Prepare for analysis (ContractAnalysisService will use this)
+        analysis_ready_diagrams = []
+        for diagram in diagrams_result:
+            analysis_ready_diagrams.append({
+                "diagram_id": diagram["id"],
+                "page_number": diagram["page_number"],
+                "diagram_type": diagram["diagram_type"],
+                "classification_confidence": diagram["classification_confidence"],
+                "basic_analysis": diagram["basic_analysis"],
+                "ready_for_detailed_analysis": not diagram["detailed_analysis_completed"],
+                "document_storage_path": document["storage_path"]
+            })
+        
+        return analysis_ready_diagrams
