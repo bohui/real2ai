@@ -72,7 +72,9 @@ class TestSupabaseClientMigration:
 
         # Verify the result
         assert result == expected_records
-        supabase_client.database.read.assert_called_once_with("users", {"active": True}, 10)
+        supabase_client.database.read.assert_called_once_with(
+            "users", {"active": True}, 10
+        )
 
     async def test_health_check_healthy(self, supabase_client):
         """Test health check when service is healthy"""

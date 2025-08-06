@@ -39,7 +39,9 @@ def settings():
 
 
 @pytest.fixture
-def client(test_user, mock_db_client, test_settings) -> Generator[TestClient, None, None]:
+def client(
+    test_user, mock_db_client, test_settings
+) -> Generator[TestClient, None, None]:
     """Create a test client for FastAPI app with auth override."""
     from app.core.auth import get_current_user
     from app.clients.factory import get_supabase_client
@@ -47,33 +49,38 @@ def client(test_user, mock_db_client, test_settings) -> Generator[TestClient, No
     from app.services.document_service import DocumentService
     from unittest.mock import patch
     import app.main
-    
+
     # Override dependencies for testing
     def override_get_current_user():
         return test_user
-    
+
     async def override_get_supabase_client():
         return mock_db_client
-    
+
     def override_get_settings():
         return test_settings
-    
+
     from app.main import app as fastapi_app
+
     fastapi_app.dependency_overrides[get_current_user] = override_get_current_user
     fastapi_app.dependency_overrides[get_supabase_client] = override_get_supabase_client
     fastapi_app.dependency_overrides[get_settings] = override_get_settings
-    
+
     # Mock global db_client used in main module and router modules
     import app.main
     from app.clients.factory import get_supabase_client as real_get_supabase_client
-    
-    with patch.object(app.main, 'db_client', mock_db_client):
+
+    with patch.object(app.main, "db_client", mock_db_client):
         # Also patch the get_supabase_client function directly in all modules that import it
-        with patch('app.clients.factory.get_supabase_client', return_value=mock_db_client):
-            with patch('app.router.documents.get_supabase_client', return_value=mock_db_client):
+        with patch(
+            "app.clients.factory.get_supabase_client", return_value=mock_db_client
+        ):
+            with patch(
+                "app.router.documents.get_supabase_client", return_value=mock_db_client
+            ):
                 test_client = TestClient(fastapi_app)
                 yield test_client
-    
+
     # Clean up overrides
     fastapi_app.dependency_overrides.clear()
     test_client.close()
@@ -91,23 +98,22 @@ async def async_client() -> AsyncGenerator[AsyncClient, None]:
 def mock_supabase_client():
     """Mock Supabase client for testing."""
     mock_client = MagicMock()
-    
+
     # Mock auth
     mock_client.auth.get_user.return_value = MagicMock(
         user=MagicMock(id="test-user-id", email="test@example.com")
     )
-    
+
     # Mock storage
     mock_client.storage.from_.return_value = MagicMock()
-    
+
     # Mock database queries
     mock_select = MagicMock()
     mock_select.execute.return_value = MagicMock(
-        data=[{"id": 1, "name": "test"}],
-        error=None
+        data=[{"id": 1, "name": "test"}], error=None
     )
     mock_client.table.return_value.select.return_value = mock_select
-    
+
     return mock_client
 
 
@@ -115,21 +121,18 @@ def mock_supabase_client():
 def mock_openai_client():
     """Mock OpenAI client for testing."""
     mock_client = AsyncMock()
-    
+
     # Mock chat completions
     mock_client.chat.completions.create = AsyncMock(
         return_value=MagicMock(
             choices=[
                 MagicMock(
-                    message=MagicMock(
-                        content="Mock AI response",
-                        role="assistant"
-                    )
+                    message=MagicMock(content="Mock AI response", role="assistant")
                 )
             ]
         )
     )
-    
+
     return mock_client
 
 
@@ -142,7 +145,7 @@ def sample_contract_data():
         "contract_type": "purchase_agreement",
         "australian_state": "NSW",
         "user_id": "test-user-id",
-        "created_at": "2024-01-01T00:00:00Z"
+        "created_at": "2024-01-01T00:00:00Z",
     }
 
 
@@ -156,19 +159,19 @@ def sample_risk_assessment():
                 "category": "financial",
                 "severity": "medium",
                 "description": "Settlement period shorter than recommended",
-                "impact": "Potential difficulty securing finance"
+                "impact": "Potential difficulty securing finance",
             },
             {
                 "category": "legal",
-                "severity": "low", 
+                "severity": "low",
                 "description": "Standard contract terms",
-                "impact": "Minimal legal risk"
-            }
+                "impact": "Minimal legal risk",
+            },
         ],
         "recommendations": [
             "Seek pre-approval for finance",
-            "Consider extending settlement period"
-        ]
+            "Consider extending settlement period",
+        ],
     }
 
 
@@ -184,7 +187,7 @@ def setup_test_environment(monkeypatch):
         "OPENAI_API_KEY": "test-openai-key",
         "REDIS_URL": "redis://localhost:6379/1",  # Use test DB
     }
-    
+
     for key, value in test_env_vars.items():
         monkeypatch.setenv(key, value)
 
@@ -206,9 +209,9 @@ def performance_threshold():
     """Performance thresholds for different operations."""
     return {
         "api_response": 0.2,  # 200ms
-        "ai_analysis": 5.0,   # 5 seconds
-        "file_upload": 1.0,   # 1 second
-        "database_query": 0.1  # 100ms
+        "ai_analysis": 5.0,  # 5 seconds
+        "file_upload": 1.0,  # 1 second
+        "database_query": 0.1,  # 100ms
     }
 
 
@@ -228,7 +231,7 @@ def auth_headers():
     """Authentication headers for API tests."""
     return {
         "Authorization": "Bearer test-jwt-token",
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
     }
 
 
@@ -236,18 +239,18 @@ def auth_headers():
 def mock_db_client():
     """Mock database client for testing."""
     mock_client = MagicMock()
-    
+
     # Mock the _client attribute to simulate initialized state
     mock_client._client = MagicMock()
-    
+
     # Mock the initialize method to prevent real database connection
     async def mock_initialize():
         """Mock initialization that succeeds without connecting"""
         mock_client._client = MagicMock()
         return True
-    
+
     mock_client.initialize = mock_initialize
-    
+
     # Mock table operations
     mock_table = MagicMock()
     mock_table.select.return_value = mock_table
@@ -256,7 +259,7 @@ def mock_db_client():
     mock_table.update.return_value = mock_table
     mock_table.execute.return_value = MagicMock(data=[], error=None)
     mock_client.table.return_value = mock_table
-    
+
     # Mock auth operations
     mock_client.auth.get_user.return_value = MagicMock(
         user=MagicMock(id="test-user-id", email="test@example.com")
@@ -266,9 +269,9 @@ def mock_db_client():
     )
     mock_client.auth.sign_in_with_password.return_value = MagicMock(
         user=MagicMock(id="test-user-id", email="test@example.com"),
-        session=MagicMock(access_token="test-token", refresh_token="test-refresh")
+        session=MagicMock(access_token="test-token", refresh_token="test-refresh"),
     )
-    
+
     return mock_client
 
 
@@ -287,8 +290,8 @@ def sample_document_data():
             "extracted_text": "Sample contract text",
             "extraction_confidence": 0.95,
             "character_count": 1000,
-            "word_count": 200
-        }
+            "word_count": 200,
+        },
     }
 
 
@@ -300,10 +303,7 @@ def sample_onboarding_preferences():
         "jurisdiction": "nsw",
         "firm_size": "small",
         "experience_level": "intermediate",
-        "notification_preferences": {
-            "email_alerts": True,
-            "contract_updates": False
-        }
+        "notification_preferences": {"email_alerts": True, "contract_updates": False},
     }
 
 
@@ -319,22 +319,19 @@ def sample_analysis_data():
                 "parties": ["John Buyer", "Jane Seller"],
                 "property_address": "123 Test Street, Sydney NSW 2000",
                 "purchase_price": 850000,
-                "settlement_date": "2024-12-01"
+                "settlement_date": "2024-12-01",
             },
-            "risk_assessment": {
-                "overall_risk_score": 3.5,
-                "risk_factors": []
-            },
+            "risk_assessment": {"overall_risk_score": 3.5, "risk_factors": []},
             "compliance_check": {
                 "state_compliance": True,
                 "compliance_issues": [],
-                "cooling_off_compliance": True
+                "cooling_off_compliance": True,
             },
-            "recommendations": []
+            "recommendations": [],
         },
         "risk_score": 3,
         "processing_time": 120.5,
-        "created_at": "2024-01-01T00:00:00Z"
+        "created_at": "2024-01-01T00:00:00Z",
     }
 
 
@@ -351,6 +348,7 @@ def test_settings():
 def test_user():
     """Test user data."""
     from app.core.auth import User
+
     return User(
         id="test-user-id",
         email="test@real2ai.com",
@@ -358,7 +356,7 @@ def test_user():
         user_type="lawyer",
         subscription_status="free",
         credits_remaining=5,
-        preferences={"practice_area": "property"}
+        preferences={"practice_area": "property"},
     )
 
 
@@ -366,6 +364,7 @@ def test_user():
 def mock_user():
     """Mock user for testing."""
     from unittest.mock import MagicMock
+
     user = MagicMock()
     user.id = "test-user-id"
     user.email = "test@real2ai.com"

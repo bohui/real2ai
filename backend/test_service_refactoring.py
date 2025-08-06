@@ -115,8 +115,7 @@ async def test_document_service():
 
 
 async def test_contract_analysis_service():
-    """Test ContractAnalysisService with enhanced configuration.
-    """
+    """Test ContractAnalysisService with enhanced configuration."""
 
     logger.info("Testing ContractAnalysisService...")
 
@@ -160,12 +159,15 @@ async def test_contract_analysis_service():
         try:
             # Test full analysis
             analysis = await service.analyze_contract(
-                document_data={"content": test_contract, "filename": "test_contract.txt"},
+                document_data={
+                    "content": test_contract,
+                    "filename": "test_contract.txt",
+                },
                 user_id="test_user_123",
                 australian_state="NSW",
                 contract_type="purchase_agreement",
                 user_experience="novice",
-                user_type="buyer"
+                user_type="buyer",
             )
             logger.info(
                 f"✓ Contract analysis completed with auth: {analysis.get('analysis_metadata', {}).get('authentication_method', 'unknown')}"
