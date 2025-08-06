@@ -9,12 +9,12 @@ import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime, timezone
 
-from ...services.property_profile_service import (
+from app.services.property_profile_service import (
     PropertyProfileService, 
     PropertyProfileRequest,
     get_property_profile_service
 )
-from ...clients.factory import get_client_factory
+from app.clients.factory import get_client_factory
 
 
 class TestPropertyProfileIntegration:
@@ -434,7 +434,7 @@ class TestPropertyProfileIntegration:
         """Test data quality scoring calculation."""
         
         # Create mock response with varying data completeness
-        from ...services.property_profile_service import PropertyProfileResponse
+        from app.services.property_profile_service import PropertyProfileResponse
         
         # High quality response
         high_quality_response = PropertyProfileResponse(

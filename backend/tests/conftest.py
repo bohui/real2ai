@@ -71,15 +71,8 @@ def client(test_user, mock_db_client, test_settings) -> Generator[TestClient, No
         # Also patch the get_supabase_client function directly in all modules that import it
         with patch('app.clients.factory.get_supabase_client', return_value=mock_db_client):
             with patch('app.router.documents.get_supabase_client', return_value=mock_db_client):
-                # Mock document service
-                with patch.object(DocumentService, 'upload_file', new_callable=AsyncMock) as mock_upload:
-                    mock_upload.return_value = {
-                        "document_id": "test-doc-id",
-                        "storage_path": "documents/test-user-id/test-doc-id.pdf"
-                    }
-                    
-                    test_client = TestClient(fastapi_app)
-                    yield test_client
+                test_client = TestClient(fastapi_app)
+                yield test_client
     
     # Clean up overrides
     fastapi_app.dependency_overrides.clear()

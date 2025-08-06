@@ -190,6 +190,47 @@ class SupabaseAuthClient(AuthOperations):
                 original_error=e
             )
     
+    def sign_up(self, user_data: Dict[str, Any]):
+        """Sign up a new user (synchronous wrapper for create_user)."""
+        try:
+            self.logger.debug(f"Signing up user: {user_data.get('email', 'no-email')}")
+            
+            # Extract required fields
+            email = user_data.get("email")
+            password = user_data.get("password")
+            options = user_data.get("options", {})
+            
+            if not email or not password:
+                raise ClientError(
+                    "Email and password are required for user sign up",
+                    client_name=self.client_name
+                )
+            
+            # Create user with Supabase auth
+            auth_response = self.supabase_client.auth.sign_up({
+                "email": email,
+                "password": password,
+                "options": options
+            })
+            
+            self.logger.debug(f"Successfully signed up user: {auth_response.user.id if auth_response.user else 'unknown'}")
+            return auth_response
+            
+        except AuthError as e:
+            self.logger.error(f"Auth error signing up user: {e}")
+            raise ClientError(
+                f"Failed to sign up user: {str(e)}",
+                client_name=self.client_name,
+                original_error=e
+            )
+        except Exception as e:
+            self.logger.error(f"Unexpected error signing up user: {e}")
+            raise ClientError(
+                f"Unexpected error signing up user: {str(e)}",
+                client_name=self.client_name,
+                original_error=e
+            )
+    
     @with_retry(max_retries=3, backoff_factor=1.0)
     async def update_user(self, user_id: str, user_data: Dict[str, Any]) -> Dict[str, Any]:
         """Update user information."""

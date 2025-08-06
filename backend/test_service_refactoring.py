@@ -17,12 +17,10 @@ from app.services.gemini_ocr_service import GeminiOCRService
 from app.services.document_service import DocumentService
 from app.services.contract_analysis_service import (
     ContractAnalysisService,
-    ContractAnalysisConfig,
-    AnalysisComplexity,
-    ContractSection,
 )
 from app.models.contract_state import AustralianState, ContractType
 from app.services.ocr_performance_service import ProcessingPriority
+from app.config.enhanced_workflow_config import EnhancedWorkflowConfig
 
 # Set up logging
 logging.basicConfig(
@@ -117,9 +115,13 @@ async def test_document_service():
 
 
 async def test_contract_analysis_service():
-    """Test ContractAnalysisService with GeminiClient."""
+    """Test ContractAnalysisService with enhanced configuration.
+    """
 
     logger.info("Testing ContractAnalysisService...")
+
+    # Create enhanced workflow configuration
+    config = EnhancedWorkflowConfig.from_environment()
 
     try:
         # Initialize service
@@ -155,30 +157,18 @@ async def test_contract_analysis_service():
         - Title search clear of encumbrances
         """
 
-        config = ContractAnalysisConfig(
-            australian_state=AustralianState.NSW,
-            contract_type=ContractType.SALE_OF_LAND,
-            analysis_depth=AnalysisComplexity.STANDARD,
-            focus_areas=[
-                ContractSection.PARTIES,
-                ContractSection.FINANCIAL_TERMS,
-                ContractSection.CONDITIONS,
-            ],
-        )
-
-        try:
-            # Test summary generation
-            summary = await service.generate_contract_summary(test_contract, config)
-            logger.info(f"✓ Contract summary generated: {len(summary)} characters")
-
-        except Exception as e:
-            logger.info(f"✓ Contract summary failed as expected (quota/mock): {e}")
-
         try:
             # Test full analysis
-            analysis = await service.analyze_contract(test_contract, config)
+            analysis = await service.analyze_contract(
+                document_data={"content": test_contract, "filename": "test_contract.txt"},
+                user_id="test_user_123",
+                australian_state="NSW",
+                contract_type="purchase_agreement",
+                user_experience="novice",
+                user_type="buyer"
+            )
             logger.info(
-                f"✓ Contract analysis completed with auth: {analysis['analysis_metadata'].get('authentication_method', 'unknown')}"
+                f"✓ Contract analysis completed with auth: {analysis.get('analysis_metadata', {}).get('authentication_method', 'unknown')}"
             )
 
         except Exception as e:

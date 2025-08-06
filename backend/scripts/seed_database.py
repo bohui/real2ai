@@ -325,9 +325,9 @@ class DatabaseSeeder:
                     )
 
                     document_ids.append({**doc, "id": doc_id})
-                    logger.info(f"Created sample document: {doc['filename']}")
+                    logger.info(f"Created sample document: {doc['original_filename']}")
                 except Exception as e:
-                    logger.error(f"Failed to create document {doc['filename']}: {e}")
+                    logger.error(f"Failed to create document {doc['original_filename']}: {e}")
 
         finally:
             await conn.close()
