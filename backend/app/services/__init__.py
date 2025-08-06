@@ -8,7 +8,7 @@ from typing import Optional, Dict, Any
 # Service imports (refactored to use client architecture)
 from .gemini_ocr_service import GeminiOCRService
 from .document_service import DocumentService
-from .contract_analysis_service import ContractAnalysisService
+from .contract_analysis_service import ContractAnalysisService, create_contract_analysis_service
 
 logger = logging.getLogger(__name__)
 
@@ -47,13 +47,15 @@ async def get_document_service() -> DocumentService:
 
 async def get_contract_analysis_service() -> ContractAnalysisService:
     """
-    Get contract analysis service instance with GeminiClient.
+    Get unified contract analysis service instance with enhanced features.
 
     Returns:
-        Initialized contract analysis service instance
+        Initialized unified contract analysis service instance
     """
-    service = ContractAnalysisService()
-    await service.initialize()
+    service = create_contract_analysis_service()
+    # Initialize prompt manager if available
+    if service.prompt_manager:
+        await service.prompt_manager.initialize()
     return service
 
 
@@ -87,7 +89,7 @@ async def check_all_services_health() -> Dict[str, Dict[str, Any]]:
     try:
         contract_service = await get_contract_analysis_service()
         health_results["contract_analysis_service"] = (
-            await contract_service.health_check()
+            await contract_service.get_service_health()
         )
     except Exception as e:
         health_results["contract_analysis_service"] = {
@@ -108,6 +110,7 @@ __all__ = [
     "get_ocr_service",
     "get_document_service",
     "get_contract_analysis_service",
+    "create_contract_analysis_service",
     # Health utilities
     "check_all_services_health",
 ]

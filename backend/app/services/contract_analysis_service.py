@@ -1,13 +1,19 @@
 """
-Enhanced Contract Analysis Service with WebSocket Integration
+Unified Contract Analysis Service with WebSocket Integration and Enhanced Features
 """
 
 import asyncio
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from datetime import datetime, UTC
 
-from app.agents.contract_workflow import EnhancedContractAnalysisWorkflow as ContractAnalysisWorkflow
+from backend.app.agents.contract_workflow import EnhancedContractAnalysisWorkflow as ContractAnalysisWorkflow
+from app.config.enhanced_workflow_config import (
+    get_enhanced_workflow_config,
+    validate_workflow_configuration,
+    EnhancedWorkflowConfig
+)
+from app.core.prompts import PromptManager, get_prompt_manager
 from app.models.contract_state import create_initial_state, RealEstateAgentState
 from app.model.enums import AustralianState, ProcessingStatus
 from app.services.websocket_service import WebSocketManager, WebSocketEvents
@@ -17,21 +23,269 @@ logger = logging.getLogger(__name__)
 
 class ContractAnalysisService:
     """
-    Enhanced contract analysis service with real-time progress tracking
+    Unified contract analysis service with real-time progress tracking and enhanced features
+    
+    Combines:
+    - Real-time WebSocket progress tracking
+    - Advanced workflow configuration
+    - Integrated PromptManager system
+    - Comprehensive validation & quality checks
+    - Service health monitoring & metrics
+    - Enhanced error handling & fallback mechanisms
     """
 
     def __init__(
         self,
-        websocket_manager: WebSocketManager,
-        openai_api_key: str,
-        model_name: str = "gpt-4"
+        websocket_manager: Optional[WebSocketManager] = None,
+        openai_api_key: str = None,
+        model_name: str = "gpt-4",
+        openai_api_base: Optional[str] = None,
+        config: Optional[EnhancedWorkflowConfig] = None,
+        prompt_manager: Optional[PromptManager] = None,
+        enable_websocket_progress: bool = True
     ):
         self.websocket_manager = websocket_manager
+        self.enable_websocket_progress = enable_websocket_progress and websocket_manager is not None
+        self.openai_api_key = openai_api_key
+        self.model_name = model_name
+        self.openai_api_base = openai_api_base
+        
+        # Initialize configuration
+        self.config = config or get_enhanced_workflow_config()
+        
+        # Validate configuration
+        config_validation = validate_workflow_configuration(self.config)
+        if not config_validation["valid"]:
+            logger.error(f"Configuration validation failed: {config_validation['issues']}")
+            raise ValueError(f"Invalid configuration: {'; '.join(config_validation['issues'])}")
+        
+        if config_validation["warnings"]:
+            logger.warning(f"Configuration warnings: {config_validation['warnings']}")
+        
+        # Initialize prompt manager
+        if prompt_manager is None and self.config.enable_prompt_manager:
+            try:
+                prompt_manager_config = self.config.to_prompt_manager_config()
+                self.prompt_manager = PromptManager(prompt_manager_config)
+                logger.info("Prompt manager initialized successfully")
+            except Exception as e:
+                logger.warning(f"Failed to initialize prompt manager: {e}")
+                self.prompt_manager = None
+        else:
+            self.prompt_manager = prompt_manager
+        
+        # Initialize workflow
         self.workflow = ContractAnalysisWorkflow(
-            openai_api_key=openai_api_key,
-            model_name=model_name
+            openai_api_key=self.openai_api_key,
+            model_name=self.model_name,
+            openai_api_base=self.openai_api_base,
+            prompt_manager=self.prompt_manager,
+            enable_validation=self.config.enable_validation,
+            enable_quality_checks=self.config.enable_quality_checks
         )
+        
+        # WebSocket progress tracking
         self.active_analyses: Dict[str, Dict[str, Any]] = {}
+        
+        # Service metrics
+        self._service_metrics = {
+            "total_requests": 0,
+            "successful_analyses": 0,
+            "failed_analyses": 0,
+            "average_processing_time": 0.0,
+            "configuration_errors": 0,
+            "prompt_manager_errors": 0
+        }
+        
+        logger.info(f"Unified contract analysis service initialized with config: {config_validation['config_summary']}")
+
+    async def analyze_contract(
+        self,
+        document_data: Dict[str, Any],
+        user_id: str,
+        australian_state: str,
+        user_preferences: Optional[Dict[str, Any]] = None,
+        session_id: Optional[str] = None,
+        contract_type: str = "purchase_agreement",
+        user_experience: str = "novice",
+        user_type: str = "buyer",
+        enable_websocket_progress: Optional[bool] = None
+    ) -> Dict[str, Any]:
+        """
+        Unified contract analysis method with optional WebSocket progress tracking
+        
+        Args:
+            document_data: Document content and metadata
+            user_id: ID of the user requesting analysis
+            australian_state: Australian state for compliance
+            user_preferences: Optional user preferences
+            session_id: Optional session identifier
+            contract_type: Type of contract being analyzed
+            user_experience: User experience level
+            user_type: Type of user (buyer, seller, etc.)
+            enable_websocket_progress: Override WebSocket progress setting
+            
+        Returns:
+            Enhanced analysis results with comprehensive metadata
+        """
+        
+        start_time = datetime.now(UTC)
+        self._service_metrics["total_requests"] += 1
+        
+        # Generate session ID if not provided
+        if session_id is None:
+            session_id = f"analysis_{int(start_time.timestamp())}"
+        
+        # Determine if WebSocket progress should be enabled
+        use_websocket_progress = (
+            enable_websocket_progress if enable_websocket_progress is not None 
+            else self.enable_websocket_progress
+        )
+        
+        logger.info(f"Starting unified contract analysis for session {session_id}")
+        
+        try:
+            # Validate inputs
+            validation_result = self._validate_analysis_inputs(
+                document_data, user_id, australian_state, contract_type
+            )
+            
+            if not validation_result["valid"]:
+                error_msg = f"Input validation failed: {'; '.join(validation_result['errors'])}"
+                logger.error(error_msg)
+                return self._create_error_response(error_msg, session_id, start_time)
+            
+            # Create initial state
+            if hasattr(AustralianState, australian_state.upper()):
+                state_enum = AustralianState(australian_state.upper())
+            else:
+                state_enum = AustralianState(australian_state)
+            
+            initial_state = self._create_initial_state(
+                document_data=document_data,
+                user_id=user_id,
+                australian_state=state_enum,
+                user_preferences=user_preferences or {},
+                session_id=session_id,
+                contract_type=contract_type,
+                user_experience=user_experience,
+                user_type=user_type
+            )
+            
+            # Initialize analysis tracking if WebSocket is enabled
+            contract_id = initial_state["session_id"]
+            if use_websocket_progress:
+                self.active_analyses[contract_id] = {
+                    "start_time": start_time,
+                    "user_id": user_id,
+                    "session_id": session_id,
+                    "status": "starting",
+                    "progress": 0
+                }
+                
+                # Send analysis started event
+                if self.websocket_manager:
+                    await self.websocket_manager.send_message(
+                        session_id,
+                        WebSocketEvents.analysis_started(contract_id, estimated_time=3)
+                    )
+            
+            # Initialize prompt manager if needed
+            if self.prompt_manager:
+                try:
+                    await self.prompt_manager.initialize()
+                except Exception as e:
+                    logger.warning(f"Prompt manager initialization failed: {e}")
+                    self._service_metrics["prompt_manager_errors"] += 1
+            
+            # Execute analysis with optional progress tracking
+            if use_websocket_progress:
+                final_state = await self._execute_with_progress_tracking(
+                    initial_state, session_id, contract_id
+                )
+            else:
+                logger.debug(f"Executing workflow for session {session_id}")
+                final_state = await self.workflow.analyze_contract(initial_state)
+            
+            # Calculate processing time
+            processing_time = (datetime.now(UTC) - start_time).total_seconds()
+            
+            # Update service metrics
+            if final_state.get("parsing_status") == ProcessingStatus.COMPLETED or not final_state.get("error_state"):
+                self._service_metrics["successful_analyses"] += 1
+                logger.info(f"Analysis completed successfully in {processing_time:.2f}s")
+            else:
+                self._service_metrics["failed_analyses"] += 1
+                logger.warning(f"Analysis failed after {processing_time:.2f}s")
+            
+            # Update average processing time
+            self._service_metrics["average_processing_time"] = (
+                (self._service_metrics["average_processing_time"] * (self._service_metrics["total_requests"] - 1) + processing_time)
+                / self._service_metrics["total_requests"]
+            )
+            
+            # Send WebSocket completion events if enabled
+            if use_websocket_progress and self.websocket_manager:
+                if final_state.get("error_state"):
+                    await self.websocket_manager.send_message(
+                        session_id,
+                        WebSocketEvents.analysis_failed(
+                            contract_id,
+                            final_state["error_state"],
+                            retry_available=True
+                        )
+                    )
+                    
+                    # Update analysis status
+                    if contract_id in self.active_analyses:
+                        self.active_analyses[contract_id]["status"] = "failed"
+                        self.active_analyses[contract_id]["error"] = final_state["error_state"]
+                else:
+                    # Create analysis summary
+                    analysis_results = final_state.get("analysis_results", {})
+                    summary = {
+                        "overall_confidence": analysis_results.get("overall_confidence", 0),
+                        "risk_score": analysis_results.get("risk_assessment", {}).get("overall_risk_score", 0),
+                        "compliance_status": analysis_results.get("compliance_check", {}).get("state_compliance", False),
+                        "recommendations_count": len(analysis_results.get("recommendations", [])),
+                        "processing_time": processing_time
+                    }
+                    
+                    await self.websocket_manager.send_message(
+                        session_id,
+                        WebSocketEvents.analysis_completed(contract_id, summary)
+                    )
+                    
+                    # Update analysis status
+                    if contract_id in self.active_analyses:
+                        self.active_analyses[contract_id]["status"] = "completed"
+                        self.active_analyses[contract_id]["summary"] = summary
+            
+            # Create enhanced response
+            response = self._create_analysis_response(final_state, processing_time)
+            
+            logger.debug(f"Analysis response created for session {session_id}")
+            return response
+            
+        except Exception as e:
+            processing_time = (datetime.now(UTC) - start_time).total_seconds()
+            self._service_metrics["failed_analyses"] += 1
+            
+            error_msg = f"Contract analysis failed: {str(e)}"
+            logger.error(f"{error_msg} (processing time: {processing_time:.2f}s)")
+            
+            # Send WebSocket error event if enabled
+            if use_websocket_progress and self.websocket_manager:
+                await self.websocket_manager.send_message(
+                    session_id,
+                    WebSocketEvents.analysis_failed(
+                        session_id,
+                        f"Analysis service error: {str(e)}",
+                        retry_available=True
+                    )
+                )
+            
+            return self._create_error_response(error_msg, session_id, start_time)
 
     async def start_analysis(
         self,
@@ -43,106 +297,224 @@ class ContractAnalysisService:
         user_type: str = "buyer"
     ) -> Dict[str, Any]:
         """
-        Start contract analysis with real-time progress tracking
+        Start contract analysis with real-time progress tracking (backward compatibility method)
+        
+        This method delegates to analyze_contract with WebSocket progress enabled.
         """
         
-        try:
-            # Create initial state
-            initial_state = create_initial_state(
-                user_id=user_id,
-                australian_state=australian_state,
-                user_type=user_type,
-                user_preferences=user_preferences or {}
-            )
-            
-            # Override session_id if provided
-            initial_state["session_id"] = session_id
-            initial_state["document_data"] = document_data
-            
-            # Store analysis info
-            contract_id = initial_state["session_id"]
-            self.active_analyses[contract_id] = {
-                "start_time": datetime.now(UTC),
-                "user_id": user_id,
-                "session_id": session_id,
-                "status": "starting",
-                "progress": 0
-            }
-            
-            # Send analysis started event
-            await self.websocket_manager.send_message(
-                session_id,
-                WebSocketEvents.analysis_started(contract_id, estimated_time=3)
-            )
-            
-            # Execute analysis with progress tracking
-            final_state = await self._execute_with_progress_tracking(
-                initial_state, session_id, contract_id
-            )
-            
-            # Send completion event
-            if final_state.get("error_state"):
-                await self.websocket_manager.send_message(
-                    session_id,
-                    WebSocketEvents.analysis_failed(
-                        contract_id,
-                        final_state["error_state"],
-                        retry_available=True
-                    )
-                )
-                
-                # Update analysis status
-                self.active_analyses[contract_id]["status"] = "failed"
-                self.active_analyses[contract_id]["error"] = final_state["error_state"]
-                
-            else:
-                # Create analysis summary
-                analysis_results = final_state.get("analysis_results", {})
-                summary = {
-                    "overall_confidence": analysis_results.get("overall_confidence", 0),
-                    "risk_score": analysis_results.get("risk_assessment", {}).get("overall_risk_score", 0),
-                    "compliance_status": analysis_results.get("compliance_check", {}).get("state_compliance", False),
-                    "recommendations_count": len(analysis_results.get("recommendations", [])),
-                    "processing_time": final_state.get("processing_time", 0)
-                }
-                
-                await self.websocket_manager.send_message(
-                    session_id,
-                    WebSocketEvents.analysis_completed(contract_id, summary)
-                )
-                
-                # Update analysis status
-                self.active_analyses[contract_id]["status"] = "completed"
-                self.active_analyses[contract_id]["summary"] = summary
-            
+        # Convert AustralianState enum to string if needed
+        state_str = australian_state.value if hasattr(australian_state, 'value') else str(australian_state)
+        
+        # Delegate to the unified analyze_contract method with WebSocket progress enabled
+        result = await self.analyze_contract(
+            document_data=document_data,
+            user_id=user_id,
+            australian_state=state_str,
+            user_preferences=user_preferences,
+            session_id=session_id,
+            user_type=user_type,
+            enable_websocket_progress=True
+        )
+        
+        # Transform response to match original format
+        if result["success"]:
             return {
                 "success": True,
-                "contract_id": contract_id,
-                "session_id": session_id,
-                "final_state": final_state,
-                "analysis_results": final_state.get("analysis_results", {}),
-                "processing_time": final_state.get("processing_time", 0)
+                "contract_id": result["session_id"],
+                "session_id": result["session_id"],
+                "final_state": result.get("analysis_results", {}),
+                "analysis_results": result.get("analysis_results", {}),
+                "processing_time": result["processing_time_seconds"]
             }
-            
-        except Exception as e:
-            logger.error(f"Analysis failed for session {session_id}: {str(e)}")
-            
-            # Send error event
-            if session_id:
-                await self.websocket_manager.send_message(
-                    session_id,
-                    WebSocketEvents.analysis_failed(
-                        session_id,
-                        f"Analysis service error: {str(e)}",
-                        retry_available=True
-                    )
-                )
-            
+        else:
             return {
                 "success": False,
-                "error": str(e),
+                "error": result["error"],
                 "session_id": session_id
             }
+
+    def _validate_analysis_inputs(
+        self,
+        document_data: Dict[str, Any],
+        user_id: str,
+        australian_state: str,
+        contract_type: str
+    ) -> Dict[str, Any]:
+        """Validate analysis inputs"""
+        
+        errors = []
+        warnings = []
+        
+        # Validate document data
+        if not document_data:
+            errors.append("Document data is required")
+        elif not isinstance(document_data, dict):
+            errors.append("Document data must be a dictionary")
+        else:
+            if not document_data.get("content") and not document_data.get("file_path"):
+                errors.append("Document content or file path is required")
+        
+        # Validate user ID
+        if not user_id or not isinstance(user_id, str):
+            errors.append("Valid user ID is required")
+        
+        # Validate Australian state
+        try:
+            AustralianState(australian_state.upper())
+        except (ValueError, AttributeError):
+            errors.append(f"Invalid Australian state: {australian_state}")
+        
+        # Validate contract type
+        valid_contract_types = ["purchase_agreement", "lease_agreement", "rental_agreement"]
+        if contract_type not in valid_contract_types:
+            warnings.append(f"Unrecognized contract type: {contract_type}")
+        
+        return {
+            "valid": len(errors) == 0,
+            "errors": errors,
+            "warnings": warnings
+        }
+    
+    def _create_initial_state(
+        self,
+        document_data: Dict[str, Any],
+        user_id: str,
+        australian_state: AustralianState,
+        user_preferences: Dict[str, Any],
+        session_id: str,
+        contract_type: str,
+        user_experience: str,
+        user_type: str
+    ) -> RealEstateAgentState:
+        """Create initial state for workflow"""
+        
+        return RealEstateAgentState(
+            session_id=session_id,
+            user_id=user_id,
+            australian_state=australian_state,
+            document_data=document_data,
+            user_preferences=user_preferences,
+            user_type=user_type,
+            contract_type=contract_type,
+            user_experience=user_experience,
+            current_step="initialized",
+            agent_version="unified_v1.0",
+            created_at=datetime.now(UTC).isoformat(),
+            workflow_config={
+                "validation_enabled": self.config.enable_validation,
+                "quality_checks_enabled": self.config.enable_quality_checks,
+                "prompt_manager_enabled": self.config.enable_prompt_manager,
+                "structured_parsing_enabled": self.config.enable_structured_parsing
+            },
+            confidence_scores={},
+            parsing_status=ProcessingStatus.PENDING
+        )
+    
+    def _create_analysis_response(
+        self,
+        final_state: RealEstateAgentState,
+        processing_time: float
+    ) -> Dict[str, Any]:
+        """Create enhanced analysis response"""
+        
+        analysis_results = final_state.get("analysis_results", {})
+        
+        # Create comprehensive response
+        response = {
+            "success": final_state.get("parsing_status") == ProcessingStatus.COMPLETED or not final_state.get("error_state"),
+            "session_id": final_state.get("session_id"),
+            "analysis_timestamp": datetime.now(UTC).isoformat(),
+            "processing_time_seconds": processing_time,
+            "workflow_version": "unified_v1.0",
+            
+            # Core analysis results
+            "analysis_results": analysis_results,
+            "report_data": final_state.get("report_data", {}),
+            
+            # Enhanced metadata
+            "quality_metrics": {
+                "overall_confidence": analysis_results.get("overall_confidence", 0),
+                "confidence_breakdown": analysis_results.get("confidence_breakdown", {}),
+                "quality_assessment": analysis_results.get("confidence_assessment", ""),
+                "processing_quality": analysis_results.get("quality_metrics", {}),
+                "document_quality": final_state.get("document_quality_metrics", {}),
+                "validation_results": final_state.get("quality_metrics", {}).get("validation_results", {})
+            },
+            
+            # Workflow execution details
+            "workflow_metadata": {
+                "steps_completed": final_state.get("progress", {}).get("current_step", 0),
+                "total_steps": final_state.get("progress", {}).get("total_steps", 0),
+                "progress_percentage": final_state.get("progress", {}).get("percentage", 0),
+                "configuration": final_state.get("workflow_config", {}),
+                "performance_metrics": self.workflow.get_workflow_metrics() if hasattr(self.workflow, 'get_workflow_metrics') else {},
+                "service_metrics": self._service_metrics
+            },
+            
+            # Error information (if any)
+            "errors": final_state.get("error_state"),
+            "warnings": self._extract_warnings_from_state(final_state),
+            
+            # Enhanced features status
+            "enhancement_features": {
+                "structured_parsing_used": True,
+                "prompt_manager_used": self.config.enable_prompt_manager,
+                "validation_performed": self.config.enable_validation,
+                "quality_checks_performed": self.config.enable_quality_checks,
+                "enhanced_error_handling": self.config.enable_enhanced_error_handling,
+                "fallback_mechanisms_available": self.config.enable_fallback_mechanisms
+            }
+        }
+        
+        return response
+    
+    def _create_error_response(
+        self,
+        error_message: str,
+        session_id: str,
+        start_time: datetime
+    ) -> Dict[str, Any]:
+        """Create error response"""
+        
+        processing_time = (datetime.now(UTC) - start_time).total_seconds()
+        
+        return {
+            "success": False,
+            "session_id": session_id,
+            "error": error_message,
+            "analysis_timestamp": datetime.now(UTC).isoformat(),
+            "processing_time_seconds": processing_time,
+            "workflow_version": "unified_v1.0",
+            "service_metrics": self._service_metrics,
+            "configuration_status": self.config.validate_config() if hasattr(self.config, 'validate_config') else {}
+        }
+    
+    def _extract_warnings_from_state(self, state: RealEstateAgentState) -> List[str]:
+        """Extract warnings from workflow state"""
+        
+        warnings = []
+        
+        # Document quality warnings
+        doc_quality = state.get("document_quality_metrics", {})
+        if doc_quality.get("issues_identified"):
+            warnings.extend(doc_quality["issues_identified"])
+        
+        # Compliance warnings
+        compliance_check = state.get("compliance_check", {})
+        if compliance_check.get("warnings"):
+            warnings.extend(compliance_check["warnings"])
+        
+        # Terms validation warnings
+        terms_validation = state.get("terms_validation", {})
+        if terms_validation.get("missing_mandatory_terms"):
+            warnings.append(f"Missing mandatory terms: {', '.join(terms_validation['missing_mandatory_terms'])}")
+        
+        # Final output validation warnings
+        final_validation = state.get("final_output_validation", {})
+        if not final_validation.get("validation_passed", True):
+            warnings.append("Final output validation failed")
+        
+        return warnings
 
     async def _execute_with_progress_tracking(
         self,
@@ -342,3 +714,148 @@ class ContractAnalysisService:
             "status_breakdown": status_counts,
             "active_count": self.get_active_analyses_count()
         }
+
+    async def get_service_health(self) -> Dict[str, Any]:
+        """Get service health status"""
+        
+        health_status = {
+            "status": "healthy",
+            "timestamp": datetime.now(UTC).isoformat(),
+            "version": "unified_v1.0",
+            "configuration": self.config.validate_config() if hasattr(self.config, 'validate_config') else {},
+            "metrics": self._service_metrics,
+            "components": {}
+        }
+        
+        # Check workflow health
+        try:
+            workflow_metrics = self.workflow.get_workflow_metrics() if hasattr(self.workflow, 'get_workflow_metrics') else {}
+            health_status["components"]["workflow"] = {
+                "status": "healthy",
+                "metrics": workflow_metrics
+            }
+        except Exception as e:
+            health_status["components"]["workflow"] = {
+                "status": "error",
+                "error": str(e)
+            }
+            health_status["status"] = "degraded"
+        
+        # Check prompt manager health
+        if self.prompt_manager:
+            try:
+                pm_health = await self.prompt_manager.health_check() if hasattr(self.prompt_manager, 'health_check') else {"status": "healthy"}
+                health_status["components"]["prompt_manager"] = pm_health
+                if pm_health.get("status") != "healthy":
+                    health_status["status"] = "degraded"
+            except Exception as e:
+                health_status["components"]["prompt_manager"] = {
+                    "status": "error",
+                    "error": str(e)
+                }
+                health_status["status"] = "degraded"
+        else:
+            health_status["components"]["prompt_manager"] = {
+                "status": "disabled"
+            }
+        
+        # Check WebSocket manager health
+        if self.websocket_manager:
+            health_status["components"]["websocket_manager"] = {
+                "status": "healthy",
+                "progress_tracking_enabled": self.enable_websocket_progress
+            }
+        else:
+            health_status["components"]["websocket_manager"] = {
+                "status": "disabled"
+            }
+        
+        return health_status
+    
+    def get_service_metrics(self) -> Dict[str, Any]:
+        """Get comprehensive service metrics"""
+        
+        metrics = {
+            "service_metrics": self._service_metrics,
+            "configuration": self.config.validate_config() if hasattr(self.config, 'validate_config') else {},
+            "workflow_metrics": self.workflow.get_workflow_metrics() if hasattr(self.workflow, 'get_workflow_metrics') else {},
+            "websocket_metrics": {
+                "active_analyses_count": self.get_active_analyses_count(),
+                "total_analyses": len(self.active_analyses),
+                "progress_tracking_enabled": self.enable_websocket_progress
+            },
+            "timestamp": datetime.now(UTC).isoformat()
+        }
+        
+        if self.prompt_manager and hasattr(self.prompt_manager, 'get_metrics'):
+            try:
+                metrics["prompt_manager_metrics"] = self.prompt_manager.get_metrics()
+            except Exception as e:
+                metrics["prompt_manager_error"] = str(e)
+        
+        return metrics
+    
+    async def reload_configuration(self, new_config: Optional[EnhancedWorkflowConfig] = None) -> Dict[str, Any]:
+        """Reload service configuration"""
+        
+        try:
+            if new_config:
+                self.config = new_config
+            else:
+                self.config = get_enhanced_workflow_config()
+            
+            # Validate new configuration
+            config_validation = validate_workflow_configuration(self.config)
+            if not config_validation["valid"]:
+                raise ValueError(f"Invalid configuration: {'; '.join(config_validation['issues'])}")
+            
+            # Reload prompt manager if enabled
+            if self.config.enable_prompt_manager and self.prompt_manager and hasattr(self.prompt_manager, 'reload_templates'):
+                await self.prompt_manager.reload_templates()
+            
+            logger.info("Service configuration reloaded successfully")
+            
+            return {
+                "success": True,
+                "message": "Configuration reloaded successfully",
+                "validation": config_validation,
+                "timestamp": datetime.now(UTC).isoformat()
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to reload configuration: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "timestamp": datetime.now(UTC).isoformat()
+            }
+
+
+# Service factory function
+def create_contract_analysis_service(
+    websocket_manager: Optional[WebSocketManager] = None,
+    openai_api_key: str = None,
+    model_name: str = "gpt-4",
+    openai_api_base: Optional[str] = None,
+    use_environment_config: bool = True,
+    enable_websocket_progress: bool = True
+) -> ContractAnalysisService:
+    """Create unified contract analysis service with default configuration"""
+    
+    config = get_enhanced_workflow_config(use_environment_config)
+    
+    return ContractAnalysisService(
+        websocket_manager=websocket_manager,
+        openai_api_key=openai_api_key,
+        model_name=model_name,
+        openai_api_base=openai_api_base,
+        config=config,
+        enable_websocket_progress=enable_websocket_progress
+    )
+
+
+# Export service and factory
+__all__ = [
+    'ContractAnalysisService',
+    'create_contract_analysis_service'
+]
