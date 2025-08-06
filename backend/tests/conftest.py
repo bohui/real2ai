@@ -68,7 +68,7 @@ def client(test_user, mock_db_client, test_settings) -> Generator[TestClient, No
     from app.clients.factory import get_supabase_client as real_get_supabase_client
     
     with patch.object(app.main, 'db_client', mock_db_client):
-        # Also patch the get_database_client function directly in all modules that import it
+        # Also patch the get_supabase_client function directly in all modules that import it
         with patch('app.clients.factory.get_supabase_client', return_value=mock_db_client):
             with patch('app.router.documents.get_supabase_client', return_value=mock_db_client):
                 # Mock document service

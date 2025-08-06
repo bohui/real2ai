@@ -11,11 +11,11 @@ from datetime import datetime, UTC
 from app.core.auth import get_current_user_ws
 from app.services.websocket_service import WebSocketEvents
 from app.services.websocket_singleton import websocket_manager
-from app.core.database import get_service_database_client
+from app.clients.factory import get_service_supabase_client
 from app.services.redis_pubsub import redis_pubsub_service
 
-# Initialize database client for polling
-db_client = get_service_database_client()
+# Database client will be initialized lazily when needed
+db_client = None
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/ws", tags=["websockets"])
@@ -66,8 +66,9 @@ async def contract_analysis_websocket(
             return
 
         # Initialize database client for this connection
-        if not hasattr(db_client, "_client") or db_client._client is None:
-            await db_client.initialize()
+        global db_client
+        if db_client is None:
+            db_client = await get_service_supabase_client()
         
         # Step 4: Register with connection manager (websocket accepted and authenticated)
         await websocket_manager.connect(
@@ -193,11 +194,10 @@ async def handle_client_message(
 
     elif message_type == "get_status":
         # Request current analysis status
-        from app.core.database import get_service_database_client
+        from app.clients.factory import get_service_supabase_client
 
         try:
-            db_client = get_service_database_client()
-            await db_client.initialize()
+            db_client = await get_service_supabase_client()
 
             # First try to get detailed progress from analysis_progress table
             progress_result = (

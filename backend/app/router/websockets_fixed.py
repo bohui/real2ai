@@ -181,11 +181,10 @@ async def handle_client_message(
 
 async def handle_status_request(websocket: WebSocket, contract_id: str, user_id: str):
     """Handle status request with proper error handling."""
-    from app.core.database import get_service_database_client
+    from app.clients.factory import get_service_supabase_client
 
     try:
-        db_client = get_service_database_client()
-        await db_client.initialize()
+        db_client = await get_service_supabase_client()
 
         # Get detailed progress from analysis_progress table
         progress_result = (

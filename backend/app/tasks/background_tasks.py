@@ -14,7 +14,7 @@ from app.models.contract_state import (
     create_initial_state,
 )
 from app.agents.contract_workflow import ContractAnalysisWorkflow
-from app.core.database import get_service_database_client
+from app.clients.factory import get_service_supabase_client
 from app.services.document_service import DocumentService
 from app.services.websocket_service import WebSocketEvents
 from app.services.websocket_singleton import websocket_manager
@@ -58,7 +58,7 @@ def process_document_background(
                     contract_type=contract_type,
                 )
                 # Get service database client (has elevated permissions)
-                db_client = get_service_database_client()
+                db_client = await get_service_supabase_client()
                 if not hasattr(db_client, "_client") or db_client._client is None:
                     await db_client.initialize()
 
@@ -217,7 +217,7 @@ def analyze_contract_background(
 
         try:
             # Get service database client (has elevated permissions)
-            db_client = get_service_database_client()
+            db_client = await get_service_supabase_client()
             if not hasattr(db_client, "_client") or db_client._client is None:
                 await db_client.initialize()
 

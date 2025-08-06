@@ -138,7 +138,7 @@ python -c "import app" 2>/dev/null || {
 # Check database connection (if needed)
 if [[ "$TEST_TYPE" == "integration" || "$TEST_TYPE" == "all" ]]; then
     print_status "Checking database connection..."
-    python -c "from app.core.database import get_supabase_client; get_supabase_client()" 2>/dev/null || {
+    python -c "import asyncio; from app.clients.factory import get_supabase_client; asyncio.run(get_supabase_client())" 2>/dev/null || {
         print_warning "Database connection failed. Integration tests may fail."
     }
 fi

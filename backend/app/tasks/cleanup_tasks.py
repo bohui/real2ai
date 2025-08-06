@@ -6,7 +6,7 @@ from typing import List, Dict, Any
 from datetime import datetime, timedelta, UTC
 
 from app.core.celery import celery_app
-from app.core.database import get_service_database_client
+from app.clients.factory import get_service_supabase_client
 from app.services.document_service import DocumentService
 
 logger = logging.getLogger(__name__)
@@ -22,9 +22,7 @@ def cleanup_orphaned_documents(self):
 
         try:
             # Get service database client (elevated permissions)
-            db_client = get_service_database_client()
-            if not hasattr(db_client, "_client") or db_client._client is None:
-                await db_client.initialize()
+            db_client = await get_service_supabase_client()
 
             # Find documents that might be orphaned (uploaded/processing status, older than 1 hour)
             cutoff_time = datetime.now(UTC) - timedelta(hours=1)
@@ -92,9 +90,7 @@ def cleanup_failed_analyses(self):
 
         try:
             # Get service database client (elevated permissions)
-            db_client = get_service_database_client()
-            if not hasattr(db_client, "_client") or db_client._client is None:
-                await db_client.initialize()
+            db_client = await get_service_supabase_client()
 
             # Find failed analyses older than 24 hours
             cutoff_time = datetime.now(UTC) - timedelta(hours=24)
@@ -159,9 +155,7 @@ def verify_storage_consistency(self):
 
         try:
             # Get service database client (elevated permissions)
-            db_client = get_service_database_client()
-            if not hasattr(db_client, "_client") or db_client._client is None:
-                await db_client.initialize()
+            db_client = await get_service_supabase_client()
 
             # Get all processed documents from last 7 days
             cutoff_time = datetime.now(UTC) - timedelta(days=7)

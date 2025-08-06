@@ -263,3 +263,27 @@ async def get_corelogic_client() -> CoreLogicClient:
     if not client.is_initialized:
         await factory.initialize_client("corelogic")
     return client
+
+
+async def get_service_supabase_client() -> SupabaseClient:
+    """Get initialized Supabase client with service role permissions."""
+    factory = get_client_factory()
+    client = factory.get_client("supabase")
+    if not client.is_initialized:
+        await factory.initialize_client("supabase")
+    
+    # Create a service role client with elevated permissions
+    from supabase import create_client
+    service_client = create_client(
+        client.config.url,
+        client.config.service_key  # Use service key instead of anon key
+    )
+    
+    # Replace the underlying client with service role client
+    client._supabase_client = service_client
+    # Re-initialize database client with service permissions
+    from .supabase.database_client import SupabaseDatabaseClient
+    client._db_client = SupabaseDatabaseClient(service_client, client.config)
+    await client._db_client.initialize()
+    
+    return client
