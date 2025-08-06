@@ -30,39 +30,44 @@ const DashboardPage: React.FC = () => {
     if (analysis.contract_terms?.property_address) {
       return `Property Contract - ${analysis.contract_terms.property_address}`;
     }
-    if (analysis.contract_terms?.parties?.buyer && analysis.contract_terms?.parties?.seller) {
+    if (
+      analysis.contract_terms?.parties?.buyer &&
+      analysis.contract_terms?.parties?.seller
+    ) {
       return `${analysis.contract_terms.parties.buyer} ← ${analysis.contract_terms.parties.seller}`;
     }
     if (analysis.contract_terms?.contract_type) {
       const typeMap: Record<string, string> = {
-        'purchase_agreement': 'Purchase Agreement',
-        'lease_agreement': 'Lease Agreement',
-        'off_plan': 'Off-Plan Purchase',
-        'auction': 'Auction Contract'
+        purchase_agreement: "Purchase Agreement",
+        lease_agreement: "Lease Agreement",
+        off_plan: "Off-Plan Purchase",
+        auction: "Auction Contract",
       };
-      return typeMap[analysis.contract_terms.contract_type] || 'Contract Analysis';
+      return (
+        typeMap[analysis.contract_terms.contract_type] || "Contract Analysis"
+      );
     }
-    return 'Contract Analysis';
+    return "Contract Analysis";
   };
 
   // Helper function to get risk level text
   const getRiskLevelText = (score: number) => {
-    if (score >= 7) return 'High Risk';
-    if (score >= 5) return 'Medium Risk';
-    return 'Low Risk';
+    if (score >= 7) return "High Risk";
+    if (score >= 5) return "Medium Risk";
+    return "Low Risk";
   };
 
   // Helper function to get state context
   const getStateContext = (state: string) => {
     const stateNames: Record<string, string> = {
-      'NSW': 'New South Wales',
-      'VIC': 'Victoria',
-      'QLD': 'Queensland',
-      'SA': 'South Australia',
-      'WA': 'Western Australia',
-      'TAS': 'Tasmania',
-      'NT': 'Northern Territory', 
-      'ACT': 'Australian Capital Territory'
+      NSW: "New South Wales",
+      VIC: "Victoria",
+      QLD: "Queensland",
+      SA: "South Australia",
+      WA: "Western Australia",
+      TAS: "Tasmania",
+      NT: "Northern Territory",
+      ACT: "Australian Capital Territory",
     };
     return stateNames[state] || state;
   };
@@ -153,15 +158,23 @@ const DashboardPage: React.FC = () => {
                 Here's what's happening with your contract analyses
               </p>
               <div className="flex items-center gap-3">
-                <StatusBadge 
-                  status={user?.subscription_status === 'premium' ? 'premium' : 'verified'} 
+                <StatusBadge
+                  status={
+                    user?.subscription_status === "premium"
+                      ? "premium"
+                      : "verified"
+                  }
                   size="sm"
                   variant="outline"
-                  label={user?.subscription_status === 'premium' ? 'Premium Account' : 'Standard Account'}
+                  label={
+                    user?.subscription_status === "premium"
+                      ? "Premium Account"
+                      : "Standard Account"
+                  }
                 />
-                <StatusBadge 
-                  status="verified" 
-                  size="sm" 
+                <StatusBadge
+                  status="verified"
+                  size="sm"
                   variant="dot"
                   label="Australian Legal Compliance"
                 />
@@ -171,10 +184,13 @@ const DashboardPage: React.FC = () => {
               <div className="text-right">
                 <div className="text-sm text-neutral-500 mb-1">Last login</div>
                 <div className="font-semibold text-neutral-900">
-                  {new Date().toLocaleDateString('en-AU')}
+                  {new Date().toLocaleDateString("en-AU")}
                 </div>
                 <div className="text-xs text-neutral-500">
-                  {new Date().toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}
+                  {new Date().toLocaleTimeString("en-AU", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
                 </div>
               </div>
               <div className="w-16 h-16 bg-gradient-to-br from-primary-500 to-trust-500 rounded-full flex items-center justify-center text-white font-bold text-xl">
@@ -197,9 +213,9 @@ const DashboardPage: React.FC = () => {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3, delay: index * 0.1 }}
             >
-              <Card 
-                variant="elevated" 
-                interactive 
+              <Card
+                variant="elevated"
+                interactive
                 className="hover:shadow-xl group transition-all duration-300"
               >
                 <CardContent padding="lg">
@@ -267,7 +283,9 @@ const DashboardPage: React.FC = () => {
         <div className="lg:col-span-1">
           <Card variant="elevated" className="h-fit">
             <CardHeader padding="lg">
-              <CardTitle className="text-xl font-heading font-semibold">Quick Actions</CardTitle>
+              <CardTitle className="text-xl font-heading font-semibold">
+                Quick Actions
+              </CardTitle>
             </CardHeader>
             <CardContent padding="none">
               <div className="space-y-1">
@@ -314,11 +332,17 @@ const DashboardPage: React.FC = () => {
           <Card variant="elevated">
             <CardHeader padding="lg">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-xl font-heading font-semibold">Recent Contract Analyses</CardTitle>
+                <CardTitle className="text-xl font-heading font-semibold">
+                  Recent Contract Analyses
+                </CardTitle>
                 <Link to="/app/history">
-                  <Button variant="outline" size="sm" className="group">
-                    View all analyses
-                    <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="group flex items-center gap-2"
+                  >
+                    <span>View all analyses</span>
+                    <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                   </Button>
                 </Link>
               </div>
@@ -343,21 +367,21 @@ const DashboardPage: React.FC = () => {
                     Welcome to Real2.AI
                   </h3>
                   <p className="text-lg text-neutral-600 mb-8 max-w-lg mx-auto">
-                    Upload your first contract to experience AI-powered analysis 
+                    Upload your first contract to experience AI-powered analysis
                     tailored for Australian legal professionals
                   </p>
                   <div className="space-y-4 max-w-sm mx-auto">
                     <Link to="/app/analysis">
-                      <Button 
-                        variant="primary" 
-                        size="lg" 
-                        gradient 
-                        elevated 
+                      <Button
+                        variant="primary"
+                        size="lg"
+                        gradient
+                        elevated
                         fullWidth
-                        className="group"
+                        className="group flex items-center gap-2"
                       >
-                        Upload Your First Contract
-                        <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
+                        <span>Upload Your First Contract</span>
+                        <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                       </Button>
                     </Link>
                     <div className="flex items-center justify-center gap-4 text-sm text-neutral-500">
@@ -412,9 +436,7 @@ const DashboardPage: React.FC = () => {
               <div className="font-medium text-neutral-700 mb-1">
                 Property Value Growth
               </div>
-              <div className="text-xs text-neutral-500">
-                National Average
-              </div>
+              <div className="text-xs text-neutral-500">National Average</div>
             </div>
             <div className="text-center">
               <div className="w-16 h-16 bg-warning-100 rounded-full flex items-center justify-center mx-auto mb-3">
@@ -423,7 +445,9 @@ const DashboardPage: React.FC = () => {
               <div className="text-3xl font-heading font-bold text-warning-600 mb-2">
                 28 days
               </div>
-              <div className="font-medium text-neutral-700 mb-1">Settlement Period</div>
+              <div className="font-medium text-neutral-700 mb-1">
+                Settlement Period
+              </div>
               <div className="text-xs text-neutral-500">Average</div>
             </div>
           </div>
