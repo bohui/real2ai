@@ -48,24 +48,40 @@ async def start_contract_analysis(
     )
 
     try:
-        # Validate request parameters
+        # Enhanced request validation with detailed logging
+        logger.info(f"Contract analysis request from user {user.id}: document_id={request.document_id}")
+        
         if not request.document_id:
+            logger.warning(f"Missing document_id in request from user {user.id}")
             raise ValueError("Document ID is required")
 
         if not user.australian_state:
+            logger.warning(f"User {user.id} has no australian_state configured")
             raise ValueError(
                 "Australian state is required for accurate contract analysis"
             )
 
-        # Check user credits with user-friendly messaging
+        # Check user credits with detailed logging
+        logger.debug(f"User {user.id} credits: {user.credits_remaining}, subscription: {user.subscription_status}")
         if user.credits_remaining <= 0 and user.subscription_status == "free":
+            logger.warning(f"User {user.id} has insufficient credits: {user.credits_remaining}")
             raise ValueError("You don't have enough credits to analyze this contract")
 
         # Get user-authenticated client through document service
-        user_client = await document_service.get_user_client()
+        try:
+            user_client = await document_service.get_user_client()
+            logger.debug(f"Successfully obtained user client for user {user.id}")
+        except Exception as e:
+            logger.error(f"Failed to get user client for user {user.id}: {str(e)}")
+            raise ValueError("Authentication failed - please try logging in again")
 
         # Get document with user context (RLS enforced)
-        document = await _get_user_document(user_client, request.document_id, user.id)
+        try:
+            document = await _get_user_document(user_client, request.document_id, user.id)
+            logger.debug(f"Successfully retrieved document {request.document_id} for user {user.id}")
+        except Exception as e:
+            logger.error(f"Failed to retrieve document {request.document_id} for user {user.id}: {str(e)}")
+            raise
 
         # Validate document is suitable for analysis
         if not _is_valid_contract_document(document):
@@ -127,14 +143,24 @@ async def _initialize_database_client(db_client):
 @retry_database_operation(max_attempts=3)
 async def _get_user_document(user_client, document_id: str, user_id: str):
     """Get user document with user context (RLS enforced)"""
-    doc_result = await user_client.database.select(
-        "documents", columns="*", filters={"id": document_id, "user_id": user_id}
-    )
-
-    if not doc_result.get("data"):
-        raise ValueError(f"Document not found or you don't have access to it")
-
-    return doc_result["data"][0]
+    try:
+        doc_result = await user_client.database.select(
+            "documents", columns="*", filters={"id": document_id, "user_id": user_id}
+        )
+        
+        logger.debug(f"Document query result for {document_id}: {doc_result is not None}")
+        
+        if not doc_result.get("data"):
+            logger.warning(f"Document {document_id} not found for user {user_id}")
+            raise ValueError(f"Document not found or you don't have access to it")
+        
+        document = doc_result["data"][0]
+        logger.debug(f"Retrieved document: id={document.get('id')}, status={document.get('processing_status')}")
+        return document
+        
+    except Exception as e:
+        logger.error(f"Database error retrieving document {document_id} for user {user_id}: {str(e)}")
+        raise ValueError(f"Failed to retrieve document: {str(e)}")
 
 
 def _is_valid_contract_document(document) -> bool:

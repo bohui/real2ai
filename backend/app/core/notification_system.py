@@ -484,7 +484,7 @@ class NotificationSystem:
                 "data": notification.to_dict()
             }
             
-            await redis_pubsub_service.publish_message(channel, message)
+            await redis_pubsub_service.publish_progress(notification.user_id, message)
             
         except Exception as e:
             logger.error(f"Failed to send pub/sub notification: {e}")
