@@ -222,9 +222,8 @@ class SupabaseClient(BaseClient):
         try:
             # Set the auth header for all subsequent requests
             if self._supabase_client:
-                # Update the auth header in the underlying client
-                self._supabase_client.auth.set_session(token, None)
-                # Also update the postgrest client headers for database operations
+                # For JWT token authentication, we only need to set the auth header
+                # Don't use set_session as it expects access_token and refresh_token
                 self._supabase_client.postgrest.auth(token)
                 self.logger.debug("User JWT token set for RLS operations")
             else:
