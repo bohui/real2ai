@@ -81,7 +81,7 @@ class DocumentDetails(BaseModel):
     file_size: int
     status: str  # uploaded, processing, processed, failed
     storage_path: str
-    upload_timestamp: datetime
+    created_at: datetime
     processing_results: Optional[Dict[str, Any]] = None
 
 

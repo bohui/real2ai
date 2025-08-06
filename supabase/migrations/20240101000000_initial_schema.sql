@@ -73,7 +73,7 @@ CREATE TABLE documents (
     processing_errors JSONB,
     processing_notes TEXT,
     
-    upload_timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW(), -- Renamed from created_at
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -373,7 +373,7 @@ CREATE INDEX idx_documents_document_type ON documents(document_type);
 CREATE INDEX idx_documents_australian_state ON documents(australian_state);
 CREATE INDEX idx_documents_contract_type ON documents(contract_type);
 CREATE INDEX idx_documents_has_diagrams ON documents(has_diagrams);
-CREATE INDEX idx_documents_created_at ON documents(created_at DESC);
+CREATE INDEX idx_documents_created_at ON documents(upload_timestamp DESC);
 
 CREATE INDEX idx_contracts_user_id ON contracts(user_id);
 CREATE INDEX idx_contracts_document_id ON contracts(document_id);

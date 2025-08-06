@@ -41,7 +41,10 @@ from app.models.document_models import (
     DiagramType,
     EntityType,
 )
-from backend.app.prompts.schema.entity_extraction_schema import AustralianState, ContractType
+from backend.app.prompts.schema.entity_extraction_schema import (
+    AustralianState,
+    ContractType,
+)
 from app.models.contract_state import ContractType as ContractStateType
 from app.services.gemini_ocr_service import GeminiOCRService
 from app.services.semantic_analysis_service import SemanticAnalysisService
@@ -375,7 +378,7 @@ class DocumentService:
                 "file_size": file_info["file_size"],
                 "content_hash": file_info["content_hash"],
                 "processing_status": ProcessingStatus.UPLOADED.value,
-                "upload_timestamp": datetime.now(UTC).isoformat(),
+                "updated_at": datetime.now(UTC).isoformat(),
                 "contract_type": contract_type,
                 "australian_state": australian_state,
                 "text_extraction_method": "pending",

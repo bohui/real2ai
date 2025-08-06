@@ -7,6 +7,7 @@ from datetime import datetime
 
 class DocumentUploadResponse(BaseModel):
     """Document upload response"""
+
     document_id: str
     filename: str
     file_size: int
@@ -16,6 +17,7 @@ class DocumentUploadResponse(BaseModel):
 
 class DocumentDetails(BaseModel):
     """Document details response"""
+
     id: str
     user_id: str
     filename: str
@@ -23,12 +25,13 @@ class DocumentDetails(BaseModel):
     file_size: int
     status: str  # uploaded, processing, processed, failed
     storage_path: str
-    upload_timestamp: datetime
+    created_at: datetime
     processing_results: Optional[Dict[str, Any]] = None
 
 
 class DocumentProcessingStatus(BaseModel):
     """Enhanced document processing status with OCR details"""
+
     document_id: str
     status: str  # uploaded, processing, processed, reprocessing_ocr, ocr_failed, failed
     extraction_confidence: float
@@ -42,19 +45,21 @@ class DocumentProcessingStatus(BaseModel):
 
 class ReportGenerationRequest(BaseModel):
     """Report generation request"""
+
     contract_id: str
     format: str = "pdf"  # pdf, html, json
     include_sections: List[str] = [
-        "executive_summary", 
-        "risk_assessment", 
-        "compliance_check", 
-        "recommendations"
+        "executive_summary",
+        "risk_assessment",
+        "compliance_check",
+        "recommendations",
     ]
     custom_branding: bool = False
 
 
 class ReportResponse(BaseModel):
     """Report response"""
+
     report_id: str
     download_url: str
     format: str
