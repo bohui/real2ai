@@ -11,6 +11,7 @@ from datetime import datetime, UTC
 from PIL import Image
 import fitz  # PyMuPDF
 from google import genai
+from google.genai.types import Content, Part, GenerateContentConfig
 
 from ..base.client import with_retry
 from ..base.exceptions import (
@@ -84,21 +85,21 @@ class GeminiOCRClient:
             prompt = "What text is visible in this image? If no text, respond with 'No text found'."
 
             # Create content with image
-            content = genai.types.Content(
+            content = Content(
+                role="user",
                 parts=[
-                    genai.types.Part(text=prompt),
-                    genai.types.Part(
-                        inline_data=genai.types.Blob(
-                            mime_type="image/png", data=img_bytes
-                        )
-                    ),
-                ]
+                    Part.from_text(text=prompt),
+                    Part.from_bytes(data=img_bytes, mime_type="image/png"),
+                ],
             )
 
+            config = GenerateContentConfig(
+                temperature=0.1,
+            )
             response = await asyncio.get_event_loop().run_in_executor(
                 None,
                 lambda: self.client.models.generate_content(
-                    model=self.config.model_name, contents=[content]
+                    model=self.config.model_name, contents=[content], config=config
                 ),
             )
 
@@ -290,14 +291,10 @@ class GeminiOCRClient:
             prompt = self._create_ocr_prompt(page_number, **kwargs)
 
             # Create content with image
-            content = genai.types.Content(
+            content = Content(
                 parts=[
-                    genai.types.Part(text=prompt),
-                    genai.types.Part(
-                        inline_data=genai.types.Blob(
-                            mime_type="image/png", data=img_data
-                        )
-                    ),
+                    Part.from_text(prompt),
+                    Part.from_data(img_data, mime_type="image/png"),
                 ]
             )
 
@@ -349,14 +346,10 @@ class GeminiOCRClient:
 
             # Create content with image
             mime_type = f"image/{content_type.replace('image/', '')}"
-            content = genai.types.Content(
+            content = Content(
                 parts=[
-                    genai.types.Part(text=prompt),
-                    genai.types.Part(
-                        inline_data=genai.types.Blob(
-                            mime_type=mime_type, data=enhanced_image
-                        )
-                    ),
+                    Part.from_text(prompt),
+                    Part.from_data(enhanced_image, mime_type=mime_type),
                 ]
             )
 
