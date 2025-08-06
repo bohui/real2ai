@@ -942,45 +942,45 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
         return tab_ratio > 0.3 or currency_lines > 2 or alignment_ratio > 0.4
 
     def _detect_diagrams_on_page(self, page: pymupdf.Page, text_content: str) -> bool:
-        """Comprehensive diagram detection"""
-
-        # Method 1: Check for embedded images
+        """Optimized diagram detection with text length preconditions"""
+        
+        # OPTIMIZATION 1: Text length precondition
+        text_length = len(text_content) if text_content else 0
+        
+        # Skip vector analysis for text-heavy pages (likely tables)
+        if text_length > 5000:  # Configurable threshold
+            # For long text pages, only check images and keywords
+            image_list = page.get_images()
+            if image_list:
+                return True
+                
+            # Enhanced keyword check for text-heavy pages
+            if text_content:
+                return self._has_diagram_keywords(text_content, strict_mode=True)
+            return False
+        
+        # Method 1: Check for embedded images (always check)
         image_list = page.get_images()
         if image_list:
             return True
-
-        # Method 2: Check for vector graphics
-        drawings = page.get_drawings()
-        if drawings:
-            return True
-
-        # Method 3: Text-based diagram indicators
+        
+        # OPTIMIZATION 2: Smart vector analysis (only for low-text pages)
+        if text_length < 1000:  # Only for low-text pages
+            drawings = page.get_drawings()
+            if drawings:
+                # Filter out table-like vector patterns
+                if self._is_likely_diagram_vectors(drawings, text_content):
+                    return True
+        elif text_length <= 5000:  # Medium text pages - limited vector check
+            drawings = page.get_drawings()
+            if drawings and len(drawings) <= 50:  # Only check if reasonable vector count
+                if self._is_likely_diagram_vectors(drawings, text_content):
+                    return True
+        
+        # Method 3: Enhanced keyword detection
         if text_content:
-            diagram_keywords = [
-                "diagram",
-                "plan",
-                "map",
-                "layout",
-                "site plan",
-                "floor plan",
-                "survey",
-                "boundary",
-                "title plan",
-                "sewer diagram",
-                "sewerage diagram",
-                "service diagram",
-                "utilities diagram",
-                "flood map",
-                "bushfire",
-                "drainage",
-                "contour",
-                "easement",
-                "zoning map",
-                "cadastral",
-            ]
-            text_lower = text_content.lower()
-            return any(keyword in text_lower for keyword in diagram_keywords)
-
+            return self._has_diagram_keywords(text_content)
+            
         return False
 
     def _detect_header_footer(self, text: str, position: str) -> bool:
