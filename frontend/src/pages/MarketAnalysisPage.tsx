@@ -268,7 +268,7 @@ const MarketAnalysisPage: React.FC = () => {
             </CardHeader>
             <CardContent padding="lg">
               <div className="space-y-4">
-                {mockMarketData.stateComparison.map((state) => (
+                {marketData ? marketData.stateComparison.map((state) => (
                   <div key={state.state} className="flex items-center justify-between p-4 bg-neutral-50 rounded-lg">
                     <div className="flex items-center gap-4">
                       <div className="w-10 h-10 bg-primary-100 rounded-lg flex items-center justify-center">
@@ -299,7 +299,11 @@ const MarketAnalysisPage: React.FC = () => {
                       {getTrendIcon(state.trend, "w-5 h-5")}
                     </div>
                   </div>
-                ))}
+                )) : (
+                  <div className="text-center py-4 text-neutral-500">
+                    Loading state comparison data...
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -400,7 +404,7 @@ const MarketAnalysisPage: React.FC = () => {
           </CardHeader>
           <CardContent padding="lg">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {mockMarketData.hotSuburbs.map((suburb, index) => (
+              {marketData ? marketData.hotSuburbs.map((suburb, index) => (
                 <Card key={suburb.name} variant="outlined" interactive>
                   <CardContent padding="lg">
                     <div className="flex items-start justify-between mb-4">
@@ -433,7 +437,11 @@ const MarketAnalysisPage: React.FC = () => {
                     </div>
                   </CardContent>
                 </Card>
-              ))}
+              )) : (
+                <div className="col-span-3 text-center py-4 text-neutral-500">
+                  Loading growth suburbs data...
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -454,7 +462,7 @@ const MarketAnalysisPage: React.FC = () => {
           </CardHeader>
           <CardContent padding="lg">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {mockMarketData.riskFactors.map((risk) => (
+              {marketData ? marketData.riskFactors.map((risk) => (
                 <div key={risk.factor} className="flex items-center justify-between p-4 bg-neutral-50 rounded-lg">
                   <div className="flex items-center gap-3">
                     <AlertCircle className={cn(
@@ -477,7 +485,11 @@ const MarketAnalysisPage: React.FC = () => {
                     <div className="text-xs text-neutral-500">Probability</div>
                   </div>
                 </div>
-              ))}
+              )) : (
+                <div className="col-span-2 text-center py-4 text-neutral-500">
+                  Loading risk factors data...
+                </div>
+              )}
             </div>
             
             <div className="mt-6 p-4 bg-gradient-to-r from-warning-50 to-danger-50 rounded-lg">
