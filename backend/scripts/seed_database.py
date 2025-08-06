@@ -9,6 +9,7 @@ import sys
 import json
 import logging
 import asyncio
+import argparse
 from datetime import datetime, timedelta
 from typing import List, Dict, Any
 from pathlib import Path
@@ -327,7 +328,9 @@ class DatabaseSeeder:
                     document_ids.append({**doc, "id": doc_id})
                     logger.info(f"Created sample document: {doc['original_filename']}")
                 except Exception as e:
-                    logger.error(f"Failed to create document {doc['original_filename']}: {e}")
+                    logger.error(
+                        f"Failed to create document {doc['original_filename']}: {e}"
+                    )
 
         finally:
             await conn.close()
@@ -636,18 +639,45 @@ class DatabaseSeeder:
         finally:
             await conn.close()
 
-    async def seed_all(self):
-        """Seed all sample data"""
+    async def seed_all(
+        self,
+        include_documents=False,
+        include_contracts=False,
+        include_analyses=False,
+        include_usage_logs=False,
+        include_property_data=False,
+    ):
+        """Seed sample data based on provided options"""
         logger.info("🌱 Starting database seeding...")
 
         try:
-            # Seed in dependency order
+            # Always seed demo users/profiles
             demo_users = await self.seed_demo_users()
-            documents = await self.seed_sample_documents(demo_users)
-            contracts = await self.seed_sample_contracts(documents)
-            await self.seed_sample_analyses(contracts)
-            await self.seed_usage_logs(demo_users)
-            await self.seed_property_data(contracts)
+            logger.info(f"✅ Created {len(demo_users)} demo user profiles")
+
+            # Seed additional data only if requested
+            documents = []
+            contracts = []
+
+            if include_documents:
+                documents = await self.seed_sample_documents(demo_users)
+                logger.info(f"✅ Created {len(documents)} sample documents")
+
+            if include_contracts and documents:
+                contracts = await self.seed_sample_contracts(documents)
+                logger.info(f"✅ Created {len(contracts)} sample contracts")
+
+            if include_analyses and contracts:
+                await self.seed_sample_analyses(contracts)
+                logger.info("✅ Created sample analyses")
+
+            if include_usage_logs:
+                await self.seed_usage_logs(demo_users)
+                logger.info("✅ Created usage logs")
+
+            if include_property_data and contracts:
+                await self.seed_property_data(contracts)
+                logger.info("✅ Created property data")
 
             logger.info("✅ Database seeding completed successfully!")
 
@@ -656,8 +686,65 @@ class DatabaseSeeder:
             raise
 
 
+def parse_arguments():
+    """Parse command line arguments"""
+    parser = argparse.ArgumentParser(
+        description="Seed the Real2.AI database with sample data",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python seed_database.py                    # Only create sample profiles
+  python seed_database.py --all              # Create all sample data
+  python seed_database.py --documents --contracts  # Create profiles, documents, and contracts
+  python seed_database.py --reset --all      # Reset and create all sample data
+        """,
+    )
+
+    parser.add_argument(
+        "--reset",
+        action="store_true",
+        help="Delete all existing data before seeding (requires confirmation)",
+    )
+
+    parser.add_argument(
+        "--all",
+        action="store_true",
+        help="Create all sample data (profiles, documents, contracts, analyses, usage logs, property data)",
+    )
+
+    parser.add_argument(
+        "--documents", action="store_true", help="Create sample documents"
+    )
+
+    parser.add_argument(
+        "--contracts",
+        action="store_true",
+        help="Create sample contracts (requires --documents)",
+    )
+
+    parser.add_argument(
+        "--analyses",
+        action="store_true",
+        help="Create sample analyses (requires --contracts)",
+    )
+
+    parser.add_argument(
+        "--usage-logs", action="store_true", help="Create sample usage logs"
+    )
+
+    parser.add_argument(
+        "--property-data",
+        action="store_true",
+        help="Create sample property data (requires --contracts)",
+    )
+
+    return parser.parse_args()
+
+
 async def main():
-    if len(sys.argv) > 1 and sys.argv[1] == "--reset":
+    args = parse_arguments()
+
+    if args.reset:
         logger.warning("🚨 This will delete all existing data and reseed!")
         confirmation = input("Type 'SEED' to confirm: ")
         if confirmation != "SEED":
@@ -667,7 +754,27 @@ async def main():
     try:
         seeder = DatabaseSeeder()
         await seeder.initialize()
-        await seeder.seed_all()
+
+        # Determine what to seed based on arguments
+        if args.all:
+            # Create all sample data
+            await seeder.seed_all(
+                include_documents=True,
+                include_contracts=True,
+                include_analyses=True,
+                include_usage_logs=True,
+                include_property_data=True,
+            )
+        else:
+            # Only create profiles by default, plus any additional data requested
+            await seeder.seed_all(
+                include_documents=args.documents,
+                include_contracts=args.contracts,
+                include_analyses=args.analyses,
+                include_usage_logs=args.usage_logs,
+                include_property_data=args.property_data,
+            )
+
     except Exception as e:
         logger.error(f"Seeding failed: {e}")
         sys.exit(1)
