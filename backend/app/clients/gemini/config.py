@@ -21,11 +21,12 @@ class GeminiClientConfig(ClientConfig):
     """Configuration for Google Gemini client with service role authentication."""
 
     # Gemini API settings
-    model_name: str = "gemini-2.5-pro"
+    model_name: str = "gemini-2.5-flash"
 
     # Service role authentication settings (required)
     credentials_path: Optional[str] = None
     project_id: Optional[str] = None
+    location: str = "global"
 
     # Safety settings
     harm_block_threshold: str = "BLOCK_NONE"
@@ -60,11 +61,18 @@ class GeminiClientConfig(ClientConfig):
 class GeminiSettings(BaseSettings):
     """Pydantic settings for Gemini configuration from environment."""
 
-    gemini_model_name: str = "gemini-2.5-pro"
+    gemini_model_name: str = "gemini-2.5-flash"
 
     # Service role authentication settings (required)
     gemini_credentials_path: Optional[str] = None
     gemini_project_id: Optional[str] = None
+    gemini_location: str = "global"
+    gemini_use_vertexai: bool = True
+
+    # Map to Google Cloud environment variables
+    google_genai_use_vertexai: bool = True
+    google_cloud_project: Optional[str] = None
+    google_cloud_location: str = "global"
 
     # Safety settings
     gemini_harm_block_threshold: str = "BLOCK_NONE"
@@ -100,7 +108,8 @@ class GeminiSettings(BaseSettings):
             model_name=self.gemini_model_name,
             # Service role authentication settings
             credentials_path=self.gemini_credentials_path,
-            project_id=self.gemini_project_id,
+            project_id=self.google_cloud_project or self.gemini_project_id,
+            location=self.google_cloud_location or self.gemini_location,
             # Safety settings
             harm_block_threshold=self.gemini_harm_block_threshold,
             # OCR settings

@@ -7,6 +7,8 @@ import os
 from typing import Any, Dict, Optional
 from google import genai
 from google.genai.types import (
+    Part,
+    Content,
     HarmCategory,
     HarmBlockThreshold,
     SafetySetting,
@@ -135,10 +137,11 @@ class GeminiClient(BaseClient, AIOperations):
                 project_id = self.config.project_id
                 self.logger.info(f"Using configured project ID: {project_id}")
 
-            # Create the client with credentials
+            # Create the client with vertexai parameters
             self._client = genai.Client(
-                credentials=credentials,
+                vertexai=True,
                 project=project_id,
+                location=self.config.location,
             )
 
             self.logger.info(
@@ -194,7 +197,7 @@ class GeminiClient(BaseClient, AIOperations):
             test_prompt = "Test connection. Respond with 'OK'."
 
             # Create content for the test
-            content = genai.types.Content(parts=[genai.types.Part(text=test_prompt)])
+            content = Content(role="user", parts=[Part.from_text(text=test_prompt)])
 
             # Generate content
             response = self._client.models.generate_content(
