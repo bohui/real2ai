@@ -60,8 +60,12 @@ interface MarketData {
 }
 
 const MarketAnalysisPage: React.FC = () => {
-  const [selectedTimeframe, setSelectedTimeframe] = useState<"3M" | "6M" | "1Y" | "2Y">("1Y");
-  const [selectedRegion, setSelectedRegion] = useState<"national" | "state" | "suburb">("national");
+  const [selectedTimeframe, setSelectedTimeframe] = useState<
+    "3M" | "6M" | "1Y" | "2Y"
+  >("1Y");
+  const [selectedRegion, setSelectedRegion] = useState<
+    "national" | "state" | "suburb"
+  >("national");
   const [marketData, setMarketData] = useState<MarketData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -92,72 +96,149 @@ const MarketAnalysisPage: React.FC = () => {
 
   // Generate market data from API responses with fallbacks
   const generateMarketData = async (
-    insights: any[], 
+    insights: any[],
     trends: any[]
   ): Promise<MarketData> => {
-    const avgMedianPrice = trends.length > 0 
-      ? trends.reduce((sum: number, trend: any) => sum + (trend.median_price_current || 750000), 0) / trends.length
-      : 750000;
+    const avgMedianPrice =
+      trends.length > 0
+        ? trends.reduce(
+            (sum: number, trend: any) =>
+              sum + (trend.median_price_current || 750000),
+            0
+          ) / trends.length
+        : 750000;
 
-    const avgGrowth = trends.length > 0 
-      ? trends.reduce((sum: number, trend: any) => sum + (trend.price_growth_annual || 5.2), 0) / trends.length
-      : 5.2;
+    const avgGrowth =
+      trends.length > 0
+        ? trends.reduce(
+            (sum: number, trend: any) =>
+              sum + (trend.price_growth_annual || 5.2),
+            0
+          ) / trends.length
+        : 5.2;
 
     return {
       nationalStats: {
         medianPrice: avgMedianPrice,
         priceGrowth: avgGrowth,
-        salesVolume: trends.length > 0 ? trends[0].sales_volume || 42850 : 42850,
+        salesVolume:
+          trends.length > 0 ? trends[0].sales_volume || 42850 : 42850,
         daysOnMarket: trends.length > 0 ? trends[0].days_on_market || 32 : 32,
-        auctionClearance: trends.length > 0 ? trends[0].auction_clearance_rate || 68.5 : 68.5,
+        auctionClearance:
+          trends.length > 0 ? trends[0].auction_clearance_rate || 68.5 : 68.5,
         rentalYield: trends.length > 0 ? trends[0].rental_yield || 4.1 : 4.1,
       },
-      stateComparison: trends.length > 0 ? trends.slice(0, 8).map((trend: any, index: number) => {
-        const states = ["NSW", "VIC", "QLD", "WA", "SA", "TAS", "ACT", "NT"];
-        return {
-          state: states[index] || "NSW",
-          medianPrice: trend.median_price_current || 750000,
-          growth: trend.price_growth_annual || 5.2,
-          volume: trend.sales_volume || 5000,
-          trend: trend.price_growth_annual > 5 ? "up" : trend.price_growth_annual > 3 ? "neutral" : "down"
-        };
-      }) : [
-        { state: "NSW", medianPrice: 950000, growth: 4.8, volume: 15200, trend: "up" },
-        { state: "VIC", medianPrice: 720000, growth: 6.1, volume: 12500, trend: "up" },
-        { state: "QLD", medianPrice: 650000, growth: 7.2, volume: 8900, trend: "up" },
-      ],
-      hotSuburbs: insights.length > 0 ? insights.slice(0, 5).map((insight: any) => ({
-        name: insight.location || "Sydney, NSW",
-        growth: insight.price_growth_forecast || 12.0,
-        medianPrice: insight.median_price || 850000,
-        riskLevel: insight.risk_level || "medium"
-      })) : [
-        { name: "Teneriffe, QLD", growth: 15.2, medianPrice: 850000, riskLevel: "medium" },
-        { name: "Richmond, VIC", growth: 12.8, medianPrice: 920000, riskLevel: "low" },
-      ],
+      stateComparison:
+        trends.length > 0
+          ? trends.slice(0, 8).map((trend: any, index: number) => {
+              const states = [
+                "NSW",
+                "VIC",
+                "QLD",
+                "WA",
+                "SA",
+                "TAS",
+                "ACT",
+                "NT",
+              ];
+              return {
+                state: states[index] || "NSW",
+                medianPrice: trend.median_price_current || 750000,
+                growth: trend.price_growth_annual || 5.2,
+                volume: trend.sales_volume || 5000,
+                trend:
+                  trend.price_growth_annual > 5
+                    ? "up"
+                    : trend.price_growth_annual > 3
+                    ? "neutral"
+                    : "down",
+              };
+            })
+          : [
+              {
+                state: "NSW",
+                medianPrice: 950000,
+                growth: 4.8,
+                volume: 15200,
+                trend: "up",
+              },
+              {
+                state: "VIC",
+                medianPrice: 720000,
+                growth: 6.1,
+                volume: 12500,
+                trend: "up",
+              },
+              {
+                state: "QLD",
+                medianPrice: 650000,
+                growth: 7.2,
+                volume: 8900,
+                trend: "up",
+              },
+            ],
+      hotSuburbs:
+        insights.length > 0
+          ? insights.slice(0, 5).map((insight: any) => ({
+              name: insight.location || "Sydney, NSW",
+              growth: insight.price_growth_forecast || 12.0,
+              medianPrice: insight.median_price || 850000,
+              riskLevel: insight.risk_level || "medium",
+            }))
+          : [
+              {
+                name: "Teneriffe, QLD",
+                growth: 15.2,
+                medianPrice: 850000,
+                riskLevel: "medium",
+              },
+              {
+                name: "Richmond, VIC",
+                growth: 12.8,
+                medianPrice: 920000,
+                riskLevel: "low",
+              },
+            ],
       marketPredictions: {
-        sixMonth: { 
-          trend: insights.length > 0 && insights[0].forecast_6_months > 0 ? "rising" : "stable", 
-          confidence: 78, 
-          priceChange: insights.length > 0 ? insights[0].forecast_6_months || 2.8 : 2.8 
+        sixMonth: {
+          trend:
+            insights.length > 0 && insights[0].forecast_6_months > 0
+              ? "rising"
+              : "stable",
+          confidence: 78,
+          priceChange:
+            insights.length > 0 ? insights[0].forecast_6_months || 2.8 : 2.8,
         },
-        oneYear: { 
-          trend: "stable", 
-          confidence: 65, 
-          priceChange: insights.length > 0 ? insights[0].forecast_12_months || 4.2 : 4.2 
+        oneYear: {
+          trend: "stable",
+          confidence: 65,
+          priceChange:
+            insights.length > 0 ? insights[0].forecast_12_months || 4.2 : 4.2,
         },
-        twoYear: { 
-          trend: "rising", 
-          confidence: 52, 
-          priceChange: insights.length > 0 ? insights[0].forecast_24_months || 8.5 : 8.5 
+        twoYear: {
+          trend: "rising",
+          confidence: 52,
+          priceChange:
+            insights.length > 0 ? insights[0].forecast_24_months || 8.5 : 8.5,
         },
       },
-      riskFactors: trends.length > 0 && trends[0].risk_factors ? trends[0].risk_factors : [
-        { factor: "Interest Rate Changes", impact: "High", probability: 85 },
-        { factor: "Supply Shortage", impact: "Medium", probability: 72 },
-        { factor: "Economic Downturn", impact: "High", probability: 35 },
-        { factor: "Regulatory Changes", impact: "Medium", probability: 45 },
-      ],
+      riskFactors:
+        trends.length > 0 && trends[0].risk_factors
+          ? trends[0].risk_factors
+          : [
+              {
+                factor: "Interest Rate Changes",
+                impact: "High",
+                probability: 85,
+              },
+              { factor: "Supply Shortage", impact: "Medium", probability: 72 },
+              { factor: "Economic Downturn", impact: "High", probability: 35 },
+              {
+                factor: "Regulatory Changes",
+                impact: "Medium",
+                probability: 45,
+              },
+            ],
     };
   };
 
@@ -166,23 +247,28 @@ const MarketAnalysisPage: React.FC = () => {
     const loadMarketData = async () => {
       setIsLoading(true);
       setError(null);
-      
+
       try {
         // Load data from multiple API endpoints
         const [insights, trends] = await Promise.allSettled([
-          propertyIntelligenceService.getMarketInsights("Sydney", ["trends", "forecasts"], 10),
+          propertyIntelligenceService.getMarketInsights(
+            "Sydney",
+            ["trends", "forecasts"],
+            10
+          ),
           propertyIntelligenceService.getMarketTrends(selectedTimeframe),
         ]);
 
-        const insightsData = insights.status === 'fulfilled' ? insights.value : [];
-        const trendsData = trends.status === 'fulfilled' ? trends.value : [];
-        
+        const insightsData =
+          insights.status === "fulfilled" ? insights.value : [];
+        const trendsData = trends.status === "fulfilled" ? trends.value : [];
+
         const data = await generateMarketData(insightsData, trendsData);
         setMarketData(data);
       } catch (error) {
-        console.error('Failed to load market data:', error);
-        setError('Failed to load market data');
-        
+        console.error("Failed to load market data:", error);
+        setError("Failed to load market data");
+
         // Fallback to default data
         setMarketData(await generateMarketData([], []));
       } finally {
@@ -198,21 +284,23 @@ const MarketAnalysisPage: React.FC = () => {
     try {
       // Generate and download market report
       const reportData = {
-        type: 'market-analysis',
+        type: "market-analysis",
         timeframe: selectedTimeframe,
         region: selectedRegion,
-        data: marketData
+        data: marketData,
       };
-      
-      const blob = new Blob([JSON.stringify(reportData, null, 2)], { type: 'application/json' });
+
+      const blob = new Blob([JSON.stringify(reportData, null, 2)], {
+        type: "application/json",
+      });
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
+      const a = document.createElement("a");
       a.href = url;
       a.download = `market-analysis-${selectedTimeframe}.json`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (error) {
-      console.error('Export failed:', error);
+      console.error("Export failed:", error);
     }
   };
 
@@ -240,10 +328,12 @@ const MarketAnalysisPage: React.FC = () => {
           <CardContent padding="xl">
             <div className="text-center py-12">
               <AlertCircle className="w-16 h-16 text-danger-500 mx-auto mb-4" />
-              <h3 className="text-xl font-semibold text-danger-900 mb-2">Failed to Load Market Data</h3>
+              <h3 className="text-xl font-semibold text-danger-900 mb-2">
+                Failed to Load Market Data
+              </h3>
               <p className="text-danger-600 mb-4">{error}</p>
-              <Button 
-                variant="destructive" 
+              <Button
+                variant="destructive"
                 onClick={() => window.location.reload()}
               >
                 Retry
@@ -271,7 +361,8 @@ const MarketAnalysisPage: React.FC = () => {
                   Market Analysis
                 </h1>
                 <p className="text-lg text-neutral-600 max-w-2xl">
-                  Comprehensive market insights and predictions for the Australian property market
+                  Comprehensive market insights and predictions for the
+                  Australian property market
                 </p>
               </div>
               <div className="flex items-center gap-3">
@@ -358,7 +449,11 @@ const MarketAnalysisPage: React.FC = () => {
                   <DollarSign className="w-6 h-6 text-primary-600" />
                 </div>
                 <div className="text-2xl font-heading font-bold text-neutral-900">
-                  ${marketData ? (marketData.nationalStats.medianPrice / 1000).toFixed(0) : '750'}K
+                  $
+                  {marketData
+                    ? (marketData.nationalStats.medianPrice / 1000).toFixed(0)
+                    : "750"}
+                  K
                 </div>
                 <div className="text-sm text-neutral-500">Median Price</div>
               </div>
@@ -368,7 +463,11 @@ const MarketAnalysisPage: React.FC = () => {
                   <TrendingUp className="w-6 h-6 text-success-600" />
                 </div>
                 <div className="text-2xl font-heading font-bold text-success-600">
-                  +{marketData ? marketData.nationalStats.priceGrowth.toFixed(1) : '5.2'}%
+                  +
+                  {marketData
+                    ? marketData.nationalStats.priceGrowth.toFixed(1)
+                    : "5.2"}
+                  %
                 </div>
                 <div className="text-sm text-neutral-500">Price Growth</div>
               </div>
@@ -378,7 +477,10 @@ const MarketAnalysisPage: React.FC = () => {
                   <Home className="w-6 h-6 text-trust-600" />
                 </div>
                 <div className="text-2xl font-heading font-bold text-neutral-900">
-                  {marketData ? (marketData.nationalStats.salesVolume / 1000).toFixed(1) : '42.9'}K
+                  {marketData
+                    ? (marketData.nationalStats.salesVolume / 1000).toFixed(1)
+                    : "42.9"}
+                  K
                 </div>
                 <div className="text-sm text-neutral-500">Sales Volume</div>
               </div>
@@ -388,7 +490,7 @@ const MarketAnalysisPage: React.FC = () => {
                   <Calendar className="w-6 h-6 text-warning-600" />
                 </div>
                 <div className="text-2xl font-heading font-bold text-neutral-900">
-                  {marketData ? marketData.nationalStats.daysOnMarket : '32'}
+                  {marketData ? marketData.nationalStats.daysOnMarket : "32"}
                 </div>
                 <div className="text-sm text-neutral-500">Days on Market</div>
               </div>
@@ -398,9 +500,14 @@ const MarketAnalysisPage: React.FC = () => {
                   <Target className="w-6 h-6 text-purple-600" />
                 </div>
                 <div className="text-2xl font-heading font-bold text-neutral-900">
-                  {marketData ? marketData.nationalStats.auctionClearance.toFixed(1) : '68.5'}%
+                  {marketData
+                    ? marketData.nationalStats.auctionClearance.toFixed(1)
+                    : "68.5"}
+                  %
                 </div>
-                <div className="text-sm text-neutral-500">Auction Clearance</div>
+                <div className="text-sm text-neutral-500">
+                  Auction Clearance
+                </div>
               </div>
 
               <div className="text-center">
@@ -408,7 +515,10 @@ const MarketAnalysisPage: React.FC = () => {
                   <PieChart className="w-6 h-6 text-cyan-600" />
                 </div>
                 <div className="text-2xl font-heading font-bold text-neutral-900">
-                  {marketData ? marketData.nationalStats.rentalYield.toFixed(1) : '4.1'}%
+                  {marketData
+                    ? marketData.nationalStats.rentalYield.toFixed(1)
+                    : "4.1"}
+                  %
                 </div>
                 <div className="text-sm text-neutral-500">Rental Yield</div>
               </div>
@@ -433,11 +543,14 @@ const MarketAnalysisPage: React.FC = () => {
             </CardHeader>
             <CardContent padding="lg">
               <div className="space-y-4">
-                {marketData ? marketData.stateComparison.map((state) => (
-                  <div key={state.state} className="flex items-center justify-between p-4 bg-neutral-50 rounded-lg">
-                    <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 bg-primary-100 rounded-lg flex items-center justify-center">
-                        <span className="font-bold text-primary-600 text-sm">
+                {marketData?.stateComparison?.map((state) => (
+                  <div
+                    key={state.state}
+                    className="flex items-center justify-between p-4 bg-white rounded-lg border border-neutral-200"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center">
+                        <span className="text-sm font-semibold text-primary-600">
                           {state.state}
                         </span>
                       </div>
@@ -446,29 +559,28 @@ const MarketAnalysisPage: React.FC = () => {
                           ${(state.medianPrice / 1000).toFixed(0)}K
                         </div>
                         <div className="text-sm text-neutral-500">
-                          {(state.volume / 1000).toFixed(1)}K sales
+                          {state.volume.toLocaleString()} sales
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <div className="text-right">
-                        <div className={cn(
-                          "font-semibold",
-                          state.growth > 5 ? "text-success-600" : 
-                          state.growth > 3 ? "text-warning-600" : "text-danger-600"
-                        )}>
-                          +{state.growth}%
-                        </div>
-                        <div className="text-sm text-neutral-500">Growth</div>
-                      </div>
-                      {getTrendIcon(state.trend, "w-5 h-5")}
+                    <div className="flex items-center gap-2">
+                      {getTrendIcon(state.trend)}
+                      <span
+                        className={cn(
+                          "text-sm font-medium",
+                          state.growth > 5
+                            ? "text-success-600"
+                            : state.growth > 0
+                            ? "text-warning-600"
+                            : "text-danger-600"
+                        )}
+                      >
+                        {state.growth > 0 ? "+" : ""}
+                        {state.growth.toFixed(1)}%
+                      </span>
                     </div>
                   </div>
-                )) : (
-                  <div className="text-center py-4 text-neutral-500">
-                    Loading state comparison data...
-                  </div>
-                )}
+                ))}
               </div>
             </CardContent>
           </Card>
@@ -495,8 +607,15 @@ const MarketAnalysisPage: React.FC = () => {
                       6 Month Outlook
                     </div>
                     <StatusBadge
-                      status={marketData?.marketPredictions.sixMonth.trend === "rising" ? "success" : "warning"}
-                      label={marketData?.marketPredictions.sixMonth.trend || "stable"}
+                      status={
+                        marketData?.marketPredictions.sixMonth.trend ===
+                        "rising"
+                          ? "success"
+                          : "warning"
+                      }
+                      label={
+                        marketData?.marketPredictions.sixMonth.trend || "stable"
+                      }
                       variant="dot"
                       size="sm"
                     />
@@ -504,13 +623,21 @@ const MarketAnalysisPage: React.FC = () => {
                   <div className="flex items-center justify-between">
                     <div>
                       <div className="text-2xl font-bold text-primary-600">
-                        +{marketData?.marketPredictions.sixMonth.priceChange.toFixed(1) || '2.8'}%
+                        +
+                        {marketData?.marketPredictions.sixMonth.priceChange.toFixed(
+                          1
+                        ) || "2.8"}
+                        %
                       </div>
-                      <div className="text-sm text-neutral-500">Expected Growth</div>
+                      <div className="text-sm text-neutral-500">
+                        Expected Growth
+                      </div>
                     </div>
                     <div className="text-right">
                       <div className="text-xl font-semibold text-neutral-900">
-                        {marketData?.marketPredictions.sixMonth.confidence || '78'}%
+                        {marketData?.marketPredictions.sixMonth.confidence ||
+                          "78"}
+                        %
                       </div>
                       <div className="text-sm text-neutral-500">Confidence</div>
                     </div>
@@ -521,11 +648,19 @@ const MarketAnalysisPage: React.FC = () => {
                   <div className="p-4 bg-neutral-50 rounded-lg">
                     <div className="text-center">
                       <div className="text-xl font-bold text-neutral-900">
-                        +{marketData?.marketPredictions.oneYear.priceChange.toFixed(1) || '4.2'}%
+                        +
+                        {marketData?.marketPredictions.oneYear.priceChange.toFixed(
+                          1
+                        ) || "4.2"}
+                        %
                       </div>
-                      <div className="text-sm text-neutral-500 mb-1">12 Months</div>
+                      <div className="text-sm text-neutral-500 mb-1">
+                        12 Months
+                      </div>
                       <div className="text-xs text-neutral-400">
-                        {marketData?.marketPredictions.oneYear.confidence || '65'}% confidence
+                        {marketData?.marketPredictions.oneYear.confidence ||
+                          "65"}
+                        % confidence
                       </div>
                     </div>
                   </div>
@@ -533,11 +668,19 @@ const MarketAnalysisPage: React.FC = () => {
                   <div className="p-4 bg-neutral-50 rounded-lg">
                     <div className="text-center">
                       <div className="text-xl font-bold text-neutral-900">
-                        +{marketData?.marketPredictions.twoYear.priceChange.toFixed(1) || '8.5'}%
+                        +
+                        {marketData?.marketPredictions.twoYear.priceChange.toFixed(
+                          1
+                        ) || "8.5"}
+                        %
                       </div>
-                      <div className="text-sm text-neutral-500 mb-1">24 Months</div>
+                      <div className="text-sm text-neutral-500 mb-1">
+                        24 Months
+                      </div>
                       <div className="text-xs text-neutral-400">
-                        {marketData?.marketPredictions.twoYear.confidence || '52'}% confidence
+                        {marketData?.marketPredictions.twoYear.confidence ||
+                          "52"}
+                        % confidence
                       </div>
                     </div>
                   </div>
@@ -569,7 +712,7 @@ const MarketAnalysisPage: React.FC = () => {
           </CardHeader>
           <CardContent padding="lg">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {marketData ? marketData.hotSuburbs.map((suburb, index) => (
+              {marketData?.hotSuburbs?.map((suburb, index) => (
                 <Card key={suburb.name} variant="outlined" interactive>
                   <CardContent padding="lg">
                     <div className="flex items-start justify-between mb-4">
@@ -588,12 +731,14 @@ const MarketAnalysisPage: React.FC = () => {
                         <div className="text-xs text-neutral-500">Growth</div>
                       </div>
                     </div>
-                    
+
                     <div className="flex items-center justify-between">
-                      <span className={cn(
-                        "inline-flex items-center px-2 py-1 rounded-full text-xs font-medium",
-                        getRiskColor(suburb.riskLevel)
-                      )}>
+                      <span
+                        className={cn(
+                          "inline-flex items-center px-2 py-1 rounded-full text-xs font-medium",
+                          getRiskColor(suburb.riskLevel)
+                        )}
+                      >
                         {suburb.riskLevel} Risk
                       </span>
                       <div className="text-sm font-medium text-primary-600">
@@ -602,11 +747,7 @@ const MarketAnalysisPage: React.FC = () => {
                     </div>
                   </CardContent>
                 </Card>
-              )) : (
-                <div className="col-span-3 text-center py-4 text-neutral-500">
-                  Loading growth suburbs data...
-                </div>
-              )}
+              ))}
             </div>
           </CardContent>
         </Card>
@@ -627,13 +768,20 @@ const MarketAnalysisPage: React.FC = () => {
           </CardHeader>
           <CardContent padding="lg">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {marketData ? marketData.riskFactors.map((risk) => (
-                <div key={risk.factor} className="flex items-center justify-between p-4 bg-neutral-50 rounded-lg">
+              {marketData?.riskFactors?.map((risk) => (
+                <div
+                  key={risk.factor}
+                  className="flex items-center justify-between p-4 bg-neutral-50 rounded-lg"
+                >
                   <div className="flex items-center gap-3">
-                    <AlertCircle className={cn(
-                      "w-5 h-5",
-                      risk.impact === "High" ? "text-danger-500" : "text-warning-500"
-                    )} />
+                    <AlertCircle
+                      className={cn(
+                        "w-5 h-5",
+                        risk.impact === "High"
+                          ? "text-danger-500"
+                          : "text-warning-500"
+                      )}
+                    />
                     <div>
                       <div className="font-medium text-neutral-900">
                         {risk.factor}
@@ -650,13 +798,9 @@ const MarketAnalysisPage: React.FC = () => {
                     <div className="text-xs text-neutral-500">Probability</div>
                   </div>
                 </div>
-              )) : (
-                <div className="col-span-2 text-center py-4 text-neutral-500">
-                  Loading risk factors data...
-                </div>
-              )}
+              ))}
             </div>
-            
+
             <div className="mt-6 p-4 bg-gradient-to-r from-warning-50 to-danger-50 rounded-lg">
               <div className="flex items-start gap-3">
                 <AlertCircle className="w-5 h-5 text-warning-600 mt-0.5" />
@@ -665,9 +809,10 @@ const MarketAnalysisPage: React.FC = () => {
                     Market Risk Assessment
                   </div>
                   <div className="text-sm text-neutral-600">
-                    Current market conditions show moderate risk levels. Interest rate changes remain
-                    the highest probability risk factor. Consider diversified investment strategies
-                    and maintain cash reserves for opportunities.
+                    Current market conditions show moderate risk levels.
+                    Interest rate changes remain the highest probability risk
+                    factor. Consider diversified investment strategies and
+                    maintain cash reserves for opportunities.
                   </div>
                 </div>
               </div>

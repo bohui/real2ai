@@ -6,11 +6,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@/test/utils'
 import ProtectedRoute from '../ProtectedRoute'
 import { useAuthStore } from '@/store/authStore'
+import { User } from '@/types'
 
 // Mock the auth store
 const mockAuthStore = {
   isAuthenticated: false,
-  user: null,
+  user: null as User | null,
   isLoading: false,
   error: null,
   login: vi.fn(),
@@ -121,7 +122,7 @@ describe('ProtectedRoute Component', () => {
 
     it('redirects when user exists but not authenticated', () => {
       mockAuthStore.isAuthenticated = false
-      mockAuthStore.user = { id: 'user1', email: 'test@example.com', user_type: 'user' }
+      mockAuthStore.user = null
 
       render(
         <ProtectedRoute>
@@ -137,7 +138,17 @@ describe('ProtectedRoute Component', () => {
   describe('Authenticated Access', () => {
     beforeEach(() => {
       mockAuthStore.isAuthenticated = true
-      mockAuthStore.user = { id: 'user1', email: 'test@example.com', user_type: 'user' }
+      mockAuthStore.user = {
+        id: 'user1',
+        email: 'test@example.com',
+        user_type: 'buyer',
+        australian_state: 'NSW',
+        subscription_status: 'free',
+        credits_remaining: 0,
+        preferences: {},
+        onboarding_completed: false,
+        onboarding_preferences: {}
+      }
     })
 
     it('renders protected content when authenticated', () => {
@@ -175,24 +186,44 @@ describe('ProtectedRoute Component', () => {
     })
 
     it('allows access when user has required role', () => {
-      mockAuthStore.user = { id: 'admin1', email: 'admin@example.com', user_type: 'admin' }
+      mockAuthStore.user = {
+        id: 'admin1',
+        email: 'admin@example.com',
+        user_type: 'agent',
+        australian_state: 'NSW',
+        subscription_status: 'enterprise',
+        credits_remaining: 100,
+        preferences: {},
+        onboarding_completed: true,
+        onboarding_preferences: {}
+      }
 
       render(
-        <ProtectedRoute requiredRole="admin">
-          <div data-testid="protected-content">Admin Content</div>
+        <ProtectedRoute requiredRole="agent">
+          <div data-testid="protected-content">Agent Content</div>
         </ProtectedRoute>
       )
 
       expect(screen.getByTestId('protected-content')).toBeInTheDocument()
-      expect(screen.getByText('Admin Content')).toBeInTheDocument()
+      expect(screen.getByText('Agent Content')).toBeInTheDocument()
     })
 
     it('redirects to dashboard when user lacks required role', () => {
-      mockAuthStore.user = { id: 'user1', email: 'user@example.com', user_type: 'user' }
+      mockAuthStore.user = {
+        id: 'user1',
+        email: 'user@example.com',
+        user_type: 'buyer',
+        australian_state: 'NSW',
+        subscription_status: 'free',
+        credits_remaining: 0,
+        preferences: {},
+        onboarding_completed: false,
+        onboarding_preferences: {}
+      }
 
       render(
-        <ProtectedRoute requiredRole="admin">
-          <div data-testid="protected-content">Admin Content</div>
+        <ProtectedRoute requiredRole="agent">
+          <div data-testid="protected-content">Agent Content</div>
         </ProtectedRoute>
       )
 
@@ -201,7 +232,17 @@ describe('ProtectedRoute Component', () => {
     })
 
     it('allows access when no role is required', () => {
-      mockAuthStore.user = { id: 'user1', email: 'user@example.com', user_type: 'user' }
+      mockAuthStore.user = {
+        id: 'user1',
+        email: 'user@example.com',
+        user_type: 'buyer',
+        australian_state: 'NSW',
+        subscription_status: 'free',
+        credits_remaining: 0,
+        preferences: {},
+        onboarding_completed: false,
+        onboarding_preferences: {}
+      }
 
       render(
         <ProtectedRoute>
@@ -214,11 +255,20 @@ describe('ProtectedRoute Component', () => {
     })
 
     it('handles undefined user_type gracefully', () => {
-      mockAuthStore.user = { id: 'user1', email: 'user@example.com' } // No user_type
+      mockAuthStore.user = {
+        id: 'user1',
+        email: 'user@example.com',
+        australian_state: 'NSW',
+        subscription_status: 'free',
+        credits_remaining: 0,
+        preferences: {},
+        onboarding_completed: false,
+        onboarding_preferences: {}
+      } as any // No user_type
 
       render(
-        <ProtectedRoute requiredRole="admin">
-          <div data-testid="protected-content">Admin Content</div>
+        <ProtectedRoute requiredRole="agent">
+          <div data-testid="protected-content">Agent Content</div>
         </ProtectedRoute>
       )
 
@@ -261,7 +311,17 @@ describe('ProtectedRoute Component', () => {
 
     it('validates both authentication and user presence', () => {
       mockAuthStore.isAuthenticated = false
-      mockAuthStore.user = { id: 'user1', email: 'test@example.com', user_type: 'admin' }
+      mockAuthStore.user = {
+        id: 'user1',
+        email: 'test@example.com',
+        user_type: 'agent',
+        australian_state: 'NSW',
+        subscription_status: 'enterprise',
+        credits_remaining: 100,
+        preferences: {},
+        onboarding_completed: true,
+        onboarding_preferences: {}
+      }
 
       render(
         <ProtectedRoute>
@@ -275,15 +335,25 @@ describe('ProtectedRoute Component', () => {
 
     it('requires exact role match for security', () => {
       mockAuthStore.isAuthenticated = true
-      mockAuthStore.user = { id: 'user1', email: 'user@example.com', user_type: 'admin-trainee' }
+      mockAuthStore.user = {
+        id: 'user1',
+        email: 'user@example.com',
+        user_type: 'individual',
+        australian_state: 'NSW',
+        subscription_status: 'free',
+        credits_remaining: 0,
+        preferences: {},
+        onboarding_completed: false,
+        onboarding_preferences: {}
+      }
 
       render(
-        <ProtectedRoute requiredRole="admin">
-          <div data-testid="protected-content">Admin Content</div>
+        <ProtectedRoute requiredRole="agent">
+          <div data-testid="protected-content">Agent Content</div>
         </ProtectedRoute>
       )
 
-      // Should redirect since 'admin-trainee' !== 'admin'
+      // Should redirect since 'individual' !== 'agent'
       expect(screen.getByTestId('navigate')).toBeInTheDocument()
       expect(screen.queryByTestId('protected-content')).not.toBeInTheDocument()
     })

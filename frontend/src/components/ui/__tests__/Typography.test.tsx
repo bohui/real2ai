@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import { Typography } from '../Typography'
+import Typography from '../Typography'
 
 describe('Typography Component', () => {
   describe('Heading Variants', () => {
@@ -41,7 +41,7 @@ describe('Typography Component', () => {
 
   describe('Body Text Variants', () => {
     it('should render body text', () => {
-      render(<Typography variant="body">This is body text</Typography>)
+      render(<Typography variant="body1">This is body text</Typography>)
       
       const text = screen.getByText('This is body text')
       expect(text).toBeInTheDocument()
@@ -49,14 +49,14 @@ describe('Typography Component', () => {
     })
 
     it('should render large body text', () => {
-      render(<Typography variant="body-large">This is large body text</Typography>)
+      render(<Typography variant="body1">This is large body text</Typography>)
       
       const text = screen.getByText('This is large body text')
       expect(text).toHaveClass('text-lg')
     })
 
     it('should render small body text', () => {
-      render(<Typography variant="body-small">This is small body text</Typography>)
+      render(<Typography variant="body2">This is small body text</Typography>)
       
       const text = screen.getByText('This is small body text')
       expect(text).toHaveClass('text-sm')
@@ -73,7 +73,7 @@ describe('Typography Component', () => {
     })
 
     it('should render subtitle text', () => {
-      render(<Typography variant="subtitle">This is subtitle text</Typography>)
+      render(<Typography variant="subtitle1">This is subtitle text</Typography>)
       
       const text = screen.getByText('This is subtitle text')
       expect(text).toHaveClass('text-lg', 'font-medium')
@@ -90,7 +90,7 @@ describe('Typography Component', () => {
   describe('Custom Element Types', () => {
     it('should render with custom element', () => {
       render(
-        <Typography variant="body" as="div">
+        <Typography variant="body1" as="div">
           Div content
         </Typography>
       )
@@ -134,7 +134,7 @@ describe('Typography Component', () => {
     })
 
     it('should render with error color', () => {
-      render(<Typography color="error">Error text</Typography>)
+      render(<Typography color="danger">Error text</Typography>)
       
       const text = screen.getByText('Error text')
       expect(text).toHaveClass('text-red-600')
@@ -248,14 +248,14 @@ describe('Typography Component', () => {
     })
 
     it('should render with truncation', () => {
-      render(<Typography truncate>This is very long text that should be truncated</Typography>)
+      render(<Typography>This is very long text that should be truncated</Typography>)
       
       const text = screen.getByText('This is very long text that should be truncated')
       expect(text).toHaveClass('truncate')
     })
 
     it('should render with no wrap', () => {
-      render(<Typography noWrap>This text should not wrap</Typography>)
+      render(<Typography>This text should not wrap</Typography>)
       
       const text = screen.getByText('This text should not wrap')
       expect(text).toHaveClass('whitespace-nowrap')
@@ -264,7 +264,7 @@ describe('Typography Component', () => {
 
   describe('Responsive Typography', () => {
     it('should handle responsive font sizes', () => {
-      render(<Typography variant="h1" responsive>Responsive heading</Typography>)
+      render(<Typography variant="h1">Responsive heading</Typography>)
       
       const text = screen.getByText('Responsive heading')
       expect(text).toHaveClass('text-2xl', 'md:text-4xl', 'lg:text-5xl')

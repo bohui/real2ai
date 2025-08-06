@@ -168,7 +168,7 @@ export const ContractAnalysisProgress: React.FC<ContractAnalysisProgressProps> =
       }
       
       // Mark previous stages as completed
-      if (index < prev.findIndex(stage => stage.id === stage)) {
+      if (index < prev.findIndex(s => s.id === stage)) {
         return { ...s, status: 'completed' as const, progress: 100 };
       }
       

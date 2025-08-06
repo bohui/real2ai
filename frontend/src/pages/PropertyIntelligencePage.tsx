@@ -13,7 +13,6 @@ import {
   ArrowRight,
   BarChart3,
   Calculator,
-  Compare,
   Bell,
   Star,
   Eye,
@@ -36,7 +35,7 @@ import {
   PropertyListing,
   PropertyMarketInsight,
   PropertyWatchlistItem,
-  AustralianState
+  AustralianState,
 } from "@/types";
 
 // Property display interface for UI compatibility
@@ -81,26 +80,28 @@ const PropertyIntelligencePage: React.FC = () => {
   const [selectedView, setSelectedView] = useState<"grid" | "list">("grid");
   const [selectedProperty, setSelectedProperty] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
-  
+
   // Data State
   const [properties, setProperties] = useState<PropertyDisplay[]>([]);
-  const [marketInsights, setMarketInsights] = useState<MarketInsights | null>(null);
+  const [marketInsights, setMarketInsights] = useState<MarketInsights | null>(
+    null
+  );
   const [watchlist, setWatchlist] = useState<PropertyWatchlistItem[]>([]);
   const [hotSuburbs, setHotSuburbs] = useState<PropertyMarketInsight[]>([]);
-  
+
   // Loading and Error States
   const [isLoading, setIsLoading] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
+
   // Filter States
   const [filters, setFilters] = useState({
     propertyType: "",
     bedrooms: "",
     priceRange: "",
-    riskLevel: ""
+    riskLevel: "",
   });
-  
+
   // Saved properties from watchlist
   const [savedProperties, setSavedProperties] = useState<string[]>([]);
 
@@ -108,38 +109,41 @@ const PropertyIntelligencePage: React.FC = () => {
   useEffect(() => {
     loadInitialData();
   }, []);
-  
+
   const loadInitialData = async () => {
     setIsLoading(true);
     try {
       // Load watchlist
       const watchlistData = await propertyIntelligenceService.getWatchlist(50);
       setWatchlist(watchlistData);
-      setSavedProperties(watchlistData.map(item => item.id));
-      
+      setSavedProperties(watchlistData.map((item) => item.id));
+
       // Load market insights for trending suburbs
       const insights = await propertyIntelligenceService.getMarketInsights(
-        "Australia", 
-        ["trends", "forecasts"], 
+        "Australia",
+        ["trends", "forecasts"],
         10
       );
-      setHotSuburbs(insights.filter(insight => insight.insight_type === "trend").slice(0, 3));
-      
+      setHotSuburbs(
+        insights
+          .filter((insight) => insight.insight_type === "trend")
+          .slice(0, 3)
+      );
+
       // Set mock market insights (replace with real API call when available)
       setMarketInsights({
         nationalGrowth: 5.2,
         interestRate: 4.25,
         averageSettlement: 28,
-        hotSuburbs: insights.map(insight => 
-          insight.affected_areas[0] || "Unknown Location"
-        ).slice(0, 3),
+        hotSuburbs: insights
+          .map((insight) => insight.affected_areas[0] || "Unknown Location")
+          .slice(0, 3),
         marketTrend: "rising",
-        confidenceIndex: 78
+        confidenceIndex: 78,
       });
-      
+
       // Load initial property search (default search)
       await searchProperties();
-      
     } catch (error) {
       console.error("Failed to load initial data:", error);
       setError("Failed to load property data. Please try again.");
@@ -147,41 +151,46 @@ const PropertyIntelligencePage: React.FC = () => {
       setIsLoading(false);
     }
   };
-  
+
   const searchProperties = async () => {
     if (!searchQuery && !hasActiveFilters()) {
       // Load sample properties for initial view
       await loadSampleProperties();
       return;
     }
-    
+
     setIsSearching(true);
     setError(null);
-    
+
     try {
       const searchRequest: PropertySearchRequest = {
         query: searchQuery,
         filters: {
           property_types: filters.propertyType ? [filters.propertyType] : [],
-          min_bedrooms: filters.bedrooms ? parseInt(filters.bedrooms) : undefined,
+          min_bedrooms: filters.bedrooms
+            ? parseInt(filters.bedrooms)
+            : undefined,
           min_price: getPriceRangeMin(filters.priceRange),
           max_price: getPriceRangeMax(filters.priceRange),
           suburbs: [],
           states: [],
-          features_required: []
+          features_required: [],
         },
         location: searchQuery,
         radius_km: 10.0,
         limit: 20,
-        sort_by: 'relevance',
+        sort_by: "relevance",
         include_off_market: false,
-        include_historical: false
+        include_historical: false,
       };
-      
-      const response = await propertyIntelligenceService.searchProperties(searchRequest);
-      const transformedProperties = transformPropertyListings(response.properties);
+
+      const response = await propertyIntelligenceService.searchProperties(
+        searchRequest
+      );
+      const transformedProperties = transformPropertyListings(
+        response.properties
+      );
       setProperties(transformedProperties);
-      
     } catch (error) {
       console.error("Property search failed:", error);
       setError("Search failed. Please try again.");
@@ -191,26 +200,27 @@ const PropertyIntelligencePage: React.FC = () => {
       setIsSearching(false);
     }
   };
-  
+
   const loadSampleProperties = async () => {
     try {
       // Search for properties in major Australian cities
       const locations = ["Melbourne, VIC", "Sydney, NSW", "Brisbane, QLD"];
       let allProperties: PropertyDisplay[] = [];
-      
+
       for (const location of locations) {
         try {
-          const response = await propertyIntelligenceService.searchPropertiesAdvanced({
-            location,
-            limit: 5
-          });
+          const response =
+            await propertyIntelligenceService.searchPropertiesAdvanced({
+              location,
+              limit: 5,
+            });
           const transformed = transformPropertyListings(response.properties);
           allProperties = [...allProperties, ...transformed];
         } catch (error) {
           console.error(`Failed to load properties for ${location}:`, error);
         }
       }
-      
+
       setProperties(allProperties.slice(0, 12)); // Limit to 12 properties
     } catch (error) {
       console.error("Failed to load sample properties:", error);
@@ -218,9 +228,11 @@ const PropertyIntelligencePage: React.FC = () => {
       setProperties([]);
     }
   };
-  
-  const transformPropertyListings = (listings: PropertyListing[]): PropertyDisplay[] => {
-    return listings.map(listing => ({
+
+  const transformPropertyListings = (
+    listings: PropertyListing[]
+  ): PropertyDisplay[] => {
+    return listings.map((listing) => ({
       id: listing.id,
       address: listing.address,
       suburb: listing.address.split(",")[1]?.trim(),
@@ -234,7 +246,7 @@ const PropertyIntelligencePage: React.FC = () => {
       riskScore: Math.max(1, 10 - listing.investment_score), // Inverse of investment score
       investmentScore: listing.investment_score,
       growthRate: Math.random() * 8 + 2, // Mock data - replace with real calculation
-      yield: (listing.estimated_rental * 52 / listing.price) * 100,
+      yield: ((listing.estimated_rental * 52) / listing.price) * 100,
       isSaved: savedProperties.includes(listing.id),
       lastUpdated: listing.listing_date,
       priceChange: Math.random() * 20000 - 10000, // Mock data
@@ -243,77 +255,90 @@ const PropertyIntelligencePage: React.FC = () => {
       amenityScore: Math.random() * 3 + 7,
       transportScore: Math.random() * 3 + 7,
       environmentalRisk: Math.random() > 0.7 ? "Medium" : "Low",
-      estimated_rental: listing.estimated_rental
+      estimated_rental: listing.estimated_rental,
     }));
   };
-  
+
   const hasActiveFilters = (): boolean => {
-    return Object.values(filters).some(value => value !== "");
+    return Object.values(filters).some((value) => value !== "");
   };
-  
+
   const getPriceRangeMin = (range: string): number | undefined => {
     switch (range) {
-      case "500k-1m": return 500000;
-      case "1m-2m": return 1000000;
-      case "2m+": return 2000000;
-      default: return undefined;
+      case "500k-1m":
+        return 500000;
+      case "1m-2m":
+        return 1000000;
+      case "2m+":
+        return 2000000;
+      default:
+        return undefined;
     }
   };
-  
+
   const getPriceRangeMax = (range: string): number | undefined => {
     switch (range) {
-      case "0-500k": return 500000;
-      case "500k-1m": return 1000000;
-      case "1m-2m": return 2000000;
-      default: return undefined;
+      case "0-500k":
+        return 500000;
+      case "500k-1m":
+        return 1000000;
+      case "1m-2m":
+        return 2000000;
+      default:
+        return undefined;
     }
   };
-  
+
   const toggleSaveProperty = async (propertyId: string) => {
     try {
-      const property = properties.find(p => p.id === propertyId);
+      const property = properties.find((p) => p.id === propertyId);
       if (!property) return;
-      
+
       if (savedProperties.includes(propertyId)) {
         // Remove from watchlist
-        const watchlistItem = watchlist.find(w => w.property.address.full_address === property.address);
+        const watchlistItem = watchlist.find(
+          (w) => w.property.address.full_address === property.address
+        );
         if (watchlistItem) {
-          await propertyIntelligenceService.removeFromWatchlist(watchlistItem.id);
+          await propertyIntelligenceService.removeFromWatchlist(
+            watchlistItem.id
+          );
         }
-        setSavedProperties(prev => prev.filter(id => id !== propertyId));
+        setSavedProperties((prev) => prev.filter((id) => id !== propertyId));
       } else {
         // Add to watchlist
         await propertyIntelligenceService.addToWatchlist({
           address: property.address,
           notes: "Added from Property Intelligence search",
           tags: ["search_result"],
-          alert_preferences: {}
+          alert_preferences: {},
         });
-        setSavedProperties(prev => [...prev, propertyId]);
+        setSavedProperties((prev) => [...prev, propertyId]);
       }
-      
+
       // Update property in local state
-      setProperties(prev => prev.map(p => 
-        p.id === propertyId ? { ...p, isSaved: !p.isSaved } : p
-      ));
-      
+      setProperties((prev) =>
+        prev.map((p) =>
+          p.id === propertyId ? { ...p, isSaved: !p.isSaved } : p
+        )
+      );
     } catch (error) {
       console.error("Failed to toggle property save:", error);
       setError("Failed to update saved properties. Please try again.");
     }
   };
-  
+
   const handleSearch = () => {
     searchProperties();
   };
-  
+
   const handleFilterChange = (filterName: string, value: string) => {
-    setFilters(prev => ({
+    setFilters((prev) => ({
       ...prev,
-      [filterName]: value
+      [filterName]: value,
     }));
   };
-  
+
   const applyFilters = () => {
     searchProperties();
     setShowFilters(false);
@@ -347,7 +372,8 @@ const PropertyIntelligencePage: React.FC = () => {
                   Property Intelligence
                 </h1>
                 <p className="text-lg text-neutral-600 max-w-2xl">
-                  Discover, analyze and compare properties with AI-powered insights for the Australian market
+                  Discover, analyze and compare properties with AI-powered
+                  insights for the Australian market
                 </p>
               </div>
               <div className="flex items-center gap-3">
@@ -386,9 +412,9 @@ const PropertyIntelligencePage: React.FC = () => {
                   <Filter className="w-5 h-5 mr-2" />
                   Filters
                 </Button>
-                <Button 
-                  variant="primary" 
-                  size="lg" 
+                <Button
+                  variant="primary"
+                  size="lg"
                   className="px-8"
                   onClick={handleSearch}
                   disabled={isSearching}
@@ -416,7 +442,11 @@ const PropertyIntelligencePage: React.FC = () => {
               </CardTitle>
               {marketInsights && (
                 <StatusBadge
-                  status={marketInsights.marketTrend === "rising" ? "success" : "warning"}
+                  status={
+                    marketInsights.marketTrend === "rising"
+                      ? "success"
+                      : "warning"
+                  }
                   label={`Market ${marketInsights.marketTrend}`}
                   variant="dot"
                 />
@@ -432,10 +462,12 @@ const PropertyIntelligencePage: React.FC = () => {
                 <div className="text-3xl font-heading font-bold text-primary-600 mb-1">
                   {marketInsights ? `+${marketInsights.nationalGrowth}%` : "--"}
                 </div>
-                <div className="font-medium text-neutral-700">National Growth</div>
+                <div className="font-medium text-neutral-700">
+                  National Growth
+                </div>
                 <div className="text-sm text-neutral-500">12 months</div>
               </div>
-              
+
               <div className="text-center">
                 <div className="w-16 h-16 bg-warning-100 rounded-full flex items-center justify-center mx-auto mb-3">
                   <Calculator className="w-8 h-8 text-warning-600" />
@@ -446,7 +478,7 @@ const PropertyIntelligencePage: React.FC = () => {
                 <div className="font-medium text-neutral-700">Cash Rate</div>
                 <div className="text-sm text-neutral-500">RBA Current</div>
               </div>
-              
+
               <div className="text-center">
                 <div className="w-16 h-16 bg-success-100 rounded-full flex items-center justify-center mx-auto mb-3">
                   <Calendar className="w-8 h-8 text-success-600" />
@@ -454,10 +486,12 @@ const PropertyIntelligencePage: React.FC = () => {
                 <div className="text-3xl font-heading font-bold text-success-600 mb-1">
                   {marketInsights ? marketInsights.averageSettlement : "--"}
                 </div>
-                <div className="font-medium text-neutral-700">Days Settlement</div>
+                <div className="font-medium text-neutral-700">
+                  Days Settlement
+                </div>
                 <div className="text-sm text-neutral-500">Average</div>
               </div>
-              
+
               <div className="text-center">
                 <div className="w-16 h-16 bg-trust-100 rounded-full flex items-center justify-center mx-auto mb-3">
                   <BarChart3 className="w-8 h-8 text-trust-600" />
@@ -465,7 +499,9 @@ const PropertyIntelligencePage: React.FC = () => {
                 <div className="text-3xl font-heading font-bold text-trust-600 mb-1">
                   {marketInsights ? marketInsights.confidenceIndex : "--"}
                 </div>
-                <div className="font-medium text-neutral-700">Confidence Index</div>
+                <div className="font-medium text-neutral-700">
+                  Confidence Index
+                </div>
                 <div className="text-sm text-neutral-500">Market Sentiment</div>
               </div>
             </div>
@@ -490,10 +526,12 @@ const PropertyIntelligencePage: React.FC = () => {
                     <label className="block text-sm font-medium text-neutral-700 mb-2">
                       Property Type
                     </label>
-                    <select 
+                    <select
                       className="w-full px-3 py-2 border border-neutral-200 rounded-lg focus:ring-2 focus:ring-primary-500"
                       value={filters.propertyType}
-                      onChange={(e) => handleFilterChange('propertyType', e.target.value)}
+                      onChange={(e) =>
+                        handleFilterChange("propertyType", e.target.value)
+                      }
                     >
                       <option value="">Any</option>
                       <option value="House">House</option>
@@ -502,15 +540,17 @@ const PropertyIntelligencePage: React.FC = () => {
                       <option value="Unit">Unit</option>
                     </select>
                   </div>
-                  
+
                   <div>
                     <label className="block text-sm font-medium text-neutral-700 mb-2">
                       Bedrooms
                     </label>
-                    <select 
+                    <select
                       className="w-full px-3 py-2 border border-neutral-200 rounded-lg focus:ring-2 focus:ring-primary-500"
                       value={filters.bedrooms}
-                      onChange={(e) => handleFilterChange('bedrooms', e.target.value)}
+                      onChange={(e) =>
+                        handleFilterChange("bedrooms", e.target.value)
+                      }
                     >
                       <option value="">Any</option>
                       <option value="1">1+</option>
@@ -519,15 +559,17 @@ const PropertyIntelligencePage: React.FC = () => {
                       <option value="4">4+</option>
                     </select>
                   </div>
-                  
+
                   <div>
                     <label className="block text-sm font-medium text-neutral-700 mb-2">
                       Price Range
                     </label>
-                    <select 
+                    <select
                       className="w-full px-3 py-2 border border-neutral-200 rounded-lg focus:ring-2 focus:ring-primary-500"
                       value={filters.priceRange}
-                      onChange={(e) => handleFilterChange('priceRange', e.target.value)}
+                      onChange={(e) =>
+                        handleFilterChange("priceRange", e.target.value)
+                      }
                     >
                       <option value="">Any</option>
                       <option value="0-500k">Under $500K</option>
@@ -536,15 +578,17 @@ const PropertyIntelligencePage: React.FC = () => {
                       <option value="2m+">$2M+</option>
                     </select>
                   </div>
-                  
+
                   <div>
                     <label className="block text-sm font-medium text-neutral-700 mb-2">
                       Risk Level
                     </label>
-                    <select 
+                    <select
                       className="w-full px-3 py-2 border border-neutral-200 rounded-lg focus:ring-2 focus:ring-primary-500"
                       value={filters.riskLevel}
-                      onChange={(e) => handleFilterChange('riskLevel', e.target.value)}
+                      onChange={(e) =>
+                        handleFilterChange("riskLevel", e.target.value)
+                      }
                     >
                       <option value="">Any</option>
                       <option value="low">Low Risk (1-3)</option>
@@ -552,7 +596,7 @@ const PropertyIntelligencePage: React.FC = () => {
                       <option value="high">High Risk (7-10)</option>
                     </select>
                   </div>
-                  
+
                   <div className="flex items-end">
                     <Button variant="primary" fullWidth onClick={applyFilters}>
                       Apply Filters
@@ -577,7 +621,7 @@ const PropertyIntelligencePage: React.FC = () => {
             Saved Properties ({savedProperties.length})
           </Button>
           <Button variant="outline" className="flex items-center gap-2">
-            <Compare className="w-4 h-4" />
+            <BarChart3 className="w-4 h-4" />
             Compare Properties
           </Button>
           <Button variant="outline" className="flex items-center gap-2">
@@ -610,8 +654,8 @@ const PropertyIntelligencePage: React.FC = () => {
                     onClick={() => setSelectedView("grid")}
                     className={cn(
                       "px-3 py-1 text-sm rounded-l-lg transition-colors",
-                      selectedView === "grid" 
-                        ? "bg-primary-100 text-primary-600" 
+                      selectedView === "grid"
+                        ? "bg-primary-100 text-primary-600"
                         : "text-neutral-500 hover:text-neutral-700"
                     )}
                   >
@@ -621,8 +665,8 @@ const PropertyIntelligencePage: React.FC = () => {
                     onClick={() => setSelectedView("list")}
                     className={cn(
                       "px-3 py-1 text-sm rounded-r-lg transition-colors",
-                      selectedView === "list" 
-                        ? "bg-primary-100 text-primary-600" 
+                      selectedView === "list"
+                        ? "bg-primary-100 text-primary-600"
                         : "text-neutral-500 hover:text-neutral-700"
                     )}
                   >
@@ -642,193 +686,247 @@ const PropertyIntelligencePage: React.FC = () => {
                 </div>
               </div>
             )}
-            
+
             {/* Loading State */}
             {isLoading && (
               <div className="text-center py-8">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4"></div>
-                <p className="text-neutral-600">Loading property intelligence...</p>
+                <p className="text-neutral-600">
+                  Loading property intelligence...
+                </p>
               </div>
             )}
-            
+
             {/* Empty State */}
             {!isLoading && properties.length === 0 && !error && (
               <div className="text-center py-8">
                 <Building className="w-16 h-16 text-neutral-300 mx-auto mb-4" />
-                <h3 className="text-lg font-semibold text-neutral-700 mb-2">No Properties Found</h3>
-                <p className="text-neutral-500 mb-4">Try adjusting your search criteria or filters.</p>
-                <Button variant="primary" onClick={() => {
-                  setSearchQuery("");
-                  setFilters({ propertyType: "", bedrooms: "", priceRange: "", riskLevel: "" });
-                  loadSampleProperties();
-                }}>
+                <h3 className="text-lg font-semibold text-neutral-700 mb-2">
+                  No Properties Found
+                </h3>
+                <p className="text-neutral-500 mb-4">
+                  Try adjusting your search criteria or filters.
+                </p>
+                <Button
+                  variant="primary"
+                  onClick={() => {
+                    setSearchQuery("");
+                    setFilters({
+                      propertyType: "",
+                      bedrooms: "",
+                      priceRange: "",
+                      riskLevel: "",
+                    });
+                    loadSampleProperties();
+                  }}
+                >
                   Load Sample Properties
                 </Button>
               </div>
             )}
-            
+
             {/* Properties Grid/List */}
             {!isLoading && properties.length > 0 && (
-              <div className={cn(
-                "gap-6",
-                selectedView === "grid" 
-                  ? "grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3" 
-                  : "space-y-4"
-              )}>
+              <div
+                className={cn(
+                  "gap-6",
+                  selectedView === "grid"
+                    ? "grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3"
+                    : "space-y-4"
+                )}
+              >
                 {properties.map((property, index) => (
-                <motion.div
-                  key={property.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.1 }}
-                >
-                  <Card 
-                    variant="outlined" 
-                    interactive
-                    className="group hover:shadow-xl transition-all duration-300"
+                  <motion.div
+                    key={property.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.1 }}
                   >
-                    <CardContent padding="lg">
-                      {/* Property Header */}
-                      <div className="flex items-start justify-between mb-4">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-2">
-                            <Building className="w-4 h-4 text-neutral-400" />
-                            <span className="text-sm font-medium text-neutral-600">
-                              {property.propertyType}
-                            </span>
-                            <StatusBadge
-                              status={property.environmentalRisk === "Low" ? "success" : "warning"}
-                              label={`${property.environmentalRisk} Env Risk`}
-                              size="xs"
-                              variant="dot"
-                            />
-                          </div>
-                          <h3 className="font-semibold text-neutral-900 group-hover:text-primary-600 transition-colors">
-                            {property.address}
-                          </h3>
-                          <div className="flex items-center gap-4 mt-2 text-sm text-neutral-600">
-                            <span>{property.bedrooms} bed</span>
-                            <span>{property.bathrooms} bath</span>
-                            <span>{property.carSpaces} car</span>
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => toggleSaveProperty(property.id)}
-                          className="p-2 hover:bg-neutral-100 rounded-lg transition-colors"
-                        >
-                          {savedProperties.includes(property.id) ? (
-                            <BookmarkCheck className="w-5 h-5 text-primary-600" />
-                          ) : (
-                            <Bookmark className="w-5 h-5 text-neutral-400" />
-                          )}
-                        </button>
-                      </div>
-
-                      {/* Property Value & Metrics */}
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <div className="text-2xl font-heading font-bold text-neutral-900">
-                              ${property.currentValue.toLocaleString()}
-                            </div>
-                            <div className="flex items-center gap-2 text-sm">
-                              <span className="text-neutral-500">
-                                {property.confidence}% confidence
+                    <Card
+                      variant="outlined"
+                      interactive
+                      className="group hover:shadow-xl transition-all duration-300"
+                    >
+                      <CardContent padding="lg">
+                        {/* Property Header */}
+                        <div className="flex items-start justify-between mb-4">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-2">
+                              <Building className="w-4 h-4 text-neutral-400" />
+                              <span className="text-sm font-medium text-neutral-600">
+                                {property.propertyType}
                               </span>
-                              <span className={cn(
-                                "flex items-center gap-1",
-                                property.priceChange > 0 ? "text-success-600" : "text-danger-600"
-                              )}>
-                                <TrendingUp className="w-3 h-3" />
-                                ${Math.abs(property.priceChange).toLocaleString()}
+                              <StatusBadge
+                                status={
+                                  property.environmentalRisk === "Low"
+                                    ? "success"
+                                    : "warning"
+                                }
+                                label={`${property.environmentalRisk} Env Risk`}
+                                size="sm"
+                                variant="dot"
+                              />
+                            </div>
+                            <h3 className="font-semibold text-neutral-900 group-hover:text-primary-600 transition-colors">
+                              {property.address}
+                            </h3>
+                            <div className="flex items-center gap-4 mt-2 text-sm text-neutral-600">
+                              <span>{property.bedrooms} bed</span>
+                              <span>{property.bathrooms} bath</span>
+                              <span>{property.carSpaces} car</span>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => toggleSaveProperty(property.id)}
+                            className="p-2 hover:bg-neutral-100 rounded-lg transition-colors"
+                          >
+                            {savedProperties.includes(property.id) ? (
+                              <BookmarkCheck className="w-5 h-5 text-primary-600" />
+                            ) : (
+                              <Bookmark className="w-5 h-5 text-neutral-400" />
+                            )}
+                          </button>
+                        </div>
+
+                        {/* Property Value & Metrics */}
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <div className="text-2xl font-heading font-bold text-neutral-900">
+                                ${property.currentValue.toLocaleString()}
+                              </div>
+                              <div className="flex items-center gap-2 text-sm">
+                                <span className="text-neutral-500">
+                                  {property.confidence}% confidence
+                                </span>
+                                <span
+                                  className={cn(
+                                    "flex items-center gap-1",
+                                    (property.priceChange ?? 0) > 0
+                                      ? "text-success-600"
+                                      : "text-danger-600"
+                                  )}
+                                >
+                                  <TrendingUp className="w-3 h-3" />$
+                                  {Math.abs(
+                                    property.priceChange ?? 0
+                                  ).toLocaleString()}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className="flex items-center gap-2 mb-1">
+                                <Star className="w-4 h-4 text-warning-500 fill-current" />
+                                <span className="font-semibold text-neutral-900">
+                                  {property.investmentScore}/10
+                                </span>
+                              </div>
+                              <div className="text-sm text-neutral-500">
+                                Investment Score
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Risk Assessment */}
+                          <div className="flex items-center justify-between p-3 bg-neutral-50 rounded-lg">
+                            <div className="flex items-center gap-2">
+                              <ShieldCheck
+                                className={cn(
+                                  "w-4 h-4",
+                                  getRiskColor(property.riskScore ?? 0)
+                                )}
+                              />
+                              <span className="text-sm font-medium text-neutral-700">
+                                Risk Assessment
+                              </span>
+                            </div>
+                            <div className="text-right">
+                              <div
+                                className={cn(
+                                  "font-semibold",
+                                  getRiskColor(property.riskScore ?? 0)
+                                )}
+                              >
+                                {property.riskScore ?? 0}/10
+                              </div>
+                              <div className="text-xs text-neutral-500">
+                                {getRiskLabel(property.riskScore ?? 0)}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Key Metrics */}
+                          <div className="grid grid-cols-3 gap-4">
+                            <div className="text-center">
+                              <div className="font-semibold text-neutral-900">
+                                {property.growthRate}%
+                              </div>
+                              <div className="text-xs text-neutral-500">
+                                Growth
+                              </div>
+                            </div>
+                            <div className="text-center">
+                              <div className="font-semibold text-neutral-900">
+                                {property.yield}%
+                              </div>
+                              <div className="text-xs text-neutral-500">
+                                Yield
+                              </div>
+                            </div>
+                            <div className="text-center">
+                              <div className="font-semibold text-neutral-900">
+                                {property.daysOnMarket}
+                              </div>
+                              <div className="text-xs text-neutral-500">
+                                Days
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Score Indicators */}
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="text-neutral-600">
+                                School Score
+                              </span>
+                              <span className="font-medium">
+                                {property.schoolScore}/10
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="text-neutral-600">
+                                Amenities
+                              </span>
+                              <span className="font-medium">
+                                {property.amenityScore}/10
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="text-neutral-600">
+                                Transport
+                              </span>
+                              <span className="font-medium">
+                                {property.transportScore}/10
                               </span>
                             </div>
                           </div>
-                          <div className="text-right">
-                            <div className="flex items-center gap-2 mb-1">
-                              <Star className="w-4 h-4 text-warning-500 fill-current" />
-                              <span className="font-semibold text-neutral-900">
-                                {property.investmentScore}/10
-                              </span>
-                            </div>
-                            <div className="text-sm text-neutral-500">
-                              Investment Score
-                            </div>
-                          </div>
-                        </div>
 
-                        {/* Risk Assessment */}
-                        <div className="flex items-center justify-between p-3 bg-neutral-50 rounded-lg">
-                          <div className="flex items-center gap-2">
-                            <ShieldCheck className={cn("w-4 h-4", getRiskColor(property.riskScore))} />
-                            <span className="text-sm font-medium text-neutral-700">
-                              Risk Assessment
-                            </span>
-                          </div>
-                          <div className="text-right">
-                            <div className={cn("font-semibold", getRiskColor(property.riskScore))}>
-                              {property.riskScore}/10
-                            </div>
-                            <div className="text-xs text-neutral-500">
-                              {getRiskLabel(property.riskScore)}
-                            </div>
+                          {/* Action Buttons */}
+                          <div className="flex gap-2 pt-4 border-t border-neutral-100">
+                            <Button variant="primary" size="sm" fullWidth>
+                              View Details
+                            </Button>
+                            <Button variant="outline" size="sm">
+                              <BarChart3 className="w-4 h-4" />
+                            </Button>
+                            <Button variant="outline" size="sm">
+                              <Calculator className="w-4 h-4" />
+                            </Button>
                           </div>
                         </div>
-
-                        {/* Key Metrics */}
-                        <div className="grid grid-cols-3 gap-4">
-                          <div className="text-center">
-                            <div className="font-semibold text-neutral-900">
-                              {property.growthRate}%
-                            </div>
-                            <div className="text-xs text-neutral-500">Growth</div>
-                          </div>
-                          <div className="text-center">
-                            <div className="font-semibold text-neutral-900">
-                              {property.yield}%
-                            </div>
-                            <div className="text-xs text-neutral-500">Yield</div>
-                          </div>
-                          <div className="text-center">
-                            <div className="font-semibold text-neutral-900">
-                              {property.daysOnMarket}
-                            </div>
-                            <div className="text-xs text-neutral-500">Days</div>
-                          </div>
-                        </div>
-
-                        {/* Score Indicators */}
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between text-sm">
-                            <span className="text-neutral-600">School Score</span>
-                            <span className="font-medium">{property.schoolScore}/10</span>
-                          </div>
-                          <div className="flex items-center justify-between text-sm">
-                            <span className="text-neutral-600">Amenities</span>
-                            <span className="font-medium">{property.amenityScore}/10</span>
-                          </div>
-                          <div className="flex items-center justify-between text-sm">
-                            <span className="text-neutral-600">Transport</span>
-                            <span className="font-medium">{property.transportScore}/10</span>
-                          </div>
-                        </div>
-
-                        {/* Action Buttons */}
-                        <div className="flex gap-2 pt-4 border-t border-neutral-100">
-                          <Button variant="primary" size="sm" fullWidth>
-                            View Details
-                          </Button>
-                          <Button variant="outline" size="sm">
-                            <Compare className="w-4 h-4" />
-                          </Button>
-                          <Button variant="outline" size="sm">
-                            <Calculator className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </motion.div>
+                      </CardContent>
+                    </Card>
+                  </motion.div>
                 ))}
               </div>
             )}
@@ -853,13 +951,20 @@ const PropertyIntelligencePage: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {marketInsights && marketInsights.hotSuburbs.length > 0 ? (
                 marketInsights.hotSuburbs.map((suburb, index) => (
-                  <div key={suburb} className="flex items-center gap-3 p-4 bg-white/60 rounded-xl">
+                  <div
+                    key={suburb}
+                    className="flex items-center gap-3 p-4 bg-white/60 rounded-xl"
+                  >
                     <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center text-primary-600 font-bold text-sm">
                       {index + 1}
                     </div>
                     <div>
-                      <div className="font-medium text-neutral-900">{suburb}</div>
-                      <div className="text-sm text-neutral-500">High Growth Area</div>
+                      <div className="font-medium text-neutral-900">
+                        {suburb}
+                      </div>
+                      <div className="text-sm text-neutral-500">
+                        High Growth Area
+                      </div>
                     </div>
                   </div>
                 ))

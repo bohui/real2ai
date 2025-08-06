@@ -1,19 +1,19 @@
-import apiService from './api';
+import apiService from "./api";
 import {
-  PropertySearchRequest,
-  PropertySearchResponse,
+  BulkPropertyAnalysisRequest,
   PropertyAnalyticsRequest,
   PropertyAnalyticsResponse,
-  BulkPropertyAnalysisRequest,
-  PropertyProfile,
-  PropertyMarketInsight,
   PropertyComparisonResult,
-  PropertyWatchlistItem
-} from '../types';
+  PropertyMarketInsight,
+  PropertyProfile,
+  PropertySearchRequest,
+  PropertySearchResponse,
+  PropertyWatchlistItem,
+} from "../types";
 
 export class PropertyIntelligenceService {
   private static instance: PropertyIntelligenceService;
-  private baseUrl = '/api/property-intelligence';
+  private baseUrl = "/api/property-intelligence";
 
   public static getInstance(): PropertyIntelligenceService {
     if (!PropertyIntelligenceService.instance) {
@@ -25,54 +25,69 @@ export class PropertyIntelligenceService {
   /**
    * Advanced property search with intelligent filtering
    */
-  async searchProperties(request: PropertySearchRequest): Promise<PropertySearchResponse> {
+  async searchProperties(
+    request: PropertySearchRequest,
+  ): Promise<PropertySearchResponse> {
     try {
       const response = await apiService.post(`${this.baseUrl}/search`, request);
       return response.data;
     } catch (error) {
-      console.error('Property search failed:', error);
-      throw new Error('Failed to search properties');
+      console.error("Property search failed:", error);
+      throw new Error("Failed to search properties");
     }
   }
 
   /**
    * Comprehensive property analysis
    */
-  async analyzeProperty(request: PropertyAnalyticsRequest): Promise<PropertyAnalyticsResponse> {
+  async analyzeProperty(
+    request: PropertyAnalyticsRequest,
+  ): Promise<PropertyAnalyticsResponse> {
     try {
-      const response = await apiService.post(`${this.baseUrl}/analyze`, request);
+      const response = await apiService.post(
+        `${this.baseUrl}/analyze`,
+        request,
+      );
       return response.data;
     } catch (error) {
-      console.error('Property analysis failed:', error);
-      throw new Error('Failed to analyze property');
+      console.error("Property analysis failed:", error);
+      throw new Error("Failed to analyze property");
     }
   }
 
   /**
    * Bulk property portfolio analysis
    */
-  async bulkAnalyzeProperties(request: BulkPropertyAnalysisRequest): Promise<any> {
+  async bulkAnalyzeProperties(
+    request: BulkPropertyAnalysisRequest,
+  ): Promise<any> {
     try {
-      const response = await apiService.post(`${this.baseUrl}/bulk-analyze`, request);
+      const response = await apiService.post(
+        `${this.baseUrl}/bulk-analyze`,
+        request,
+      );
       return response.data;
     } catch (error) {
-      console.error('Bulk analysis failed:', error);
-      throw new Error('Failed to perform bulk analysis');
+      console.error("Bulk analysis failed:", error);
+      throw new Error("Failed to perform bulk analysis");
     }
   }
 
   /**
    * Get user's property watchlist
    */
-  async getWatchlist(limit: number = 50, offset: number = 0): Promise<PropertyWatchlistItem[]> {
+  async getWatchlist(
+    limit: number = 50,
+    offset: number = 0,
+  ): Promise<PropertyWatchlistItem[]> {
     try {
       const response = await apiService.get(`${this.baseUrl}/watchlist`, {
-        params: { limit, offset }
+        params: { limit, offset },
       });
       return response.data;
     } catch (error) {
-      console.error('Failed to get watchlist:', error);
-      throw new Error('Failed to retrieve property watchlist');
+      console.error("Failed to get watchlist:", error);
+      throw new Error("Failed to retrieve property watchlist");
     }
   }
 
@@ -86,11 +101,14 @@ export class PropertyIntelligenceService {
     alert_preferences?: Record<string, any>;
   }): Promise<any> {
     try {
-      const response = await apiService.post(`${this.baseUrl}/watchlist`, property);
+      const response = await apiService.post(
+        `${this.baseUrl}/watchlist`,
+        property,
+      );
       return response.data;
     } catch (error) {
-      console.error('Failed to add to watchlist:', error);
-      throw new Error('Failed to add property to watchlist');
+      console.error("Failed to add to watchlist:", error);
+      throw new Error("Failed to add property to watchlist");
     }
   }
 
@@ -101,8 +119,8 @@ export class PropertyIntelligenceService {
     try {
       await apiService.delete(`${this.baseUrl}/watchlist/${watchlistItemId}`);
     } catch (error) {
-      console.error('Failed to remove from watchlist:', error);
-      throw new Error('Failed to remove property from watchlist');
+      console.error("Failed to remove from watchlist:", error);
+      throw new Error("Failed to remove property from watchlist");
     }
   }
 
@@ -111,17 +129,17 @@ export class PropertyIntelligenceService {
    */
   async getMarketInsights(
     location: string,
-    insightTypes: string[] = ['trends', 'forecasts'],
-    limit: number = 10
+    insightTypes: string[] = ["trends", "forecasts"],
+    limit: number = 10,
   ): Promise<PropertyMarketInsight[]> {
     try {
       const response = await apiService.get(`${this.baseUrl}/market-insights`, {
-        params: { location, insight_types: insightTypes.join(','), limit }
+        params: { location, insight_types: insightTypes.join(","), limit },
       });
       return response.data;
     } catch (error) {
-      console.error('Failed to get market insights:', error);
-      throw new Error('Failed to retrieve market insights');
+      console.error("Failed to get market insights:", error);
+      throw new Error("Failed to retrieve market insights");
     }
   }
 
@@ -130,17 +148,17 @@ export class PropertyIntelligenceService {
    */
   async compareProperties(
     properties: string[],
-    comparisonCriteria: string[] = ['price', 'investment', 'growth']
+    comparisonCriteria: string[] = ["price", "investment", "growth"],
   ): Promise<PropertyComparisonResult> {
     try {
       const response = await apiService.post(`${this.baseUrl}/compare`, {
         properties,
-        comparison_criteria: comparisonCriteria
+        comparison_criteria: comparisonCriteria,
       });
       return response.data;
     } catch (error) {
-      console.error('Property comparison failed:', error);
-      throw new Error('Failed to compare properties');
+      console.error("Property comparison failed:", error);
+      throw new Error("Failed to compare properties");
     }
   }
 
@@ -148,20 +166,20 @@ export class PropertyIntelligenceService {
    * Export property data in various formats
    */
   async exportPropertyData(
-    format: 'csv' | 'json' | 'pdf',
-    properties: string[]
+    format: "csv" | "json" | "pdf",
+    properties: string[],
   ): Promise<Blob> {
     try {
       const response = await apiService.post(`${this.baseUrl}/export`, {
         format,
-        properties
+        properties,
       }, {
-        responseType: 'blob'
+        responseType: "blob",
       });
       return response.data;
     } catch (error) {
-      console.error('Export failed:', error);
-      throw new Error('Failed to export property data');
+      console.error("Export failed:", error);
+      throw new Error("Failed to export property data");
     }
   }
 
@@ -170,11 +188,13 @@ export class PropertyIntelligenceService {
    */
   async getPropertyAnalysis(propertyId: string): Promise<PropertyProfile> {
     try {
-      const response = await apiService.get(`${this.baseUrl}/property/${propertyId}/analysis`);
+      const response = await apiService.get(
+        `${this.baseUrl}/property/${propertyId}/analysis`,
+      );
       return response.data;
     } catch (error) {
-      console.error('Failed to get property analysis:', error);
-      throw new Error('Failed to retrieve property analysis');
+      console.error("Failed to get property analysis:", error);
+      throw new Error("Failed to retrieve property analysis");
     }
   }
 
@@ -184,16 +204,16 @@ export class PropertyIntelligenceService {
   async getMarketAnalysis(
     suburb: string,
     state: string,
-    propertyType?: string
+    propertyType?: string,
   ): Promise<any> {
     try {
       const response = await apiService.get(`${this.baseUrl}/market-analysis`, {
-        params: { suburb, state, property_type: propertyType }
+        params: { suburb, state, property_type: propertyType },
       });
       return response.data;
     } catch (error) {
-      console.error('Failed to get market analysis:', error);
-      throw new Error('Failed to retrieve market analysis');
+      console.error("Failed to get market analysis:", error);
+      throw new Error("Failed to retrieve market analysis");
     }
   }
 
@@ -203,21 +223,24 @@ export class PropertyIntelligenceService {
   async getInvestmentOpportunities(
     location: string,
     budgetRange?: [number, number],
-    investmentStrategy: string = 'growth'
+    investmentStrategy: string = "growth",
   ): Promise<any> {
     try {
-      const response = await apiService.get(`${this.baseUrl}/investment-opportunities`, {
-        params: {
-          location,
-          min_budget: budgetRange?.[0],
-          max_budget: budgetRange?.[1],
-          strategy: investmentStrategy
-        }
-      });
+      const response = await apiService.get(
+        `${this.baseUrl}/investment-opportunities`,
+        {
+          params: {
+            location,
+            min_budget: budgetRange?.[0],
+            max_budget: budgetRange?.[1],
+            strategy: investmentStrategy,
+          },
+        },
+      );
       return response.data;
     } catch (error) {
-      console.error('Failed to get investment opportunities:', error);
-      throw new Error('Failed to retrieve investment opportunities');
+      console.error("Failed to get investment opportunities:", error);
+      throw new Error("Failed to retrieve investment opportunities");
     }
   }
 
@@ -226,17 +249,17 @@ export class PropertyIntelligenceService {
    */
   async getPropertyValuation(
     address: string,
-    valuationType: 'avm' | 'desktop' | 'professional' = 'avm'
+    valuationType: "avm" | "desktop" | "professional" = "avm",
   ): Promise<any> {
     try {
       const response = await apiService.post(`${this.baseUrl}/valuation`, {
         address,
-        valuation_type: valuationType
+        valuation_type: valuationType,
       });
       return response.data;
     } catch (error) {
-      console.error('Failed to get property valuation:', error);
-      throw new Error('Failed to retrieve property valuation');
+      console.error("Failed to get property valuation:", error);
+      throw new Error("Failed to retrieve property valuation");
     }
   }
 
@@ -245,13 +268,16 @@ export class PropertyIntelligenceService {
    */
   async getSuburbStatistics(suburb: string, state: string): Promise<any> {
     try {
-      const response = await apiService.get(`${this.baseUrl}/suburb-statistics`, {
-        params: { suburb, state }
-      });
+      const response = await apiService.get(
+        `${this.baseUrl}/suburb-statistics`,
+        {
+          params: { suburb, state },
+        },
+      );
       return response.data;
     } catch (error) {
-      console.error('Failed to get suburb statistics:', error);
-      throw new Error('Failed to retrieve suburb statistics');
+      console.error("Failed to get suburb statistics:", error);
+      throw new Error("Failed to retrieve suburb statistics");
     }
   }
 
@@ -282,22 +308,21 @@ export class PropertyIntelligenceService {
           suburbs: filters.location ? [filters.location] : [],
           states: [],
           min_carspaces: undefined,
-          max_carspaces: undefined,
           min_land_area: undefined,
-          max_land_area: undefined
+          max_land_area: undefined,
         },
         location: filters.location,
         radius_km: 50,
         limit: filters.limit || 20,
-        sort_by: (filters.sortBy as any) || 'relevance',
+        sort_by: (filters.sortBy as any) || "relevance",
         include_off_market: false,
-        include_historical: false
+        include_historical: false,
       };
 
       return await this.searchProperties(searchRequest);
     } catch (error) {
-      console.error('Advanced property search failed:', error);
-      throw new Error('Failed to search properties with advanced filters');
+      console.error("Advanced property search failed:", error);
+      throw new Error("Failed to search properties with advanced filters");
     }
   }
 
@@ -306,11 +331,13 @@ export class PropertyIntelligenceService {
    */
   async getPropertyPriceHistory(propertyId: string): Promise<any> {
     try {
-      const response = await apiService.get(`${this.baseUrl}/property/${propertyId}/price-history`);
+      const response = await apiService.get(
+        `${this.baseUrl}/property/${propertyId}/price-history`,
+      );
       return response.data;
     } catch (error) {
-      console.error('Failed to get price history:', error);
-      throw new Error('Failed to retrieve property price history');
+      console.error("Failed to get price history:", error);
+      throw new Error("Failed to retrieve property price history");
     }
   }
 
@@ -319,11 +346,14 @@ export class PropertyIntelligenceService {
    */
   async getRentalEstimate(address: string): Promise<any> {
     try {
-      const response = await apiService.post(`${this.baseUrl}/rental-estimate`, { address });
+      const response = await apiService.post(
+        `${this.baseUrl}/rental-estimate`,
+        { address },
+      );
       return response.data;
     } catch (error) {
-      console.error('Failed to get rental estimate:', error);
-      throw new Error('Failed to retrieve rental estimate');
+      console.error("Failed to get rental estimate:", error);
+      throw new Error("Failed to retrieve rental estimate");
     }
   }
 
@@ -332,18 +362,22 @@ export class PropertyIntelligenceService {
    */
   async generatePropertyReport(
     propertyId: string,
-    reportType: 'basic' | 'standard' | 'premium' = 'standard'
+    reportType: "basic" | "standard" | "premium" = "standard",
   ): Promise<Blob> {
     try {
-      const response = await apiService.post(`${this.baseUrl}/property/${propertyId}/report`, {
-        report_type: reportType
-      }, {
-        responseType: 'blob'
-      });
+      const response = await apiService.post(
+        `${this.baseUrl}/property/${propertyId}/report`,
+        {
+          report_type: reportType,
+        },
+        {
+          responseType: "blob",
+        },
+      );
       return response.data;
     } catch (error) {
-      console.error('Failed to generate property report:', error);
-      throw new Error('Failed to generate property report');
+      console.error("Failed to generate property report:", error);
+      throw new Error("Failed to generate property report");
     }
   }
 
@@ -352,16 +386,19 @@ export class PropertyIntelligenceService {
    */
   async getNearbyAmenities(
     address: string,
-    radius: number = 2000
+    radius: number = 2000,
   ): Promise<any> {
     try {
-      const response = await apiService.get(`${this.baseUrl}/nearby-amenities`, {
-        params: { address, radius }
-      });
+      const response = await apiService.get(
+        `${this.baseUrl}/nearby-amenities`,
+        {
+          params: { address, radius },
+        },
+      );
       return response.data;
     } catch (error) {
-      console.error('Failed to get nearby amenities:', error);
-      throw new Error('Failed to retrieve nearby amenities');
+      console.error("Failed to get nearby amenities:", error);
+      throw new Error("Failed to retrieve nearby amenities");
     }
   }
 
@@ -370,13 +407,16 @@ export class PropertyIntelligenceService {
    */
   async getSchoolCatchments(address: string): Promise<any> {
     try {
-      const response = await apiService.get(`${this.baseUrl}/school-catchments`, {
-        params: { address }
-      });
+      const response = await apiService.get(
+        `${this.baseUrl}/school-catchments`,
+        {
+          params: { address },
+        },
+      );
       return response.data;
     } catch (error) {
-      console.error('Failed to get school catchments:', error);
-      throw new Error('Failed to retrieve school catchments');
+      console.error("Failed to get school catchments:", error);
+      throw new Error("Failed to retrieve school catchments");
     }
   }
 
@@ -385,26 +425,30 @@ export class PropertyIntelligenceService {
    */
   async getOwnershipHistory(propertyId: string): Promise<any> {
     try {
-      const response = await apiService.get(`${this.baseUrl}/property/${propertyId}/ownership-history`);
+      const response = await apiService.get(
+        `${this.baseUrl}/property/${propertyId}/ownership-history`,
+      );
       return response.data;
     } catch (error) {
-      console.error('Failed to get ownership history:', error);
-      throw new Error('Failed to retrieve property ownership history');
+      console.error("Failed to get ownership history:", error);
+      throw new Error("Failed to retrieve property ownership history");
     }
   }
 
   /**
    * Get market trends data
    */
-  async getMarketTrends(timeframe: '3M' | '6M' | '1Y' | '2Y' = '1Y'): Promise<any> {
+  async getMarketTrends(
+    timeframe: "3M" | "6M" | "1Y" | "2Y" = "1Y",
+  ): Promise<any> {
     try {
       const response = await apiService.get(`${this.baseUrl}/market-trends`, {
-        params: { timeframe }
+        params: { timeframe },
       });
       return response.data;
     } catch (error) {
-      console.error('Failed to get market trends:', error);
-      throw new Error('Failed to retrieve market trends');
+      console.error("Failed to get market trends:", error);
+      throw new Error("Failed to retrieve market trends");
     }
   }
 
@@ -416,8 +460,8 @@ export class PropertyIntelligenceService {
       const response = await apiService.get(`${this.baseUrl}/market/national`);
       return response.data;
     } catch (error) {
-      console.error('Failed to get national market stats:', error);
-      throw new Error('Failed to retrieve national market statistics');
+      console.error("Failed to get national market stats:", error);
+      throw new Error("Failed to retrieve national market statistics");
     }
   }
 
@@ -429,8 +473,8 @@ export class PropertyIntelligenceService {
       const response = await apiService.get(`${this.baseUrl}/market/states`);
       return response.data;
     } catch (error) {
-      console.error('Failed to get state market comparison:', error);
-      throw new Error('Failed to retrieve state market comparison');
+      console.error("Failed to get state market comparison:", error);
+      throw new Error("Failed to retrieve state market comparison");
     }
   }
 
@@ -439,13 +483,16 @@ export class PropertyIntelligenceService {
    */
   async getHotSuburbs(limit: number = 10): Promise<any> {
     try {
-      const response = await apiService.get(`${this.baseUrl}/market/hot-suburbs`, {
-        params: { limit }
-      });
+      const response = await apiService.get(
+        `${this.baseUrl}/market/hot-suburbs`,
+        {
+          params: { limit },
+        },
+      );
       return response.data;
     } catch (error) {
-      console.error('Failed to get hot suburbs:', error);
-      throw new Error('Failed to retrieve high growth suburbs');
+      console.error("Failed to get hot suburbs:", error);
+      throw new Error("Failed to retrieve high growth suburbs");
     }
   }
 
@@ -454,11 +501,13 @@ export class PropertyIntelligenceService {
    */
   async getMarketPredictions(): Promise<any> {
     try {
-      const response = await apiService.get(`${this.baseUrl}/market/predictions`);
+      const response = await apiService.get(
+        `${this.baseUrl}/market/predictions`,
+      );
       return response.data;
     } catch (error) {
-      console.error('Failed to get market predictions:', error);
-      throw new Error('Failed to retrieve market predictions');
+      console.error("Failed to get market predictions:", error);
+      throw new Error("Failed to retrieve market predictions");
     }
   }
 
@@ -467,14 +516,17 @@ export class PropertyIntelligenceService {
    */
   async getMarketRiskFactors(): Promise<any> {
     try {
-      const response = await apiService.get(`${this.baseUrl}/market/risk-factors`);
+      const response = await apiService.get(
+        `${this.baseUrl}/market/risk-factors`,
+      );
       return response.data;
     } catch (error) {
-      console.error('Failed to get market risk factors:', error);
-      throw new Error('Failed to retrieve market risk factors');
+      console.error("Failed to get market risk factors:", error);
+      throw new Error("Failed to retrieve market risk factors");
     }
   }
 }
 
 // Export singleton instance
-export const propertyIntelligenceService = PropertyIntelligenceService.getInstance();
+export const propertyIntelligenceService = PropertyIntelligenceService
+  .getInstance();

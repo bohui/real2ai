@@ -15,7 +15,7 @@ import { ContractAnalysisResult, RiskLevel } from '@/types'
 import { getRiskLevelColor, getRiskLevelIcon, cn } from '@/utils'
 
 interface RiskAssessmentProps {
-  riskAssessment: ContractAnalysisResult['risk_assessment']
+  riskAssessment: ContractAnalysisResult['risk_assessment'] | null
   loading?: boolean
   className?: string
 }

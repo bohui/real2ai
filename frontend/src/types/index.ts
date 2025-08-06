@@ -17,7 +17,7 @@ export type ContractType =
 
 export type RiskLevel = "low" | "medium" | "high" | "critical";
 
-export type UserType = "buyer" | "investor" | "agent";
+export type UserType = "buyer" | "investor" | "agent" | "individual";
 
 export type SubscriptionStatus = "free" | "basic" | "premium" | "enterprise";
 

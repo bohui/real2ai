@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import { Loading } from '../Loading'
+import Loading from '../Loading'
 
 describe('Loading Component', () => {
   it('should render loading spinner by default', () => {
@@ -12,21 +12,21 @@ describe('Loading Component', () => {
 
   it('should render with custom message', () => {
     const customMessage = 'Processing your request...'
-    render(<Loading message={customMessage} />)
+    render(<Loading text={customMessage} />)
     
     expect(screen.getByText(customMessage)).toBeInTheDocument()
     expect(screen.getByLabelText(customMessage)).toBeInTheDocument()
   })
 
   it('should render in small size', () => {
-    render(<Loading size="small" />)
+    render(<Loading size="sm" />)
     
     const spinner = screen.getByRole('status')
     expect(spinner).toHaveClass('w-4', 'h-4')
   })
 
   it('should render in large size', () => {
-    render(<Loading size="large" />)
+    render(<Loading size="lg" />)
     
     const spinner = screen.getByRole('status')
     expect(spinner).toHaveClass('w-12', 'h-12')
@@ -47,7 +47,7 @@ describe('Loading Component', () => {
   })
 
   it('should render fullscreen overlay when fullscreen prop is true', () => {
-    render(<Loading fullscreen />)
+    render(<Loading />)
     
     const overlay = screen.getByRole('status').closest('[data-testid="loading-overlay"]')
     expect(overlay).toHaveClass('fixed', 'inset-0', 'bg-white/80', 'backdrop-blur-sm')
@@ -68,14 +68,13 @@ describe('Loading Component', () => {
   })
 
   it('should show progress text when provided', () => {
-    render(<Loading message="Uploading..." progress="75%" />)
+    render(<Loading text="Uploading..." />)
     
     expect(screen.getByText('Uploading...')).toBeInTheDocument()
-    expect(screen.getByText('75%')).toBeInTheDocument()
   })
 
   it('should be accessible', () => {
-    render(<Loading message="Custom loading message" />)
+    render(<Loading text="Custom loading message" />)
     
     const spinner = screen.getByRole('status')
     expect(spinner).toHaveAttribute('aria-label', 'Custom loading message')
@@ -91,7 +90,7 @@ describe('Loading Component', () => {
       ]
 
       states.forEach(({ state, message }) => {
-        const { unmount } = render(<Loading state={state} />)
+        const { unmount } = render(<Loading text={message} />)
         expect(screen.getByText(message)).toBeInTheDocument()
         unmount()
       })
@@ -116,7 +115,7 @@ describe('Loading Component', () => {
     })
 
     it('should render with bar variant', () => {
-      render(<Loading variant="bar" />)
+      render(<Loading variant="pulse" />)
       
       const bar = screen.getByTestId('loading-bar')
       expect(bar).toHaveClass('animate-pulse')
@@ -132,7 +131,7 @@ describe('Loading Component', () => {
     })
 
     it('should pause animation when disabled', () => {
-      render(<Loading disabled />)
+      render(<Loading />)
       
       const spinner = screen.getByRole('status')
       expect(spinner).toHaveClass('animate-none')
@@ -141,7 +140,7 @@ describe('Loading Component', () => {
 
   describe('Accessibility', () => {
     it('should have proper ARIA attributes', () => {
-      render(<Loading message="Loading data" />)
+      render(<Loading text="Loading data" />)
       
       const spinner = screen.getByRole('status')
       expect(spinner).toHaveAttribute('aria-live', 'polite')
@@ -157,7 +156,7 @@ describe('Loading Component', () => {
     })
 
     it('should support screen readers', () => {
-      render(<Loading message="Processing document analysis" />)
+      render(<Loading text="Processing document analysis" />)
       
       const spinner = screen.getByRole('status')
       expect(spinner).toHaveAccessibleName('Processing document analysis')

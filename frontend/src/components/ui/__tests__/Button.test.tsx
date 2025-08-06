@@ -68,7 +68,7 @@ describe('Button Component', () => {
   })
 
   it('renders as different HTML elements', () => {
-    const { rerender } = render(<Button as="a" href="/test">Link Button</Button>)
+    const { rerender } = render(<Button as="a" {...({ href: '/test' } as any)}>Link Button</Button>)
     expect(screen.getByRole('link')).toBeInTheDocument()
     
     rerender(<Button as="div">Div Button</Button>)

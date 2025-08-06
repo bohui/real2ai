@@ -1002,7 +1002,7 @@ const FinancialAnalysisPage: React.FC = () => {
                       </div>
                       <div className="text-sm text-warning-700">Estimated CGT Liability</div>
                       <div className="text-xs text-warning-600 mt-1">
-                        After 50% discount (held >12 months)
+                        After 50% discount (held greater than 12 months)
                       </div>
                     </div>
                   </div>

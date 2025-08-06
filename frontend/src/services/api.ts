@@ -1,20 +1,20 @@
-import axios, { AxiosInstance, AxiosError } from "axios";
+import axios, { AxiosError, AxiosInstance } from "axios";
 import {
-  User,
-  UserRegistrationRequest,
-  UserLoginRequest,
   AuthResponse,
-  DocumentUploadResponse,
-  DocumentDetails,
   ContractAnalysisRequest,
   ContractAnalysisResponse,
   ContractAnalysisResult,
+  DocumentDetails,
+  DocumentUploadResponse,
   UsageStats,
+  User,
+  UserLoginRequest,
+  UserRegistrationRequest,
 } from "@/types";
 
 // API Configuration
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ||
+  "http://localhost:8000";
 
 class ApiService {
   private client: AxiosInstance;
@@ -37,7 +37,7 @@ class ApiService {
         }
         return config;
       },
-      (error) => Promise.reject(error)
+      (error) => Promise.reject(error),
     );
 
     // Response interceptor for error handling
@@ -50,7 +50,7 @@ class ApiService {
           window.dispatchEvent(new CustomEvent("auth:unauthorized"));
         }
         return Promise.reject(error);
-      }
+      },
     );
 
     // Load token from localStorage
@@ -79,7 +79,7 @@ class ApiService {
   async register(data: UserRegistrationRequest): Promise<AuthResponse> {
     const response = await this.client.post<AuthResponse>(
       "/api/auth/register",
-      data
+      data,
     );
     return response.data;
   }
@@ -87,7 +87,7 @@ class ApiService {
   async login(data: UserLoginRequest): Promise<AuthResponse> {
     const response = await this.client.post<AuthResponse>(
       "/api/auth/login",
-      data
+      data,
     );
     if (response.data.access_token) {
       this.setToken(response.data.access_token);
@@ -109,7 +109,7 @@ class ApiService {
   async updateProfile(userData: Partial<User>): Promise<User> {
     const response = await this.client.patch<User>(
       "/api/users/profile",
-      userData
+      userData,
     );
     return response.data;
   }
@@ -139,7 +139,7 @@ class ApiService {
     preferences_saved?: boolean;
   }> {
     const response = await this.client.post("/api/users/onboarding/complete", {
-      onboarding_preferences: preferences
+      onboarding_preferences: preferences,
     });
     return response.data;
   }
@@ -155,7 +155,7 @@ class ApiService {
 
   async getUserStats(): Promise<UsageStats> {
     const response = await this.client.get<UsageStats>(
-      "/api/users/usage-stats"
+      "/api/users/usage-stats",
     );
     return response.data;
   }
@@ -164,7 +164,7 @@ class ApiService {
   async uploadDocument(
     file: File,
     contractType: string = "purchase_agreement",
-    australianState: string = "NSW"
+    australianState: string = "NSW",
   ): Promise<DocumentUploadResponse> {
     const formData = new FormData();
     formData.append("file", file);
@@ -181,34 +181,34 @@ class ApiService {
         // Upload progress tracking
         onUploadProgress: (progressEvent) => {
           const percentCompleted = Math.round(
-            (progressEvent.loaded * 100) / (progressEvent.total || 1)
+            (progressEvent.loaded * 100) / (progressEvent.total || 1),
           );
           // Emit progress event
           window.dispatchEvent(
             new CustomEvent("upload:progress", {
               detail: { progress: percentCompleted },
-            })
+            }),
           );
         },
-      }
+      },
     );
     return response.data;
   }
 
   async getDocument(documentId: string): Promise<DocumentDetails> {
     const response = await this.client.get<DocumentDetails>(
-      `/api/documents/${documentId}`
+      `/api/documents/${documentId}`,
     );
     return response.data;
   }
 
   // Contract analysis endpoints
   async startAnalysis(
-    data: ContractAnalysisRequest
+    data: ContractAnalysisRequest,
   ): Promise<ContractAnalysisResponse> {
     const response = await this.client.post<ContractAnalysisResponse>(
       "/api/contracts/analyze",
-      data
+      data,
     );
     return response.data;
   }
@@ -217,34 +217,44 @@ class ApiService {
     const response = await this.retryRequest(
       () => this.client.get<any>(`/api/contracts/${contractId}/analysis`),
       3, // max retries
-      1000 // initial delay
+      1000, // initial delay
     );
-    
+
     // Transform API response to match frontend expectations
     const apiData = response.data;
     const analysisResult = apiData.analysis_result || {};
-    
+
     // Create executive summary from available data
     const executiveSummary = {
-      overall_risk_score: analysisResult.risk_assessment?.overall_risk_score || apiData.risk_score || 0,
-      compliance_status: analysisResult.compliance_check?.state_compliance ? 'compliant' : 'non-compliant',
+      overall_risk_score: analysisResult.risk_assessment?.overall_risk_score ||
+        apiData.risk_score || 0,
+      compliance_status:
+        (analysisResult.compliance_check?.state_compliance
+          ? "compliant"
+          : "non-compliant") as "compliant" | "non-compliant",
       total_recommendations: analysisResult.recommendations?.length || 0,
-      critical_issues: analysisResult.recommendations?.filter((r: any) => r.priority === 'critical')?.length || 0,
-      confidence_level: analysisResult.overall_confidence || 0.8
+      critical_issues:
+        analysisResult.recommendations?.filter((r: any) =>
+          r.priority === "critical"
+        )?.length || 0,
+      confidence_level: analysisResult.overall_confidence || 0.8,
     };
-    
+
     // Transform to match ContractAnalysisResult interface
     const transformedResult: ContractAnalysisResult = {
       contract_id: apiData.contract_id,
       analysis_id: analysisResult.analysis_id || apiData.contract_id,
-      analysis_timestamp: analysisResult.analysis_timestamp || apiData.created_at,
-      user_id: analysisResult.user_id || '',
-      australian_state: analysisResult.australian_state || 'NSW',
-      analysis_status: apiData.analysis_status || 'completed',
+      analysis_timestamp: analysisResult.analysis_timestamp ||
+        apiData.created_at,
+      user_id: analysisResult.user_id || "",
+      australian_state: analysisResult.australian_state || "NSW",
+      analysis_status: apiData.analysis_status || "completed",
       contract_terms: analysisResult.contract_terms || {},
       risk_assessment: {
-        overall_risk_score: analysisResult.risk_assessment?.overall_risk_score || apiData.risk_score || 0,
-        risk_factors: analysisResult.risk_assessment?.risk_factors || []
+        overall_risk_score:
+          analysisResult.risk_assessment?.overall_risk_score ||
+          apiData.risk_score || 0,
+        risk_factors: analysisResult.risk_assessment?.risk_factors || [],
       },
       compliance_check: analysisResult.compliance_check || {
         state_compliance: false,
@@ -253,33 +263,52 @@ class ApiService {
         cooling_off_details: {},
         mandatory_disclosures: [],
         warnings: [],
-        legal_references: []
+        legal_references: [],
       },
       recommendations: analysisResult.recommendations || [],
       confidence_scores: analysisResult.confidence_scores || {},
       overall_confidence: analysisResult.overall_confidence || 0.8,
       processing_time: apiData.processing_time || 0,
-      analysis_version: analysisResult.processing_summary?.analysis_version || '1.0',
-      executive_summary: executiveSummary
+      analysis_version: analysisResult.processing_summary?.analysis_version ||
+        "1.0",
+      executive_summary: {
+        overall_risk_score:
+          analysisResult.risk_assessment?.overall_risk_score || 0,
+        compliance_status: analysisResult.compliance_check?.state_compliance
+          ? "compliant"
+          : "non-compliant",
+        total_recommendations: analysisResult.recommendations?.length || 0,
+        critical_issues:
+          analysisResult.risk_assessment?.risk_factors?.filter((rf: any) =>
+            rf.severity === "critical" || rf.severity === "high"
+          ).length || 0,
+        confidence_level: analysisResult.overall_confidence || 0.8,
+      },
     };
-    
+
     return transformedResult;
+  }
+
+  async removeFromWatchlist(watchlistItemId: string): Promise<void> {
+    await this.client.delete(
+      `/api/property-intelligence/watchlist/${watchlistItemId}`,
+    );
   }
 
   async deleteAnalysis(contractId: string): Promise<void> {
     await this.retryRequest(
       () => this.client.delete(`/api/contracts/${contractId}`),
       2, // fewer retries for delete operations
-      1000
+      1000,
     );
   }
 
   async downloadReport(
     contractId: string,
-    format: string = "pdf"
+    format: string = "pdf",
   ): Promise<string> {
     const response = await this.client.get(
-      `/api/contracts/${contractId}/report?format=${format}`
+      `/api/contracts/${contractId}/report?format=${format}`,
     );
     return response.data.download_url;
   }
@@ -290,13 +319,42 @@ class ApiService {
     return response.data;
   }
 
+  // Generic HTTP methods for other services
+  async get<T = any>(url: string, config?: any): Promise<{ data: T }> {
+    const response = await this.client.get<T>(url, config);
+    return { data: response.data };
+  }
+
+  async post<T = any>(
+    url: string,
+    data?: any,
+    config?: any,
+  ): Promise<{ data: T }> {
+    const response = await this.client.post<T>(url, data, config);
+    return { data: response.data };
+  }
+
+  async put<T = any>(
+    url: string,
+    data?: any,
+    config?: any,
+  ): Promise<{ data: T }> {
+    const response = await this.client.put<T>(url, data, config);
+    return { data: response.data };
+  }
+
+  async delete<T = any>(url: string, config?: any): Promise<{ data: T }> {
+    const response = await this.client.delete<T>(url, config);
+    return { data: response.data };
+  }
+
   // Enhanced error handler with retry logic
   handleError(error: AxiosError): string {
     if (error.response) {
       // Server responded with error status
       const data = error.response.data as any;
       const status = error.response.status;
-      
+
       // Handle specific status codes
       switch (status) {
         case 400:
@@ -324,7 +382,7 @@ class ApiService {
       }
     } else if (error.request) {
       // Request made but no response received
-      if (error.code === 'ECONNABORTED') {
+      if (error.code === "ECONNABORTED") {
         return "Request timeout. Please try again.";
       }
       return "Network error - please check your connection";
@@ -338,7 +396,7 @@ class ApiService {
   private async retryRequest<T>(
     requestFn: () => Promise<T>,
     maxRetries: number = 3,
-    delay: number = 1000
+    delay: number = 1000,
   ): Promise<T> {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
@@ -347,21 +405,20 @@ class ApiService {
         if (attempt === maxRetries) {
           throw error;
         }
-        
+
         // Check if error is retryable
         const axiosError = error as AxiosError;
-        const shouldRetry = 
-          !axiosError.response || 
+        const shouldRetry = !axiosError.response ||
           axiosError.response.status >= 500 ||
           axiosError.response.status === 408 ||
           axiosError.response.status === 429;
-          
+
         if (!shouldRetry) {
           throw error;
         }
-        
+
         // Wait before retry with exponential backoff
-        await new Promise(resolve => setTimeout(resolve, delay * attempt));
+        await new Promise((resolve) => setTimeout(resolve, delay * attempt));
       }
     }
     throw new Error("Max retries exceeded");
@@ -385,33 +442,41 @@ export class WebSocketService {
     const wsUrl = API_BASE_URL.replace("http", "ws");
     const token = localStorage.getItem("auth_token");
     this.contractId = contractId;
-    this.url = `${wsUrl}/ws/contracts/${contractId}?token=${encodeURIComponent(token || "")}`;
+    this.url = `${wsUrl}/ws/contracts/${contractId}?token=${
+      encodeURIComponent(token || "")
+    }`;
   }
 
   connect(): Promise<void> {
     // Prevent multiple connection attempts
     if (this.isConnecting || this.isConnected) {
-      console.log(`WebSocket already connecting/connected for contract ${this.contractId}`);
+      console.log(
+        `WebSocket already connecting/connected for contract ${this.contractId}`,
+      );
       return Promise.resolve();
     }
 
     return new Promise((resolve, reject) => {
       try {
         this.isConnecting = true;
-        
+
         // Close existing connection if any
         if (this.ws) {
-          console.log(`Closing existing WebSocket for contract ${this.contractId}`);
+          console.log(
+            `Closing existing WebSocket for contract ${this.contractId}`,
+          );
           this.ws.close(1000, "Reconnecting");
           this.ws = null;
         }
 
         // Validate URL before creating WebSocket
-        if (!this.url || !this.url.startsWith('ws')) {
+        if (!this.url || !this.url.startsWith("ws")) {
           throw new Error(`Invalid WebSocket URL: ${this.url}`);
         }
 
-        console.log(`Creating new WebSocket connection for contract ${this.contractId}: ${this.url}`);
+        console.log(
+          `Creating new WebSocket connection for contract ${this.contractId}: ${this.url}`,
+        );
         this.ws = new WebSocket(this.url);
 
         this.ws.onopen = () => {
@@ -419,50 +484,64 @@ export class WebSocketService {
           this.reconnectAttempts = 0;
           this.isConnecting = false;
           this.isConnected = true;
-          
+
           // Start heartbeat
           this.startHeartbeat();
-          
+
           // Process queued messages
           this.processMessageQueue();
-          
+
           // Request initial status after a brief delay to ensure connection is stable
           setTimeout(() => {
             if (this.isConnected && this.ws?.readyState === WebSocket.OPEN) {
               this.sendMessage({ type: "get_status" });
             }
           }, 100);
-          
+
           resolve();
         };
 
         this.ws.onmessage = (event) => {
           try {
             const data = JSON.parse(event.data);
-            console.log(`WebSocket message received for contract ${this.contractId}:`, data.event_type);
-            
+            console.log(
+              `WebSocket message received for contract ${this.contractId}:`,
+              data.event_type,
+            );
+
             // Validate message structure
             if (!data.event_type) {
-              console.warn(`Invalid WebSocket message format for contract ${this.contractId}:`, data);
+              console.warn(
+                `Invalid WebSocket message format for contract ${this.contractId}:`,
+                data,
+              );
               return;
             }
-            
+
             // Emit custom event for components to listen to
             window.dispatchEvent(
               new CustomEvent("analysis:update", {
                 detail: data,
-              })
+              }),
             );
           } catch (error) {
-            console.error(`Error parsing WebSocket message for contract ${this.contractId}:`, error, event.data);
+            console.error(
+              `Error parsing WebSocket message for contract ${this.contractId}:`,
+              error,
+              event.data,
+            );
           }
         };
 
         this.ws.onclose = (event) => {
-          console.log(`WebSocket disconnected for contract ${this.contractId}:`, event.code, event.reason);
+          console.log(
+            `WebSocket disconnected for contract ${this.contractId}:`,
+            event.code,
+            event.reason,
+          );
           this.isConnecting = false;
           this.isConnected = false;
-          
+
           // Only reconnect if it wasn't a clean disconnect (1000) and we haven't exceeded max attempts
           if (
             event.code !== 1000 &&
@@ -474,7 +553,10 @@ export class WebSocketService {
         };
 
         this.ws.onerror = (error) => {
-          console.error(`WebSocket error for contract ${this.contractId}:`, error);
+          console.error(
+            `WebSocket error for contract ${this.contractId}:`,
+            error,
+          );
           this.isConnecting = false;
           this.isConnected = false;
           reject(error);
@@ -498,7 +580,7 @@ export class WebSocketService {
 
     setTimeout(() => {
       console.log(
-        `Attempting to reconnect WebSocket for contract ${this.contractId} (${this.reconnectAttempts}/${this.maxReconnectAttempts})`
+        `Attempting to reconnect WebSocket for contract ${this.contractId} (${this.reconnectAttempts}/${this.maxReconnectAttempts})`,
       );
       this.connect().catch(console.error);
     }, delay);
@@ -506,26 +588,29 @@ export class WebSocketService {
 
   disconnect(): void {
     console.log(`Disconnecting WebSocket for contract ${this.contractId}`);
-    
+
     this.isConnecting = false;
     this.isConnected = false;
-    
+
     // Stop heartbeat first
     if (this.heartbeatInterval) {
       clearInterval(this.heartbeatInterval);
       this.heartbeatInterval = null;
     }
-    
+
     // Close WebSocket connection
     if (this.ws) {
       try {
         this.ws.close(1000, "Client disconnect");
       } catch (error) {
-        console.warn(`Error closing WebSocket for contract ${this.contractId}:`, error);
+        console.warn(
+          `Error closing WebSocket for contract ${this.contractId}:`,
+          error,
+        );
       }
       this.ws = null;
     }
-    
+
     // Clear message queue
     this.messageQueue = [];
   }
@@ -535,7 +620,7 @@ export class WebSocketService {
     if (this.heartbeatInterval) {
       clearInterval(this.heartbeatInterval);
     }
-    
+
     // Send heartbeat every 30 seconds
     this.heartbeatInterval = setInterval(() => {
       if (this.isConnected && this.ws?.readyState === WebSocket.OPEN) {
@@ -554,19 +639,28 @@ export class WebSocketService {
     if (this.isConnected && this.ws?.readyState === WebSocket.OPEN) {
       try {
         const messageStr = JSON.stringify(message);
-        console.log(`Sending WebSocket message for contract ${this.contractId}:`, message.type);
+        console.log(
+          `Sending WebSocket message for contract ${this.contractId}:`,
+          message.type,
+        );
         this.ws.send(messageStr);
       } catch (error) {
-        console.error(`Error sending WebSocket message for contract ${this.contractId}:`, error);
+        console.error(
+          `Error sending WebSocket message for contract ${this.contractId}:`,
+          error,
+        );
         // Queue message for retry only if it's not a heartbeat
-        if (message.type !== 'heartbeat') {
+        if (message.type !== "heartbeat") {
           this.messageQueue.push(message);
         }
       }
     } else {
-      console.warn(`WebSocket not connected for contract ${this.contractId} (state: ${this.getConnectionState()}), queueing message:`, message.type);
+      console.warn(
+        `WebSocket not connected for contract ${this.contractId} (state: ${this.getConnectionState()}), queueing message:`,
+        message.type,
+      );
       // Queue non-heartbeat messages for when connection is established
-      if (message.type !== 'heartbeat') {
+      if (message.type !== "heartbeat") {
         this.messageQueue.push(message);
       }
     }
@@ -592,13 +686,18 @@ export class WebSocketService {
   }
 
   getConnectionState(): string {
-    if (!this.ws) return 'disconnected';
+    if (!this.ws) return "disconnected";
     switch (this.ws.readyState) {
-      case WebSocket.CONNECTING: return 'connecting';
-      case WebSocket.OPEN: return 'open';
-      case WebSocket.CLOSING: return 'closing';
-      case WebSocket.CLOSED: return 'closed';
-      default: return 'unknown';
+      case WebSocket.CONNECTING:
+        return "connecting";
+      case WebSocket.OPEN:
+        return "open";
+      case WebSocket.CLOSING:
+        return "closing";
+      case WebSocket.CLOSED:
+        return "closed";
+      default:
+        return "unknown";
     }
   }
 }
@@ -621,7 +720,7 @@ class WebSocketConnectionManager {
 
   createConnection(contractId: string): WebSocketService {
     console.log(`Creating WebSocket connection for contract ${contractId}`);
-    
+
     // Close existing connection if any
     const existing = this.connections.get(contractId);
     if (existing) {
@@ -632,7 +731,9 @@ class WebSocketConnectionManager {
 
     const connection = new WebSocketService(contractId);
     this.connections.set(contractId, connection);
-    console.log(`WebSocket connection created and registered for contract ${contractId}`);
+    console.log(
+      `WebSocket connection created and registered for contract ${contractId}`,
+    );
     return connection;
   }
 
@@ -652,7 +753,7 @@ class WebSocketConnectionManager {
   }
 
   getActiveConnections(): string[] {
-    return Array.from(this.connections.keys()).filter(contractId => {
+    return Array.from(this.connections.keys()).filter((contractId) => {
       const connection = this.connections.get(contractId);
       return connection?.isWebSocketConnected();
     });
@@ -665,12 +766,12 @@ export const wsConnectionManager = WebSocketConnectionManager.getInstance();
 export default apiService;
 
 // Cleanup connections on page unload
-window.addEventListener('beforeunload', () => {
+window.addEventListener("beforeunload", () => {
   wsConnectionManager.disconnectAll();
 });
 
 // Cleanup connections on page visibility change (mobile Safari)
-document.addEventListener('visibilitychange', () => {
+document.addEventListener("visibilitychange", () => {
   if (document.hidden) {
     // Page is hidden, disconnect WebSockets to save resources
     wsConnectionManager.disconnectAll();

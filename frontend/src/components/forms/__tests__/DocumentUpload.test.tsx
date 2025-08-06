@@ -234,7 +234,9 @@ describe('DocumentUpload Component', () => {
     const fileInput = document.querySelector('input[type="file"]')
     const file = createMockFile('test.txt', 1024, 'text/plain')
     
-    fireEvent.change(fileInput, { target: { files: [file] } })
+    if (fileInput) {
+      fireEvent.change(fileInput, { target: { files: [file] } })
+    }
     
     // File validation happens at the dropzone level via react-dropzone
     // The error notification would be shown, but we can't easily test it here
@@ -248,7 +250,9 @@ describe('DocumentUpload Component', () => {
     const fileInput = document.querySelector('input[type="file"]')
     const file = createMockFile('large-file.pdf', 20 * 1024 * 1024, 'application/pdf') // 20MB
     
-    fireEvent.change(fileInput, { target: { files: [file] } })
+    if (fileInput) {
+      fireEvent.change(fileInput, { target: { files: [file] } })
+    }
     
     // File validation happens at the dropzone level via react-dropzone
     // The error notification would be shown, but we can't easily test it here

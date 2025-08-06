@@ -103,9 +103,9 @@ export const configureOnboardingState = (
 ) => {
   mockAuthStore.user = {
     ...mockUser,
-    onboarding_completed: false,
-    onboarding_completed_at: null,
     ...userOverrides,
+    onboarding_completed: false,
+    onboarding_completed_at: null
   };
   mockAuthStore.isAuthenticated = true;
   mockAuthStore.isLoading = false;
@@ -201,10 +201,10 @@ export const mockApiService = {
 
 // Mock auth store
 export const mockAuthStore = {
-  user: null,
+  user: null as any,
   isAuthenticated: false,
   isLoading: false,
-  error: null,
+  error: null as string | null,
   login: vi.fn(),
   register: vi.fn(),
   logout: vi.fn(),
@@ -246,9 +246,9 @@ export const mockAnalysisStore = {
 export const mockUser = {
   id: "test-user-id",
   email: "test@example.com",
-  australian_state: "NSW",
-  user_type: "buyer",
-  subscription_status: "free",
+  australian_state: "NSW" as const,
+  user_type: "buyer" as const,
+  subscription_status: "free" as const,
   credits_remaining: 5,
   preferences: {},
   onboarding_completed: true,
@@ -300,7 +300,7 @@ export const mockAnalysis = {
       risk_factors: [
         {
           factor: "Short settlement period",
-          severity: "medium",
+          severity: "medium" as const,
           description: "Settlement period is shorter than recommended",
           impact: "Medium financial risk",
           mitigation: "Arrange finance pre-approval",
@@ -326,8 +326,8 @@ export const mockAnalysis = {
     },
     recommendations: [
       {
-        priority: "high",
-        category: "legal",
+        priority: "high" as const,
+        category: "legal" as const,
         recommendation: "Review settlement date with conveyancer",
         action_required: true,
         australian_context: "NSW specific settlement requirements",

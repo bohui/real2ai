@@ -11,7 +11,7 @@ const mockLogin = vi.fn()
 const mockAuthStore = {
   login: mockLogin,
   isLoading: false,
-  error: null,
+  error: null as string | null,
 }
 
 vi.mock('@/store/authStore', () => ({

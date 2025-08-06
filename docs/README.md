@@ -30,20 +30,16 @@ Welcome to the Real2.AI platform documentation. This directory contains comprehe
 - **[Workflow Diagrams](workflows/langgraph-workflow-diagrams.md)** - Visual workflow representations
 
 ### 💻 Development
-- **[Implementation Summary](development/IMPLEMENTATION_SUMMARY.md)** - Current implementation status
-- **[Migration Summaries](development/MIGRATION_GUIDES.md)** - Phase 2 migration documentation
-- **[Backend Architecture Guide](development/BACKEND_ARCHITECTURE.md)** - Backend service architecture
-- **[Frontend Architecture Guide](development/FRONTEND_ARCHITECTURE.md)** - React component architecture
+- **[Current Implementation Status](development/CURRENT_IMPLEMENTATION_STATUS.md)** - Complete current status overview
+- **[Implementation Summary](development/IMPLEMENTATION_SUMMARY.md)** - Development progress summary
+- **[Setup Guide](development/SETUP_GUIDE.md)** - Complete development environment setup
 
 ### 🧪 Quality Assurance
 - **[Test Summary](testing/TEST_SUMMARY.md)** - Test coverage and quality metrics
 - **[Test Execution Report](testing/TEST_EXECUTION_REPORT.md)** - Detailed test results
-- **[Performance Benchmarks](testing/PERFORMANCE_BENCHMARKS.md)** - System performance analysis
 
 ### 📋 Requirements & Planning
 - **[Business Requirements](requirements/requirement_architect.md)** - Product requirements and specifications
-- **[Technical Requirements](requirements/TECHNICAL_REQUIREMENTS.md)** - System technical specifications
-- **[Compliance Requirements](requirements/AUSTRALIAN_COMPLIANCE.md)** - Australian legal compliance specifications
 
 ## 🎯 Documentation by Use Case
 
@@ -96,7 +92,9 @@ Welcome to the Real2.AI platform documentation. This directory contains comprehe
 
 ### Frontend Components  
 - **[Frontend README](../frontend/README.md)** - React application overview
-- **Component Library** - UI component documentation (in development)
+
+### Documentation Management
+- **[Documentation Audit Summary](DOCUMENTATION_AUDIT_SUMMARY.md)** - Recent cleanup and organization
 
 ## 📞 Support & Contributing
 
