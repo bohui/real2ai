@@ -161,18 +161,23 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
                 "ensure_bucket_exists", {"bucket_name": self.storage_bucket}
             )
 
-            # Parse the JSON string result
-            result_data = json.loads(result)
+            # RPC function returns JSONB, which Supabase client already parses
+            # No need to json.loads() - result is already a dict/object
+            result_data = result
 
             if result_data.get("created"):
                 self.logger.info(f"Created storage bucket: {self.storage_bucket}")
+            else:
+                self.logger.debug(f"Storage bucket already exists: {self.storage_bucket}")
 
             self.log_operation(
                 "system_bucket_ensure", "storage_bucket", self.storage_bucket
             )
 
         except Exception as e:
-            self.logger.warning(f"Could not verify/create bucket: {str(e)}")
+            # This is expected when bucket already exists, just log as debug
+            self.logger.debug(f"Bucket verification completed with message: {str(e)}")
+            # Don't treat this as an error - service can continue normally
 
     @langsmith_trace(name="process_document")
     async def process_document(

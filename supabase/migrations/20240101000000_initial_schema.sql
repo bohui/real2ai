@@ -44,6 +44,7 @@ CREATE TABLE documents (
     storage_path TEXT NOT NULL,
     file_type TEXT NOT NULL,
     file_size BIGINT NOT NULL,
+    content_hash TEXT, -- SHA-256 hash for duplicate detection and integrity verification
     processing_status TEXT NOT NULL DEFAULT 'uploaded', -- Renamed from status, flexible text type
     upload_metadata JSONB DEFAULT '{}',
     processing_results JSONB DEFAULT '{}',
@@ -373,6 +374,7 @@ CREATE INDEX idx_documents_document_type ON documents(document_type);
 CREATE INDEX idx_documents_australian_state ON documents(australian_state);
 CREATE INDEX idx_documents_contract_type ON documents(contract_type);
 CREATE INDEX idx_documents_has_diagrams ON documents(has_diagrams);
+CREATE INDEX idx_documents_content_hash ON documents(content_hash);
 CREATE INDEX idx_documents_created_at ON documents(created_at DESC);
 
 CREATE INDEX idx_contracts_user_id ON contracts(user_id);
