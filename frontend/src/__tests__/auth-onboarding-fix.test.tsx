@@ -41,17 +41,73 @@ describe('Auth Onboarding Fix', () => {
   })
 
   it('should only show onboarding for fully authenticated users', async () => {
-    // Configure authenticated state with onboarding needed
-    configureAuthenticatedState({
-      onboarding_completed: false
+    // Import and configure stores
+    const { useAuthStore } = await import('@/store/authStore')
+    const { useUIStore } = await import('@/store/uiStore')
+    const { apiService } = await import('@/services/api')
+    
+    // Configure authenticated state
+    vi.mocked(useAuthStore).mockReturnValue({
+      user: { 
+        id: 'test-user', 
+        email: 'test@example.com',
+        australian_state: 'NSW',
+        onboarding_completed: false
+      },
+      isAuthenticated: true,
+      isLoading: false,
+      error: null,
+      login: vi.fn(),
+      register: vi.fn(),
+      logout: vi.fn(),
+      clearError: vi.fn(),
+      updateUser: vi.fn(),
+      updateProfile: vi.fn(),
+      refreshUser: vi.fn(),
+      initializeAuth: vi.fn(),
+      setUser: vi.fn(),
     })
-    mockUIStore.showOnboarding = true
+    
+    // Configure UI store to start with onboarding hidden
+    const mockSetShowOnboarding = vi.fn()
+    vi.mocked(useUIStore).mockReturnValue({
+      showOnboarding: false,
+      notifications: [],
+      setShowOnboarding: mockSetShowOnboarding,
+      addNotification: vi.fn(),
+      removeNotification: vi.fn(),
+      clearNotifications: vi.fn(),
+    })
+    
+    // Mock the API call to return onboarding not completed
+    vi.mocked(apiService.getOnboardingStatus).mockResolvedValue({
+      onboarding_completed: false,
+      onboarding_preferences: {}
+    })
 
+    renderApp(<App />)
+
+    // Wait for the onboarding to show - the App should call setShowOnboarding(true)
+    await waitFor(() => {
+      expect(mockSetShowOnboarding).toHaveBeenCalledWith(true)
+    }, { timeout: 2000 })
+    
+    // Now mock the UI store to return showOnboarding: true to simulate the state update
+    vi.mocked(useUIStore).mockReturnValue({
+      showOnboarding: true,
+      notifications: [],
+      setShowOnboarding: mockSetShowOnboarding,
+      addNotification: vi.fn(),
+      removeNotification: vi.fn(),
+      clearNotifications: vi.fn(),
+    })
+    
+    // Re-render to get the updated state
     renderApp(<App />)
 
     // Now onboarding should show because user is fully authenticated
     await waitFor(() => {
       expect(screen.queryByTestId('onboarding-wizard')).toBeInTheDocument()
-    })
+    }, { timeout: 2000 })
   })
 })

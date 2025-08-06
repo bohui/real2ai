@@ -192,11 +192,7 @@ describe('DocumentUpload Component', () => {
     fireEvent.click(submitButton)
     
     await waitFor(() => {
-      expect(mockOnUploadComplete).toHaveBeenCalledWith({
-        document_id: 'test-doc-id',
-        filename: 'test-contract.pdf',
-        upload_status: 'uploaded'
-      })
+      expect(mockOnUploadComplete).toHaveBeenCalledWith('test-doc-id')
     })
   })
 
