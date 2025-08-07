@@ -6,14 +6,11 @@ Handles document processing cache operations with hash-based lookups
 import hashlib
 import logging
 from typing import Dict, List, Optional, Any, Tuple
-from datetime import datetime, timedelta
-from uuid import UUID, uuid4
+from datetime import datetime
 
-from app.clients.base.interfaces import DatabaseOperations
 from app.clients.supabase.client import SupabaseClient
 from app.core.auth_context import AuthContext
 from app.clients.factory import get_service_supabase_client
-from app.models.supabase_models import Document, Contract, ContractAnalysis
 
 logger = logging.getLogger(__name__)
 
@@ -123,7 +120,6 @@ class CacheService:
         analysis_result: Dict[str, Any],
         property_address: Optional[str] = None,
         contract_type: Optional[str] = None,
-        ttl_hours: int = 24,
     ) -> bool:
         """
         Cache contract analysis result - now just logs the operation since we link directly to source.
@@ -133,7 +129,6 @@ class CacheService:
             analysis_result: Analysis result to cache
             property_address: Optional property address
             contract_type: Optional contract type
-            ttl_hours: Time to live in hours (default: 24) - no longer used
 
         Returns:
             True if logged successfully, False otherwise
@@ -265,7 +260,7 @@ class CacheService:
             return None
 
     async def cache_property_analysis(
-        self, address: str, analysis_result: Dict[str, Any], ttl_hours: int = 48
+        self, address: str, analysis_result: Dict[str, Any]
     ) -> bool:
         """
         Cache property analysis result - now just logs the operation since we link directly to source.
@@ -273,7 +268,6 @@ class CacheService:
         Args:
             address: Property address
             analysis_result: Analysis result to cache
-            ttl_hours: Time to live in hours (default: 48) - no longer used
 
         Returns:
             True if logged successfully, False otherwise

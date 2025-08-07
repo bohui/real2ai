@@ -368,22 +368,39 @@ class DatabaseSeeder:
                 else:
                     state = "NSW"  # default
 
+                # Generate content hash for shared contract (simplified for seeding)
+                import hashlib
+                content_hash = hashlib.sha256(f"{contract_id}".encode()).hexdigest()
+                
                 await conn.execute(
                     """
-                    INSERT INTO contracts (id, document_id, user_id, contract_type, australian_state)
-                    VALUES ($1, $2, $3, $4, $5)
+                    INSERT INTO contracts (id, content_hash, contract_type, australian_state)
+                    VALUES ($1, $2, $3, $4)
                     ON CONFLICT (id) DO NOTHING
                 """,
                     contract_id,
-                    doc["id"],
-                    doc["user_id"],
+                    content_hash,
                     contract_type,
                     state,
+                )
+                
+                # Create user_contract_views entry for user access
+                await conn.execute(
+                    """
+                    INSERT INTO user_contract_views (user_id, content_hash, property_address, source)
+                    VALUES ($1, $2, $3, $4)
+                    ON CONFLICT DO NOTHING
+                    """,
+                    doc["user_id"],
+                    content_hash,
+                    None,  # property_address - could be added later
+                    'upload'
                 )
 
                 contract_ids.append(
                     {
                         "id": contract_id,
+                        "content_hash": content_hash,
                         "document_id": doc["id"],
                         "user_id": doc["user_id"],
                         "contract_type": contract_type,
@@ -500,15 +517,14 @@ class DatabaseSeeder:
                 await conn.execute(
                     """
                     INSERT INTO contract_analyses (
-                        id, contract_id, user_id, agent_version, status, 
+                        id, content_hash, agent_version, status, 
                         executive_summary, risk_assessment, compliance_check, recommendations,
                         overall_risk_score, confidence_level, processing_time_seconds
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-                    ON CONFLICT (id) DO NOTHING
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                    ON CONFLICT (content_hash) DO NOTHING
                 """,
                     analysis_id,
-                    contract["id"],
-                    contract["user_id"],
+                    content_hash,
                     "1.0",
                     "completed",
                     json.dumps(analysis_data["executive_summary"]),
@@ -600,18 +616,21 @@ class DatabaseSeeder:
                 if i < len(contracts):
                     contract = contracts[i]
 
+                    # Generate property_hash for shared property data
+                    property_address = prop["address"]
+                    property_hash = hashlib.sha256(property_address.lower().encode()).hexdigest()
+                    
                     await conn.execute(
                         """
                         INSERT INTO property_data (
-                            contract_id, user_id, address, suburb, state, postcode,
+                            property_hash, address, suburb, state, postcode,
                             property_type, bedrooms, bathrooms, car_spaces,
                             land_size, building_size, purchase_price, market_value,
                             market_analysis
-                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-                        ON CONFLICT DO NOTHING
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+                        ON CONFLICT (property_hash) DO NOTHING
                     """,
-                        contract["id"],
-                        contract["user_id"],
+                        property_hash,
                         prop["address"],
                         prop["suburb"],
                         prop["state"],
@@ -632,6 +651,19 @@ class DatabaseSeeder:
                                 "days_on_market": 32,
                             }
                         ),
+                    )
+                    
+                    # Create user_property_views entry for user access
+                    await conn.execute(
+                        """
+                        INSERT INTO user_property_views (user_id, property_hash, property_address, source)
+                        VALUES ($1, $2, $3, $4)
+                        ON CONFLICT DO NOTHING
+                        """,
+                        contract["user_id"],
+                        property_hash,
+                        property_address,
+                        'search'
                     )
 
                     logger.info(f"Created property data for {prop['address']}")

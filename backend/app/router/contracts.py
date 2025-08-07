@@ -784,10 +784,10 @@ async def _get_analysis_status_with_validation(
 ) -> AnalysisRecord:
     """Get analysis status with validation and retry logic"""
 
-    # First verify the contract belongs to the user
+    # First get the contract to get its content_hash
     contract_result = (
         db_client.table("contracts")
-        .select("id, user_id")
+        .select("id, content_hash")
         .eq("id", contract_id)
         .execute()
     )
@@ -796,16 +796,27 @@ async def _get_analysis_status_with_validation(
         raise ValueError("Contract not found")
 
     contract = contract_result.data[0]
-    if contract["user_id"] != user_id:
+    content_hash = contract["content_hash"]
+    
+    # Verify the user has access to this contract via user_contract_views
+    access_result = (
+        db_client.table("user_contract_views")
+        .select("id")
+        .eq("content_hash", content_hash)
+        .eq("user_id", user_id)
+        .execute()
+    )
+    
+    if not access_result.data:
         raise ValueError("You don't have access to this contract")
 
-    # Get analysis status
+    # Get analysis status using content_hash
     result = (
         db_client.table("contract_analyses")
         .select(
             "id, status, created_at, updated_at, processing_time, error_message, analysis_metadata"
         )
-        .eq("contract_id", contract_id)
+        .eq("content_hash", content_hash)
         .order("created_at", desc=True)
         .limit(1)
         .execute()
@@ -897,18 +908,40 @@ async def get_analysis_progress(
         # Get authenticated client
         db_client = await AuthContext.get_authenticated_client(require_auth=True)
 
-        # Get progress record from analysis_progress table
+        # First get the contract to get its content_hash
+        contract_result = await db_client.database.select(
+            "contracts",
+            columns="id, content_hash",
+            filters={"id": contract_id}
+        )
+        
+        if not contract_result.get("data"):
+            raise ValueError("Contract not found")
+            
+        content_hash = contract_result["data"][0]["content_hash"]
+        
+        # Verify user access via user_contract_views
+        access_result = await db_client.database.select(
+            "user_contract_views",
+            columns="id",
+            filters={"content_hash": content_hash, "user_id": str(user.id)}
+        )
+        
+        if not access_result.get("data"):
+            raise ValueError("You don't have access to this contract")
+
+        # Get progress record from analysis_progress table using content_hash
         progress_result = await db_client.database.select(
             "analysis_progress",
             columns="*",
-            filters={"contract_id": contract_id, "user_id": str(user.id)},
+            filters={"content_hash": content_hash, "user_id": str(user.id)},
         )
 
-        # Get analysis status as fallback
+        # Get analysis status as fallback using content_hash
         analysis_result = await db_client.database.select(
             "contract_analyses",
             columns="id, status, created_at, updated_at, processing_time",
-            filters={"contract_id": contract_id},
+            filters={"content_hash": content_hash},
         )
 
         if not analysis_result.get("data"):

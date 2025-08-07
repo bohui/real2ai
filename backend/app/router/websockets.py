@@ -63,11 +63,11 @@ async def check_document_cache_status(document_id: str, user_id: str) -> Dict[st
             f"Checking cache for document {document_id} with content_hash: {content_hash}"
         )
 
-        # Check if we have any existing contract with this content_hash
+        # Check if we have any existing contract with this content_hash (contracts is now shared resource)
         contract_result = await user_client.database.select(
             "contracts",
             columns="*",
-            filters={"content_hash": content_hash, "user_id": user_id},
+            filters={"content_hash": content_hash},
             order_by="created_at DESC",
             limit=1,
         )
@@ -89,11 +89,11 @@ async def check_document_cache_status(document_id: str, user_id: str) -> Dict[st
         contract = contract_result["data"][0]
         contract_id = contract["id"]
 
-        # Check analysis status for this contract
+        # Check analysis status for this content_hash (contract_analyses is now shared resource)
         analysis_result = await user_client.database.select(
             "contract_analyses",
             columns="*",
-            filters={"contract_id": contract_id, "user_id": user_id},
+            filters={"content_hash": content_hash},
             order_by="created_at DESC",
             limit=1,
         )
@@ -142,7 +142,7 @@ async def check_document_cache_status(document_id: str, user_id: str) -> Dict[st
             progress_result = await user_client.database.select(
                 "analysis_progress",
                 columns="*",
-                filters={"contract_id": contract_id, "user_id": user_id},
+                filters={"content_hash": content_hash, "user_id": user_id},
                 order_by="updated_at DESC",
                 limit=1,
             )
@@ -688,11 +688,25 @@ async def handle_status_request(
         # Get user-authenticated client (respects RLS)
         user_client = await AuthContext.get_authenticated_client(require_auth=True)
 
+        # First get the content_hash from the document
+        doc_result = await user_client.database.select(
+            "documents", 
+            columns="content_hash", 
+            filters={"id": document_id, "user_id": user_id}
+        )
+        
+        if not doc_result.get("data"):
+            raise ValueError(f"Document {document_id} not found or access denied")
+            
+        content_hash = doc_result["data"][0].get("content_hash")
+        if not content_hash:
+            raise ValueError(f"Document {document_id} has no content hash")
+            
         # Get detailed progress from analysis_progress table (user context - RLS enforced)
         progress_result = await user_client.database.select(
             "analysis_progress",
             columns="*",
-            filters={"contract_id": contract_id, "user_id": user_id},
+            filters={"content_hash": content_hash, "user_id": user_id},
             order_by="updated_at DESC",
             limit=1,
         )
@@ -716,11 +730,11 @@ async def handle_status_request(
                 },
             }
         else:
-            # Fallback to contract_analyses table (user context - RLS enforced)
+            # Fallback to contract_analyses table (shared resource - no user filter)
             analysis_result = await user_client.database.select(
                 "contract_analyses",
                 columns="*",
-                filters={"contract_id": contract_id, "user_id": user_id},
+                filters={"content_hash": content_hash},
                 order_by="created_at DESC",
                 limit=1,
             )
