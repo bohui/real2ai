@@ -757,6 +757,45 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
             self.logger.error(f"Failed to get system stats: {str(e)}")
             raise
 
+    async def get_file_content(self, storage_path: str) -> bytes:
+        """
+        Get file content from storage - can be used for system operations.
+        
+        This method will use system client if no user authentication is available,
+        making it suitable for background tasks like cleanup.
+        
+        Args:
+            storage_path: Path to file in storage
+            
+        Returns:
+            bytes: File content
+            
+        Raises:
+            Exception: If file not found or access denied
+        """
+        try:
+            # Try user client first if authenticated
+            if self.is_user_authenticated():
+                user_client = await self.get_user_client()
+                self.log_operation("read", "document_content", storage_path)
+            else:
+                # Fall back to system client for background tasks
+                user_client = await self.get_system_client()
+                self.log_system_operation("read", "document_content", storage_path, None)
+            
+            file_content = await user_client.download_file(
+                bucket=self.storage_bucket, path=storage_path
+            )
+            
+            if not file_content:
+                raise ValueError(f"File not found or empty: {storage_path}")
+            
+            return file_content
+            
+        except Exception as e:
+            self.logger.error(f"Failed to get file content for {storage_path}: {str(e)}")
+            raise
+
     # Health check implementation
     async def health_check(self) -> Dict[str, Any]:
         """Health check for DocumentService"""
