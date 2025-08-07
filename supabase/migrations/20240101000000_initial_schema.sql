@@ -5,6 +5,7 @@
 -- Enable required extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "vector";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto"; -- For digest function used in hashing
 
 -- Create custom types
 CREATE TYPE australian_state AS ENUM ('NSW', 'VIC', 'QLD', 'SA', 'WA', 'TAS', 'NT', 'ACT');
@@ -578,10 +579,97 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+-- Function to process contract cache hits (creates user records from cached analysis)
+CREATE OR REPLACE FUNCTION process_contract_cache_hit(
+    p_user_id UUID,
+    p_content_hash TEXT,
+    p_filename TEXT,
+    p_file_size BIGINT,
+    p_mime_type TEXT,
+    p_property_address TEXT DEFAULT NULL
+)
+RETURNS TABLE (
+    document_id UUID,
+    analysis_id UUID,
+    view_id UUID
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_document_id UUID;
+    v_analysis_id UUID;
+    v_view_id UUID;
+    v_contract_id UUID;
+BEGIN
+    -- Create document record for user
+    INSERT INTO documents (
+        user_id,
+        original_filename,
+        storage_path,
+        file_type,
+        file_size,
+        content_hash,
+        processing_status
+    ) VALUES (
+        p_user_id,
+        p_filename,
+        'cache_hit/' || p_content_hash, -- Virtual path for cached items
+        p_mime_type,
+        p_file_size,
+        p_content_hash,
+        'completed'
+    )
+    RETURNING id INTO v_document_id;
+    
+    -- Get existing analysis ID
+    SELECT id INTO v_analysis_id
+    FROM contract_analyses
+    WHERE content_hash = p_content_hash
+    AND status = 'completed'
+    LIMIT 1;
+    
+    -- Create contract record
+    INSERT INTO contracts (
+        document_id,
+        user_id,
+        content_hash,
+        contract_type,
+        australian_state
+    ) VALUES (
+        v_document_id,
+        p_user_id,
+        p_content_hash,
+        'purchase_agreement',
+        'NSW'
+    )
+    RETURNING id INTO v_contract_id;
+    
+    -- Log the view
+    INSERT INTO user_contract_views (
+        user_id,
+        content_hash,
+        property_address,
+        analysis_id,
+        source
+    ) VALUES (
+        p_user_id,
+        p_content_hash,
+        p_property_address,
+        v_analysis_id,
+        'cache_hit'
+    )
+    RETURNING id INTO v_view_id;
+    
+    RETURN QUERY SELECT v_document_id, v_analysis_id, v_view_id;
+END;
+$$;
+
 -- Grant permissions on property intelligence functions
 GRANT EXECUTE ON FUNCTION find_or_create_property TO authenticated;
 GRANT EXECUTE ON FUNCTION find_or_create_property TO service_role;
 GRANT EXECUTE ON FUNCTION cleanup_expired_property_data TO service_role;
+GRANT EXECUTE ON FUNCTION process_contract_cache_hit TO service_role;
 
 -- User tracking tables for cache history
 -- User property search history (Private with RLS)
@@ -724,6 +812,40 @@ BEGIN
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
+
+-- Utility functions for address normalization and hashing
+CREATE OR REPLACE FUNCTION normalize_address(address TEXT)
+RETURNS TEXT
+LANGUAGE plpgsql
+IMMUTABLE
+AS $$
+BEGIN
+    -- Remove extra whitespace, convert to lowercase, remove punctuation
+    RETURN LOWER(
+        REGEXP_REPLACE(
+            REGEXP_REPLACE(
+                TRIM(address),
+                '[^a-zA-Z0-9\s]', '', 'g'  -- Remove punctuation
+            ),
+            '\s+', ' ', 'g'  -- Normalize whitespace
+        )
+    );
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION generate_property_hash(address TEXT)
+RETURNS TEXT
+LANGUAGE plpgsql
+IMMUTABLE
+AS $$
+BEGIN
+    -- Generate SHA-256 hash of normalized address
+    RETURN encode(
+        digest(normalize_address(address), 'sha256'),
+        'hex'
+    );
+END;
+$$;
 
 -- Comments for user view tables
 COMMENT ON TABLE user_property_views IS 'User''s property search history with RLS for privacy';
