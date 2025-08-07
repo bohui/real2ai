@@ -9,7 +9,7 @@ from datetime import datetime
 
 class PromptTemplateCreate(BaseModel):
     """Create new prompt template"""
-    
+
     name: str = Field(..., description="Template name")
     description: str = Field(..., description="Template description")
     template: str = Field(..., description="Prompt template content")
@@ -18,7 +18,7 @@ class PromptTemplateCreate(BaseModel):
 
 class PromptTemplateUpdate(BaseModel):
     """Update prompt template"""
-    
+
     name: Optional[str] = None
     description: Optional[str] = None
     template: Optional[str] = None
@@ -27,7 +27,7 @@ class PromptTemplateUpdate(BaseModel):
 
 class PromptTemplateResponse(BaseModel):
     """Prompt template response"""
-    
+
     id: str
     name: str
     description: str
@@ -41,7 +41,7 @@ class PromptTemplateResponse(BaseModel):
 
 class TestDatasetCreate(BaseModel):
     """Create test dataset"""
-    
+
     name: str
     description: str
     test_cases: List[Dict[str, Any]]
@@ -49,7 +49,7 @@ class TestDatasetCreate(BaseModel):
 
 class TestDatasetResponse(BaseModel):
     """Test dataset response"""
-    
+
     id: str
     name: str
     description: str
@@ -61,7 +61,7 @@ class TestDatasetResponse(BaseModel):
 
 class TestCaseCreate(BaseModel):
     """Create individual test case"""
-    
+
     input_data: Dict[str, Any]
     expected_output: Dict[str, Any]
     metadata: Optional[Dict[str, Any]] = None
@@ -69,7 +69,7 @@ class TestCaseCreate(BaseModel):
 
 class TestCaseResponse(BaseModel):
     """Test case response"""
-    
+
     id: str
     input_data: Dict[str, Any]
     expected_output: Dict[str, Any]
@@ -79,7 +79,7 @@ class TestCaseResponse(BaseModel):
 
 class ModelConfig(BaseModel):
     """Model configuration for evaluation"""
-    
+
     model_name: str
     temperature: float = 0.7
     max_tokens: Optional[int] = None
@@ -88,7 +88,7 @@ class ModelConfig(BaseModel):
 
 class MetricsConfig(BaseModel):
     """Metrics configuration for evaluation"""
-    
+
     accuracy: bool = True
     precision: bool = True
     recall: bool = True
@@ -99,23 +99,23 @@ class MetricsConfig(BaseModel):
 
 class EvaluationJobCreate(BaseModel):
     """Create evaluation job"""
-    
+
     name: str
     prompt_template_id: str
     test_dataset_id: str
-    model_config: ModelConfig
+    model_configuration: ModelConfig
     metrics_config: MetricsConfig
 
 
 class EvaluationJobResponse(BaseModel):
     """Evaluation job response"""
-    
+
     id: str
     name: str
     status: str  # pending, running, completed, failed
     prompt_template_id: str
     test_dataset_id: str
-    model_config: ModelConfig
+    model_configuration: ModelConfig
     metrics_config: MetricsConfig
     results: Optional[Dict[str, Any]] = None
     created_at: datetime
@@ -127,7 +127,7 @@ class EvaluationJobResponse(BaseModel):
 
 class EvaluationResultResponse(BaseModel):
     """Evaluation result response"""
-    
+
     job_id: str
     overall_score: float
     metric_scores: Dict[str, float]
@@ -140,7 +140,7 @@ class EvaluationResultResponse(BaseModel):
 
 class ABTestCreate(BaseModel):
     """Create A/B test"""
-    
+
     name: str
     description: str
     variant_a_template_id: str
@@ -151,7 +151,7 @@ class ABTestCreate(BaseModel):
 
 class ABTestResponse(BaseModel):
     """A/B test response"""
-    
+
     id: str
     name: str
     description: str
@@ -168,7 +168,7 @@ class ABTestResponse(BaseModel):
 
 class ModelComparisonResponse(BaseModel):
     """Model comparison response"""
-    
+
     comparison_id: str
     models_compared: List[str]
     metrics: Dict[str, Dict[str, float]]  # model -> metric -> score
@@ -179,7 +179,7 @@ class ModelComparisonResponse(BaseModel):
 
 class JobSummaryResponse(BaseModel):
     """Job summary response"""
-    
+
     total_jobs: int
     running_jobs: int
     completed_jobs: int

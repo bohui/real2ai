@@ -6,28 +6,44 @@ from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field, field_validator
 from datetime import datetime
 
-from app.models.contract_state import AustralianState, RiskLevel
+from app.schema.enums import AustralianState, RiskLevel
 
 
 class PropertyProfileRequestModel(BaseModel):
     """Request model for property profile generation."""
-    
-    address: str = Field(..., description="Property address", min_length=10, max_length=200)
-    property_type: Optional[str] = Field(None, description="Property type (house, apartment, townhouse, etc.)")
-    valuation_type: str = Field("avm", description="Valuation type (avm, desktop, professional)")
-    include_market_analysis: bool = Field(True, description="Include market analysis data")
+
+    address: str = Field(
+        ..., description="Property address", min_length=10, max_length=200
+    )
+    property_type: Optional[str] = Field(
+        None, description="Property type (house, apartment, townhouse, etc.)"
+    )
+    valuation_type: str = Field(
+        "avm", description="Valuation type (avm, desktop, professional)"
+    )
+    include_market_analysis: bool = Field(
+        True, description="Include market analysis data"
+    )
     include_risk_assessment: bool = Field(True, description="Include risk assessment")
-    include_investment_metrics: bool = Field(True, description="Include investment analysis")
-    include_comparable_sales: bool = Field(True, description="Include comparable sales data")
-    radius_km: float = Field(2.0, description="Radius for comparable sales search (km)", ge=0.5, le=10.0)
-    
+    include_investment_metrics: bool = Field(
+        True, description="Include investment analysis"
+    )
+    include_comparable_sales: bool = Field(
+        True, description="Include comparable sales data"
+    )
+    radius_km: float = Field(
+        2.0, description="Radius for comparable sales search (km)", ge=0.5, le=10.0
+    )
+
     @field_validator("valuation_type")
     @classmethod
     def validate_valuation_type(cls, v):
         if v not in ["avm", "desktop", "professional"]:
-            raise ValueError("Valuation type must be 'avm', 'desktop', or 'professional'")
+            raise ValueError(
+                "Valuation type must be 'avm', 'desktop', or 'professional'"
+            )
         return v
-    
+
     @field_validator("address")
     @classmethod
     def validate_address(cls, v):
@@ -38,13 +54,18 @@ class PropertyProfileRequestModel(BaseModel):
 
 class PropertyComparisonRequestModel(BaseModel):
     """Request model for property comparison."""
-    
-    addresses: List[str] = Field(..., description="List of property addresses to compare", min_length=2, max_length=10)
-    comparison_criteria: Optional[List[str]] = Field(
-        None, 
-        description="Criteria to focus on (valuation, market_performance, risk_assessment, investment_potential)"
+
+    addresses: List[str] = Field(
+        ...,
+        description="List of property addresses to compare",
+        min_length=2,
+        max_length=10,
     )
-    
+    comparison_criteria: Optional[List[str]] = Field(
+        None,
+        description="Criteria to focus on (valuation, market_performance, risk_assessment, investment_potential)",
+    )
+
     @field_validator("addresses")
     @classmethod
     def validate_addresses(cls, v):
@@ -52,12 +73,12 @@ class PropertyComparisonRequestModel(BaseModel):
             raise ValueError("At least 2 addresses are required for comparison")
         if len(v) > 10:
             raise ValueError("Maximum 10 addresses allowed for comparison")
-        
+
         # Validate each address
         for address in v:
             if not address or len(address.strip()) < 10:
                 raise ValueError(f"Invalid address: {address}")
-        
+
         return [addr.strip() for addr in v]
 
     @field_validator("comparison_criteria")
@@ -65,18 +86,25 @@ class PropertyComparisonRequestModel(BaseModel):
     def validate_criteria(cls, v):
         if v is None:
             return v
-        
-        valid_criteria = ["valuation", "market_performance", "risk_assessment", "investment_potential"]
+
+        valid_criteria = [
+            "valuation",
+            "market_performance",
+            "risk_assessment",
+            "investment_potential",
+        ]
         for criterion in v:
             if criterion not in valid_criteria:
-                raise ValueError(f"Invalid criterion: {criterion}. Must be one of {valid_criteria}")
-        
+                raise ValueError(
+                    f"Invalid criterion: {criterion}. Must be one of {valid_criteria}"
+                )
+
         return v
 
 
 class PropertySearchFilters(BaseModel):
     """Advanced property search filters"""
-    
+
     min_price: Optional[float] = None
     max_price: Optional[float] = None
     min_bedrooms: Optional[int] = None
@@ -90,7 +118,7 @@ class PropertySearchFilters(BaseModel):
     min_land_area: Optional[float] = None
     max_land_area: Optional[float] = None
     features_required: List[str] = []
-    
+
     @field_validator("property_types")
     @classmethod
     def validate_property_types(cls, v):
@@ -304,7 +332,7 @@ class PropertyAPIHealthStatus(BaseModel):
 
 class PropertyAnalysisDepth(BaseModel):
     """Property analysis depth configuration"""
-    
+
     include_detailed_financials: bool = False
     include_neighborhood_analysis: bool = False
     include_investment_projections: bool = False
@@ -314,19 +342,24 @@ class PropertyAnalysisDepth(BaseModel):
 
 class MarketInsightRequest(BaseModel):
     """Market insight request model"""
-    
+
     location: str = Field(..., description="Suburb, postcode, or address")
     insight_type: str = Field("comprehensive", description="Type of insight requested")
     time_horizon: str = Field("12_months", description="Time horizon for analysis")
-    
+
     @field_validator("insight_type")
     @classmethod
     def validate_insight_type(cls, v):
-        valid_types = ["market_trends", "price_forecast", "investment_opportunity", "comprehensive"]
+        valid_types = [
+            "market_trends",
+            "price_forecast",
+            "investment_opportunity",
+            "comprehensive",
+        ]
         if v not in valid_types:
             raise ValueError(f"Insight type must be one of: {valid_types}")
         return v
-    
+
     @field_validator("time_horizon")
     @classmethod
     def validate_time_horizon(cls, v):
@@ -334,3 +367,66 @@ class MarketInsightRequest(BaseModel):
         if v not in valid_horizons:
             raise ValueError(f"Time horizon must be one of: {valid_horizons}")
         return v
+
+
+class PropertySearchFilter(BaseModel):
+    """Property search filter for API requests"""
+
+    listing_type: Optional[str] = None  # Sale, Rent, Sold
+    property_types: List[str] = []
+    min_bedrooms: Optional[int] = None
+    max_bedrooms: Optional[int] = None
+    min_bathrooms: Optional[int] = None
+    max_bathrooms: Optional[int] = None
+    min_carspaces: Optional[int] = None
+    max_carspaces: Optional[int] = None
+    min_price: Optional[float] = None
+    max_price: Optional[float] = None
+    locations: List[Dict[str, str]] = []
+    surrounding_suburbs: bool = False
+    search_mode: Optional[str] = None  # ForSale, ForRent, Sold
+    sort_by: Optional[str] = None  # DateUpdated, Price, Bedrooms
+
+
+class PropertyListing(BaseModel):
+    """Property listing information"""
+
+    id: str
+    address: PropertyAddress
+    property_details: PropertyDetails
+    price_details: Dict[str, Any] = {}
+    listing_date: Optional[datetime] = None
+    agent_info: Optional[Dict[str, Any]] = None
+    media_urls: List[str] = []
+    description: Optional[str] = None
+    auction_date: Optional[datetime] = None
+    status: Optional[str] = None
+    listing_type: Optional[str] = None
+
+
+class PropertySearchResponse(BaseModel):
+    """Property search response"""
+
+    search_id: str
+    query: Optional[str] = None
+    total_results: int
+    results_returned: int
+    search_time_ms: int
+    properties: List[PropertyListing]
+    facets: Optional[Dict[str, Any]] = None
+    market_summary: Optional[Dict[str, Any]] = None
+    processing_time: float = 0.0
+    page_number: int = 1
+    page_size: int = 20
+
+
+class PropertyDataValidationResult(BaseModel):
+    """Property data validation result"""
+
+    is_valid: bool
+    validation_errors: List[str] = []
+    validation_warnings: List[str] = []
+    data_quality_score: float = 0.0
+    missing_fields: List[str] = []
+    confidence_score: float = 0.0
+    validation_timestamp: datetime = Field(default_factory=datetime.now)

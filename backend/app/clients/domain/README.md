@@ -74,7 +74,7 @@ print(f"Client status: {health['status']}")
 
 ```python
 from app.clients.domain.enhanced_client import EnhancedDomainClient
-from app.api.models import PropertySearchRequest
+from app.schema import PropertySearchRequest
 
 # Enhanced client with caching and additional features
 enhanced_client = EnhancedDomainClient(config)

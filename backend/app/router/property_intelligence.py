@@ -14,7 +14,7 @@ from fastapi import (
     BackgroundTasks,
 )
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 import logging
 from datetime import datetime, timedelta
 import asyncio
@@ -22,15 +22,136 @@ import json
 from io import StringIO
 import csv
 
-from app.schema.property import (
+from app.schema import (
     PropertySearchFilters,
     PropertyProfileResponse,
     PropertyAnalysisDepth,
-    MarketInsightRequest
+    MarketInsightRequest,
+    PropertySearchRequest,
+    PropertyProfile,
+    AustralianState,
+    RiskLevel,
 )
-from app.models.contract_state import AustralianState, RiskLevel
 
 logger = logging.getLogger(__name__)
+
+
+# Additional schema models for property intelligence
+class PropertyAnalyticsRequest(BaseModel):
+    """Request model for property analytics"""
+
+    properties: List[str] = Field(..., description="List of property addresses or IDs")
+    analysis_type: str = Field("comprehensive", description="Type of analysis")
+    include_market_comparison: bool = True
+    include_investment_metrics: bool = True
+    include_risk_assessment: bool = True
+
+    @field_validator("analysis_type")
+    @classmethod
+    def validate_analysis_type(cls, v):
+        valid_types = ["basic", "standard", "comprehensive"]
+        if v not in valid_types:
+            raise ValueError(f"Analysis type must be one of: {valid_types}")
+        return v
+
+
+class PropertyInvestmentRecommendation(BaseModel):
+    """Property investment recommendation"""
+
+    recommendation_type: str
+    confidence_score: float
+    reasoning: List[str]
+    key_factors: List[str]
+    risk_warnings: List[str]
+    optimal_holding_period: str
+    expected_return_range: Dict[str, float]
+
+
+class PropertyMarketInsight(BaseModel):
+    """Property market insight"""
+
+    insight_id: str
+    insight_type: str
+    title: str
+    description: str
+    impact_level: str
+    affected_areas: List[str]
+    time_horizon: str
+    confidence_level: str
+    data_sources: List[str]
+    created_at: datetime
+    expires_at: Optional[datetime] = None
+
+
+class PropertyAnalyticsResponse(BaseModel):
+    """Property analytics response"""
+
+    request_id: str
+    properties_analyzed: int
+    analysis_type: str
+    property_profiles: List[PropertyProfile]
+    recommendations: List[PropertyInvestmentRecommendation]
+    market_insights: List[PropertyMarketInsight]
+    data_quality_score: float
+    processing_time: float
+    total_cost: float
+    created_at: datetime
+
+
+class BulkPropertyAnalysisRequest(BaseModel):
+    """Bulk property analysis request"""
+
+    properties: List[str] = Field(..., min_length=2, max_length=50)
+    analysis_depth: str = Field("standard", description="Analysis depth")
+    output_format: str = Field("json", description="Output format")
+
+    @field_validator("analysis_depth")
+    @classmethod
+    def validate_analysis_depth(cls, v):
+        valid_depths = ["basic", "standard", "comprehensive"]
+        if v not in valid_depths:
+            raise ValueError(f"Analysis depth must be one of: {valid_depths}")
+        return v
+
+
+class PropertyWatchlistRequest(BaseModel):
+    """Property watchlist request"""
+
+    address: str = Field(..., description="Property address")
+    notes: Optional[str] = None
+    tags: List[str] = []
+    alert_preferences: Dict[str, bool] = {
+        "price_changes": True,
+        "market_updates": False,
+        "similar_listings": False,
+    }
+
+
+class PropertyWatchlistResponse(BaseModel):
+    """Property watchlist response"""
+
+    id: str
+    property: Optional[PropertyProfile] = None
+    saved_at: datetime
+    notes: Optional[str] = None
+    tags: List[str] = []
+    alert_preferences: Dict[str, bool]
+    is_favorite: bool = False
+    price_alerts_triggered: int = 0
+    last_price_change: Optional[datetime] = None
+
+
+class PropertyComparisonResult(BaseModel):
+    """Property comparison result"""
+
+    comparison_id: str
+    properties: List[PropertyProfile]
+    comparison_matrix: Dict[str, Dict[str, Any]]
+    rankings: Dict[str, List[str]]
+    summary_insights: List[str]
+    recommendation: str
+    created_at: datetime
+
 
 router = APIRouter(prefix="/property-intelligence", tags=["Property Intelligence"])
 

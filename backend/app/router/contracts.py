@@ -2,7 +2,7 @@
 
 from typing import Dict, List, Optional, Union, TypedDict
 from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 import logging
 from datetime import datetime
 from uuid import UUID
@@ -17,7 +17,11 @@ from app.core.notification_system import (
     notify_user_error,
     notify_user_success,
 )
-from app.schema.contract import ContractAnalysisRequest, ContractAnalysisResponse, AnalysisOptions
+from app.schema.contract import (
+    ContractAnalysisRequest,
+    ContractAnalysisResponse,
+    AnalysisOptions,
+)
 from app.models.supabase_models import Document, Contract, ContractAnalysis, Profile
 from app.clients.base.interfaces import DatabaseOperations, AuthOperations
 from app.clients.supabase.client import SupabaseClient
@@ -26,20 +30,27 @@ from app.clients.supabase.client import SupabaseClient
 # Database Result Types
 class DatabaseSelectResult(TypedDict):
     """Result from database select operations."""
-    data: List[Dict[str, Union[str, int, float, bool, datetime, UUID, None, Dict, List]]]
+
+    data: List[
+        Dict[str, Union[str, int, float, bool, datetime, UUID, None, Dict, List]]
+    ]
     count: int
 
 
 class DatabaseMutationResult(TypedDict):
     """Result from database insert/update/delete operations."""
+
     success: bool
-    data: Optional[Dict[str, Union[str, int, float, bool, datetime, UUID, None, Dict, List]]]
+    data: Optional[
+        Dict[str, Union[str, int, float, bool, datetime, UUID, None, Dict, List]]
+    ]
     error: Optional[str]
 
 
 # Domain Record Types (database row representations)
 class DocumentRecord(TypedDict):
     """Document database record."""
+
     id: str
     user_id: str
     original_filename: str
@@ -58,6 +69,7 @@ class DocumentRecord(TypedDict):
 
 class ContractRecord(TypedDict):
     """Contract database record."""
+
     id: str
     document_id: str
     user_id: str
@@ -70,6 +82,7 @@ class ContractRecord(TypedDict):
 
 class AnalysisRecord(TypedDict):
     """Contract analysis database record."""
+
     id: str
     contract_id: str
     user_id: str
@@ -85,6 +98,7 @@ class AnalysisRecord(TypedDict):
 
 class UserNotificationData(TypedDict):
     """User notification structure."""
+
     id: str
     user_id: str
     title: str
@@ -97,6 +111,7 @@ class UserNotificationData(TypedDict):
 # API Response Types
 class AnalysisStatusResponse(TypedDict):
     """Response for analysis status endpoint."""
+
     contract_id: str
     analysis_id: str
     status: str
@@ -111,6 +126,7 @@ class AnalysisStatusResponse(TypedDict):
 
 class AnalysisProgressInfo(TypedDict):
     """Analysis progress calculation result."""
+
     progress: int
     status_message: str
     estimated_completion: Optional[str]
@@ -119,6 +135,7 @@ class AnalysisProgressInfo(TypedDict):
 
 class ContractAnalysisResultResponse(TypedDict):
     """Response for contract analysis results."""
+
     contract_id: str
     analysis_status: str
     analysis_result: Dict[str, Union[str, int, float, bool, List, Dict]]
@@ -129,6 +146,7 @@ class ContractAnalysisResultResponse(TypedDict):
 
 class NotificationsResponse(TypedDict):
     """Response for user notifications."""
+
     notifications: List[UserNotificationData]
     total_count: int
     unread_count: int
@@ -136,6 +154,7 @@ class NotificationsResponse(TypedDict):
 
 class DeleteContractResponse(TypedDict):
     """Response for contract deletion."""
+
     message: str
     contract_id: str
     analyses_deleted: int
@@ -143,14 +162,16 @@ class DeleteContractResponse(TypedDict):
 
 class NotificationDismissResponse(TypedDict):
     """Response for notification dismissal."""
+
     message: str
 
 
 # Background Task Types
 class CeleryTaskResult:
     """Celery task result wrapper."""
+
     id: str
-    
+
     def __init__(self, id: str):
         self.id = id
 
@@ -346,7 +367,10 @@ def _is_valid_contract_document(document: DocumentRecord) -> bool:
 
 @retry_database_operation(max_attempts=3)
 async def _create_contract_record(
-    db_client: UserAuthenticatedClient, document_id: str, document: DocumentRecord, user: User
+    db_client: UserAuthenticatedClient,
+    document_id: str,
+    document: DocumentRecord,
+    user: User,
 ) -> str:
     """Create contract record with retry logic"""
     contract_data = {
@@ -625,13 +649,21 @@ async def get_contract_analysis(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.get("/{contract_id}/report")
-async def download_analysis_report(
+@router.get("/{contract_id}/report", response_model=ContractAnalysisResultResponse)
+async def get_contract_analysis_report(
     contract_id: str,
-    format: str = "pdf",
     user: User = Depends(get_current_user),
-) -> Union[JSONResponse, ContractAnalysisResultResponse]:
-    """Download analysis report"""
+) -> ContractAnalysisResultResponse:
+    """Get contract analysis report data"""
+    return await get_contract_analysis(contract_id, user)
+
+
+@router.get("/{contract_id}/report/pdf")
+async def download_contract_pdf_report(
+    contract_id: str,
+    user: User = Depends(get_current_user),
+):
+    """Download contract analysis report as PDF"""
 
     try:
         # Get authenticated client
@@ -640,20 +672,22 @@ async def download_analysis_report(
         # Get analysis data
         analysis_data = await get_contract_analysis(contract_id, user)
 
-        if format == "pdf":
-            # Generate PDF report (would implement with reportlab or similar)
-            from app.tasks.background_tasks import generate_pdf_report
+        # Generate PDF report (would implement with reportlab or similar)
+        from app.tasks.background_tasks import generate_pdf_report
 
-            pdf_content = await generate_pdf_report(analysis_data)
-            return JSONResponse(
-                content={"download_url": f"/api/contracts/{contract_id}/report.pdf"},
-                headers={"Content-Type": "application/json"},
-            )
-        else:
-            return analysis_data
+        pdf_content = await generate_pdf_report(analysis_data)
+
+        # Return the actual PDF content
+        return Response(
+            content=pdf_content,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f"attachment; filename=contract_{contract_id}_report.pdf"
+            },
+        )
 
     except Exception as e:
-        logger.error(f"Report download error: {str(e)}")
+        logger.error(f"PDF report download error: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
 
 

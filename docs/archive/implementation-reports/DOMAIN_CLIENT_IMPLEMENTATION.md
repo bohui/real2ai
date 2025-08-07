@@ -181,7 +181,7 @@ client = await get_domain_client()
 
 ### Model Integration
 ```python
-from app.api.models import PropertySearchRequest, PropertyProfile
+from app.schema import PropertySearchRequest, PropertyProfile
 
 # Use existing models
 request = PropertySearchRequest(address="123 Main St, Sydney NSW")

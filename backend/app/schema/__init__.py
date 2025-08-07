@@ -1,11 +1,7 @@
 """Schema module for request/response models."""
 
 # Authentication schemas
-from .auth import (
-    UserRegistrationRequest,
-    UserLoginRequest,
-    UserResponse
-)
+from .auth import UserRegistrationRequest, UserLoginRequest, UserResponse
 
 # Common schemas
 from .common import (
@@ -14,7 +10,7 @@ from .common import (
     ValidationErrorResponse,
     HealthCheckResponse,
     WebSocketMessage,
-    SystemStatsResponse
+    SystemStatsResponse,
 )
 
 # Contract schemas
@@ -30,7 +26,7 @@ from .contract import (
     StampDutyCalculationRequest,
     PropertyFinancialSummary,
     WebSocketProgressUpdate,
-    ContractAnalysisFromOCR
+    ContractAnalysisFromOCR,
 )
 
 # Document schemas
@@ -39,7 +35,7 @@ from .document import (
     DocumentDetails,
     DocumentProcessingStatus,
     ReportGenerationRequest,
-    ReportResponse
+    ReportResponse,
 )
 
 # OCR schemas
@@ -59,20 +55,18 @@ from .ocr import (
     OCRProgressUpdate,
     BatchOCRProgressUpdate,
     OCRCompletionNotification,
-    OCRErrorNotification
+    OCRErrorNotification,
 )
 
 # Onboarding schemas
 from .onboarding import (
     OnboardingStatusResponse,
     OnboardingPreferencesRequest,
-    OnboardingCompleteRequest
+    OnboardingCompleteRequest,
 )
 
 # User schemas
-from .user import (
-    UsageStatsResponse
-)
+from .user import UsageStatsResponse
 
 # Property schemas
 from .property import (
@@ -94,7 +88,11 @@ from .property import (
     PropertyValuationResponse,
     PropertyAPIHealthStatus,
     PropertyAnalysisDepth,
-    MarketInsightRequest
+    MarketInsightRequest,
+    PropertySearchFilter,
+    PropertyListing,
+    PropertySearchResponse,
+    PropertyDataValidationResult,
 )
 
 # Evaluation schemas
@@ -114,7 +112,7 @@ from .evaluation import (
     ABTestCreate,
     ABTestResponse,
     ModelComparisonResponse,
-    JobSummaryResponse
+    JobSummaryResponse,
 )
 
 # Enum exports
@@ -123,7 +121,7 @@ from .enums import *
 __all__ = [
     # Auth
     "UserRegistrationRequest",
-    "UserLoginRequest", 
+    "UserLoginRequest",
     "UserResponse",
     # Common
     "ErrorResponse",
@@ -194,6 +192,10 @@ __all__ = [
     "PropertyAPIHealthStatus",
     "PropertyAnalysisDepth",
     "MarketInsightRequest",
+    "PropertySearchFilter",
+    "PropertyListing",
+    "PropertySearchResponse",
+    "PropertyDataValidationResult",
     # Evaluation
     "PromptTemplateCreate",
     "PromptTemplateUpdate",
