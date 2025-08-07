@@ -22,7 +22,9 @@ class ApiService {
   private token: string | null = null;
   private refreshToken: string | null = null;
   private isRefreshing = false;
-  private failedQueue: Array<{ resolve: Function; reject: Function }> = [];
+  private failedQueue: Array<
+    { resolve: (value?: any) => void; reject: (error?: any) => void }
+  > = [];
 
   constructor() {
     this.client = axios.create({
@@ -51,6 +53,16 @@ class ApiService {
         const originalRequest = error.config as any;
 
         if (error.response?.status === 401 && !originalRequest._retry) {
+          // Don't attempt token refresh for login/register endpoints
+          const isAuthEndpoint = originalRequest.url?.includes("/auth/login") ||
+            originalRequest.url?.includes("/auth/register");
+
+          if (isAuthEndpoint) {
+            // For auth endpoints, just clear tokens and let the login form handle the error
+            this.clearTokens();
+            return Promise.reject(error);
+          }
+
           if (this.isRefreshing) {
             // If already refreshing, queue the request
             return new Promise((resolve, reject) => {
@@ -72,20 +84,32 @@ class ApiService {
             if (this.refreshToken) {
               const newTokens = await this.refreshTokens();
               this.processQueue(null, newTokens.access_token);
-              
+
               // Retry the original request with new token
               if (originalRequest.headers) {
-                originalRequest.headers.Authorization = `Bearer ${newTokens.access_token}`;
+                originalRequest.headers.Authorization =
+                  `Bearer ${newTokens.access_token}`;
               }
               return this.client.request(originalRequest);
             } else {
-              throw new Error("No refresh token available");
+              // No refresh token available - user needs to log in again
+              this.processQueue(
+                new Error("Session expired. Please log in again."),
+                null,
+              );
+              this.clearTokens();
+              window.dispatchEvent(new CustomEvent("auth:unauthorized"));
+              return Promise.reject(
+                new Error("Session expired. Please log in again."),
+              );
             }
           } catch (refreshError) {
             this.processQueue(refreshError, null);
             this.clearTokens();
             window.dispatchEvent(new CustomEvent("auth:unauthorized"));
-            return Promise.reject(refreshError);
+            return Promise.reject(
+              new Error("Session expired. Please log in again."),
+            );
           } finally {
             this.isRefreshing = false;
           }
@@ -142,11 +166,13 @@ class ApiService {
         resolve(token);
       }
     });
-    
+
     this.failedQueue = [];
   }
 
-  private async refreshTokens(): Promise<{ access_token: string; refresh_token: string }> {
+  private async refreshTokens(): Promise<
+    { access_token: string; refresh_token: string }
+  > {
     if (!this.refreshToken) {
       throw new Error("No refresh token available");
     }
@@ -159,7 +185,7 @@ class ApiService {
 
     const { access_token, refresh_token } = response.data;
     this.setTokens(access_token, refresh_token);
-    
+
     return { access_token, refresh_token };
   }
 
@@ -297,9 +323,15 @@ class ApiService {
 
   // Contract analysis endpoints
   async prepareContract(
-    data: { document_id: string; contract_type?: string; australian_state?: string }
+    data: {
+      document_id: string;
+      contract_type?: string;
+      australian_state?: string;
+    },
   ): Promise<{ contract_id: string; document_id: string }> {
-    const response = await this.client.post<{ contract_id: string; document_id: string }>(
+    const response = await this.client.post<
+      { contract_id: string; document_id: string }
+    >(
       "/api/contracts/prepare",
       data,
     );
@@ -366,7 +398,7 @@ class ApiService {
           : "non-compliant",
         total_recommendations: analysisResult.recommendations?.length || 0,
         critical_issues:
-          analysisResult.risk_assessment?.risk_factors?.filter((rf) =>
+          analysisResult.risk_assessment?.risk_factors?.filter((rf: any) =>
             rf.severity === "critical" || rf.severity === "high"
           ).length || 0,
         confidence_level: analysisResult.overall_confidence || 0.8,
@@ -407,15 +439,15 @@ class ApiService {
   }
 
   // Generic HTTP methods for other services
-  async get<T = unknown>(url: string, config?: unknown): Promise<{ data: T }> {
+  async get<T = unknown>(url: string, config?: any): Promise<{ data: T }> {
     const response = await this.client.get<T>(url, config);
     return { data: response.data };
   }
 
   async post<T = unknown>(
     url: string,
-    data?: unknown,
-    config?: unknown,
+    data?: any,
+    config?: any,
   ): Promise<{ data: T }> {
     const response = await this.client.post<T>(url, data, config);
     return { data: response.data };
@@ -423,8 +455,8 @@ class ApiService {
 
   async put<T = unknown>(
     url: string,
-    data?: unknown,
-    config?: unknown,
+    data?: any,
+    config?: any,
   ): Promise<{ data: T }> {
     const response = await this.client.put<T>(url, data, config);
     return { data: response.data };
@@ -432,7 +464,7 @@ class ApiService {
 
   async delete<T = unknown>(
     url: string,
-    config?: unknown,
+    config?: any,
   ): Promise<{ data: T }> {
     const response = await this.client.delete<T>(url, config);
     return { data: response.data };
@@ -530,22 +562,31 @@ export class WebSocketService {
 
   constructor(documentId: string) {
     // Fix URL construction for both HTTP and HTTPS
-    const wsUrl = API_BASE_URL.replace(/^https?/, API_BASE_URL.startsWith('https') ? 'wss' : 'ws');
+    const wsUrl = API_BASE_URL.replace(
+      /^https?/,
+      API_BASE_URL.startsWith("https") ? "wss" : "ws",
+    );
     const token = localStorage.getItem("auth_token");
-    
-    if (!token || token.trim() === '') {
-      throw new Error('Authentication token not found. Please log in again.');
+
+    if (!token || token.trim() === "") {
+      throw new Error("Authentication token not found. Please log in again.");
     }
-    
-    if (!documentId || documentId.trim() === '') {
-      throw new Error('Document ID is required for WebSocket connection.');
+
+    if (!documentId || documentId.trim() === "") {
+      throw new Error("Document ID is required for WebSocket connection.");
     }
-    
-    this.contractId = documentId;  // Store as contractId for backward compatibility in logs
-    this.url = `${wsUrl}/ws/documents/${documentId}?token=${encodeURIComponent(token)}`;
-    
+
+    this.contractId = documentId; // Store as contractId for backward compatibility in logs
+    this.url = `${wsUrl}/ws/documents/${documentId}?token=${
+      encodeURIComponent(token)
+    }`;
+
     console.log(`📡 WebSocket service created for document ${documentId}`);
-    console.log(`🔗 WebSocket URL: ${this.url.replace(/token=[^&]+/, 'token=[REDACTED]')}`);
+    console.log(
+      `🔗 WebSocket URL: ${
+        this.url.replace(/token=[^&]+/, "token=[REDACTED]")
+      }`,
+    );
   }
 
   connect(): Promise<void> {
@@ -556,12 +597,18 @@ export class WebSocketService {
       );
       return Promise.resolve();
     }
-    
-    console.log(`🔌 Attempting to connect WebSocket for contract ${this.contractId}`);
-    console.log(`📡 WebSocket URL: ${this.url.replace(/token=[^&]+/, 'token=[REDACTED]')}`);
-    
+
+    console.log(
+      `🔌 Attempting to connect WebSocket for contract ${this.contractId}`,
+    );
+    console.log(
+      `📡 WebSocket URL: ${
+        this.url.replace(/token=[^&]+/, "token=[REDACTED]")
+      }`,
+    );
+
     // Validate URL format
-    if (!this.url.startsWith('ws://') && !this.url.startsWith('wss://')) {
+    if (!this.url.startsWith("ws://") && !this.url.startsWith("wss://")) {
       const error = new Error(`❌ Invalid WebSocket URL format: ${this.url}`);
       console.error(error.message);
       return Promise.reject(error);
@@ -591,7 +638,9 @@ export class WebSocketService {
         this.ws = new WebSocket(this.url);
 
         this.ws.onopen = () => {
-          console.log(`✅ WebSocket connected successfully for contract ${this.contractId}`);
+          console.log(
+            `✅ WebSocket connected successfully for contract ${this.contractId}`,
+          );
           console.log(`📊 Connection state: connecting=false, connected=true`);
           this.reconnectAttempts = 0;
           this.isConnecting = false;
@@ -647,7 +696,9 @@ export class WebSocketService {
 
         this.ws.onclose = (event) => {
           console.log(
-            `🔌 WebSocket disconnected for contract ${this.contractId}: code=${event.code}, reason=${event.reason || 'No reason'}`,
+            `🔌 WebSocket disconnected for contract ${this.contractId}: code=${event.code}, reason=${
+              event.reason || "No reason"
+            }`,
           );
           console.log(`📊 Connection state: connecting=false, connected=false`);
           this.isConnecting = false;
@@ -668,14 +719,20 @@ export class WebSocketService {
             `❌ WebSocket connection error for contract ${this.contractId}:`,
             error,
           );
-          console.error(`🔗 Failed URL: ${this.url.replace(/token=[^&]+/, 'token=[REDACTED]')}`);
-          console.error(`📊 Connection state: connecting=${this.isConnecting}, connected=${this.isConnected}`);
-          
+          console.error(
+            `🔗 Failed URL: ${
+              this.url.replace(/token=[^&]+/, "token=[REDACTED]")
+            }`,
+          );
+          console.error(
+            `📊 Connection state: connecting=${this.isConnecting}, connected=${this.isConnected}`,
+          );
+
           this.isConnecting = false;
           this.isConnected = false;
-          
+
           // Create a more descriptive error
-          const errorMessage = error instanceof Event 
+          const errorMessage = error instanceof Event
             ? `WebSocket connection failed (Check network, authentication, and server status)`
             : `WebSocket error: ${error}`;
           reject(new Error(errorMessage));
@@ -802,16 +859,16 @@ export class WebSocketService {
 
   // New methods for document-based WebSocket flow
   startAnalysis(analysisOptions = {}): void {
-    this.sendMessage({ 
-      type: "start_analysis", 
-      analysis_options: analysisOptions 
+    this.sendMessage({
+      type: "start_analysis",
+      analysis_options: analysisOptions,
     });
   }
 
   retryAnalysis(retryAttempt = 1): void {
-    this.sendMessage({ 
-      type: "retry_analysis", 
-      retry_attempt: retryAttempt 
+    this.sendMessage({
+      type: "retry_analysis",
+      retry_attempt: retryAttempt,
     });
   }
 
