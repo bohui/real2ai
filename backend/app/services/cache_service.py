@@ -199,11 +199,11 @@ class CacheService:
                 analysis_id = record.get("analysis_id")
                 view_id = record.get("view_id")
 
-                # Get contract_id from the document
+                # Get contract_id from shared contracts table (no user_id filter needed)
                 contract_result = await self.db_client.database.select(
                     "contracts",
                     columns="id",
-                    filters={"document_id": document_id, "user_id": user_id},
+                    filters={"content_hash": content_hash},
                 )
 
                 contract_id = (

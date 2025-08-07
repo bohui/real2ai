@@ -79,26 +79,23 @@ CREATE TABLE documents (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Contracts table for contract metadata
+-- Contracts table for contract metadata (shared resource, no user_id)
 CREATE TABLE contracts (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    document_id UUID REFERENCES documents(id) ON DELETE CASCADE NOT NULL,
-    user_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
-    content_hash TEXT, -- Hash-based caching support
+    content_hash TEXT UNIQUE NOT NULL, -- Primary key for shared caching
     contract_type contract_type NOT NULL DEFAULT 'purchase_agreement',
     australian_state australian_state NOT NULL DEFAULT 'NSW',
     contract_terms JSONB DEFAULT '{}',
     raw_text TEXT,
+    property_address TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Contract analyses table for AI analysis results
+-- Contract analyses table for AI analysis results (shared resource, no user_id)
 CREATE TABLE contract_analyses (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    contract_id UUID REFERENCES contracts(id) ON DELETE CASCADE NOT NULL,
-    user_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
-    content_hash TEXT, -- Hash-based caching support
+    content_hash TEXT UNIQUE NOT NULL, -- Primary key for shared caching
     agent_version TEXT NOT NULL DEFAULT '1.0',
     status analysis_status NOT NULL DEFAULT 'pending',
     
@@ -126,11 +123,10 @@ CREATE TABLE contract_analyses (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Document pages table for page-level analysis
+-- Document pages table for page-level analysis (shared resource)
 CREATE TABLE document_pages (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    document_id UUID REFERENCES documents(id) ON DELETE CASCADE NOT NULL,
-    content_hash TEXT, -- Hash-based caching support
+    content_hash TEXT NOT NULL, -- Hash-based caching, no document_id
     page_number INTEGER NOT NULL,
     
     -- Content analysis
@@ -163,11 +159,10 @@ CREATE TABLE document_pages (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Document entities table for extracted entities
+-- Document entities table for extracted entities (shared resource)
 CREATE TABLE document_entities (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    document_id UUID REFERENCES documents(id) ON DELETE CASCADE NOT NULL,
-    content_hash TEXT, -- Hash-based caching support
+    content_hash TEXT NOT NULL, -- Hash-based caching, no document_id
     page_id UUID REFERENCES document_pages(id) ON DELETE CASCADE,
     page_number INTEGER NOT NULL,
     
@@ -276,11 +271,9 @@ CREATE TABLE usage_logs (
 -- Property data table for enhanced property analysis
 CREATE TABLE property_data (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    contract_id UUID REFERENCES contracts(id) ON DELETE CASCADE,
-    user_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
     
-    -- Cache key
-    property_hash TEXT UNIQUE, -- Hash of normalized address for caching
+    -- Cache key (primary identifier for shared resource)
+    property_hash TEXT UNIQUE NOT NULL, -- Hash of normalized address for caching
     
     -- Property details
     address TEXT NOT NULL,
@@ -393,10 +386,10 @@ CREATE INDEX idx_documents_content_hash ON documents(content_hash);
 CREATE INDEX idx_documents_created_at ON documents(created_at DESC);
 
 CREATE INDEX idx_contracts_user_id ON contracts(user_id);
-CREATE INDEX idx_contracts_document_id ON contracts(document_id);
+CREATE INDEX idx_contracts_content_hash ON contracts(content_hash);
 CREATE INDEX idx_contracts_type_state ON contracts(contract_type, australian_state);
 
-CREATE INDEX idx_contract_analyses_contract_id ON contract_analyses(contract_id);
+CREATE INDEX idx_contract_analyses_content_hash ON contract_analyses(content_hash);
 CREATE INDEX idx_contract_analyses_user_id ON contract_analyses(user_id);
 CREATE INDEX idx_contract_analyses_status ON contract_analyses(status);
 CREATE INDEX idx_contract_analyses_timestamp ON contract_analyses(analysis_timestamp DESC);
@@ -406,7 +399,7 @@ CREATE INDEX idx_usage_logs_user_id ON usage_logs(user_id);
 CREATE INDEX idx_usage_logs_timestamp ON usage_logs(timestamp DESC);
 CREATE INDEX idx_usage_logs_action_type ON usage_logs(action_type);
 
-CREATE INDEX idx_property_data_contract_id ON property_data(contract_id);
+-- Property data indexes
 CREATE INDEX idx_property_data_location ON property_data(suburb, state, postcode);
 CREATE INDEX idx_property_data_property_type ON property_data(property_type);
 CREATE INDEX idx_property_data_property_hash ON property_data(property_hash);
@@ -422,11 +415,11 @@ CREATE INDEX idx_analysis_progress_status ON analysis_progress(status);
 CREATE INDEX idx_analysis_progress_created_at ON analysis_progress(created_at);
 
 -- Indexes for new document processing tables
-CREATE INDEX idx_document_pages_document_id ON document_pages(document_id);
+CREATE INDEX idx_document_pages_content_hash ON document_pages(content_hash);
 CREATE INDEX idx_document_pages_page_number ON document_pages(page_number);
 CREATE INDEX idx_document_pages_content_type ON document_pages(primary_content_type);
 
-CREATE INDEX idx_document_entities_document_id ON document_entities(document_id);
+CREATE INDEX idx_document_entities_content_hash ON document_entities(content_hash);
 CREATE INDEX idx_document_entities_page_id ON document_entities(page_id);
 CREATE INDEX idx_document_entities_page_number ON document_entities(page_number);
 CREATE INDEX idx_document_entities_type ON document_entities(entity_type);
@@ -600,9 +593,8 @@ DECLARE
     v_document_id UUID;
     v_analysis_id UUID;
     v_view_id UUID;
-    v_contract_id UUID;
 BEGIN
-    -- Create document record for user
+    -- Create document record for user (documents are still user-owned)
     INSERT INTO documents (
         user_id,
         original_filename,
@@ -622,30 +614,17 @@ BEGIN
     )
     RETURNING id INTO v_document_id;
     
-    -- Get existing analysis ID
+    -- Get existing analysis ID from shared table
     SELECT id INTO v_analysis_id
     FROM contract_analyses
     WHERE content_hash = p_content_hash
     AND status = 'completed'
     LIMIT 1;
     
-    -- Create contract record
-    INSERT INTO contracts (
-        document_id,
-        user_id,
-        content_hash,
-        contract_type,
-        australian_state
-    ) VALUES (
-        v_document_id,
-        p_user_id,
-        p_content_hash,
-        'purchase_agreement',
-        'NSW'
-    )
-    RETURNING id INTO v_contract_id;
+    -- Note: contracts table is now shared, so we don't create new records
+    -- The shared contract record should already exist with the content_hash
     
-    -- Log the view
+    -- Log the view for user history (user-specific table)
     INSERT INTO user_contract_views (
         user_id,
         content_hash,
@@ -847,9 +826,23 @@ BEGIN
 END;
 $$;
 
--- Comments for user view tables
+-- Disable RLS on shared resource tables for cross-user cache sharing
+ALTER TABLE contracts DISABLE ROW LEVEL SECURITY;
+ALTER TABLE contract_analyses DISABLE ROW LEVEL SECURITY;
+ALTER TABLE document_pages DISABLE ROW LEVEL SECURITY;
+ALTER TABLE document_entities DISABLE ROW LEVEL SECURITY;
+ALTER TABLE property_data DISABLE ROW LEVEL SECURITY;
+
+-- Comments for user view tables (still private with RLS)
 COMMENT ON TABLE user_property_views IS 'User''s property search history with RLS for privacy';
 COMMENT ON TABLE user_contract_views IS 'User''s contract analysis history with RLS for privacy';
+
+-- Comments for shared resource tables (RLS disabled)
+COMMENT ON TABLE contracts IS 'Contract metadata - shared resource, RLS disabled, accessed by content_hash';
+COMMENT ON TABLE contract_analyses IS 'Contract analysis results - shared resource, RLS disabled, accessed by content_hash';
+COMMENT ON TABLE document_pages IS 'Document pages - shared resource, RLS disabled, accessed by content_hash';
+COMMENT ON TABLE document_entities IS 'Document entities - shared resource, RLS disabled, accessed by content_hash';
+COMMENT ON TABLE property_data IS 'Property analysis data - shared resource, RLS disabled, accessed by property_hash';
 
 -- Cache architecture improvements:
 -- 1. Simplified to use only content_hash (removed document_hash redundancy)
