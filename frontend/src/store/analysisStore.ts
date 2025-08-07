@@ -3,7 +3,8 @@ import {
   DocumentDetails, 
   ContractAnalysisResult, 
   AnalysisProgressUpdate,
-  ContractAnalysisRequest 
+  ContractAnalysisRequest,
+  WebSocketEventData
 } from '@/types'
 import { apiService, WebSocketService, wsConnectionManager } from '@/services/api'
 
@@ -64,7 +65,7 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
       const handleProgress = (event: any) => {
         set({ uploadProgress: event.detail.progress })
       }
-      window.addEventListener('upload:progress', handleProgress)
+      window.addEventListener('upload:progress', handleProgress as EventListener)
       
       const response = await apiService.uploadDocument(file, contractType, state)
       
@@ -77,14 +78,14 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
         uploadProgress: 100
       })
       
-      window.removeEventListener('upload:progress', handleProgress)
+      window.removeEventListener('upload:progress', handleProgress as EventListener)
       return response.document_id
       
-    } catch (error: any) {
+    } catch (error: unknown) {
       set({
         isUploading: false,
         uploadProgress: 0,
-        analysisError: apiService.handleError(error)
+        analysisError: apiService.handleError(error as any)
       })
       throw error
     }
@@ -99,10 +100,10 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
       // Connect WebSocket for real-time updates
       await get().connectWebSocket(response.contract_id)
       
-    } catch (error: any) {
+    } catch (error: unknown) {
       set({
         isAnalyzing: false,
-        analysisError: apiService.handleError(error)
+        analysisError: apiService.handleError(error as any)
       })
       throw error
     }
@@ -137,7 +138,7 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
       
       switch (data.event_type) {
         case 'analysis_progress':
-          get().updateProgress(data.data)
+          get().updateProgress(data.data as AnalysisProgressUpdate)
           break
           
         case 'analysis_completed':
@@ -205,7 +206,7 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
     
     try {
       await wsService.connect()
-      window.addEventListener('analysis:update', handleUpdate)
+      window.addEventListener('analysis:update', handleUpdate as EventListener)
       
     } catch (error) {
       console.error('WebSocket connection failed:', error)
@@ -234,7 +235,7 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
     
     // Remove event listener with proper reference
     if (wsEventListener) {
-      window.removeEventListener('analysis:update', wsEventListener)
+      window.removeEventListener('analysis:update', wsEventListener as EventListener)
     }
     
     set({ 
@@ -298,7 +299,7 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
       const recent = get().recentAnalyses
       const updated = recent.filter(a => a.contract_id !== contractId)
       set({ recentAnalyses: updated })
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to delete analysis:', error)
       throw error
     }

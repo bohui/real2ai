@@ -10,6 +10,7 @@ import {
   User,
   UserLoginRequest,
   UserRegistrationRequest,
+  OnboardingPreferences,
 } from "@/types";
 
 // API Configuration
@@ -114,7 +115,7 @@ class ApiService {
     return response.data;
   }
 
-  async updateUserPreferences(preferences: Record<string, any>): Promise<void> {
+  async updateUserPreferences(preferences: Record<string, unknown>): Promise<void> {
     await this.client.put("/api/users/preferences", preferences);
   }
 
@@ -122,7 +123,7 @@ class ApiService {
   async getOnboardingStatus(): Promise<{
     onboarding_completed: boolean;
     onboarding_completed_at?: string;
-    onboarding_preferences: Record<string, any>;
+    onboarding_preferences: OnboardingPreferences;
   }> {
     const response = await this.client.get("/api/users/onboarding/status");
     return response.data;
@@ -215,30 +216,30 @@ class ApiService {
 
   async getAnalysisResult(contractId: string): Promise<ContractAnalysisResult> {
     const response = await this.retryRequest(
-      () => this.client.get<any>(`/api/contracts/${contractId}/analysis`),
+      () => this.client.get<unknown>(`/api/contracts/${contractId}/analysis`),
       3, // max retries
       1000, // initial delay
     );
 
     // Transform API response to match frontend expectations
-    const apiData = response.data;
+    const apiData = response.data as any;
     const analysisResult = apiData.analysis_result || {};
 
 
     // Transform to match ContractAnalysisResult interface
     const transformedResult: ContractAnalysisResult = {
-      contract_id: apiData.contract_id,
-      analysis_id: analysisResult.analysis_id || apiData.contract_id,
+      contract_id: (apiData as any).contract_id,
+      analysis_id: analysisResult.analysis_id || (apiData as any).contract_id,
       analysis_timestamp: analysisResult.analysis_timestamp ||
-        apiData.created_at,
+        (apiData as any).created_at,
       user_id: analysisResult.user_id || "",
       australian_state: analysisResult.australian_state || "NSW",
-      analysis_status: apiData.analysis_status || "completed",
+      analysis_status: (apiData as any).analysis_status || "completed",
       contract_terms: analysisResult.contract_terms || {},
       risk_assessment: {
         overall_risk_score:
           analysisResult.risk_assessment?.overall_risk_score ||
-          apiData.risk_score || 0,
+          (apiData as any).risk_score || 0,
         risk_factors: analysisResult.risk_assessment?.risk_factors || [],
       },
       compliance_check: analysisResult.compliance_check || {
@@ -253,7 +254,7 @@ class ApiService {
       recommendations: analysisResult.recommendations || [],
       confidence_scores: analysisResult.confidence_scores || {},
       overall_confidence: analysisResult.overall_confidence || 0.8,
-      processing_time: apiData.processing_time || 0,
+      processing_time: (apiData as any).processing_time || 0,
       analysis_version: analysisResult.processing_summary?.analysis_version ||
         "1.0",
       executive_summary: {
@@ -264,7 +265,7 @@ class ApiService {
           : "non-compliant",
         total_recommendations: analysisResult.recommendations?.length || 0,
         critical_issues:
-          analysisResult.risk_assessment?.risk_factors?.filter((rf: any) =>
+          analysisResult.risk_assessment?.risk_factors?.filter((rf) =>
             rf.severity === "critical" || rf.severity === "high"
           ).length || 0,
         confidence_level: analysisResult.overall_confidence || 0.8,
@@ -305,30 +306,30 @@ class ApiService {
   }
 
   // Generic HTTP methods for other services
-  async get<T = any>(url: string, config?: any): Promise<{ data: T }> {
+  async get<T = unknown>(url: string, config?: unknown): Promise<{ data: T }> {
     const response = await this.client.get<T>(url, config);
     return { data: response.data };
   }
 
-  async post<T = any>(
+  async post<T = unknown>(
     url: string,
-    data?: any,
-    config?: any,
+    data?: unknown,
+    config?: unknown,
   ): Promise<{ data: T }> {
     const response = await this.client.post<T>(url, data, config);
     return { data: response.data };
   }
 
-  async put<T = any>(
+  async put<T = unknown>(
     url: string,
-    data?: any,
-    config?: any,
+    data?: unknown,
+    config?: unknown,
   ): Promise<{ data: T }> {
     const response = await this.client.put<T>(url, data, config);
     return { data: response.data };
   }
 
-  async delete<T = any>(url: string, config?: any): Promise<{ data: T }> {
+  async delete<T = unknown>(url: string, config?: unknown): Promise<{ data: T }> {
     const response = await this.client.delete<T>(url, config);
     return { data: response.data };
   }
@@ -337,7 +338,7 @@ class ApiService {
   handleError(error: AxiosError): string {
     if (error.response) {
       // Server responded with error status
-      const data = error.response.data as any;
+      const data = error.response.data as Record<string, unknown>;
       const status = error.response.status;
 
       // Handle specific status codes
@@ -421,7 +422,7 @@ export class WebSocketService {
   private isConnecting = false;
   private isConnected = false;
   private contractId: string;
-  private messageQueue: any[] = [];
+  private messageQueue: unknown[] = [];
 
   constructor(contractId: string) {
     const wsUrl = API_BASE_URL.replace("http", "ws");
@@ -620,7 +621,7 @@ export class WebSocketService {
     }, 30000);
   }
 
-  sendMessage(message: any): void {
+  sendMessage(message: unknown): void {
     if (this.isConnected && this.ws?.readyState === WebSocket.OPEN) {
       try {
         const messageStr = JSON.stringify(message);

@@ -32,10 +32,10 @@ export interface User {
   user_type: UserType;
   subscription_status: SubscriptionStatus;
   credits_remaining: number;
-  preferences: Record<string, any>;
+  preferences: UserPreferences;
   onboarding_completed: boolean;
   onboarding_completed_at?: string;
-  onboarding_preferences: Record<string, any>;
+  onboarding_preferences: OnboardingPreferences;
   created_at?: string;
 }
 
@@ -146,7 +146,7 @@ export interface ComplianceCheck {
   state_compliance: boolean;
   compliance_issues: string[];
   cooling_off_compliance: boolean;
-  cooling_off_details: Record<string, any>;
+  cooling_off_details: CoolingOffDetails;
   stamp_duty_calculation?: StampDutyCalculation;
   mandatory_disclosures: string[];
   warnings: string[];
@@ -160,7 +160,7 @@ export interface ContractAnalysisResult {
   user_id: string;
   australian_state: AustralianState;
   analysis_status: "pending" | "processing" | "completed" | "failed";
-  contract_terms: Record<string, any>;
+  contract_terms: ContractTerms;
   risk_assessment: {
     overall_risk_score: number;
     risk_factors: RiskFactor[];
@@ -187,7 +187,7 @@ export type ContractAnalysis = ContractAnalysisResult;
 export interface WebSocketMessage {
   event_type: string;
   timestamp: string;
-  data: Record<string, any>;
+  data: WebSocketEventData;
 }
 
 export interface AnalysisProgressUpdate {
@@ -249,7 +249,7 @@ export interface Theme {
 }
 
 // API Response Types
-export interface ApiResponse<T = any> {
+export interface ApiResponse<T = unknown> {
   data?: T;
   error?: string;
   message?: string;
@@ -458,7 +458,7 @@ export interface PropertyAnalyticsRequest {
   include_investment_metrics: boolean;
   include_risk_analysis: boolean;
   comparison_properties: string[];
-  custom_parameters: Record<string, any>;
+  custom_parameters: CustomAnalysisParameters;
 }
 
 export interface PropertyAnalyticsResponse {
@@ -499,11 +499,11 @@ export interface PropertyMarketTrends {
 export interface PropertyNeighborhoodAnalysis {
   walkability_score?: number;
   transport_score?: number;
-  schools_nearby: Array<Record<string, any>>;
-  shopping_centers_nearby: Array<Record<string, any>>;
-  parks_recreation: Array<Record<string, any>>;
-  crime_statistics?: Record<string, any>;
-  demographic_profile?: Record<string, any>;
+  schools_nearby: SchoolInfo[];
+  shopping_centers_nearby: ShoppingCenterInfo[];
+  parks_recreation: ParkRecreationInfo[];
+  crime_statistics?: CrimeStatistics;
+  demographic_profile?: DemographicProfile;
   future_development_plans: string[];
   noise_pollution_level?: string;
   flood_risk?: string;
@@ -532,7 +532,7 @@ export interface PropertyFinancialBreakdown {
 export interface PropertyComparisonResult {
   comparison_id: string;
   properties: PropertyProfile[];
-  comparison_matrix: Record<string, Record<string, any>>;
+  comparison_matrix: Record<string, PropertyComparisonData>;
   rankings: Record<string, string[]>;
   summary_insights: string[];
   recommendation?: string;
@@ -570,7 +570,7 @@ export interface PropertyWatchlistItem {
   saved_at: string;
   notes?: string;
   tags: string[];
-  alert_preferences: Record<string, any>;
+  alert_preferences: AlertPreferences;
   is_favorite: boolean;
   price_alerts_triggered: number;
   last_price_change?: string;
@@ -583,4 +583,187 @@ export interface BulkPropertyAnalysisRequest {
   include_diversification_analysis: boolean;
   include_market_correlation: boolean;
   output_format: 'json' | 'csv' | 'pdf';
+}
+
+// Additional type definitions to replace 'any' types
+export interface UserPreferences {
+  theme?: 'light' | 'dark' | 'auto';
+  language?: string;
+  notifications?: {
+    email?: boolean;
+    push?: boolean;
+    sms?: boolean;
+  };
+  analysis_defaults?: {
+    include_financial_analysis?: boolean;
+    include_risk_assessment?: boolean;
+    include_compliance_check?: boolean;
+  };
+  privacy_settings?: {
+    share_analytics?: boolean;
+    marketing_communications?: boolean;
+  };
+  dashboard_layout?: string[];
+  [key: string]: unknown; // For extensibility
+}
+
+export interface OnboardingPreferences {
+  practice_area?: string;
+  jurisdiction?: string;
+  firm_size?: string;
+  primary_contract_types?: string[];
+  experience_level?: 'beginner' | 'intermediate' | 'expert';
+  notification_preferences?: {
+    analysis_completion?: boolean;
+    weekly_reports?: boolean;
+    system_updates?: boolean;
+  };
+  [key: string]: unknown; // For extensibility
+}
+
+export interface CoolingOffDetails {
+  period_days?: number;
+  period_hours?: number;
+  start_date?: string;
+  end_date?: string;
+  applicable?: boolean;
+  exceptions?: string[];
+  state_specific_rules?: string[];
+  waiver_conditions?: string[];
+  [key: string]: unknown; // For extensibility
+}
+
+export interface ContractTerms {
+  purchase_price?: number;
+  deposit_amount?: number;
+  settlement_date?: string;
+  special_conditions?: string[];
+  inclusions?: string[];
+  exclusions?: string[];
+  vendor_details?: {
+    name?: string;
+    legal_name?: string;
+    abn?: string;
+  };
+  purchaser_details?: {
+    name?: string;
+    legal_name?: string;
+    financing_subject_to?: boolean;
+  };
+  property_description?: string;
+  title_details?: {
+    lot?: string;
+    plan?: string;
+    volume?: string;
+    folio?: string;
+  };
+  [key: string]: unknown; // For extensibility
+}
+
+export interface WebSocketEventData {
+  contract_id?: string;
+  event_type?: string;
+  progress?: number;
+  status?: string;
+  message?: string;
+  step?: string;
+  estimated_time_remaining?: number;
+  error?: string;
+  analysis_result?: Partial<ContractAnalysisResult>;
+  [key: string]: unknown; // For extensibility
+}
+
+export interface CustomAnalysisParameters {
+  focus_areas?: string[];
+  risk_tolerance?: 'low' | 'medium' | 'high';
+  investment_timeline?: string;
+  budget_constraints?: {
+    max_purchase_price?: number;
+    max_ongoing_costs?: number;
+  };
+  location_preferences?: {
+    preferred_suburbs?: string[];
+    max_distance_from_city?: number;
+    transport_requirements?: string[];
+  };
+  property_requirements?: {
+    min_bedrooms?: number;
+    required_features?: string[];
+    avoid_features?: string[];
+  };
+  [key: string]: unknown; // For extensibility
+}
+
+export interface SchoolInfo {
+  name: string;
+  type: 'primary' | 'secondary' | 'combined';
+  sector: 'government' | 'catholic' | 'independent';
+  distance_meters: number;
+  rating?: number;
+  icsea_score?: number;
+  catchment?: boolean;
+  enrollment?: number;
+  website_url?: string;
+}
+
+export interface ShoppingCenterInfo {
+  name: string;
+  type: 'major' | 'regional' | 'neighborhood' | 'strip';
+  distance_meters: number;
+  major_retailers?: string[];
+  total_stores?: number;
+  parking_spaces?: number;
+  public_transport_access?: boolean;
+}
+
+export interface ParkRecreationInfo {
+  name: string;
+  type: 'park' | 'reserve' | 'playground' | 'sports_facility' | 'beach' | 'walking_trail';
+  distance_meters: number;
+  area_hectares?: number;
+  facilities?: string[];
+  activities?: string[];
+  accessibility_features?: string[];
+}
+
+export interface CrimeStatistics {
+  overall_crime_rate?: number;
+  crime_types?: Record<string, number>;
+  trend_12_months?: 'increasing' | 'stable' | 'decreasing';
+  safety_score?: number;
+  comparison_to_state_average?: number;
+  last_updated?: string;
+}
+
+export interface DemographicProfile {
+  median_age?: number;
+  median_household_income?: number;
+  education_levels?: Record<string, number>;
+  employment_rate?: number;
+  family_composition?: Record<string, number>;
+  cultural_diversity?: Record<string, number>;
+  population_growth_rate?: number;
+  housing_types?: Record<string, number>;
+}
+
+export interface PropertyComparisonData {
+  value?: number | string;
+  score?: number;
+  rank?: number;
+  notes?: string;
+  data_source?: string;
+  confidence?: number;
+}
+
+export interface AlertPreferences {
+  price_change_threshold?: number;
+  market_trend_alerts?: boolean;
+  new_listings_nearby?: boolean;
+  price_drop_alerts?: boolean;
+  auction_results?: boolean;
+  rental_estimate_updates?: boolean;
+  neighborhood_news?: boolean;
+  weekly_summary?: boolean;
+  email_frequency?: 'immediate' | 'daily' | 'weekly' | 'monthly';
+  push_notifications?: boolean;
 }

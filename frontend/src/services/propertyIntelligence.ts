@@ -9,6 +9,7 @@ import {
   PropertySearchRequest,
   PropertySearchResponse,
   PropertyWatchlistItem,
+  AlertPreferences
 } from "../types";
 
 export class PropertyIntelligenceService {
@@ -60,7 +61,7 @@ export class PropertyIntelligenceService {
    */
   async bulkAnalyzeProperties(
     request: BulkPropertyAnalysisRequest,
-  ): Promise<any> {
+  ): Promise<unknown> {
     try {
       const response = await apiService.post(
         `${this.baseUrl}/bulk-analyze`,
@@ -98,8 +99,8 @@ export class PropertyIntelligenceService {
     address: string;
     notes?: string;
     tags?: string[];
-    alert_preferences?: Record<string, any>;
-  }): Promise<any> {
+    alert_preferences?: AlertPreferences;
+  }): Promise<unknown> {
     try {
       const response = await apiService.post(
         `${this.baseUrl}/watchlist`,
@@ -205,7 +206,7 @@ export class PropertyIntelligenceService {
     suburb: string,
     state: string,
     propertyType?: string,
-  ): Promise<any> {
+  ): Promise<unknown> {
     try {
       const response = await apiService.get(`${this.baseUrl}/market-analysis`, {
         params: { suburb, state, property_type: propertyType },
@@ -224,7 +225,7 @@ export class PropertyIntelligenceService {
     location: string,
     budgetRange?: [number, number],
     investmentStrategy: string = "growth",
-  ): Promise<any> {
+  ): Promise<unknown> {
     try {
       const response = await apiService.get(
         `${this.baseUrl}/investment-opportunities`,
@@ -250,7 +251,7 @@ export class PropertyIntelligenceService {
   async getPropertyValuation(
     address: string,
     valuationType: "avm" | "desktop" | "professional" = "avm",
-  ): Promise<any> {
+  ): Promise<unknown> {
     try {
       const response = await apiService.post(`${this.baseUrl}/valuation`, {
         address,
@@ -266,7 +267,7 @@ export class PropertyIntelligenceService {
   /**
    * Get suburb statistics
    */
-  async getSuburbStatistics(suburb: string, state: string): Promise<any> {
+  async getSuburbStatistics(suburb: string, state: string): Promise<unknown> {
     try {
       const response = await apiService.get(
         `${this.baseUrl}/suburb-statistics`,
@@ -314,7 +315,7 @@ export class PropertyIntelligenceService {
         location: filters.location,
         radius_km: 50,
         limit: filters.limit || 20,
-        sort_by: (filters.sortBy as any) || "relevance",
+        sort_by: (filters.sortBy as PropertySearchRequest['sort_by']) || "relevance",
         include_off_market: false,
         include_historical: false,
       };
@@ -329,7 +330,7 @@ export class PropertyIntelligenceService {
   /**
    * Get property price history
    */
-  async getPropertyPriceHistory(propertyId: string): Promise<any> {
+  async getPropertyPriceHistory(propertyId: string): Promise<unknown> {
     try {
       const response = await apiService.get(
         `${this.baseUrl}/property/${propertyId}/price-history`,
@@ -344,7 +345,7 @@ export class PropertyIntelligenceService {
   /**
    * Get rental estimates for property
    */
-  async getRentalEstimate(address: string): Promise<any> {
+  async getRentalEstimate(address: string): Promise<unknown> {
     try {
       const response = await apiService.post(
         `${this.baseUrl}/rental-estimate`,
@@ -387,7 +388,7 @@ export class PropertyIntelligenceService {
   async getNearbyAmenities(
     address: string,
     radius: number = 2000,
-  ): Promise<any> {
+  ): Promise<unknown> {
     try {
       const response = await apiService.get(
         `${this.baseUrl}/nearby-amenities`,
@@ -405,7 +406,7 @@ export class PropertyIntelligenceService {
   /**
    * Get school catchments for property
    */
-  async getSchoolCatchments(address: string): Promise<any> {
+  async getSchoolCatchments(address: string): Promise<unknown> {
     try {
       const response = await apiService.get(
         `${this.baseUrl}/school-catchments`,
@@ -423,7 +424,7 @@ export class PropertyIntelligenceService {
   /**
    * Get property ownership history
    */
-  async getOwnershipHistory(propertyId: string): Promise<any> {
+  async getOwnershipHistory(propertyId: string): Promise<unknown> {
     try {
       const response = await apiService.get(
         `${this.baseUrl}/property/${propertyId}/ownership-history`,
@@ -440,7 +441,7 @@ export class PropertyIntelligenceService {
    */
   async getMarketTrends(
     timeframe: "3M" | "6M" | "1Y" | "2Y" = "1Y",
-  ): Promise<any> {
+  ): Promise<unknown> {
     try {
       const response = await apiService.get(`${this.baseUrl}/market-trends`, {
         params: { timeframe },
@@ -455,7 +456,7 @@ export class PropertyIntelligenceService {
   /**
    * Get national market statistics
    */
-  async getNationalMarketStats(): Promise<any> {
+  async getNationalMarketStats(): Promise<unknown> {
     try {
       const response = await apiService.get(`${this.baseUrl}/market/national`);
       return response.data;
@@ -468,7 +469,7 @@ export class PropertyIntelligenceService {
   /**
    * Get state market comparison data
    */
-  async getStateMarketComparison(): Promise<any> {
+  async getStateMarketComparison(): Promise<unknown> {
     try {
       const response = await apiService.get(`${this.baseUrl}/market/states`);
       return response.data;
@@ -481,7 +482,7 @@ export class PropertyIntelligenceService {
   /**
    * Get high growth suburbs
    */
-  async getHotSuburbs(limit: number = 10): Promise<any> {
+  async getHotSuburbs(limit: number = 10): Promise<unknown> {
     try {
       const response = await apiService.get(
         `${this.baseUrl}/market/hot-suburbs`,
@@ -499,7 +500,7 @@ export class PropertyIntelligenceService {
   /**
    * Get market predictions
    */
-  async getMarketPredictions(): Promise<any> {
+  async getMarketPredictions(): Promise<unknown> {
     try {
       const response = await apiService.get(
         `${this.baseUrl}/market/predictions`,
@@ -514,7 +515,7 @@ export class PropertyIntelligenceService {
   /**
    * Get market risk factors
    */
-  async getMarketRiskFactors(): Promise<any> {
+  async getMarketRiskFactors(): Promise<unknown> {
     try {
       const response = await apiService.get(
         `${this.baseUrl}/market/risk-factors`,

@@ -39,10 +39,10 @@ export const useAuthStore = create<AuthState>()(
             isLoading: false,
             error: null
           })
-        } catch (error: any) {
+        } catch (error: unknown) {
           set({
             isLoading: false,
-            error: apiService.handleError(error)
+            error: apiService.handleError(error as any)
           })
           throw error
         }
@@ -59,10 +59,10 @@ export const useAuthStore = create<AuthState>()(
             isLoading: false,
             error: null
           })
-        } catch (error: any) {
+        } catch (error: unknown) {
           set({
             isLoading: false,
-            error: apiService.handleError(error)
+            error: apiService.handleError(error as any)
           })
           throw error
         }
@@ -101,7 +101,7 @@ export const useAuthStore = create<AuthState>()(
         try {
           const updatedUser = await apiService.updateProfile(userData)
           set({ user: updatedUser })
-        } catch (error: any) {
+        } catch (error: unknown) {
           console.error('Failed to update profile:', error)
           throw error
         }
@@ -113,11 +113,11 @@ export const useAuthStore = create<AuthState>()(
         try {
           const user = await apiService.getCurrentUser()
           set({ user })
-        } catch (error: any) {
+        } catch (error: unknown) {
           console.error('Failed to refresh user:', error)
           // If it's an auth error (401), the interceptor will handle logout
           // Re-throw to allow callers to handle the error
-          if (error?.response?.status === 401) {
+          if ((error as any)?.response?.status === 401) {
             throw error
           }
           // For other errors, don't set error for background refresh failures

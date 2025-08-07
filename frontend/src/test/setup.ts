@@ -46,16 +46,16 @@ vi.spyOn(console, 'error').mockImplementation(() => {})
 // This is specifically for ZodError rejections from form validation
 const originalOnUnhandledRejection = process.listeners('unhandledRejection')
 process.removeAllListeners('unhandledRejection')
-process.on('unhandledRejection', (reason: any) => {
+process.on('unhandledRejection', (reason: unknown) => {
   // Silently handle ZodError validation rejections during testing
-  if (reason && reason.name === 'ZodError') {
+  if (reason && (reason as any).name === 'ZodError') {
     // Ignore ZodError unhandled rejections in tests as they're expected during validation testing
     return
   }
   // Re-throw other unhandled rejections
   originalOnUnhandledRejection.forEach(listener => {
     if (typeof listener === 'function') {
-      listener(reason, {} as Promise<any>)
+      listener(reason, {} as Promise<unknown>)
     }
   })
 })
@@ -214,9 +214,9 @@ vi.mock('@/components/layout/Header', () => ({
 // Mock framer-motion to avoid animation issues in tests
 vi.mock('framer-motion', () => ({
   motion: {
-    div: ({ children, ...props }: any) => React.createElement('div', props, children),
-    span: ({ children, ...props }: any) => React.createElement('span', props, children),
-    button: ({ children, ...props }: any) => React.createElement('button', props, children),
+    div: ({ children, ...props }: React.PropsWithChildren<Record<string, unknown>>) => React.createElement('div', props, children),
+    span: ({ children, ...props }: React.PropsWithChildren<Record<string, unknown>>) => React.createElement('span', props, children),
+    button: ({ children, ...props }: React.PropsWithChildren<Record<string, unknown>>) => React.createElement('button', props, children),
   },
   AnimatePresence: ({ children }: { children: React.ReactNode }) => children,
 }))
