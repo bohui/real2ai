@@ -894,8 +894,8 @@ COMMENT ON FUNCTION generate_property_hash IS 'Generates consistent hash for pro
 COMMENT ON FUNCTION find_or_create_property IS 'Finds existing property or creates new one by address';
 COMMENT ON FUNCTION cleanup_expired_property_data IS 'Removes expired property cache data and returns deletion counts';
 
--- Property table triggers
-CREATE TRIGGER update_properties_updated_at BEFORE UPDATE ON properties FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+-- Property data table triggers
+CREATE TRIGGER update_property_data_updated_at BEFORE UPDATE ON property_data FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- Analysis progress triggers
 CREATE TRIGGER update_analysis_progress_updated_at_trigger
