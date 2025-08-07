@@ -183,6 +183,16 @@ class SupabaseDatabaseClient(DatabaseOperations):
                 original_error=e,
             )
 
+    def _apply_filters(self, query, filters: Dict[str, Any]):
+        """Apply filters to query, skipping None values."""
+        if not filters:
+            return query
+
+        for key, value in filters.items():
+            if value is not None:
+                query = query.eq(key, value)
+        return query
+
     @with_retry(max_retries=3, backoff_factor=1.0)
     async def read(
         self, table: str, filters: Dict[str, Any], limit: Optional[int] = None
@@ -192,10 +202,7 @@ class SupabaseDatabaseClient(DatabaseOperations):
             self.logger.debug(f"Reading from table '{table}' with filters: {filters}")
 
             query = self.supabase_client.table(table).select("*")
-
-            # Apply filters
-            for key, value in filters.items():
-                query = query.eq(key, value)
+            query = self._apply_filters(query, filters)
 
             # Apply limit if specified
             if limit:
@@ -494,13 +501,7 @@ class SupabaseDatabaseClient(DatabaseOperations):
             )
 
             query = self.supabase_client.table(table).select(columns)
-
-            # Apply filters if provided
-            if filters:
-                for key, value in filters.items():
-                    # Skip None values to prevent database errors
-                    if value is not None:
-                        query = query.eq(key, value)
+            query = self._apply_filters(query, filters)
 
             # Apply ordering if provided
             if order_by:
