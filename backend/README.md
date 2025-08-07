@@ -24,7 +24,7 @@ A FastAPI-based backend for Real2.AI, providing contract analysis and real estat
 
 ### Prerequisites
 
-- Python 3.11+
+- Python 3.12+
 - Supabase project
 - OpenAI API key
 - Redis server

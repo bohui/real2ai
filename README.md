@@ -14,7 +14,7 @@ Real2.AI is a specialized AI-powered platform for the Australian real estate mar
 ## 🚀 Quick Start
 
 ### Prerequisites
-- Python 3.11+ and pip
+- Python 3.12+ and pip
 - Node.js 18+ and npm
 - Supabase account and project
 - OpenAI API key
