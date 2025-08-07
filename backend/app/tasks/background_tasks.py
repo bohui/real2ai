@@ -49,8 +49,7 @@ PROGRESS_STAGES = {
 
 async def update_analysis_progress(
     user_id: str,
-    analysis_id: str,
-    contract_id: str,
+    content_hash: str,
     progress_percent: int,
     current_step: str,
     step_description: str,
@@ -64,8 +63,7 @@ async def update_analysis_progress(
 
         # Update or create progress record
         progress_data = {
-            "analysis_id": analysis_id,
-            "contract_id": contract_id,
+            "content_hash": content_hash,
             "user_id": user_id,
             "current_step": current_step,
             "progress_percent": progress_percent,
@@ -76,9 +74,9 @@ async def update_analysis_progress(
             "error_message": error_message,
         }
 
-        # Upsert progress record
+        # Upsert progress record using content_hash + user_id unique constraint
         result = await user_client.database.upsert(
-            "analysis_progress", progress_data, on_conflict="analysis_id"
+            "analysis_progress", progress_data, on_conflict="content_hash,user_id"
         )
 
         # Send WebSocket update
@@ -86,8 +84,7 @@ async def update_analysis_progress(
             user_id,
             {
                 "type": "analysis_progress",
-                "analysis_id": analysis_id,
-                "contract_id": contract_id,
+                "content_hash": content_hash,
                 "progress": progress_percent,
                 "current_step": current_step,
                 "step_description": step_description,
@@ -96,11 +93,12 @@ async def update_analysis_progress(
             },
         )
 
-        # Send Redis pub/sub update
+        # Send Redis pub/sub update using content_hash as channel identifier
         publish_progress_sync(
-            contract_id,
-            WebSocketEvents.ANALYSIS_PROGRESS,
+            content_hash,
             {
+                "type": "analysis_progress", 
+                "content_hash": content_hash,
                 "progress": progress_percent,
                 "current_step": current_step,
                 "step_description": step_description,
@@ -109,11 +107,11 @@ async def update_analysis_progress(
         )
 
         logger.info(
-            f"Progress updated: {current_step} ({progress_percent}%) for analysis {analysis_id}"
+            f"Progress updated: {current_step} ({progress_percent}%) for content_hash {content_hash}"
         )
 
     except Exception as e:
-        logger.error(f"Failed to update progress for analysis {analysis_id}: {str(e)}")
+        logger.error(f"Failed to update progress for content_hash {content_hash}: {str(e)}")
 
 
 @celery_app.task(
@@ -171,6 +169,11 @@ async def comprehensive_document_analysis(
             if not doc_result.get("data"):
                 raise Exception("Document not found or access denied")
             document = doc_result["data"][0]
+            
+            # Get content_hash for progress tracking
+            content_hash = analysis_options.get("content_hash") or document.get("content_hash")
+            if not content_hash:
+                raise Exception("Content hash not found in document or analysis options")
 
             # =============================================
             # PHASE 1: DOCUMENT PROCESSING (0-75%)
@@ -179,8 +182,7 @@ async def comprehensive_document_analysis(
             # Step 1: Text Extraction (0-25%)
             await update_analysis_progress(
                 user_id,
-                analysis_id,
-                contract_id,
+                content_hash,
                 progress_percent=5,
                 current_step="text_extraction",
                 step_description="Extracting text from document...",
@@ -200,8 +202,7 @@ async def comprehensive_document_analysis(
                 error_msg = f"Text extraction failed: {extraction_result.get('error', 'Unknown error')}"
                 await update_analysis_progress(
                     user_id,
-                    analysis_id,
-                    contract_id,
+                    content_hash,
                     progress_percent=0,
                     current_step="text_extraction",
                     step_description="Text extraction failed",
@@ -211,8 +212,7 @@ async def comprehensive_document_analysis(
 
             await update_analysis_progress(
                 user_id,
-                analysis_id,
-                contract_id,
+                content_hash,
                 progress_percent=PROGRESS_STAGES["document_processing"][
                     "text_extraction"
                 ],
@@ -224,8 +224,7 @@ async def comprehensive_document_analysis(
             # Step 2: Page Analysis (25-50%)
             await update_analysis_progress(
                 user_id,
-                analysis_id,
-                contract_id,
+                content_hash,
                 progress_percent=30,
                 current_step="page_analysis",
                 step_description="Analyzing document pages and content...",
@@ -237,8 +236,7 @@ async def comprehensive_document_analysis(
 
             await update_analysis_progress(
                 user_id,
-                analysis_id,
-                contract_id,
+                content_hash,
                 progress_percent=PROGRESS_STAGES["document_processing"][
                     "page_analysis"
                 ],
@@ -250,8 +248,7 @@ async def comprehensive_document_analysis(
             # Step 3: Diagram Detection (50-60%)
             await update_analysis_progress(
                 user_id,
-                analysis_id,
-                contract_id,
+                content_hash,
                 progress_percent=55,
                 current_step="diagram_detection",
                 step_description="Detecting and analyzing diagrams...",
@@ -265,8 +262,7 @@ async def comprehensive_document_analysis(
 
             await update_analysis_progress(
                 user_id,
-                analysis_id,
-                contract_id,
+                content_hash,
                 progress_percent=PROGRESS_STAGES["document_processing"][
                     "diagram_detection"
                 ],
@@ -278,8 +274,7 @@ async def comprehensive_document_analysis(
             # Step 4: Entity Extraction (60-70%)
             await update_analysis_progress(
                 user_id,
-                analysis_id,
-                contract_id,
+                content_hash,
                 progress_percent=65,
                 current_step="entity_extraction",
                 step_description="Extracting key entities and terms...",
@@ -296,8 +291,7 @@ async def comprehensive_document_analysis(
 
             await update_analysis_progress(
                 user_id,
-                analysis_id,
-                contract_id,
+                content_hash,
                 progress_percent=PROGRESS_STAGES["document_processing"][
                     "entity_extraction"
                 ],
@@ -315,8 +309,7 @@ async def comprehensive_document_analysis(
 
             await update_analysis_progress(
                 user_id,
-                analysis_id,
-                contract_id,
+                content_hash,
                 progress_percent=PROGRESS_STAGES["document_processing"][
                     "document_complete"
                 ],
@@ -332,8 +325,7 @@ async def comprehensive_document_analysis(
             # Step 6: Contract Analysis Start (75-80%)
             await update_analysis_progress(
                 user_id,
-                analysis_id,
-                contract_id,
+                content_hash,
                 progress_percent=PROGRESS_STAGES["contract_analysis"]["analysis_start"],
                 current_step="contract_analysis",
                 step_description="Starting AI contract analysis...",
@@ -358,8 +350,7 @@ async def comprehensive_document_analysis(
             # Step 7: Workflow Processing (80-90%)
             await update_analysis_progress(
                 user_id,
-                analysis_id,
-                contract_id,
+                content_hash,
                 progress_percent=85,
                 current_step="workflow_processing",
                 step_description="AI is analyzing your contract for risks and compliance...",
@@ -391,8 +382,7 @@ async def comprehensive_document_analysis(
 
             await update_analysis_progress(
                 user_id,
-                analysis_id,
-                contract_id,
+                content_hash,
                 progress_percent=PROGRESS_STAGES["contract_analysis"][
                     "workflow_processing"
                 ],
@@ -404,8 +394,7 @@ async def comprehensive_document_analysis(
             # Step 8: Results Caching (90-95%)
             await update_analysis_progress(
                 user_id,
-                analysis_id,
-                contract_id,
+                content_hash,
                 progress_percent=PROGRESS_STAGES["contract_analysis"][
                     "results_caching"
                 ],
@@ -435,8 +424,7 @@ async def comprehensive_document_analysis(
             # Step 9: Complete (95-100%)
             await update_analysis_progress(
                 user_id,
-                analysis_id,
-                contract_id,
+                content_hash,
                 progress_percent=PROGRESS_STAGES["contract_analysis"][
                     "analysis_complete"
                 ],
@@ -468,8 +456,7 @@ async def comprehensive_document_analysis(
         try:
             await update_analysis_progress(
                 user_id,
-                analysis_id,
-                contract_id,
+                content_hash,
                 progress_percent=0,
                 current_step="failed",
                 step_description="Analysis failed. Please try again or contact support.",

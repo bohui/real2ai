@@ -603,11 +603,9 @@ async def _create_contract_record_with_cache(
 ) -> str:
     """Create contract record with cache integration."""
     contract_data = {
-        "document_id": document_id,
+        "content_hash": content_hash,
         "contract_type": document.get("contract_type", "purchase_agreement"),
         "australian_state": user.australian_state,
-        "user_id": str(user.id),
-        "content_hash": content_hash,  # Same as content_hash for contracts
     }
 
     contract_result = await db_client.database.insert("contracts", contract_data)
@@ -1008,11 +1006,37 @@ async def get_contract_analysis(
         if not hasattr(db_client, "_client") or db_client._client is None:
             await db_client.initialize()
 
-        # Get analysis results
+        # Get contract by ID to get its content_hash
+        contract_result = (
+            db_client.table("contracts")
+            .select("*")
+            .eq("id", contract_id)
+            .execute()
+        )
+        
+        if not contract_result.data:
+            raise HTTPException(status_code=404, detail="Contract not found")
+            
+        contract = contract_result.data[0]
+        content_hash = contract["content_hash"]
+        
+        # Verify user has access to this content through their documents
+        doc_result = (
+            db_client.table("documents")
+            .select("id")
+            .eq("content_hash", content_hash)
+            .eq("user_id", user.id)
+            .execute()
+        )
+        
+        if not doc_result.data:
+            raise HTTPException(status_code=403, detail="Access denied")
+        
+        # Get analysis results using content_hash
         result = (
             db_client.table("contract_analyses")
             .select("*")
-            .eq("contract_id", contract_id)
+            .eq("content_hash", content_hash)
             .execute()
         )
 
@@ -1020,25 +1044,6 @@ async def get_contract_analysis(
             raise HTTPException(status_code=404, detail="Analysis not found")
 
         analysis = result.data[0]
-
-        # Verify user owns this contract
-        contract_result = (
-            db_client.table("contracts").select("*").eq("id", contract_id).execute()
-        )
-        if not contract_result.data:
-            raise HTTPException(status_code=404, detail="Contract not found")
-
-        contract = contract_result.data[0]
-        doc_result = (
-            db_client.table("documents")
-            .select("*")
-            .eq("id", contract["document_id"])
-            .eq("user_id", user.id)
-            .execute()
-        )
-
-        if not doc_result.data:
-            raise HTTPException(status_code=403, detail="Access denied")
 
         # Enhanced response with cache information
         response = {
@@ -1123,7 +1128,7 @@ async def delete_contract_analysis(
         if not hasattr(db_client, "_client") or db_client._client is None:
             await db_client.initialize()
 
-        # Verify user owns this contract
+        # Get contract by ID to get its content_hash
         contract_result = (
             db_client.table("contracts").select("*").eq("id", contract_id).execute()
         )
@@ -1132,35 +1137,37 @@ async def delete_contract_analysis(
             raise HTTPException(status_code=404, detail="Contract not found")
 
         contract = contract_result.data[0]
+        content_hash = contract["content_hash"]
 
-        # Verify ownership through document
+        # Verify user has access to this content through their documents
         doc_result = (
             db_client.table("documents")
-            .select("user_id")
-            .eq("id", contract["document_id"])
+            .select("id")
+            .eq("content_hash", content_hash)
+            .eq("user_id", user.id)
             .execute()
         )
 
-        if not doc_result.data or doc_result.data[0]["user_id"] != user.id:
+        if not doc_result.data:
             raise HTTPException(status_code=403, detail="Access denied")
 
-        # Delete contract analyses first (foreign key constraint)
-        analyses_result = (
-            db_client.table("contract_analyses")
+        # Delete user's view of this contract (contracts and analyses are shared resources)
+        view_delete_result = (
+            db_client.table("user_contract_views")
             .delete()
-            .eq("contract_id", contract_id)
+            .eq("user_id", user.id)
+            .eq("content_hash", content_hash)
             .execute()
         )
 
-        # Delete the contract
-        contract_delete_result = (
-            db_client.table("contracts").delete().eq("id", contract_id).execute()
+        # Also remove user's document if they want to completely remove it
+        doc_delete_result = (
+            db_client.table("documents")
+            .delete()
+            .eq("content_hash", content_hash)
+            .eq("user_id", user.id)
+            .execute()
         )
-
-        if not contract_delete_result.data:
-            raise HTTPException(
-                status_code=404, detail="Contract not found or already deleted"
-            )
 
         return {
             "message": "Contract analysis deleted successfully",

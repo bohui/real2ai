@@ -588,7 +588,7 @@ async def handle_start_analysis_request(
             document_id=document_id,
             contract_id=contract_id,
             user_id=user_id,
-            analysis_options=analysis_options
+            analysis_options=analysis_options,
         )
 
         # Send success confirmation
@@ -608,7 +608,9 @@ async def handle_start_analysis_request(
             },
         )
 
-        logger.info(f"Analysis task dispatched for document {document_id}, task ID: {task_result['task_id']}")
+        logger.info(
+            f"Analysis task dispatched for document {document_id}, task ID: {task_result['task_id']}"
+        )
 
     except Exception as e:
         logger.error(f"Error starting analysis for document {document_id}: {str(e)}")
@@ -675,7 +677,7 @@ async def handle_retry_analysis_request(
             document_id=document_id,
             contract_id=contract_id,
             user_id=user_id,
-            analysis_options=analysis_options
+            analysis_options=analysis_options,
         )
 
         # Send success confirmation
@@ -695,7 +697,9 @@ async def handle_retry_analysis_request(
             },
         )
 
-        logger.info(f"Retry analysis task dispatched for document {document_id}, task ID: {task_result['task_id']}")
+        logger.info(
+            f"Retry analysis task dispatched for document {document_id}, task ID: {task_result['task_id']}"
+        )
 
     except Exception as e:
         logger.error(f"Error retrying analysis for document {document_id}: {str(e)}")
@@ -743,18 +747,18 @@ async def handle_status_request(
 
         # First get the content_hash from the document
         doc_result = await user_client.database.select(
-            "documents", 
-            columns="content_hash", 
-            filters={"id": document_id, "user_id": user_id}
+            "documents",
+            columns="content_hash",
+            filters={"id": document_id, "user_id": user_id},
         )
-        
+
         if not doc_result.get("data"):
             raise ValueError(f"Document {document_id} not found or access denied")
-            
+
         content_hash = doc_result["data"][0].get("content_hash")
         if not content_hash:
             raise ValueError(f"Document {document_id} has no content hash")
-            
+
         # Get detailed progress from analysis_progress table (user context - RLS enforced)
         progress_result = await user_client.database.select(
             "analysis_progress",
@@ -848,59 +852,68 @@ async def handle_cancellation_request(
     try:
         # Get authenticated client
         user_client = await AuthContext.get_authenticated_client(require_auth=True)
-        
+
         # Get the content_hash from the document
         doc_result = await user_client.database.select(
-            "documents", 
-            columns="content_hash", 
-            filters={"id": document_id, "user_id": user_id}
+            "documents",
+            columns="content_hash",
+            filters={"id": document_id, "user_id": user_id},
         )
-        
+
         if not doc_result.get("data"):
             raise ValueError(f"Document {document_id} not found or access denied")
-            
+
         content_hash = doc_result["data"][0].get("content_hash")
-        
+
         # Update analysis_progress status to cancelled
         await user_client.database.update(
             "analysis_progress",
             {"status": "cancelled", "error_message": "Analysis cancelled by user"},
-            filters={"content_hash": content_hash, "user_id": user_id, "status": "in_progress"}
+            filters={
+                "content_hash": content_hash,
+                "user_id": user_id,
+                "status": "in_progress",
+            },
         )
-        
+
         # Update contract_analyses status to cancelled if still processing
         await user_client.database.update(
             "contract_analyses",
             {"status": "cancelled", "error_details": {"cancelled_by_user": True}},
-            filters={"content_hash": content_hash, "status": "pending"}
+            filters={"content_hash": content_hash, "status": "pending"},
         )
-        
+
         # Try to cancel the Celery task if we can find it
         try:
             from app.tasks.background_tasks import comprehensive_document_analysis
             from celery import Celery
-            
+
             # Get all active tasks and try to revoke matching ones
             app = comprehensive_document_analysis.app
             active_tasks = app.control.inspect().active()
-            
+
             cancelled_tasks = []
             if active_tasks:
                 for worker, tasks in active_tasks.items():
                     for task in tasks:
-                        if (
-                            task.get("name") == "app.tasks.background_tasks.comprehensive_document_analysis"
-                            and document_id in str(task.get("args", []))
+                        if task.get(
+                            "name"
+                        ) == "app.tasks.background_tasks.comprehensive_document_analysis" and document_id in str(
+                            task.get("args", [])
                         ):
                             # Revoke the task
                             app.control.revoke(task["id"], terminate=True)
                             cancelled_tasks.append(task["id"])
-                            logger.info(f"Cancelled Celery task {task['id']} for document {document_id}")
-        
+                            logger.info(
+                                f"Cancelled Celery task {task['id']} for document {document_id}"
+                            )
+
         except Exception as task_cancel_error:
-            logger.warning(f"Could not cancel background task: {str(task_cancel_error)}")
+            logger.warning(
+                f"Could not cancel background task: {str(task_cancel_error)}"
+            )
             # Continue with user notification even if task cancellation fails
-        
+
         # Send success confirmation
         await websocket_manager.send_personal_message(
             document_id,
@@ -913,16 +926,18 @@ async def handle_cancellation_request(
                     "document_id": document_id,
                     "message": "Analysis successfully cancelled",
                     "status": "cancelled",
-                    "cancelled_tasks": len(cancelled_tasks) if 'cancelled_tasks' in locals() else 0,
+                    "cancelled_tasks": (
+                        len(cancelled_tasks) if "cancelled_tasks" in locals() else 0
+                    ),
                 },
             },
         )
-        
+
         logger.info(f"Successfully cancelled analysis for document {document_id}")
-        
+
     except Exception as e:
         logger.error(f"Error cancelling analysis for document {document_id}: {str(e)}")
-        
+
         # Send error response
         await websocket_manager.send_personal_message(
             document_id,
@@ -967,13 +982,14 @@ async def _dispatch_analysis_task(
         if not contract_id:
             # Create new contract record
             contract_data = {
-                "document_id": document_id,
-                "contract_type": document.get("contract_type", "purchase_agreement"),
-                "user_id": user_id,
                 "content_hash": content_hash,
+                "contract_type": document.get("contract_type", "purchase_agreement"),
+                "australian_state": document.get("australian_state", "NSW"),
             }
 
-            contract_result = await user_client.database.insert("contracts", contract_data)
+            contract_result = await user_client.database.insert(
+                "contracts", contract_data
+            )
             if not contract_result.get("success") or not contract_result.get("data"):
                 raise ValueError("Failed to create contract record")
 
@@ -982,11 +998,9 @@ async def _dispatch_analysis_task(
 
         # Create analysis record
         analysis_data = {
-            "contract_id": contract_id,
-            "user_id": user_id,
+            "content_hash": content_hash,
             "agent_version": "1.0",
             "status": "pending",
-            "content_hash": content_hash,
         }
 
         analysis_result = await user_client.database.insert(

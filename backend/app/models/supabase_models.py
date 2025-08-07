@@ -237,29 +237,22 @@ class Document(TimestampedBaseModel):
 
 
 class Contract(TimestampedBaseModel):
-    """Contracts table for contract metadata"""
+    """Contracts table for contract metadata (shared resource using content_hash)"""
 
     id: UUID = Field(..., description="Contract UUID")
-    document_id: UUID = Field(..., description="Reference to documents.id")
-    user_id: UUID = Field(..., description="Reference to profiles.id")
-    content_hash: Optional[str] = Field(
-        None, description="SHA-256 hash of document content for caching"
-    )
+    content_hash: str = Field(..., description="SHA-256 hash of document content for caching")
     contract_type: ContractType = ContractType.PURCHASE_AGREEMENT
     australian_state: AustralianState = AustralianState.NSW
     contract_terms: Dict[str, Any] = Field(default_factory=dict)
     raw_text: Optional[str] = None
+    property_address: Optional[str] = None
 
 
 class ContractAnalysis(TimestampedBaseModel):
-    """Contract analyses table for AI analysis results"""
+    """Contract analyses table for AI analysis results (shared resource using content_hash)"""
 
     id: UUID = Field(..., description="Analysis UUID")
-    contract_id: UUID = Field(..., description="Reference to contracts.id")
-    user_id: UUID = Field(..., description="Reference to profiles.id")
-    content_hash: Optional[str] = Field(
-        None, description="SHA-256 hash of document content for caching"
-    )
+    content_hash: str = Field(..., description="SHA-256 hash of document content for caching")
     agent_version: str = "1.0"
     status: AnalysisStatus = AnalysisStatus.PENDING
 
