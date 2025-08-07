@@ -1,33 +1,38 @@
-import React from 'react'
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
+import React from "react";
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  Navigate,
+} from "react-router-dom";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 
 // Layout Components
-import Layout from '@/components/layout/Layout'
-import AuthLayout from '@/components/layout/AuthLayout'
+import Layout from "@/components/layout/Layout";
+import AuthLayout from "@/components/layout/AuthLayout";
 
 // Pages
-import LoginPage from '@/pages/auth/LoginPage'
-import RegisterPage from '@/pages/auth/RegisterPage'
-import DashboardPage from '@/pages/DashboardPage'
-import AnalysisPage from '@/pages/AnalysisPage'
-import HistoryPage from '@/pages/HistoryPage'
-import SettingsPage from '@/pages/SettingsPage'
-import ReportsPage from '@/pages/ReportsPage'
-import PropertyIntelligencePage from '@/pages/PropertyIntelligencePage'
-import MarketAnalysisPage from '@/pages/MarketAnalysisPage'
-import FinancialAnalysisPage from '@/pages/FinancialAnalysisPage'
+import LoginPage from "@/pages/auth/LoginPage";
+import RegisterPage from "@/pages/auth/RegisterPage";
+import DashboardPage from "@/pages/DashboardPage";
+import AnalysisPage from "@/pages/AnalysisPage";
+import HistoryPage from "@/pages/HistoryPage";
+import SettingsPage from "@/pages/SettingsPage";
+import ReportsPage from "@/pages/ReportsPage";
+import PropertyIntelligencePage from "@/pages/PropertyIntelligencePage";
+import MarketAnalysisPage from "@/pages/MarketAnalysisPage";
+import FinancialAnalysisPage from "@/pages/FinancialAnalysisPage";
 
 // Components
-import ProtectedRoute from '@/components/auth/ProtectedRoute'
-import NotificationSystem from '@/components/notifications/NotificationSystem'
-import OnboardingWizard from '@/components/onboarding/OnboardingWizard'
+import ProtectedRoute from "@/components/auth/ProtectedRoute";
+import NotificationSystem from "@/components/notifications/NotificationSystem";
+import OnboardingWizard from "@/components/onboarding/OnboardingWizard";
 
 // Hooks and stores
-import { useAuthStore } from '@/store/authStore'
-import { useUIStore } from '@/store/uiStore'
-import apiService from '@/services/api'
+import { useAuthStore } from "@/store/authStore";
+import { useUIStore } from "@/store/uiStore";
+import apiService from "@/services/api";
 
 // Create a client
 const queryClient = new QueryClient({
@@ -37,23 +42,23 @@ const queryClient = new QueryClient({
       retry: (failureCount, error: any) => {
         // Don't retry on 4xx errors
         if (error?.response?.status >= 400 && error?.response?.status < 500) {
-          return false
+          return false;
         }
-        return failureCount < 3
-      }
-    }
-  }
-})
+        return failureCount < 3;
+      },
+    },
+  },
+});
 
 const App: React.FC = () => {
-  const { initializeAuth, isLoading, user, isAuthenticated } = useAuthStore()
-  const { showOnboarding, setShowOnboarding } = useUIStore()
-  const [onboardingChecked, setOnboardingChecked] = React.useState(false)
+  const { initializeAuth, isLoading, user, isAuthenticated } = useAuthStore();
+  const { showOnboarding, setShowOnboarding } = useUIStore();
+  const [onboardingChecked, setOnboardingChecked] = React.useState(false);
 
   // Initialize authentication on app start
   React.useEffect(() => {
-    initializeAuth()
-  }, [initializeAuth])
+    initializeAuth();
+  }, [initializeAuth]);
 
   // Check onboarding status for authenticated users only
   React.useEffect(() => {
@@ -61,31 +66,41 @@ const App: React.FC = () => {
       // Only proceed if user is authenticated and we haven't checked yet
       if (user && isAuthenticated && !isLoading && !onboardingChecked) {
         try {
-          const onboardingStatus = await apiService.getOnboardingStatus()
-          
-          // Double-check user is still authenticated after API call
-          if (user && isAuthenticated) {
-            if (!onboardingStatus.onboarding_completed) {
-              setShowOnboarding(true)
+          // Check if user already has onboarding data
+          if (user.onboarding_completed !== undefined) {
+            // Use existing user data if available
+            if (!user.onboarding_completed) {
+              setShowOnboarding(true);
             }
+            setOnboardingChecked(true);
+          } else {
+            // Only make API call if onboarding data is not available
+            const onboardingStatus = await apiService.getOnboardingStatus();
+
+            // Double-check user is still authenticated after API call
+            if (user && isAuthenticated) {
+              if (!onboardingStatus.onboarding_completed) {
+                setShowOnboarding(true);
+              }
+            }
+
+            setOnboardingChecked(true);
           }
-          
-          setOnboardingChecked(true)
         } catch (error) {
-          console.error('Failed to check onboarding status:', error)
+          console.error("Failed to check onboarding status:", error);
           // Don't show onboarding if API call fails - could indicate auth issues
           // If it's a legitimate API error, user can try again after refresh
-          setOnboardingChecked(true)
+          setOnboardingChecked(true);
         }
       } else if (!user || !isAuthenticated) {
         // Reset onboarding state when user logs out or becomes unauthenticated
-        setOnboardingChecked(false)
-        setShowOnboarding(false)
+        setOnboardingChecked(false);
+        setShowOnboarding(false);
       }
-    }
+    };
 
-    checkOnboardingStatus()
-  }, [user, isAuthenticated, isLoading, onboardingChecked, setShowOnboarding])
+    checkOnboardingStatus();
+  }, [user, isAuthenticated, isLoading, onboardingChecked, setShowOnboarding]);
 
   const handleOnboardingComplete = async (preferences: any) => {
     try {
@@ -93,26 +108,26 @@ const App: React.FC = () => {
         practice_area: preferences.practiceArea,
         jurisdiction: preferences.jurisdiction,
         firm_size: preferences.firmSize,
-        primary_contract_types: preferences.primaryContractTypes
-      })
-      
-      console.log('Onboarding completed:', result.message)
-      setShowOnboarding(false)
-      
+        primary_contract_types: preferences.primaryContractTypes,
+      });
+
+      console.log("Onboarding completed:", result.message);
+      setShowOnboarding(false);
+
       // If user was already onboarded, don't show again
       if (result.skip_onboarding) {
-        console.log('User already completed onboarding')
+        console.log("User already completed onboarding");
       }
     } catch (error) {
-      console.error('Failed to complete onboarding:', error)
+      console.error("Failed to complete onboarding:", error);
       // Still hide onboarding to prevent blocking the user
-      setShowOnboarding(false)
+      setShowOnboarding(false);
     }
-  }
+  };
 
   const handleOnboardingSkip = () => {
-    setShowOnboarding(false)
-  }
+    setShowOnboarding(false);
+  };
 
   // Show loading spinner while checking authentication
   if (isLoading) {
@@ -123,7 +138,7 @@ const App: React.FC = () => {
           <p className="text-neutral-600">Loading Real2.AI...</p>
         </div>
       </div>
-    )
+    );
   }
 
   return (
@@ -139,36 +154,51 @@ const App: React.FC = () => {
             </Route>
 
             {/* Protected app routes */}
-            <Route path="/app" element={
-              <ProtectedRoute>
-                <Layout />
-              </ProtectedRoute>
-            }>
+            <Route
+              path="/app"
+              element={
+                <ProtectedRoute>
+                  <Layout />
+                </ProtectedRoute>
+              }
+            >
               <Route path="dashboard" element={<DashboardPage />} />
               <Route path="analysis" element={<AnalysisPage />} />
               <Route path="analysis/:contractId" element={<AnalysisPage />} />
               <Route path="history" element={<HistoryPage />} />
               <Route path="reports" element={<ReportsPage />} />
-              <Route path="property-intelligence" element={<PropertyIntelligencePage />} />
+              <Route
+                path="property-intelligence"
+                element={<PropertyIntelligencePage />}
+              />
               <Route path="market-analysis" element={<MarketAnalysisPage />} />
-              <Route path="financial-analysis" element={<FinancialAnalysisPage />} />
+              <Route
+                path="financial-analysis"
+                element={<FinancialAnalysisPage />}
+              />
               <Route path="settings" element={<SettingsPage />} />
               <Route index element={<Navigate to="/app/dashboard" replace />} />
             </Route>
 
             {/* Root redirect */}
-            <Route path="/" element={<Navigate to="/app/dashboard" replace />} />
+            <Route
+              path="/"
+              element={<Navigate to="/app/dashboard" replace />}
+            />
 
             {/* Catch-all redirect */}
-            <Route path="*" element={<Navigate to="/app/dashboard" replace />} />
+            <Route
+              path="*"
+              element={<Navigate to="/app/dashboard" replace />}
+            />
           </Routes>
 
           {/* Global components */}
           <NotificationSystem />
-          
+
           {/* Onboarding Wizard - Only show for fully authenticated users */}
           {showOnboarding && user && isAuthenticated && !isLoading && (
-            <OnboardingWizard 
+            <OnboardingWizard
               onComplete={handleOnboardingComplete}
               onSkip={handleOnboardingSkip}
             />
@@ -177,11 +207,11 @@ const App: React.FC = () => {
       </Router>
 
       {/* Development tools */}
-      {process.env.NODE_ENV === 'development' && (
+      {process.env.NODE_ENV === "development" && (
         <ReactQueryDevtools initialIsOpen={false} />
       )}
     </QueryClientProvider>
-  )
-}
+  );
+};
 
-export default App
+export default App;
