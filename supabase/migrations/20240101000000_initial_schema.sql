@@ -817,9 +817,42 @@ BEGIN
 END;
 $$;
 
+-- Storage bucket management function
+CREATE OR REPLACE FUNCTION ensure_bucket_exists(bucket_name TEXT)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    bucket_exists BOOLEAN;
+BEGIN
+    -- Check if bucket exists
+    SELECT EXISTS (
+        SELECT 1 FROM storage.buckets 
+        WHERE id = bucket_name
+    ) INTO bucket_exists;
+    
+    -- If bucket doesn't exist, create it
+    IF NOT bucket_exists THEN
+        INSERT INTO storage.buckets (id, name, public)
+        VALUES (bucket_name, bucket_name, false)
+        ON CONFLICT (id) DO NOTHING;
+        
+        -- Log bucket creation
+        RAISE NOTICE 'Created storage bucket: %', bucket_name;
+        RETURN TRUE;
+    END IF;
+    
+    -- Bucket already exists
+    RETURN FALSE;
+END;
+$$;
+
 -- Grant execute permissions on functions
 GRANT EXECUTE ON FUNCTION get_user_contract_history TO authenticated;
 GRANT EXECUTE ON FUNCTION get_user_property_history TO authenticated;
+GRANT EXECUTE ON FUNCTION ensure_bucket_exists TO authenticated;
+GRANT EXECUTE ON FUNCTION ensure_bucket_exists TO service_role;
 
 -- Function to automatically update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()
