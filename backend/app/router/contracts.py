@@ -271,6 +271,23 @@ async def start_contract_analysis(
             logger.debug(
                 f"Successfully retrieved document {document_id} for user {user.id}"
             )
+        except ValueError as e:
+            error_msg = str(e)
+            if "Document not found or you don't have access to it" in error_msg:
+                logger.error(
+                    f"Document access denied: {document_id} for user {user.id}. "
+                    f"This could mean: 1) Document doesn't exist, 2) Document belongs to another user, "
+                    f"3) User session has expired. Use /api/contracts/debug/document/{document_id} to troubleshoot."
+                )
+                raise ValueError(
+                    f"Document access denied. Document {document_id} either doesn't exist or doesn't belong to your account. "
+                    f"Please verify the document ID or upload the document again."
+                )
+            else:
+                logger.error(
+                    f"Failed to retrieve document {document_id} for user {user.id}: {error_msg}"
+                )
+                raise
         except Exception as e:
             logger.error(
                 f"Failed to retrieve document {document_id} for user {user.id}: {str(e)}"
@@ -1069,3 +1086,66 @@ async def dismiss_notification(
     except Exception as e:
         logger.error(f"Error dismissing notification {notification_id}: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to dismiss notification")
+
+
+@router.get("/debug/document/{document_id}")
+async def debug_document_access(
+    document_id: str,
+    user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Debug endpoint to check document access and ownership"""
+    try:
+        # Get user-authenticated client
+        user_client = await AuthContext.get_authenticated_client()
+
+        # Try to get the document with RLS enforcement
+        doc_result = await user_client.database.select(
+            "documents",
+            columns="*",
+            filters={"id": document_id, "user_id": str(user.id)},
+        )
+
+        if doc_result.get("data"):
+            document = doc_result["data"][0]
+            return {
+                "document_exists": True,
+                "user_has_access": True,
+                "document_id": document_id,
+                "document_owner": document.get("user_id"),
+                "current_user": str(user.id),
+                "document_status": document.get("processing_status"),
+                "filename": document.get("original_filename"),
+                "created_at": document.get("created_at"),
+                "updated_at": document.get("updated_at"),
+            }
+        else:
+            # Document not found or user doesn't have access
+            return {
+                "document_exists": False,
+                "user_has_access": False,
+                "document_id": document_id,
+                "current_user": str(user.id),
+                "error": "Document not found or you don't have access to it",
+                "possible_causes": [
+                    "Document doesn't exist in the database",
+                    "Document belongs to a different user",
+                    "User session has expired",
+                    "Document was deleted",
+                ],
+                "suggestions": [
+                    "Verify the document ID is correct",
+                    "Re-upload the document if needed",
+                    "Check if you're logged in with the correct account",
+                    "Contact support if the issue persists",
+                ],
+            }
+
+    except Exception as e:
+        logger.error(f"Debug endpoint error: {str(e)}")
+        return {
+            "document_exists": "error",
+            "user_has_access": False,
+            "document_id": document_id,
+            "current_user": str(user.id),
+            "error": f"Debug endpoint failed: {str(e)}",
+        }

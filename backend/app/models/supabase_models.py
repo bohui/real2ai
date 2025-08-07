@@ -4,7 +4,7 @@ Models that correspond to your existing Supabase migration schema
 Automatic created_at/updated_at handled by database triggers
 """
 
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Decimal
 from datetime import datetime
 from enum import Enum
 from pydantic import BaseModel, Field
@@ -50,6 +50,62 @@ class DocumentStatus(str, Enum):
     ANALYSIS_PENDING = "analysis_pending"
     ANALYSIS_COMPLETE = "analysis_complete"
     FAILED = "failed"
+
+
+class PropertyType(str, Enum):
+    HOUSE = "house"
+    UNIT = "unit"
+    TOWNHOUSE = "townhouse"
+    APARTMENT = "apartment"
+    VILLA = "villa"
+    LAND = "land"
+    ACREAGE = "acreage"
+    COMMERCIAL = "commercial"
+    INDUSTRIAL = "industrial"
+    RETAIL = "retail"
+    OTHER = "other"
+
+
+class ValuationSource(str, Enum):
+    DOMAIN = "domain"
+    CORELOGIC = "corelogic"
+    COMBINED = "combined"
+
+
+class ValuationType(str, Enum):
+    AVM = "avm"
+    DESKTOP = "desktop"
+    PROFESSIONAL = "professional"
+
+
+class RiskLevel(str, Enum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    CRITICAL = "critical"
+
+
+class MarketOutlook(str, Enum):
+    DECLINING = "declining"
+    STABLE = "stable"
+    GROWING = "growing"
+    STRONG_GROWTH = "strong_growth"
+
+
+class InsightType(str, Enum):
+    TREND = "trend"
+    FORECAST = "forecast"
+    COMPARISON = "comparison"
+    HOTSPOT = "hotspot"
+
+
+class ViewSource(str, Enum):
+    SEARCH = "search"
+    BOOKMARK = "bookmark"
+    ANALYSIS = "analysis"
+    UPLOAD = "upload"
+    CACHE_HIT = "cache_hit"
+    SHARED = "shared"
 
 
 class ContentType(str, Enum):
@@ -139,6 +195,7 @@ class Document(TimestampedBaseModel):
     
     id: UUID = Field(..., description="Document UUID")
     user_id: UUID = Field(..., description="Reference to profiles.id")
+    content_hash: Optional[str] = Field(None, description="SHA-256 hash of document content for caching")
     original_filename: str = Field(..., max_length=512)
     storage_path: str = Field(..., max_length=1024)
     file_type: str = Field(..., max_length=50)
@@ -179,6 +236,7 @@ class Contract(TimestampedBaseModel):
     id: UUID = Field(..., description="Contract UUID")
     document_id: UUID = Field(..., description="Reference to documents.id")
     user_id: UUID = Field(..., description="Reference to profiles.id")
+    content_hash: Optional[str] = Field(None, description="SHA-256 hash of document content for caching")
     contract_type: ContractType = ContractType.PURCHASE_AGREEMENT
     australian_state: AustralianState = AustralianState.NSW
     contract_terms: Dict[str, Any] = Field(default_factory=dict)
@@ -191,6 +249,7 @@ class ContractAnalysis(TimestampedBaseModel):
     id: UUID = Field(..., description="Analysis UUID")
     contract_id: UUID = Field(..., description="Reference to contracts.id")
     user_id: UUID = Field(..., description="Reference to profiles.id")
+    content_hash: Optional[str] = Field(None, description="SHA-256 hash of document content for caching")
     agent_version: str = "1.0"
     status: AnalysisStatus = AnalysisStatus.PENDING
     
@@ -220,6 +279,7 @@ class DocumentPage(TimestampedBaseModel):
     
     id: UUID = Field(..., description="Page UUID")
     document_id: UUID = Field(..., description="Reference to documents.id")
+    content_hash: Optional[str] = Field(None, description="SHA-256 hash of document content for caching")
     page_number: int = Field(..., ge=1)
     
     # Content analysis
@@ -254,6 +314,7 @@ class DocumentEntity(TimestampedBaseModel):
     
     id: UUID = Field(..., description="Entity UUID")
     document_id: UUID = Field(..., description="Reference to documents.id")
+    content_hash: Optional[str] = Field(None, description="SHA-256 hash of document content for caching")
     page_id: Optional[UUID] = Field(None, description="Reference to document_pages.id")
     page_number: int = Field(..., ge=1)
     
@@ -279,6 +340,7 @@ class DocumentDiagram(TimestampedBaseModel):
     
     id: UUID = Field(..., description="Diagram UUID")
     document_id: UUID = Field(..., description="Reference to documents.id")
+    content_hash: Optional[str] = Field(None, description="SHA-256 hash of document content for caching")
     page_id: Optional[UUID] = Field(None, description="Reference to document_pages.id")
     page_number: int = Field(..., ge=1)
     
@@ -444,6 +506,381 @@ class AnalysisProgress(TimestampedBaseModel):
     status: str = Field(default="in_progress", max_length=50)  # in_progress, completed, failed, cancelled
     error_message: Optional[str] = None
     metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+# Property Intelligence Models
+class Property(TimestampedBaseModel):
+    """Properties table for Australian property data"""
+    
+    id: UUID = Field(..., description="Property UUID")
+    address_full: str = Field(..., max_length=500, description="Complete address")
+    street_number: Optional[str] = Field(None, max_length=20)
+    street_name: Optional[str] = Field(None, max_length=200)
+    suburb: Optional[str] = Field(None, max_length=100)
+    state: Optional[AustralianState] = None
+    postcode: Optional[str] = Field(None, max_length=10)
+    property_type: Optional[PropertyType] = None
+    
+    # Location data
+    latitude: Optional[float] = Field(None, ge=-90, le=90)
+    longitude: Optional[float] = Field(None, ge=-180, le=180)
+    
+    # Property features
+    bedrooms: Optional[int] = Field(None, ge=0)
+    bathrooms: Optional[int] = Field(None, ge=0)
+    car_spaces: Optional[int] = Field(None, ge=0)
+    land_size: Optional[float] = Field(None, ge=0, description="Land size in sqm")
+    building_size: Optional[float] = Field(None, ge=0, description="Building size in sqm")
+    year_built: Optional[int] = Field(None, ge=1800, le=2030)
+    
+    # Property identifiers
+    lot_number: Optional[str] = Field(None, max_length=20)
+    plan_number: Optional[str] = Field(None, max_length=50)
+    title_reference: Optional[str] = Field(None, max_length=100)
+    council_property_id: Optional[str] = Field(None, max_length=100)
+    
+    # Data quality and verification
+    address_verified: bool = False
+    coordinates_verified: bool = False
+    property_features_verified: bool = False
+    data_source: Optional[str] = Field(None, max_length=100)
+    last_updated_source: Optional[str] = Field(None, max_length=100)
+    
+    # Metadata
+    property_metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class PropertyValuation(TimestampedBaseModel):
+    """Property valuations from various sources"""
+    
+    id: UUID = Field(..., description="Valuation UUID")
+    property_id: UUID = Field(..., description="Reference to properties.id")
+    valuation_source: ValuationSource
+    valuation_type: ValuationType
+    estimated_value: float = Field(..., ge=0)
+    valuation_range_lower: Optional[float] = Field(None, ge=0)
+    valuation_range_upper: Optional[float] = Field(None, ge=0)
+    confidence: Optional[float] = Field(None, ge=0.0, le=1.0)
+    methodology: Optional[str] = None
+    valuation_date: datetime
+    expires_at: Optional[datetime] = None
+    api_response: Dict[str, Any] = Field(default_factory=dict)
+
+
+class PropertyMarketData(TimestampedBaseModel):
+    """Market data and analytics for properties"""
+    
+    id: UUID = Field(..., description="Market data UUID")
+    property_id: UUID = Field(..., description="Reference to properties.id")
+    suburb: str = Field(..., max_length=100)
+    state: AustralianState
+    data_source: ValuationSource
+    median_price: Optional[float] = Field(None, ge=0)
+    price_growth_12_month: Optional[float] = Field(None, description="Percentage growth")
+    price_growth_3_year: Optional[float] = Field(None, description="Percentage growth")
+    days_on_market: Optional[int] = Field(None, ge=0)
+    sales_volume_12_month: Optional[int] = Field(None, ge=0)
+    market_outlook: Optional[MarketOutlook] = None
+    median_rent: Optional[float] = Field(None, ge=0, description="Weekly rent")
+    rental_yield: Optional[float] = Field(None, ge=0, description="Percentage yield")
+    vacancy_rate: Optional[float] = Field(None, ge=0, description="Percentage vacancy")
+    data_date: datetime
+    expires_at: Optional[datetime] = None
+    raw_data: Dict[str, Any] = Field(default_factory=dict)
+
+
+class PropertyRiskAssessment(TimestampedBaseModel):
+    """Risk assessment data for properties"""
+    
+    id: UUID = Field(..., description="Risk assessment UUID")
+    property_id: UUID = Field(..., description="Reference to properties.id")
+    overall_risk: RiskLevel
+    liquidity_risk: RiskLevel
+    market_risk: RiskLevel
+    structural_risk: RiskLevel
+    risk_factors: List[Dict[str, Any]] = Field(default_factory=list)
+    risk_score: Optional[float] = Field(None, ge=0.0, le=100.0)
+    confidence: Optional[float] = Field(None, ge=0.0, le=1.0)
+    assessment_date: datetime
+    expires_at: Optional[datetime] = None
+    assessment_methodology: Optional[str] = None
+    mitigation_strategies: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class ComparableSale(TimestampedBaseModel):
+    """Comparable sales data for property analysis"""
+    
+    id: UUID = Field(..., description="Comparable sale UUID")
+    property_id: UUID = Field(..., description="Reference to properties.id")
+    comparable_address: str = Field(..., max_length=500)
+    sale_price: float = Field(..., ge=0)
+    sale_date: datetime
+    days_on_market: Optional[int] = Field(None, ge=0)
+    
+    # Property comparison features
+    bedrooms: Optional[int] = Field(None, ge=0)
+    bathrooms: Optional[int] = Field(None, ge=0)
+    car_spaces: Optional[int] = Field(None, ge=0)
+    land_size: Optional[float] = Field(None, ge=0)
+    building_size: Optional[float] = Field(None, ge=0)
+    
+    # Similarity metrics
+    distance_km: Optional[float] = Field(None, ge=0)
+    similarity_score: Optional[float] = Field(None, ge=0.0, le=1.0)
+    price_per_sqm: Optional[float] = Field(None, ge=0)
+    
+    # Data source and verification
+    data_source: ValuationSource
+    verified: bool = False
+    sale_metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class PropertySalesHistory(TimestampedBaseModel):
+    """Historical sales data for properties"""
+    
+    id: UUID = Field(..., description="Sales history UUID")
+    property_id: UUID = Field(..., description="Reference to properties.id")
+    sale_price: float = Field(..., ge=0)
+    sale_date: datetime
+    sale_type: Optional[str] = Field(None, max_length=50)
+    days_on_market: Optional[int] = Field(None, ge=0)
+    
+    # Market conditions at time of sale
+    median_suburb_price: Optional[float] = Field(None, ge=0)
+    price_vs_median: Optional[float] = Field(None, description="Percentage vs median")
+    
+    # Data source
+    data_source: ValuationSource
+    verified: bool = False
+    sale_metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class PropertyRentalHistory(TimestampedBaseModel):
+    """Rental history data for properties"""
+    
+    id: UUID = Field(..., description="Rental history UUID")
+    property_id: UUID = Field(..., description="Reference to properties.id")
+    weekly_rent: float = Field(..., ge=0)
+    lease_date: datetime
+    lease_duration_months: Optional[int] = Field(None, ge=1)
+    
+    # Rental analysis
+    rental_yield: Optional[float] = Field(None, ge=0)
+    rent_vs_median: Optional[float] = Field(None, description="Percentage vs median")
+    
+    # Data source
+    data_source: ValuationSource
+    verified: bool = False
+    rental_metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class UserSavedProperty(TimestampedBaseModel):
+    """User saved properties"""
+    
+    id: UUID = Field(..., description="Saved property UUID")
+    user_id: UUID = Field(..., description="Reference to profiles.id")
+    property_id: UUID = Field(..., description="Reference to properties.id")
+    is_favorite: bool = False
+    notes: Optional[str] = None
+    saved_at: datetime
+    alert_enabled: bool = False
+    alert_criteria: Dict[str, Any] = Field(default_factory=dict)
+
+
+class PropertySearch(TimestampedBaseModel):
+    """User property search history"""
+    
+    id: UUID = Field(..., description="Property search UUID")
+    user_id: UUID = Field(..., description="Reference to profiles.id")
+    search_criteria: Dict[str, Any] = Field(default_factory=dict)
+    results_count: int = Field(default=0, ge=0)
+    executed_at: datetime
+    search_metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class PropertyReport(TimestampedBaseModel):
+    """Generated property reports"""
+    
+    id: UUID = Field(..., description="Property report UUID")
+    property_id: UUID = Field(..., description="Reference to properties.id")
+    user_id: UUID = Field(..., description="Reference to profiles.id")
+    report_type: str = Field(..., max_length=100)
+    report_data: Dict[str, Any] = Field(default_factory=dict)
+    generated_at: datetime
+    expires_at: Optional[datetime] = None
+    report_version: str = Field(default="1.0", max_length=50)
+    generation_metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class PropertyAPIUsage(TimestampedBaseModel):
+    """Track API usage for billing"""
+    
+    id: UUID = Field(..., description="API usage UUID")
+    user_id: UUID = Field(..., description="Reference to profiles.id")
+    api_provider: str = Field(..., max_length=100)
+    endpoint: str = Field(..., max_length=200)
+    request_type: str = Field(..., max_length=100)
+    cost_aud: Optional[float] = Field(None, ge=0)
+    response_time_ms: Optional[int] = Field(None, ge=0)
+    request_successful: bool
+    error_message: Optional[str] = None
+    request_metadata: Dict[str, Any] = Field(default_factory=dict)
+    timestamp: datetime
+
+    # Override field name for this model since it uses 'timestamp' instead of 'created_at'
+    class Config:
+        fields = {"created_at": "timestamp"}
+
+
+class MarketInsight(TimestampedBaseModel):
+    """Market insights and trends cache"""
+    
+    id: UUID = Field(..., description="Market insight UUID")
+    suburb: str = Field(..., max_length=100)
+    state: AustralianState
+    property_type: Optional[PropertyType] = None
+    insight_type: InsightType
+    insight_data: Dict[str, Any] = Field(default_factory=dict)
+    confidence_score: Optional[float] = Field(None, ge=0.0, le=1.0)
+    data_sources: List[str] = Field(default_factory=list)
+    valid_from: datetime
+    valid_until: datetime
+
+
+# Cache Architecture Models
+class HotPropertiesCache(TimestampedBaseModel):
+    """Hot properties cache for popular property analyses (no RLS - shared across users)"""
+    
+    id: UUID = Field(..., description="Hot property cache UUID")
+    property_hash: str = Field(..., description="Hash of normalized address")
+    property_address: str = Field(..., max_length=500)
+    normalized_address: str = Field(..., max_length=500, description="Normalized for consistent hashing")
+    analysis_result: Dict[str, Any] = Field(default_factory=dict)
+    popularity_score: int = Field(default=1, ge=1)
+    access_count: int = Field(default=1, ge=1)
+    expires_at: datetime
+    updated_at: Optional[datetime] = None
+
+
+class HotContractsCache(TimestampedBaseModel):
+    """Hot contracts cache for popular contract analyses (no RLS - shared across users)"""
+    
+    id: UUID = Field(..., description="Hot contract cache UUID")
+    content_hash: str = Field(..., description="SHA-256 hash of document content")
+    contract_analysis: Dict[str, Any] = Field(default_factory=dict)
+    property_address: Optional[str] = Field(None, max_length=500)
+    contract_type: Optional[ContractType] = None
+    access_count: int = Field(default=1, ge=1)
+    expires_at: datetime
+    updated_at: Optional[datetime] = None
+
+
+class UserPropertyView(TimestampedBaseModel):
+    """User property views (with RLS - user's search history)"""
+    
+    id: UUID = Field(..., description="User property view UUID")
+    user_id: UUID = Field(..., description="Reference to profiles.id")
+    property_hash: str = Field(..., description="Hash of normalized address")
+    property_address: str = Field(..., max_length=500)
+    viewed_at: datetime
+    source: ViewSource = ViewSource.SEARCH
+
+
+class UserContractView(TimestampedBaseModel):
+    """User contract views (with RLS - user's contract analysis history)"""
+    
+    id: UUID = Field(..., description="User contract view UUID")
+    user_id: UUID = Field(..., description="Reference to profiles.id")
+    content_hash: str = Field(..., description="SHA-256 hash of document content")
+    property_address: Optional[str] = Field(None, max_length=500)
+    analysis_id: Optional[UUID] = Field(None, description="Reference to contract_analyses.id")
+    viewed_at: datetime
+    source: ViewSource = ViewSource.UPLOAD
+
+
+# View Models (Read-only database views)
+class AnalysisProgressDetailed(BaseModel):
+    """Detailed analysis progress view combining multiple tables"""
+    
+    analysis_id: UUID
+    contract_id: UUID
+    user_id: UUID
+    current_step: str
+    progress_percent: int
+    step_description: Optional[str] = None
+    step_started_at: Optional[datetime] = None
+    step_completed_at: Optional[datetime] = None
+    status: str
+    error_message: Optional[str] = None
+    
+    # From contract_analyses
+    analysis_status: AnalysisStatus
+    agent_version: str
+    overall_risk_score: float
+    confidence_score: float
+    
+    # From contracts
+    contract_type: ContractType
+    australian_state: AustralianState
+    
+    # From documents
+    original_filename: str
+    file_type: str
+    processing_status: str
+    
+    class Config:
+        from_attributes = True
+
+
+class UserContractHistory(BaseModel):
+    """User contract history view combining views with analysis data"""
+    
+    # From user_contract_views
+    id: UUID
+    user_id: UUID
+    content_hash: str
+    property_address: Optional[str] = None
+    analysis_id: Optional[UUID] = None
+    viewed_at: datetime
+    source: ViewSource
+    created_at: Optional[datetime] = None
+    
+    # From contract_analyses
+    analysis_result: Optional[Dict[str, Any]] = None
+    risk_score: Optional[float] = None
+    overall_risk_score: Optional[float] = None
+    confidence_score: Optional[float] = None
+    analysis_status: Optional[AnalysisStatus] = None
+    analysis_timestamp: Optional[datetime] = None
+    
+    # From documents
+    original_filename: Optional[str] = None
+    file_type: Optional[str] = None
+    file_size: Optional[int] = None
+    
+    class Config:
+        from_attributes = True
+
+
+class UserPropertyHistory(BaseModel):
+    """User property search history view"""
+    
+    # From user_property_views
+    id: UUID
+    user_id: UUID
+    property_hash: str
+    property_address: str
+    viewed_at: datetime
+    source: ViewSource
+    created_at: Optional[datetime] = None
+    
+    # From hot_properties_cache
+    analysis_result: Optional[Dict[str, Any]] = None
+    popularity_score: Optional[int] = None
+    access_count: Optional[int] = None
+    
+    class Config:
+        from_attributes = True
 
 
 # Helper functions for model operations

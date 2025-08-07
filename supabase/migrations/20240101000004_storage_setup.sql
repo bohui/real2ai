@@ -316,3 +316,6 @@ GRANT SELECT ON user_storage_stats TO authenticated;
 
 -- Note: ensure_bucket_exists function is now defined in the initial migration (20240101000000_initial_schema.sql)
 -- to avoid return type conflicts and maintain consistent schema setup
+
+-- Note: All property intelligence tables and functions have been moved to the initial schema
+-- This migration now focuses only on storage-specific functionality

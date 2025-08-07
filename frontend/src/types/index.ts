@@ -108,6 +108,9 @@ export interface ContractAnalysisResponse {
   analysis_id: string;
   status: string;
   estimated_completion_minutes: number;
+  cached?: boolean;
+  cache_hit?: boolean;
+  task_id?: string;
 }
 
 export interface RiskFactor {
@@ -294,7 +297,13 @@ export interface PropertyAddress {
 }
 
 export interface PropertyDetails {
-  property_type: 'House' | 'Unit' | 'Apartment' | 'Townhouse' | 'Villa' | 'Land';
+  property_type:
+    | "House"
+    | "Unit"
+    | "Apartment"
+    | "Townhouse"
+    | "Villa"
+    | "Land";
   bedrooms?: number;
   bathrooms?: number;
   carspaces?: number;
@@ -410,7 +419,14 @@ export interface PropertySearchRequest {
   location?: string;
   radius_km: number;
   limit: number;
-  sort_by: 'relevance' | 'price_asc' | 'price_desc' | 'size_asc' | 'size_desc' | 'date_asc' | 'date_desc';
+  sort_by:
+    | "relevance"
+    | "price_asc"
+    | "price_desc"
+    | "size_asc"
+    | "size_desc"
+    | "date_asc"
+    | "date_desc";
   include_off_market: boolean;
   include_historical: boolean;
 }
@@ -452,7 +468,7 @@ export interface PropertyListing {
 
 export interface PropertyAnalyticsRequest {
   properties: string[];
-  analysis_type: 'basic' | 'standard' | 'comprehensive' | 'investment';
+  analysis_type: "basic" | "standard" | "comprehensive" | "investment";
   include_forecasting: boolean;
   include_neighborhood_analysis: boolean;
   include_investment_metrics: boolean;
@@ -578,16 +594,16 @@ export interface PropertyWatchlistItem {
 
 export interface BulkPropertyAnalysisRequest {
   properties: string[];
-  analysis_depth: 'basic' | 'standard' | 'detailed';
+  analysis_depth: "basic" | "standard" | "detailed";
   include_portfolio_metrics: boolean;
   include_diversification_analysis: boolean;
   include_market_correlation: boolean;
-  output_format: 'json' | 'csv' | 'pdf';
+  output_format: "json" | "csv" | "pdf";
 }
 
 // Additional type definitions to replace 'any' types
 export interface UserPreferences {
-  theme?: 'light' | 'dark' | 'auto';
+  theme?: "light" | "dark" | "auto";
   language?: string;
   notifications?: {
     email?: boolean;
@@ -612,7 +628,7 @@ export interface OnboardingPreferences {
   jurisdiction?: string;
   firm_size?: string;
   primary_contract_types?: string[];
-  experience_level?: 'beginner' | 'intermediate' | 'expert';
+  experience_level?: "beginner" | "intermediate" | "expert";
   notification_preferences?: {
     analysis_completion?: boolean;
     weekly_reports?: boolean;
@@ -675,7 +691,7 @@ export interface WebSocketEventData {
 
 export interface CustomAnalysisParameters {
   focus_areas?: string[];
-  risk_tolerance?: 'low' | 'medium' | 'high';
+  risk_tolerance?: "low" | "medium" | "high";
   investment_timeline?: string;
   budget_constraints?: {
     max_purchase_price?: number;
@@ -696,8 +712,8 @@ export interface CustomAnalysisParameters {
 
 export interface SchoolInfo {
   name: string;
-  type: 'primary' | 'secondary' | 'combined';
-  sector: 'government' | 'catholic' | 'independent';
+  type: "primary" | "secondary" | "combined";
+  sector: "government" | "catholic" | "independent";
   distance_meters: number;
   rating?: number;
   icsea_score?: number;
@@ -708,7 +724,7 @@ export interface SchoolInfo {
 
 export interface ShoppingCenterInfo {
   name: string;
-  type: 'major' | 'regional' | 'neighborhood' | 'strip';
+  type: "major" | "regional" | "neighborhood" | "strip";
   distance_meters: number;
   major_retailers?: string[];
   total_stores?: number;
@@ -718,7 +734,13 @@ export interface ShoppingCenterInfo {
 
 export interface ParkRecreationInfo {
   name: string;
-  type: 'park' | 'reserve' | 'playground' | 'sports_facility' | 'beach' | 'walking_trail';
+  type:
+    | "park"
+    | "reserve"
+    | "playground"
+    | "sports_facility"
+    | "beach"
+    | "walking_trail";
   distance_meters: number;
   area_hectares?: number;
   facilities?: string[];
@@ -729,7 +751,7 @@ export interface ParkRecreationInfo {
 export interface CrimeStatistics {
   overall_crime_rate?: number;
   crime_types?: Record<string, number>;
-  trend_12_months?: 'increasing' | 'stable' | 'decreasing';
+  trend_12_months?: "increasing" | "stable" | "decreasing";
   safety_score?: number;
   comparison_to_state_average?: number;
   last_updated?: string;
@@ -764,6 +786,145 @@ export interface AlertPreferences {
   rental_estimate_updates?: boolean;
   neighborhood_news?: boolean;
   weekly_summary?: boolean;
-  email_frequency?: 'immediate' | 'daily' | 'weekly' | 'monthly';
+  email_frequency?: "immediate" | "daily" | "weekly" | "monthly";
   push_notifications?: boolean;
+}
+
+// Cache System Types
+export interface CacheStats {
+  contracts: {
+    total_cached: number;
+    average_access: number;
+  };
+  properties: {
+    total_cached: number;
+    average_access: number;
+    average_popularity: number;
+  };
+  last_updated: string;
+}
+
+export interface CacheHealthStatus {
+  health_status: "healthy" | "warning" | "critical";
+  health_score: number;
+  issues: string[];
+  consistency: Record<string, {
+    total_records: number;
+    records_with_hashes: number;
+    consistency_percentage: number;
+  }>;
+  stats: CacheStats;
+  timestamp?: string;
+}
+
+export interface UserContractView {
+  id: string;
+  user_id: string;
+  content_hash: string;
+  property_address?: string;
+  analysis_id?: string;
+  viewed_at: string;
+  source: "upload" | "cache_hit" | "shared";
+  original_filename?: string;
+  file_type?: string;
+  file_size?: number;
+  analysis_result?: any;
+  risk_score?: number;
+  analysis_status?: string;
+}
+
+export interface UserPropertyView {
+  id: string;
+  user_id: string;
+  property_hash: string;
+  property_address: string;
+  viewed_at: string;
+  source: "search" | "bookmark" | "analysis";
+  analysis_result?: any;
+  popularity_score?: number;
+  access_count?: number;
+}
+
+export interface CacheOperationResponse {
+  status: "success" | "error" | "cache_miss";
+  data?: any;
+  cached?: boolean;
+  cache_hit?: boolean;
+  message?: string;
+}
+
+export interface PropertySearchWithCacheRequest {
+  address: string;
+  analysis_options?: Record<string, any>;
+}
+
+export interface ContractCacheCheckRequest {
+  content_hash?: string;
+  file_content?: string;
+}
+
+export interface ContractAnalysisWithCacheRequest {
+  content_hash: string;
+  filename?: string;
+  file_size?: number;
+  mime_type?: string;
+  property_address?: string;
+}
+
+export interface BulkAnalysisRequest {
+  requests: Array<{
+    document_id: string;
+    analysis_options?: Record<string, any>;
+  }>;
+}
+
+export interface BulkAnalysisResponse {
+  results: Array<{
+    index: number;
+    document_id: string;
+    contract_id?: string;
+    analysis_id?: string;
+    status: string;
+    cached?: boolean;
+    cache_hit?: boolean;
+    error?: string;
+  }>;
+  summary: {
+    total_requests: number;
+    cache_hits: number;
+    cache_misses: number;
+    success_count: number;
+    error_count: number;
+    cache_efficiency: string;
+  };
+}
+
+// Additional Cache Service Types
+export interface CacheEfficiencyMetrics {
+  cache_hit_rate: number;
+  token_savings: number;
+  response_time_improvement: number;
+  recent_cache_hits: number;
+}
+
+export interface CacheHistoryResponse {
+  status: "success" | "error";
+  data: {
+    history: UserContractView[] | UserPropertyView[];
+    total_count: number;
+    has_more: boolean;
+  };
+  message?: string;
+}
+
+export interface CacheHealthResponse {
+  status: "success" | "error";
+  data: CacheHealthStatus;
+  message?: string;
+}
+
+export interface CacheStatsResponse {
+  status: "success" | "error";
+  data: CacheStats;
+  message?: string;
 }
