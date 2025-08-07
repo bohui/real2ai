@@ -3,11 +3,18 @@
  * Manages global SEO state and provides utilities for all components
  */
 
-import React, { createContext, useContext, useCallback, useState, useEffect, useMemo } from 'react';
-import { useLocation } from 'react-router-dom';
-import { SEOData } from '@/components/seo/SEOHead';
-import { DynamicSEOData } from '@/hooks/useSEO';
-import { generateSEOData } from '@/config/seoConfig';
+import React, {
+  createContext,
+  useContext,
+  useCallback,
+  useState,
+  useEffect,
+  useMemo,
+} from "react";
+import { useLocation } from "react-router-dom";
+import { SEOData } from "@/components/seo/SEOHead";
+import { DynamicSEOData } from "@/hooks/useSEO";
+import { generateSEOData } from "@/config/seoConfig";
 
 interface SEOContextValue {
   currentSEO: SEOData;
@@ -36,44 +43,51 @@ export function SEOProvider({ children, baseConfig = {} }: SEOProviderProps) {
   const [currentSEO, setCurrentSEO] = useState<SEOData>({});
   const [isLoading, setIsLoading] = useState(false);
 
-  const config = useMemo(() => ({
-    baseUrl: "https://real2.ai",
-    siteName: "Real2AI",
-    defaultTitle: "Real2AI - Property Analysis Platform",
-    defaultDescription: "Advanced AI-powered property analysis and contract review platform for Australian real estate professionals.",
-    titleSeparator: " - ",
-    defaultImage: "/images/og-default.jpg",
-    ...baseConfig
-  }), [baseConfig]);
+  const config = useMemo(
+    () => ({
+      baseUrl: "https://real2.ai",
+      siteName: "Real2AI",
+      defaultTitle: "Real2AI - Property Analysis Platform",
+      defaultDescription:
+        "Advanced AI-powered property analysis and contract review platform for Australian real estate professionals.",
+      titleSeparator: " - ",
+      defaultImage: "/images/og-default.jpg",
+      ...baseConfig,
+    }),
+    [baseConfig]
+  );
 
   // Generate initial SEO data for current route
-  const initializeSEOForRoute = useCallback((pathname: string, dynamicData?: DynamicSEOData) => {
-    setIsLoading(true);
-    try {
-      const seoData = generateSEOData(pathname, dynamicData);
-      setCurrentSEO(seoData);
-    } catch (error) {
-      console.error('Failed to generate SEO data:', error);
-      // Fallback to default SEO
-      setCurrentSEO({
-        title: config.defaultTitle,
-        description: config.defaultDescription,
-        canonical: pathname
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  }, []); // Remove config from dependencies as it's stable
+  const initializeSEOForRoute = useCallback(
+    (pathname: string, dynamicData?: DynamicSEOData) => {
+      setIsLoading(true);
+      try {
+        const seoData = generateSEOData(pathname, dynamicData);
+        setCurrentSEO(seoData);
+      } catch (error) {
+        console.error("Failed to generate SEO data:", error);
+        // Fallback to default SEO
+        setCurrentSEO({
+          title: config.defaultTitle,
+          description: config.defaultDescription,
+          canonical: pathname,
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [config]
+  );
 
   // Update SEO when route changes
   useEffect(() => {
     initializeSEOForRoute(location.pathname);
-  }, [location.pathname]); // Remove initializeSEOForRoute from dependencies
+  }, [location.pathname, initializeSEOForRoute]);
 
   const updateGlobalSEO = useCallback((seo: Partial<SEOData>) => {
-    setCurrentSEO(prev => ({
+    setCurrentSEO((prev) => ({
       ...prev,
-      ...seo
+      ...seo,
     }));
   }, []);
 
@@ -81,45 +95,54 @@ export function SEOProvider({ children, baseConfig = {} }: SEOProviderProps) {
     setIsLoading(true);
     try {
       const generatedSEO = generateSEOData(location.pathname, data);
-      setCurrentSEO(prev => ({
+      setCurrentSEO((prev) => ({
         ...prev,
-        ...generatedSEO
+        ...generatedSEO,
       }));
     } catch (error) {
-      console.error('Failed to update dynamic SEO:', error);
+      console.error("Failed to update dynamic SEO:", error);
     } finally {
       setIsLoading(false);
     }
-  }, []); // Remove location.pathname from dependencies as it's handled by the route change effect
+  }, [location.pathname]);
 
   const resetSEO = useCallback(() => {
     initializeSEOForRoute(location.pathname);
-  }, [location.pathname]); // Remove initializeSEOForRoute from dependencies
+  }, [location.pathname, initializeSEOForRoute]);
 
-  const setSEOForRoute = useCallback((pathname: string, dynamicData?: DynamicSEOData) => {
-    initializeSEOForRoute(pathname, dynamicData);
-  }, []); // Remove initializeSEOForRoute from dependencies
-
-  const value: SEOContextValue = React.useMemo(() => ({
-    currentSEO,
-    updateGlobalSEO,
-    updateDynamicSEO,
-    resetSEO,
-    setSEOForRoute,
-    isLoading
-  }), [currentSEO, updateGlobalSEO, updateDynamicSEO, resetSEO, setSEOForRoute, isLoading]);
-
-  return (
-    <SEOContext.Provider value={value}>
-      {children}
-    </SEOContext.Provider>
+  const setSEOForRoute = useCallback(
+    (pathname: string, dynamicData?: DynamicSEOData) => {
+      initializeSEOForRoute(pathname, dynamicData);
+    },
+    [initializeSEOForRoute]
   );
+
+  const value: SEOContextValue = React.useMemo(
+    () => ({
+      currentSEO,
+      updateGlobalSEO,
+      updateDynamicSEO,
+      resetSEO,
+      setSEOForRoute,
+      isLoading,
+    }),
+    [
+      currentSEO,
+      updateGlobalSEO,
+      updateDynamicSEO,
+      resetSEO,
+      setSEOForRoute,
+      isLoading,
+    ]
+  );
+
+  return <SEOContext.Provider value={value}>{children}</SEOContext.Provider>;
 }
 
 export function useSEOContext(): SEOContextValue {
   const context = useContext(SEOContext);
   if (!context) {
-    throw new Error('useSEOContext must be used within a SEOProvider');
+    throw new Error("useSEOContext must be used within a SEOProvider");
   }
   return context;
 }
@@ -131,29 +154,33 @@ export function usePageSEO(
   staticSEO?: Partial<SEOData>,
   dynamicData?: DynamicSEOData
 ) {
-  const { updateGlobalSEO, updateDynamicSEO, currentSEO, isLoading } = useSEOContext();
+  const { updateGlobalSEO, updateDynamicSEO, currentSEO, isLoading } =
+    useSEOContext();
 
   // Update SEO with static data on mount
   useEffect(() => {
     if (staticSEO && Object.keys(staticSEO).length > 0) {
       updateGlobalSEO(staticSEO);
     }
-  }, [staticSEO]); // Remove updateGlobalSEO from dependencies
+  }, [staticSEO, updateGlobalSEO]);
 
   // Update SEO with dynamic data when it changes
   useEffect(() => {
     if (dynamicData && Object.keys(dynamicData).length > 0) {
       updateDynamicSEO(dynamicData);
     }
-  }, [dynamicData]); // Remove updateDynamicSEO from dependencies
+  }, [dynamicData, updateDynamicSEO]);
 
-  const convenienceMethods = useMemo(() => ({
-    setTitle: (title: string) => updateGlobalSEO({ title }),
-    setDescription: (description: string) => updateGlobalSEO({ description }),
-    setKeywords: (keywords: string[]) => updateGlobalSEO({ keywords }),
-    setCanonical: (canonical: string) => updateGlobalSEO({ canonical }),
-    setOGImage: (ogImage: string) => updateGlobalSEO({ ogImage }),
-  }), [updateGlobalSEO]);
+  const convenienceMethods = useMemo(
+    () => ({
+      setTitle: (title: string) => updateGlobalSEO({ title }),
+      setDescription: (description: string) => updateGlobalSEO({ description }),
+      setKeywords: (keywords: string[]) => updateGlobalSEO({ keywords }),
+      setCanonical: (canonical: string) => updateGlobalSEO({ canonical }),
+      setOGImage: (ogImage: string) => updateGlobalSEO({ ogImage }),
+    }),
+    [updateGlobalSEO]
+  );
 
   return {
     seoData: currentSEO,
