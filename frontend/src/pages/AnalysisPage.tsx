@@ -20,7 +20,9 @@ const AnalysisPage: React.FC = () => {
     currentDocument,
     isAnalyzing,
     analysisError,
-    startAnalysis,
+    cacheStatus,
+    triggerAnalysisStart,
+    triggerAnalysisRetry,
     clearCurrentAnalysis,
   } = useAnalysisStore();
   const { addNotification } = useUIStore();
@@ -29,27 +31,67 @@ const AnalysisPage: React.FC = () => {
     "overview" | "risks" | "compliance"
   >("overview");
 
-  // Handle document upload completion
+  // Handle document upload completion - now with smart cache handling
   const handleUploadComplete = async (documentId: string) => {
     try {
-      await startAnalysis({
-        document_id: documentId,
-        analysis_options: {
-          include_financial_analysis: true,
-          include_risk_assessment: true,
-          include_compliance_check: true,
-          include_recommendations: true,
-        },
+      console.log('📡 Document uploaded, WebSocket should be connected');
+      
+      // The WebSocket connection is established during upload
+      // Cache status will determine next steps automatically
+      addNotification({
+        type: "info",
+        title: "Document uploaded",
+        message: "Checking for existing analysis...",
       });
-
+      
+      // Wait for cache status to determine next steps
+      // The WebSocket will handle cache status and trigger analysis if needed
+      
+    } catch (error) {
+      console.error("Upload completion error:", error);
+      addNotification({
+        type: "error",
+        title: "Upload error", 
+        message: "Failed to process uploaded document.",
+      });
+    }
+  };
+  
+  // Handle manual analysis start (for cache miss scenarios)
+  const handleStartAnalysis = async () => {
+    try {
+      await triggerAnalysisStart();
       addNotification({
         type: "info",
         title: "Analysis started",
-        message:
-          "Your contract is being analyzed. This may take a few minutes.",
+        message: "Your contract is being analyzed. This may take a few minutes.",
       });
     } catch (error) {
       console.error("Failed to start analysis:", error);
+      addNotification({
+        type: "error",
+        title: "Analysis failed",
+        message: "Could not start analysis. Please try again.",
+      });
+    }
+  };
+  
+  // Handle analysis retry (for failed scenarios)
+  const handleRetryAnalysis = async () => {
+    try {
+      await triggerAnalysisRetry();
+      addNotification({
+        type: "info",
+        title: "Retrying analysis",
+        message: "Retrying your contract analysis...",
+      });
+    } catch (error) {
+      console.error("Failed to retry analysis:", error);
+      addNotification({
+        type: "error",
+        title: "Retry failed",
+        message: "Could not retry analysis. Please try again.",
+      });
     }
   };
 
@@ -155,6 +197,65 @@ const AnalysisPage: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Left Column - Progress & Navigation */}
           <div className="space-y-6">
+            {/* Cache Status & Action Panel */}
+            {cacheStatus && (
+              <Card className="border-l-4 border-l-primary-500">
+                <CardContent padding="md">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-semibold text-sm text-neutral-700 mb-1">
+                        Document Status
+                      </h3>
+                      {cacheStatus === 'complete' && (
+                        <p className="text-sm text-success-600">
+                          ✅ Analysis complete - results ready!
+                        </p>
+                      )}
+                      {cacheStatus === 'in_progress' && (
+                        <p className="text-sm text-warning-600">
+                          🔄 Analysis in progress - streaming updates...
+                        </p>
+                      )}
+                      {cacheStatus === 'failed' && (
+                        <p className="text-sm text-danger-600">
+                          ❌ Previous analysis failed
+                        </p>
+                      )}
+                      {cacheStatus === 'miss' && (
+                        <p className="text-sm text-neutral-600">
+                          🆕 New document - ready to analyze
+                        </p>
+                      )}
+                    </div>
+                    
+                    {/* Action Buttons */}
+                    <div className="flex gap-2">
+                      {cacheStatus === 'miss' && (
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          onClick={handleStartAnalysis}
+                          disabled={isAnalyzing}
+                        >
+                          Start Analysis
+                        </Button>
+                      )}
+                      {cacheStatus === 'failed' && (
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          onClick={handleRetryAnalysis}
+                          disabled={isAnalyzing}
+                        >
+                          Retry Analysis
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+            
             <AnalysisProgress />
 
             {/* Navigation Tabs (Mobile) */}

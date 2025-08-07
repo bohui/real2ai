@@ -296,6 +296,16 @@ class ApiService {
   }
 
   // Contract analysis endpoints
+  async prepareContract(
+    data: { document_id: string; contract_type?: string; australian_state?: string }
+  ): Promise<{ contract_id: string; document_id: string }> {
+    const response = await this.client.post<{ contract_id: string; document_id: string }>(
+      "/api/contracts/prepare",
+      data,
+    );
+    return response.data;
+  }
+
   async startAnalysis(
     data: ContractAnalysisRequest,
   ): Promise<ContractAnalysisResponse> {
@@ -518,13 +528,24 @@ export class WebSocketService {
   private contractId: string;
   private messageQueue: unknown[] = [];
 
-  constructor(contractId: string) {
-    const wsUrl = API_BASE_URL.replace("http", "ws");
+  constructor(documentId: string) {
+    // Fix URL construction for both HTTP and HTTPS
+    const wsUrl = API_BASE_URL.replace(/^https?/, API_BASE_URL.startsWith('https') ? 'wss' : 'ws');
     const token = localStorage.getItem("auth_token");
-    this.contractId = contractId;
-    this.url = `${wsUrl}/ws/contracts/${contractId}?token=${
-      encodeURIComponent(token || "")
-    }`;
+    
+    if (!token || token.trim() === '') {
+      throw new Error('Authentication token not found. Please log in again.');
+    }
+    
+    if (!documentId || documentId.trim() === '') {
+      throw new Error('Document ID is required for WebSocket connection.');
+    }
+    
+    this.contractId = documentId;  // Store as contractId for backward compatibility in logs
+    this.url = `${wsUrl}/ws/documents/${documentId}?token=${encodeURIComponent(token)}`;
+    
+    console.log(`📡 WebSocket service created for document ${documentId}`);
+    console.log(`🔗 WebSocket URL: ${this.url.replace(/token=[^&]+/, 'token=[REDACTED]')}`);
   }
 
   connect(): Promise<void> {
@@ -534,6 +555,16 @@ export class WebSocketService {
         `WebSocket already connecting/connected for contract ${this.contractId}`,
       );
       return Promise.resolve();
+    }
+    
+    console.log(`🔌 Attempting to connect WebSocket for contract ${this.contractId}`);
+    console.log(`📡 WebSocket URL: ${this.url.replace(/token=[^&]+/, 'token=[REDACTED]')}`);
+    
+    // Validate URL format
+    if (!this.url.startsWith('ws://') && !this.url.startsWith('wss://')) {
+      const error = new Error(`❌ Invalid WebSocket URL format: ${this.url}`);
+      console.error(error.message);
+      return Promise.reject(error);
     }
 
     return new Promise((resolve, reject) => {
@@ -560,7 +591,8 @@ export class WebSocketService {
         this.ws = new WebSocket(this.url);
 
         this.ws.onopen = () => {
-          console.log(`WebSocket connected for contract ${this.contractId}`);
+          console.log(`✅ WebSocket connected successfully for contract ${this.contractId}`);
+          console.log(`📊 Connection state: connecting=false, connected=true`);
           this.reconnectAttempts = 0;
           this.isConnecting = false;
           this.isConnected = true;
@@ -615,10 +647,9 @@ export class WebSocketService {
 
         this.ws.onclose = (event) => {
           console.log(
-            `WebSocket disconnected for contract ${this.contractId}:`,
-            event.code,
-            event.reason,
+            `🔌 WebSocket disconnected for contract ${this.contractId}: code=${event.code}, reason=${event.reason || 'No reason'}`,
           );
+          console.log(`📊 Connection state: connecting=false, connected=false`);
           this.isConnecting = false;
           this.isConnected = false;
 
@@ -634,12 +665,20 @@ export class WebSocketService {
 
         this.ws.onerror = (error) => {
           console.error(
-            `WebSocket error for contract ${this.contractId}:`,
+            `❌ WebSocket connection error for contract ${this.contractId}:`,
             error,
           );
+          console.error(`🔗 Failed URL: ${this.url.replace(/token=[^&]+/, 'token=[REDACTED]')}`);
+          console.error(`📊 Connection state: connecting=${this.isConnecting}, connected=${this.isConnected}`);
+          
           this.isConnecting = false;
           this.isConnected = false;
-          reject(error);
+          
+          // Create a more descriptive error
+          const errorMessage = error instanceof Event 
+            ? `WebSocket connection failed (Check network, authentication, and server status)`
+            : `WebSocket error: ${error}`;
+          reject(new Error(errorMessage));
         };
       } catch (error) {
         this.isConnecting = false;
@@ -761,6 +800,21 @@ export class WebSocketService {
     this.sendMessage({ type: "cancel_analysis" });
   }
 
+  // New methods for document-based WebSocket flow
+  startAnalysis(analysisOptions = {}): void {
+    this.sendMessage({ 
+      type: "start_analysis", 
+      analysis_options: analysisOptions 
+    });
+  }
+
+  retryAnalysis(retryAttempt = 1): void {
+    this.sendMessage({ 
+      type: "retry_analysis", 
+      retry_attempt: retryAttempt 
+    });
+  }
+
   isWebSocketConnected(): boolean {
     return this.isConnected && this.ws?.readyState === WebSocket.OPEN;
   }
@@ -794,34 +848,34 @@ class WebSocketConnectionManager {
     return WebSocketConnectionManager.instance;
   }
 
-  getConnection(contractId: string): WebSocketService | null {
-    return this.connections.get(contractId) || null;
+  getConnection(documentId: string): WebSocketService | null {
+    return this.connections.get(documentId) || null;
   }
 
-  createConnection(contractId: string): WebSocketService {
-    console.log(`Creating WebSocket connection for contract ${contractId}`);
+  createConnection(documentId: string): WebSocketService {
+    console.log(`🏠 Creating WebSocket connection for document ${documentId}`);
 
     // Close existing connection if any
-    const existing = this.connections.get(contractId);
+    const existing = this.connections.get(documentId);
     if (existing) {
-      console.log(`Closing existing connection for contract ${contractId}`);
+      console.log(`🏠 Closing existing connection for document ${documentId}`);
       existing.disconnect();
-      this.connections.delete(contractId);
+      this.connections.delete(documentId);
     }
 
-    const connection = new WebSocketService(contractId);
-    this.connections.set(contractId, connection);
+    const connection = new WebSocketService(documentId);
+    this.connections.set(documentId, connection);
     console.log(
-      `WebSocket connection created and registered for contract ${contractId}`,
+      `✅ WebSocket connection created and registered for document ${documentId}`,
     );
     return connection;
   }
 
-  removeConnection(contractId: string): void {
-    const connection = this.connections.get(contractId);
+  removeConnection(documentId: string): void {
+    const connection = this.connections.get(documentId);
     if (connection) {
       connection.disconnect();
-      this.connections.delete(contractId);
+      this.connections.delete(documentId);
     }
   }
 
@@ -833,8 +887,8 @@ class WebSocketConnectionManager {
   }
 
   getActiveConnections(): string[] {
-    return Array.from(this.connections.keys()).filter((contractId) => {
-      const connection = this.connections.get(contractId);
+    return Array.from(this.connections.keys()).filter((documentId) => {
+      const connection = this.connections.get(documentId);
       return connection?.isWebSocketConnected();
     });
   }
