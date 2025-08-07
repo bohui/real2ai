@@ -107,7 +107,6 @@ const MobileOptimizedLoading: React.FC<MobileOptimizedLoadingProps> = ({
             {steps.map((step, index) => {
               const isCompleted = index < currentStepIndex
               const isCurrent = index === currentStepIndex
-              const isUpcoming = index > currentStepIndex
 
               return (
                 <motion.div

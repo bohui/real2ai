@@ -6,7 +6,6 @@ import {
   FileText,
   AlertTriangle,
   CheckCircle,
-  Calendar,
   Download,
   Filter,
 } from "lucide-react";
@@ -14,12 +13,10 @@ import {
 import Button from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { useAnalysisStore } from "@/store/analysisStore";
-import { useAuthStore } from "@/store/authStore";
 import { cn } from "@/utils";
 
 const ReportsPage: React.FC = () => {
   const { recentAnalyses } = useAnalysisStore();
-  const { user } = useAuthStore();
 
   // Calculate summary statistics
   const totalAnalyses = recentAnalyses.length;
@@ -228,7 +225,7 @@ const ReportsPage: React.FC = () => {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {recentAnalyses.slice(0, 5).map((analysis, index) => (
+                  {recentAnalyses.slice(0, 5).map((analysis) => (
                     <div
                       key={analysis.contract_id}
                       className="flex items-center gap-3"

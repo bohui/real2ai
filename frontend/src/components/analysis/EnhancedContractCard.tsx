@@ -2,8 +2,6 @@ import React from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { 
-  CheckCircle, 
-  Clock, 
   AlertTriangle, 
   TrendingUp, 
   FileText,
@@ -18,7 +16,6 @@ import Button from '@/components/ui/Button'
 import { Card, CardContent } from '@/components/ui/Card'
 import StatusBadge from '@/components/ui/StatusBadge'
 import RiskIndicator from '@/components/ui/RiskIndicator'
-import { cn } from '@/utils'
 import { ContractAnalysisResult, AustralianState } from '@/types'
 
 interface EnhancedContractCardProps {
@@ -94,11 +91,6 @@ const EnhancedContractCard: React.FC<EnhancedContractCardProps> = ({
     return stateNames[state] || state
   }
 
-  const getRiskLevel = (score: number) => {
-    if (score >= 7) return { level: 'High Risk', color: 'danger' }
-    if (score >= 5) return { level: 'Medium Risk', color: 'warning' }
-    return { level: 'Low Risk', color: 'success' }
-  }
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-AU', {
@@ -110,7 +102,6 @@ const EnhancedContractCard: React.FC<EnhancedContractCardProps> = ({
   }
 
   const contractInfo = getContractInfo()
-  const risk = getRiskLevel(analysis.executive_summary.overall_risk_score)
   const isCompleted = analysis.analysis_status === 'completed'
 
   return (

@@ -7,7 +7,6 @@ import App from '../App'
 import {
   renderApp,
   configureUnauthenticatedState,
-  configureAuthenticatedState,
   mockUIStore
 } from '@/test/utils'
 

@@ -10,22 +10,16 @@ import {
   X,
   CheckCircle,
   AlertCircle,
-  Eye,
-  Trash2,
 } from "lucide-react";
 
 import Button from "@/components/ui/Button";
 import Select from "@/components/ui/Select";
-import Input from "@/components/ui/Input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { apiService } from "@/services/api";
 import { useAuthStore } from "@/store/authStore";
 import { useUIStore } from "@/store/uiStore";
-import { ContractType, AustralianState } from "@/types";
 import {
   formatFileSize,
-  validateFileType,
-  validateFileSize,
   australianStates,
   cn,
 } from "@/utils";
@@ -89,7 +83,6 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({
     control,
     handleSubmit,
     formState: { errors },
-    watch,
   } = useForm<UploadFormData>({
     resolver: zodResolver(uploadSchema),
     defaultValues: {

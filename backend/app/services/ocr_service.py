@@ -515,7 +515,7 @@ class OCRService:
 
 
 # Global OCR service instance
-_ocr_service = None
+_ocr_service: Optional["OCRService"] = None
 
 
 async def get_ocr_service() -> OCRService:

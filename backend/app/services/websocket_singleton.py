@@ -5,10 +5,12 @@ This ensures WebSocket connections made in the router can receive messages
 from background tasks (Celery workers).
 """
 
+from typing import Optional
+
 from app.services.websocket_service import WebSocketManager
 
 # Global singleton instance
-_websocket_manager_instance = None
+_websocket_manager_instance: Optional[WebSocketManager] = None
 
 
 def get_websocket_manager() -> WebSocketManager:

@@ -5,8 +5,6 @@ import {
   Bell,
   Shield,
   CreditCard,
-  MapPin,
-  Globe,
   Save,
   Eye,
   EyeOff,

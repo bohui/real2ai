@@ -224,21 +224,6 @@ class ApiService {
     const apiData = response.data;
     const analysisResult = apiData.analysis_result || {};
 
-    // Create executive summary from available data
-    const executiveSummary = {
-      overall_risk_score: analysisResult.risk_assessment?.overall_risk_score ||
-        apiData.risk_score || 0,
-      compliance_status:
-        (analysisResult.compliance_check?.state_compliance
-          ? "compliant"
-          : "non-compliant") as "compliant" | "non-compliant",
-      total_recommendations: analysisResult.recommendations?.length || 0,
-      critical_issues:
-        analysisResult.recommendations?.filter((r: any) =>
-          r.priority === "critical"
-        )?.length || 0,
-      confidence_level: analysisResult.overall_confidence || 0.8,
-    };
 
     // Transform to match ContractAnalysisResult interface
     const transformedResult: ContractAnalysisResult = {
@@ -746,7 +731,7 @@ class WebSocketConnectionManager {
   }
 
   disconnectAll(): void {
-    for (const [contractId, connection] of this.connections) {
+    for (const [, connection] of this.connections) {
       connection.disconnect();
     }
     this.connections.clear();

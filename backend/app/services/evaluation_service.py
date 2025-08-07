@@ -876,7 +876,7 @@ class EvaluationOrchestrator:
 
 
 # Global orchestrator instance
-_orchestrator = None
+_orchestrator: Optional["EvaluationOrchestrator"] = None
 
 async def get_evaluation_orchestrator() -> EvaluationOrchestrator:
     """Get the global evaluation orchestrator instance."""

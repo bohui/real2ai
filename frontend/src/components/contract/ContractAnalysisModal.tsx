@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, FileText, AlertCircle, CheckCircle } from 'lucide-react';
+import { X, AlertCircle, CheckCircle } from 'lucide-react';
 import { ContractAnalysisProgress } from './ContractAnalysisProgress';
 
 export interface ContractAnalysisModalProps {

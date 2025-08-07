@@ -120,8 +120,6 @@ const ComplianceCheck: React.FC<ComplianceCheckProps> = ({ analysis, className }
         <CardContent>
           <div className="space-y-4">
             {complianceItems.map((item, index) => {
-              const IconComponent = item.icon
-              
               return (
                 <motion.div
                   key={item.key}

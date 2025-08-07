@@ -4,12 +4,6 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { 
-  screen, 
-  waitFor, 
-  fireEvent, 
-  act,
-  mockUser, 
-  mockApiService, 
   renderApp,
   configureUnauthenticatedState,
   configureAuthenticatedState,
@@ -48,7 +42,7 @@ describe('App Component', () => {
       { name: 'onboarding', config: configureOnboardingState }
     ]
 
-    states.forEach(({ name, config }) => {
+    states.forEach(({ config }) => {
       config()
       const { container, unmount } = renderApp(<App />)
       

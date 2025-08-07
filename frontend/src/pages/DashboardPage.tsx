@@ -24,66 +24,11 @@ const DashboardPage: React.FC = () => {
   const { recentAnalyses } = useAnalysisStore();
   const { user } = useAuthStore();
 
-  // Helper function to get contract display name
-  const getContractDisplayName = (analysis: any) => {
-    // Try to extract meaningful name from contract terms or filename
-    if (analysis.contract_terms?.property_address) {
-      return `Property Contract - ${analysis.contract_terms.property_address}`;
-    }
-    if (
-      analysis.contract_terms?.parties?.buyer &&
-      analysis.contract_terms?.parties?.seller
-    ) {
-      return `${analysis.contract_terms.parties.buyer} ← ${analysis.contract_terms.parties.seller}`;
-    }
-    if (analysis.contract_terms?.contract_type) {
-      const typeMap: Record<string, string> = {
-        purchase_agreement: "Purchase Agreement",
-        lease_agreement: "Lease Agreement",
-        off_plan: "Off-Plan Purchase",
-        auction: "Auction Contract",
-      };
-      return (
-        typeMap[analysis.contract_terms.contract_type] || "Contract Analysis"
-      );
-    }
-    return "Contract Analysis";
-  };
 
-  // Helper function to get risk level text
-  const getRiskLevelText = (score: number) => {
-    if (score >= 7) return "High Risk";
-    if (score >= 5) return "Medium Risk";
-    return "Low Risk";
-  };
 
-  // Helper function to get state context
-  const getStateContext = (state: string) => {
-    const stateNames: Record<string, string> = {
-      NSW: "New South Wales",
-      VIC: "Victoria",
-      QLD: "Queensland",
-      SA: "South Australia",
-      WA: "Western Australia",
-      TAS: "Tasmania",
-      NT: "Northern Territory",
-      ACT: "Australian Capital Territory",
-    };
-    return stateNames[state] || state;
-  };
 
   // Calculate dashboard stats
   const totalAnalyses = recentAnalyses.length;
-  const completedAnalyses = recentAnalyses.filter(
-    (a) => a.analysis_status === "completed"
-  ).length;
-  const averageRiskScore =
-    recentAnalyses.length > 0
-      ? recentAnalyses.reduce(
-          (sum, a) => sum + a.executive_summary.overall_risk_score,
-          0
-        ) / recentAnalyses.length
-      : 0;
   const highRiskCount = recentAnalyses.filter(
     (a) => a.executive_summary.overall_risk_score >= 7
   ).length;
@@ -136,12 +81,6 @@ const DashboardPage: React.FC = () => {
     .sort((a, b) => b.valueScore - a.valueScore)
     .slice(0, 3); // Top 3 best value properties
 
-  const bestValueCount = bestValueProperties.length;
-  const averageValueScore =
-    bestValueProperties.length > 0
-      ? bestValueProperties.reduce((sum, p) => sum + p.valueScore, 0) /
-        bestValueProperties.length
-      : 0;
 
   // Calculate minimal risk properties (properties with lowest risk scores)
   const minimalRiskProperties = recentAnalyses

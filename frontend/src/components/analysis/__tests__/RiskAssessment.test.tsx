@@ -5,7 +5,6 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@/test/utils'
 import { RiskAssessment } from '../RiskAssessment'
-import { mockAnalysis } from '@/test/utils'
 import { RiskLevel } from '@/types'
 
 describe('RiskAssessment Component', () => {

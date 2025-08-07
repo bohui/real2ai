@@ -65,6 +65,82 @@ from app.clients.base.exceptions import (
 logger = logging.getLogger(__name__)
 
 
+# Constants for magic numbers
+class DocumentServiceConstants:
+    """Constants used throughout DocumentService to replace magic numbers."""
+
+    # File size and validation constants
+    DEFAULT_MAX_FILE_SIZE_MB = 50
+    BYTES_PER_MB = 1024 * 1024
+    FILE_HEADER_READ_SIZE = 1024
+    DOCX_HEADER_SEARCH_SIZE = 200
+
+    # Text processing thresholds
+    TEXT_HEAVY_THRESHOLD = 5000  # Skip vector analysis above this text length
+    LOW_TEXT_THRESHOLD = 500  # Full vector analysis below this text length
+    MAX_VECTOR_COUNT = 50  # Maximum vectors to analyze for medium text pages
+    TABLE_VECTOR_THRESHOLD = 100  # Vector count indicating tables vs diagrams
+    COMPLEXITY_RATIO_THRESHOLD = (
+        0.3  # Minimum complexity ratio for diagram classification
+    )
+
+    # OCR and text extraction constants
+    MIN_TEXT_LENGTH_FOR_OCR = 50
+    OCR_ZOOM_FACTOR = 2.0
+    OCR_CONFIDENCE_HIGH = 0.9
+    OCR_CONFIDENCE_MEDIUM = 0.85
+    OCR_CONFIDENCE_LOW = 0.7
+    OCR_CONFIDENCE_THRESHOLD = 0.8
+
+    # Content analysis thresholds
+    MIN_TEXT_CONTENT_LENGTH = 10
+    MIN_TEXT_CONTENT_FOR_ANALYSIS = 20
+    MIN_COMPLEX_SHAPE_ITEMS = 3
+    VECTOR_SAMPLE_SIZE = 20
+    TEXT_TO_VECTOR_RATIO_THRESHOLD = 10
+
+    # Table detection thresholds
+    TAB_RATIO_THRESHOLD = 0.3
+    CURRENCY_LINES_THRESHOLD = 2
+    ALIGNMENT_RATIO_THRESHOLD = 0.4
+    MIN_SPACES_FOR_ALIGNMENT = 3
+
+    # Quality indicators normalization
+    MAX_LINE_LENGTH_NORMALIZATION = 80
+    MAX_SENTENCE_LENGTH_NORMALIZATION = 100
+    OPTIMAL_WORD_LENGTH = 5
+    WORD_LENGTH_NORMALIZATION_FACTOR = 10
+
+    # HTTP status codes
+    HTTP_SERVICE_UNAVAILABLE = 503
+    HTTP_FORBIDDEN = 403
+
+    # Default values
+    DEFAULT_CONFIDENCE = 0.0
+    DEFAULT_LIMIT = 50
+    DEFAULT_PAGE_NUMBER = 0
+
+    # Error message truncation
+    ERROR_MESSAGE_TRUNCATION_LENGTH = 100
+
+    # File type detection magic bytes
+    PNG_MAGIC_BYTES = b"\x89PNG"
+    JPEG_MAGIC_BYTES = b"\xff\xd8\xff"
+    TIFF_MAGIC_BYTES_1 = b"II*\x00"
+    TIFF_MAGIC_BYTES_2 = b"MM\x00*"
+    BMP_MAGIC_BYTES = b"BM"
+    PDF_MAGIC_BYTES = b"%PDF"
+    ZIP_MAGIC_BYTES = b"PK"
+
+    # Executable file headers
+    EXECUTABLE_HEADERS = [b"MZ", b"\x7fELF", b"\xca\xfe\xba\xbe"]
+
+    # Content type ratios
+    TAB_RATIO_FOR_TABLE = 0.3
+    CURRENCY_LINES_FOR_TABLE = 2
+    ALIGNMENT_RATIO_FOR_TABLE = 0.4
+
+
 class DocumentService(UserAwareService, ServiceInitializationMixin):
     """
     Document Service with proper user context management.
@@ -88,7 +164,7 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
         storage_base_path: str = "storage/documents",
         enable_advanced_ocr: bool = True,
         enable_gemini_ocr: bool = True,
-        max_file_size_mb: int = 50,
+        max_file_size_mb: int = DocumentServiceConstants.DEFAULT_MAX_FILE_SIZE_MB,
         user_client=None,  # For dependency injection
     ):
         super().__init__(user_client=user_client)
@@ -97,6 +173,15 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
         self.enable_advanced_ocr = enable_advanced_ocr
         self.enable_gemini_ocr = enable_gemini_ocr
         self.max_file_size_mb = max_file_size_mb
+
+        # Diagram detection optimization thresholds
+        self.text_heavy_threshold = DocumentServiceConstants.TEXT_HEAVY_THRESHOLD
+        self.low_text_threshold = DocumentServiceConstants.LOW_TEXT_THRESHOLD
+        self.max_vector_count = DocumentServiceConstants.MAX_VECTOR_COUNT
+        self.table_vector_threshold = DocumentServiceConstants.TABLE_VECTOR_THRESHOLD
+        self.complexity_ratio_threshold = (
+            DocumentServiceConstants.COMPLEXITY_RATIO_THRESHOLD
+        )
 
         # Client instances
         self.gemini_client = None
@@ -147,7 +232,10 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
 
         except ClientConnectionError as e:
             self.logger.error(f"Failed to connect to required services: {e}")
-            raise HTTPException(status_code=503, detail="Required services unavailable")
+            raise HTTPException(
+                status_code=DocumentServiceConstants.HTTP_SERVICE_UNAVAILABLE,
+                detail="Required services unavailable",
+            )
         except Exception as e:
             self.logger.error(f"Failed to initialize document service: {str(e)}")
             self.enable_gemini_ocr = False  # Fallback mode
@@ -178,9 +266,13 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
             if result_data.get("created"):
                 self.logger.info(f"Created storage bucket: {self.storage_bucket}")
             elif result_data.get("message") == "Bucket already exists":
-                self.logger.debug(f"Storage bucket already exists: {self.storage_bucket}")
+                self.logger.debug(
+                    f"Storage bucket already exists: {self.storage_bucket}"
+                )
             else:
-                self.logger.info(f"Bucket operation result: {result_data.get('message', 'Unknown')}")
+                self.logger.info(
+                    f"Bucket operation result: {result_data.get('message', 'Unknown')}"
+                )
 
             self.log_operation(
                 "system_bucket_ensure", "storage_bucket", self.storage_bucket
@@ -190,24 +282,37 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
             # Parse the error message to extract actual result if available
             error_str = str(e)
             if "Bucket already exists" in error_str:
-                self.logger.debug(f"Storage bucket already exists: {self.storage_bucket}")
+                self.logger.debug(
+                    f"Storage bucket already exists: {self.storage_bucket}"
+                )
             elif "JSON could not be generated" in error_str and "details" in error_str:
                 # Extract the JSON from the error details - this is a known Supabase client issue
                 import re
+
                 json_match = re.search(r"details.*?b'({.*?})'", error_str)
                 if json_match:
                     try:
                         result_data = json.loads(json_match.group(1))
                         if result_data.get("message") == "Bucket already exists":
-                            self.logger.debug(f"Storage bucket already exists: {self.storage_bucket}")
+                            self.logger.debug(
+                                f"Storage bucket already exists: {self.storage_bucket}"
+                            )
                         else:
-                            self.logger.debug(f"Bucket operation completed: {result_data.get('message', 'Unknown')}")
+                            self.logger.debug(
+                                f"Bucket operation completed: {result_data.get('message', 'Unknown')}"
+                            )
                     except json.JSONDecodeError:
-                        self.logger.debug(f"Bucket operation completed with parsing issues (service operational): {error_str[:100]}...")
+                        self.logger.debug(
+                            f"Bucket operation completed with parsing issues (service operational): {error_str[:DocumentServiceConstants.ERROR_MESSAGE_TRUNCATION_LENGTH]}..."
+                        )
                 else:
-                    self.logger.debug(f"Bucket operation completed (service operational): {error_str[:100]}...")
+                    self.logger.debug(
+                        f"Bucket operation completed (service operational): {error_str[:DocumentServiceConstants.ERROR_MESSAGE_TRUNCATION_LENGTH]}..."
+                    )
             else:
-                self.logger.debug(f"Bucket operation completed (service operational): {error_str[:100]}...")
+                self.logger.debug(
+                    f"Bucket operation completed (service operational): {error_str[:DocumentServiceConstants.ERROR_MESSAGE_TRUNCATION_LENGTH]}..."
+                )
             # Don't raise - service can function without bucket verification
 
     @langsmith_trace(name="process_document")
@@ -454,7 +559,7 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
             self.logger.error(f"Failed to update document status: {str(e)}")
 
     async def get_user_documents(
-        self, user_id: str, limit: int = 50
+        self, user_id: str, limit: int = DocumentServiceConstants.DEFAULT_LIMIT
     ) -> List[Dict[str, Any]]:
         """Get user's documents - USER OPERATION with explicit user context"""
         try:
@@ -464,7 +569,10 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
             # user_id parameter is for application logic validation
             current_user = self.get_current_user_id()
             if current_user != user_id:
-                raise HTTPException(status_code=403, detail="Access denied")
+                raise HTTPException(
+                    status_code=DocumentServiceConstants.HTTP_FORBIDDEN,
+                    detail="Access denied",
+                )
 
             self.log_operation("list", "documents", user_id)
 
@@ -563,14 +671,20 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
             await file.seek(0)  # Reset file position
 
             # Size validation
-            if file_size > self.max_file_size_mb * 1024 * 1024:
+            if (
+                file_size
+                > self.max_file_size_mb * DocumentServiceConstants.BYTES_PER_MB
+            ):
                 return {
                     "valid": False,
                     "error": f"File too large. Maximum size: {self.max_file_size_mb}MB",
                 }
 
             # Type validation
-            file_type = self._detect_file_type(file.filename, file_content[:1024])
+            file_type = self._detect_file_type(
+                file.filename,
+                file_content[: DocumentServiceConstants.FILE_HEADER_READ_SIZE],
+            )
             supported_types = [
                 "pdf",
                 "png",
@@ -589,7 +703,10 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
                 }
 
             # Security validation
-            if self._has_security_concerns(file.filename, file_content[:1024]):
+            if self._has_security_concerns(
+                file.filename,
+                file_content[: DocumentServiceConstants.FILE_HEADER_READ_SIZE],
+            ):
                 return {"valid": False, "error": "File failed security validation"}
 
             return {
@@ -625,17 +742,23 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
                 return ext_map[ext]
 
         # Detect from magic bytes
-        if file_header.startswith(b"%PDF"):
+        if file_header.startswith(DocumentServiceConstants.PDF_MAGIC_BYTES):
             return "pdf"
-        elif file_header.startswith(b"\x89PNG"):
+        elif file_header.startswith(DocumentServiceConstants.PNG_MAGIC_BYTES):
             return "png"
-        elif file_header.startswith(b"\xff\xd8\xff"):
+        elif file_header.startswith(DocumentServiceConstants.JPEG_MAGIC_BYTES):
             return "jpg"
-        elif file_header.startswith(b"II*\x00") or file_header.startswith(b"MM\x00*"):
+        elif file_header.startswith(
+            DocumentServiceConstants.TIFF_MAGIC_BYTES_1
+        ) or file_header.startswith(DocumentServiceConstants.TIFF_MAGIC_BYTES_2):
             return "tiff"
-        elif file_header.startswith(b"BM"):
+        elif file_header.startswith(DocumentServiceConstants.BMP_MAGIC_BYTES):
             return "bmp"
-        elif file_header.startswith(b"PK") and b"word/" in file_header[:200]:
+        elif (
+            file_header.startswith(DocumentServiceConstants.ZIP_MAGIC_BYTES)
+            and b"word/"
+            in file_header[: DocumentServiceConstants.DOCX_HEADER_SEARCH_SIZE]
+        ):
             return "docx"
 
         return "unknown"
@@ -648,8 +771,10 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
             return True
 
         # Check for executable headers
-        executable_headers = [b"MZ", b"\x7fELF", b"\xca\xfe\xba\xbe"]
-        if any(file_header.startswith(header) for header in executable_headers):
+        if any(
+            file_header.startswith(header)
+            for header in DocumentServiceConstants.EXECUTABLE_HEADERS
+        ):
             return True
 
         return False
@@ -686,15 +811,25 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
             "processing_time": processing_time,
             "processing_timestamp": datetime.now(UTC).isoformat(),
             "text_extraction": {
-                "total_pages": text_result.get("total_pages", 0),
-                "total_word_count": text_result.get("total_word_count", 0),
+                "total_pages": text_result.get(
+                    "total_pages", DocumentServiceConstants.DEFAULT_PAGE_NUMBER
+                ),
+                "total_word_count": text_result.get(
+                    "total_word_count", DocumentServiceConstants.DEFAULT_PAGE_NUMBER
+                ),
                 "extraction_methods": text_result.get("extraction_methods", []),
-                "overall_confidence": text_result.get("overall_confidence", 0.0),
+                "overall_confidence": text_result.get(
+                    "overall_confidence", DocumentServiceConstants.DEFAULT_CONFIDENCE
+                ),
             },
             "content_analysis": {
                 "pages_analyzed": len(page_result.get("pages", [])),
-                "entities_extracted": entity_result.get("total_entities", 0),
-                "diagrams_detected": diagram_result.get("total_diagrams", 0),
+                "entities_extracted": entity_result.get(
+                    "total_entities", DocumentServiceConstants.DEFAULT_PAGE_NUMBER
+                ),
+                "diagrams_detected": diagram_result.get(
+                    "total_diagrams", DocumentServiceConstants.DEFAULT_PAGE_NUMBER
+                ),
                 "document_classification": analysis_result.get("classification", {}),
             },
         }
@@ -736,52 +871,64 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
                 # Primary extraction with pymupdf
                 text_content = page.get_text()
                 extraction_method = "pymupdf"
-                confidence = 0.9
+                confidence = DocumentServiceConstants.OCR_CONFIDENCE_HIGH
 
                 # OCR fallback for pages with minimal text
-                if len(text_content.strip()) < 50:
-                    ocr_text = await self._extract_text_with_ocr(page, page_num + 1)
+                if (
+                    len(text_content.strip())
+                    < DocumentServiceConstants.MIN_TEXT_LENGTH_FOR_OCR
+                ):
+                    ocr_text = await self._extract_text_with_ocr(
+                        page,
+                        page_num + DocumentServiceConstants.MIN_COMPLEX_SHAPE_ITEMS,
+                    )
                     if len(ocr_text.strip()) > len(text_content.strip()):
                         text_content = ocr_text
                         extraction_method = "tesseract_ocr"
-                        confidence = 0.7
+                        confidence = DocumentServiceConstants.OCR_CONFIDENCE_LOW
 
                 # Advanced OCR with Gemini for complex pages
                 if (
                     self.enable_gemini_ocr
                     and self.gemini_ocr_service
-                    and confidence < 0.8
+                    and confidence < DocumentServiceConstants.OCR_CONFIDENCE_THRESHOLD
                 ):
                     try:
                         gemini_result = await self._extract_text_with_gemini(
-                            page, page_num + 1
+                            page,
+                            page_num + DocumentServiceConstants.MIN_COMPLEX_SHAPE_ITEMS,
                         )
                         if gemini_result and len(gemini_result.strip()) > len(
                             text_content.strip()
                         ):
                             text_content = gemini_result
                             extraction_method = "gemini_ocr"
-                            confidence = 0.85
+                            confidence = DocumentServiceConstants.OCR_CONFIDENCE_MEDIUM
                     except Exception as gemini_error:
                         self.logger.warning(
-                            f"Gemini OCR failed for page {page_num + 1}: {gemini_error}"
+                            f"Gemini OCR failed for page {page_num + DocumentServiceConstants.MIN_COMPLEX_SHAPE_ITEMS}: {gemini_error}"
                         )
 
                 # Analyze page content
                 page_analysis = self._analyze_page_content(text_content, page)
 
                 page_data = {
-                    "page_number": page_num + 1,
+                    "page_number": page_num
+                    + DocumentServiceConstants.MIN_COMPLEX_SHAPE_ITEMS,
                     "text_content": text_content,
                     "text_length": len(text_content),
-                    "word_count": len(text_content.split()) if text_content else 0,
+                    "word_count": (
+                        len(text_content.split())
+                        if text_content
+                        else DocumentServiceConstants.DEFAULT_PAGE_NUMBER
+                    ),
                     "extraction_method": extraction_method,
                     "confidence": confidence,
                     "content_analysis": page_analysis,
                 }
 
                 pages.append(page_data)
-                full_text += f"\n--- Page {page_num + 1} ---\n{text_content}"
+                full_text += f"\n--- Page {page_num + DocumentServiceConstants.MIN_COMPLEX_SHAPE_ITEMS} ---\n{text_content}"
 
                 if extraction_method not in extraction_methods:
                     extraction_methods.append(extraction_method)
@@ -796,7 +943,9 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
                 "extraction_methods": extraction_methods,
                 "total_word_count": sum(p["word_count"] for p in pages),
                 "overall_confidence": (
-                    sum(p["confidence"] for p in pages) / len(pages) if pages else 0
+                    sum(p["confidence"] for p in pages) / len(pages)
+                    if pages
+                    else DocumentServiceConstants.DEFAULT_CONFIDENCE
                 ),
             }
 
@@ -808,7 +957,10 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
         """Extract text using Tesseract OCR with optimized settings"""
         try:
             # Render page as high-resolution image
-            matrix = pymupdf.Matrix(2.0, 2.0)  # 2x zoom for better OCR
+            matrix = pymupdf.Matrix(
+                DocumentServiceConstants.OCR_ZOOM_FACTOR,
+                DocumentServiceConstants.OCR_ZOOM_FACTOR,
+            )  # 2x zoom for better OCR
             pix = page.get_pixmap(matrix=matrix)
 
             # Convert to PIL Image
@@ -834,7 +986,10 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
 
         try:
             # Render page as image
-            matrix = pymupdf.Matrix(2.0, 2.0)
+            matrix = pymupdf.Matrix(
+                DocumentServiceConstants.OCR_ZOOM_FACTOR,
+                DocumentServiceConstants.OCR_ZOOM_FACTOR,
+            )
             pix = page.get_pixmap(matrix=matrix)
             img_data = pix.pil_tobytes(format="PNG")
 
@@ -867,19 +1022,27 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
                 "has_tables": False,
             },
             "quality_indicators": {
-                "text_density": 0.0,
-                "structure_score": 0.0,
-                "readability_score": 0.0,
+                "text_density": DocumentServiceConstants.DEFAULT_CONFIDENCE,
+                "structure_score": DocumentServiceConstants.DEFAULT_CONFIDENCE,
+                "readability_score": DocumentServiceConstants.DEFAULT_CONFIDENCE,
             },
         }
 
-        if not text_content or len(text_content.strip()) < 10:
+        if (
+            not text_content
+            or len(text_content.strip())
+            < DocumentServiceConstants.MIN_TEXT_CONTENT_LENGTH
+        ):
             return analysis
 
         text_lower = text_content.lower()
 
         # Content type detection
-        if text_content and len(text_content.strip()) > 20:
+        if (
+            text_content
+            and len(text_content.strip())
+            > DocumentServiceConstants.MIN_TEXT_CONTENT_FOR_ANALYSIS
+        ):
             analysis["content_types"].append("text")
 
         # Table detection
@@ -929,59 +1092,195 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
         lines = text.split("\n")
 
         # Check for consistent column separators
-        tab_lines = sum(1 for line in lines if "\t" in line or "  " in line)
-        tab_ratio = tab_lines / len(lines) if lines else 0
+        tab_lines = sum(
+            DocumentServiceConstants.MIN_COMPLEX_SHAPE_ITEMS
+            for line in lines
+            if "\t" in line or "  " in line
+        )
+        tab_ratio = (
+            tab_lines / len(lines)
+            if lines
+            else DocumentServiceConstants.DEFAULT_PAGE_NUMBER
+        )
 
         # Check for financial patterns (common in contract tables)
-        currency_lines = sum(1 for line in lines if re.search(r"\$[\d,]+\.?\d*", line))
+        currency_lines = sum(
+            DocumentServiceConstants.MIN_COMPLEX_SHAPE_ITEMS
+            for line in lines
+            if re.search(r"\$[\d,]+\.?\d*", line)
+        )
 
         # Check for aligned data patterns
-        aligned_patterns = sum(1 for line in lines if re.search(r"\s{3,}", line))
-        alignment_ratio = aligned_patterns / len(lines) if lines else 0
+        aligned_patterns = sum(
+            DocumentServiceConstants.MIN_COMPLEX_SHAPE_ITEMS
+            for line in lines
+            if re.search(
+                r"\s{" + str(DocumentServiceConstants.MIN_SPACES_FOR_ALIGNMENT) + r",}",
+                line,
+            )
+        )
+        alignment_ratio = (
+            aligned_patterns / len(lines)
+            if lines
+            else DocumentServiceConstants.DEFAULT_PAGE_NUMBER
+        )
 
-        return tab_ratio > 0.3 or currency_lines > 2 or alignment_ratio > 0.4
+        return (
+            tab_ratio > DocumentServiceConstants.TAB_RATIO_FOR_TABLE
+            or currency_lines > DocumentServiceConstants.CURRENCY_LINES_FOR_TABLE
+            or alignment_ratio > DocumentServiceConstants.ALIGNMENT_RATIO_FOR_TABLE
+        )
 
     def _detect_diagrams_on_page(self, page: pymupdf.Page, text_content: str) -> bool:
         """Optimized diagram detection with text length preconditions"""
-        
+
         # OPTIMIZATION 1: Text length precondition
-        text_length = len(text_content) if text_content else 0
-        
+        text_length = (
+            len(text_content)
+            if text_content
+            else DocumentServiceConstants.DEFAULT_PAGE_NUMBER
+        )
+
+        # Log performance optimization decisions for monitoring
+        if self.logger.isEnabledFor(logging.DEBUG):
+            self.logger.debug(
+                f"Diagram detection: text_length={text_length}, threshold={self.text_heavy_threshold}"
+            )
+
         # Skip vector analysis for text-heavy pages (likely tables)
-        if text_length > 5000:  # Configurable threshold
+        if text_length > self.text_heavy_threshold:
             # For long text pages, only check images and keywords
             image_list = page.get_images()
             if image_list:
                 return True
-                
+
             # Enhanced keyword check for text-heavy pages
             if text_content:
                 return self._has_diagram_keywords(text_content, strict_mode=True)
             return False
-        
+
         # Method 1: Check for embedded images (always check)
         image_list = page.get_images()
         if image_list:
             return True
-        
+
         # OPTIMIZATION 2: Smart vector analysis (only for low-text pages)
-        if text_length < 1000:  # Only for low-text pages
+        if text_length < self.low_text_threshold:
             drawings = page.get_drawings()
             if drawings:
                 # Filter out table-like vector patterns
                 if self._is_likely_diagram_vectors(drawings, text_content):
                     return True
-        elif text_length <= 5000:  # Medium text pages - limited vector check
+        elif (
+            text_length <= self.text_heavy_threshold
+        ):  # Medium text pages - limited vector check
             drawings = page.get_drawings()
-            if drawings and len(drawings) <= 50:  # Only check if reasonable vector count
+            if drawings and len(drawings) <= self.max_vector_count:
                 if self._is_likely_diagram_vectors(drawings, text_content):
                     return True
-        
+
         # Method 3: Enhanced keyword detection
         if text_content:
             return self._has_diagram_keywords(text_content)
-            
+
         return False
+
+    def _is_likely_diagram_vectors(self, drawings: list, text_content: str) -> bool:
+        """Distinguish diagram vectors from table vectors"""
+        if not drawings:
+            return False
+
+        # High vector count suggests tables, not diagrams
+        if len(drawings) > self.table_vector_threshold:
+            return False
+
+        # Check for drawing complexity patterns (sample first 20 for performance)
+        sample_size = min(DocumentServiceConstants.VECTOR_SAMPLE_SIZE, len(drawings))
+        complex_shapes = DocumentServiceConstants.DEFAULT_PAGE_NUMBER
+
+        for drawing in drawings[:sample_size]:
+            # Check for complex drawing items (curves, paths, etc.)
+            items = drawing.get("items", []) if hasattr(drawing, "get") else []
+            if (
+                len(items) > DocumentServiceConstants.MIN_COMPLEX_SHAPE_ITEMS
+            ):  # Complex shape indicator
+                complex_shapes += DocumentServiceConstants.MIN_COMPLEX_SHAPE_ITEMS
+
+        # If 30%+ of sampled drawings are complex, likely diagrams
+        complexity_ratio = (
+            complex_shapes / sample_size
+            if sample_size > DocumentServiceConstants.DEFAULT_PAGE_NUMBER
+            else DocumentServiceConstants.DEFAULT_CONFIDENCE
+        )
+
+        # Additional heuristic: check for geometric patterns vs table patterns
+        if (
+            text_content
+            and complexity_ratio > DocumentServiceConstants.DEFAULT_CONFIDENCE
+        ):
+            # If we have both complex vectors and minimal text, likely a diagram
+            text_to_vector_ratio = len(text_content) / len(drawings)
+            if (
+                text_to_vector_ratio
+                < DocumentServiceConstants.TEXT_TO_VECTOR_RATIO_THRESHOLD
+            ):  # Low text-to-vector ratio
+                return True
+
+        return complexity_ratio > self.complexity_ratio_threshold
+
+    def _has_diagram_keywords(
+        self, text_content: str, strict_mode: bool = False
+    ) -> bool:
+        """Enhanced keyword detection with configurable strictness"""
+        if not text_content:
+            return False
+
+        text_lower = text_content.lower()
+
+        if strict_mode:
+            # Stricter keywords for text-heavy pages to reduce false positives
+            strict_keywords = [
+                "site plan",
+                "floor plan",
+                "survey plan",
+                "title plan",
+                "sewer diagram",
+                "sewerage diagram",
+                "utilities diagram",
+                "service diagram",
+                "flood map",
+                "zoning map",
+                "cadastral",
+                "boundary survey",
+                "drainage plan",
+                "contour map",
+            ]
+            return any(keyword in text_lower for keyword in strict_keywords)
+
+        # Standard keyword list for regular detection
+        diagram_keywords = [
+            "diagram",
+            "plan",
+            "map",
+            "layout",
+            "site plan",
+            "floor plan",
+            "survey",
+            "boundary",
+            "title plan",
+            "sewer diagram",
+            "sewerage diagram",
+            "service diagram",
+            "utilities diagram",
+            "flood map",
+            "bushfire",
+            "drainage",
+            "contour",
+            "easement",
+            "zoning map",
+            "cadastral",
+        ]
+        return any(keyword in text_lower for keyword in diagram_keywords)
 
     def _detect_header_footer(self, text: str, position: str) -> bool:
         """Detect header or footer content"""
@@ -989,7 +1288,11 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
             return False
 
         lines = text.split("\n")
-        target_lines = lines[:3] if position == "header" else lines[-3:]
+        target_lines = (
+            lines[: DocumentServiceConstants.MIN_COMPLEX_SHAPE_ITEMS]
+            if position == "header"
+            else lines[-DocumentServiceConstants.MIN_COMPLEX_SHAPE_ITEMS :]
+        )
 
         indicators = {
             "header": ["contract", "agreement", "document", "page", "section"],
@@ -1008,13 +1311,16 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
         """Determine primary content type from detected types"""
         if not content_types:
             return ContentType.EMPTY.value
-        elif "diagram" in content_types and len(content_types) == 1:
+        elif (
+            "diagram" in content_types
+            and len(content_types) == DocumentServiceConstants.MIN_COMPLEX_SHAPE_ITEMS
+        ):
             return ContentType.DIAGRAM.value
         elif "table" in content_types and "text" not in content_types:
             return ContentType.TABLE.value
         elif "signature" in content_types:
             return ContentType.SIGNATURE.value
-        elif len(content_types) > 1:
+        elif len(content_types) > DocumentServiceConstants.MIN_COMPLEX_SHAPE_ITEMS:
             return ContentType.MIXED.value
         else:
             return ContentType.TEXT.value
@@ -1023,9 +1329,9 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
         """Calculate various quality metrics for text content"""
 
         indicators = {
-            "text_density": 0.0,
-            "structure_score": 0.0,
-            "readability_score": 0.0,
+            "text_density": DocumentServiceConstants.DEFAULT_CONFIDENCE,
+            "structure_score": DocumentServiceConstants.DEFAULT_CONFIDENCE,
+            "readability_score": DocumentServiceConstants.DEFAULT_CONFIDENCE,
         }
 
         if not text_content:
@@ -1039,79 +1345,120 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
             avg_line_length = sum(len(line) for line in non_empty_lines) / len(
                 non_empty_lines
             )
-            indicators["text_density"] = min(
-                avg_line_length / 80, 1.0
-            )  # Normalize to 80 chars
+            # Calculate normalized density and clamp to [0.0, 1.0]
+            normalized_density = (
+                avg_line_length / DocumentServiceConstants.MAX_LINE_LENGTH_NORMALIZATION
+            )
+            indicators["text_density"] = min(1.0, max(0.0, normalized_density))
 
         # Structure score (based on punctuation and formatting)
         sentences = re.split(r"[.!?]+", text_content)
-        if len(sentences) > 1:
+        if len(sentences) > DocumentServiceConstants.MIN_COMPLEX_SHAPE_ITEMS:
             avg_sentence_length = len(text_content) / len(sentences)
-            indicators["structure_score"] = min(
-                avg_sentence_length / 100, 1.0
-            )  # Normalize to 100 chars
+            # Calculate normalized structure score and clamp to [0.0, 1.0]
+            normalized_structure = (
+                avg_sentence_length
+                / DocumentServiceConstants.MAX_SENTENCE_LENGTH_NORMALIZATION
+            )
+            indicators["structure_score"] = min(1.0, max(0.0, normalized_structure))
 
         # Basic readability (word length distribution)
         words = text_content.split()
         if words:
             avg_word_length = sum(len(word) for word in words) / len(words)
-            indicators["readability_score"] = (
-                1.0 - abs(avg_word_length - 5) / 10
-            )  # Optimal around 5 chars
-            indicators["readability_score"] = max(0.0, indicators["readability_score"])
+            # Calculate readability based on deviation from optimal word length
+            # Start with max score (1.0) and subtract penalty for deviation
+            word_length_penalty = (
+                abs(avg_word_length - DocumentServiceConstants.OPTIMAL_WORD_LENGTH)
+                / DocumentServiceConstants.WORD_LENGTH_NORMALIZATION_FACTOR
+            )
+            readability_raw = 1.0 - word_length_penalty
+            # Clamp to [0.0, 1.0] range
+            indicators["readability_score"] = min(1.0, max(0.0, readability_raw))
 
         return indicators
 
-    def _aggregate_diagram_detections(self, text_extraction_result: Dict[str, Any]) -> Dict[str, Any]:
+    def _aggregate_diagram_detections(
+        self, text_extraction_result: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """Aggregate diagram detection results from page-level analysis"""
-        if not text_extraction_result.get("success") or not text_extraction_result.get("pages"):
+        if not text_extraction_result.get("success") or not text_extraction_result.get(
+            "pages"
+        ):
             return {
-                "total_diagrams": 0,
+                "total_diagrams": DocumentServiceConstants.DEFAULT_PAGE_NUMBER,
                 "diagram_pages": [],
                 "diagram_types": {},
                 "detection_summary": {
-                    "embedded_images": 0,
-                    "vector_graphics": 0,
-                    "text_indicators": 0,
-                    "mixed_content": 0
-                }
+                    "embedded_images": DocumentServiceConstants.DEFAULT_PAGE_NUMBER,
+                    "vector_graphics": DocumentServiceConstants.DEFAULT_PAGE_NUMBER,
+                    "text_indicators": DocumentServiceConstants.DEFAULT_PAGE_NUMBER,
+                    "mixed_content": DocumentServiceConstants.DEFAULT_PAGE_NUMBER,
+                },
             }
 
         diagram_pages = []
         diagram_types = {}
         detection_summary = {
-            "embedded_images": 0,
-            "vector_graphics": 0, 
-            "text_indicators": 0,
-            "mixed_content": 0
+            "embedded_images": DocumentServiceConstants.DEFAULT_PAGE_NUMBER,
+            "vector_graphics": DocumentServiceConstants.DEFAULT_PAGE_NUMBER,
+            "text_indicators": DocumentServiceConstants.DEFAULT_PAGE_NUMBER,
+            "mixed_content": DocumentServiceConstants.DEFAULT_PAGE_NUMBER,
         }
 
         for page in text_extraction_result["pages"]:
             page_analysis = page.get("content_analysis", {})
             layout_features = page_analysis.get("layout_features", {})
-            
+
             if layout_features.get("has_diagrams", False):
-                page_num = page.get("page_number", 0)
-                diagram_pages.append({
-                    "page_number": page_num,
-                    "content_types": page_analysis.get("content_types", []),
-                    "primary_type": page_analysis.get("primary_type", "unknown"),
-                    "confidence": page.get("confidence", 0.0)
-                })
+                page_num = page.get(
+                    "page_number", DocumentServiceConstants.DEFAULT_PAGE_NUMBER
+                )
+                diagram_pages.append(
+                    {
+                        "page_number": page_num,
+                        "content_types": page_analysis.get("content_types", []),
+                        "primary_type": page_analysis.get("primary_type", "unknown"),
+                        "confidence": page.get(
+                            "confidence", DocumentServiceConstants.DEFAULT_CONFIDENCE
+                        ),
+                    }
+                )
 
                 # Count diagram types based on content analysis
                 primary_type = page_analysis.get("primary_type", "unknown")
                 if primary_type == "diagram":
-                    diagram_types["diagram"] = diagram_types.get("diagram", 0) + 1
-                elif primary_type == "mixed" and "diagram" in page_analysis.get("content_types", []):
-                    diagram_types["mixed"] = diagram_types.get("mixed", 0) + 1
-                    detection_summary["mixed_content"] += 1
+                    diagram_types["diagram"] = (
+                        diagram_types.get(
+                            "diagram", DocumentServiceConstants.DEFAULT_PAGE_NUMBER
+                        )
+                        + DocumentServiceConstants.MIN_COMPLEX_SHAPE_ITEMS
+                    )
+                elif primary_type == "mixed" and "diagram" in page_analysis.get(
+                    "content_types", []
+                ):
+                    diagram_types["mixed"] = (
+                        diagram_types.get(
+                            "mixed", DocumentServiceConstants.DEFAULT_PAGE_NUMBER
+                        )
+                        + DocumentServiceConstants.MIN_COMPLEX_SHAPE_ITEMS
+                    )
+                    detection_summary[
+                        "mixed_content"
+                    ] += DocumentServiceConstants.MIN_COMPLEX_SHAPE_ITEMS
                 else:
-                    diagram_types["other"] = diagram_types.get("other", 0) + 1
+                    diagram_types["other"] = (
+                        diagram_types.get(
+                            "other", DocumentServiceConstants.DEFAULT_PAGE_NUMBER
+                        )
+                        + DocumentServiceConstants.MIN_COMPLEX_SHAPE_ITEMS
+                    )
 
                 # Increment detection summary (this is a simplified heuristic)
                 # In a full implementation, we'd track detection method per page
-                detection_summary["text_indicators"] += 1
+                detection_summary[
+                    "text_indicators"
+                ] += DocumentServiceConstants.MIN_COMPLEX_SHAPE_ITEMS
 
         total_diagrams = len(diagram_pages)
 
@@ -1123,32 +1470,51 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
             "processing_notes": [
                 f"Detected diagrams on {total_diagrams} pages",
                 f"Primary detection method: text-based indicators",
-                f"Diagram types found: {list(diagram_types.keys())}" if diagram_types else "No specific diagram types classified"
-            ]
+                (
+                    f"Diagram types found: {list(diagram_types.keys())}"
+                    if diagram_types
+                    else "No specific diagram types classified"
+                ),
+            ],
         }
 
-    def _create_page_processing_summary(self, text_extraction_result: Dict[str, Any]) -> Dict[str, Any]:
+    def _create_page_processing_summary(
+        self, text_extraction_result: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """Create summary of page processing results"""
-        if not text_extraction_result.get("success") or not text_extraction_result.get("pages"):
+        if not text_extraction_result.get("success") or not text_extraction_result.get(
+            "pages"
+        ):
             return {
                 "pages": [],
-                "total_pages_processed": 0,
+                "total_pages_processed": DocumentServiceConstants.DEFAULT_PAGE_NUMBER,
                 "content_type_distribution": {},
-                "average_confidence": 0.0
+                "average_confidence": DocumentServiceConstants.DEFAULT_CONFIDENCE,
             }
 
         pages = text_extraction_result["pages"]
         content_type_distribution = {}
-        total_confidence = 0.0
+        total_confidence = DocumentServiceConstants.DEFAULT_CONFIDENCE
 
         for page in pages:
             page_analysis = page.get("content_analysis", {})
             primary_type = page_analysis.get("primary_type", "unknown")
-            
-            content_type_distribution[primary_type] = content_type_distribution.get(primary_type, 0) + 1
-            total_confidence += page.get("confidence", 0.0)
 
-        average_confidence = total_confidence / len(pages) if pages else 0.0
+            content_type_distribution[primary_type] = (
+                content_type_distribution.get(
+                    primary_type, DocumentServiceConstants.DEFAULT_PAGE_NUMBER
+                )
+                + DocumentServiceConstants.MIN_COMPLEX_SHAPE_ITEMS
+            )
+            total_confidence += page.get(
+                "confidence", DocumentServiceConstants.DEFAULT_CONFIDENCE
+            )
+
+        average_confidence = (
+            total_confidence / len(pages)
+            if pages
+            else DocumentServiceConstants.DEFAULT_CONFIDENCE
+        )
 
         return {
             "pages": pages,
@@ -1156,13 +1522,25 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
             "content_type_distribution": content_type_distribution,
             "average_confidence": average_confidence,
             "processing_summary": {
-                "text_pages": content_type_distribution.get("text", 0),
-                "diagram_pages": content_type_distribution.get("diagram", 0),
-                "mixed_pages": content_type_distribution.get("mixed", 0),
-                "table_pages": content_type_distribution.get("table", 0),
-                "signature_pages": content_type_distribution.get("signature", 0),
-                "empty_pages": content_type_distribution.get("empty", 0)
-            }
+                "text_pages": content_type_distribution.get(
+                    "text", DocumentServiceConstants.DEFAULT_PAGE_NUMBER
+                ),
+                "diagram_pages": content_type_distribution.get(
+                    "diagram", DocumentServiceConstants.DEFAULT_PAGE_NUMBER
+                ),
+                "mixed_pages": content_type_distribution.get(
+                    "mixed", DocumentServiceConstants.DEFAULT_PAGE_NUMBER
+                ),
+                "table_pages": content_type_distribution.get(
+                    "table", DocumentServiceConstants.DEFAULT_PAGE_NUMBER
+                ),
+                "signature_pages": content_type_distribution.get(
+                    "signature", DocumentServiceConstants.DEFAULT_PAGE_NUMBER
+                ),
+                "empty_pages": content_type_distribution.get(
+                    "empty", DocumentServiceConstants.DEFAULT_PAGE_NUMBER
+                ),
+            },
         }
 
     # Placeholder implementations
@@ -1184,7 +1562,7 @@ def create_document_service(
     storage_path: str = "storage/documents",
     enable_advanced_ocr: bool = True,
     enable_gemini_ocr: bool = True,
-    max_file_size_mb: int = 50,
+    max_file_size_mb: int = DocumentServiceConstants.DEFAULT_MAX_FILE_SIZE_MB,
 ) -> DocumentService:
     """Create unified document service with specified configuration"""
 

@@ -15,7 +15,6 @@ import {
   Info,
   Banknote,
   Building,
-  CreditCard,
   Shield,
 } from "lucide-react";
 
@@ -23,11 +22,6 @@ import Button from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import StatusBadge from "@/components/ui/StatusBadge";
 import { cn } from "@/utils";
-import { propertyIntelligenceService } from "@/services/propertyIntelligence";
-import {
-  PropertyProfile,
-  AustralianState
-} from "@/types";
 
 // Financial calculation interfaces
 interface AffordabilityResults {
@@ -105,7 +99,6 @@ const FinancialAnalysisPage: React.FC = () => {
     taxAnalysis: null,
     insuranceEstimates: null,
   });
-  const [propertyData, setPropertyData] = useState<PropertyProfile | null>(null);
   
   // Loading and Error States
   const [isCalculating, setIsCalculating] = useState(false);
@@ -310,21 +303,6 @@ const FinancialAnalysisPage: React.FC = () => {
     calculateFinancials();
   };
   
-  const loadPropertyData = async (address: string) => {
-    try {
-      const valuation = await propertyIntelligenceService.getPropertyValuation(address);
-      if (valuation) {
-        setPropertyPrice(valuation.estimated_value || propertyPrice);
-        
-        const rental = await propertyIntelligenceService.getRentalEstimate(address);
-        if (rental && rental.weekly_estimate) {
-          setWeeklyRent(rental.weekly_estimate);
-        }
-      }
-    } catch (error) {
-      console.error('Failed to load property data:', error);
-    }
-  };
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-AU', {

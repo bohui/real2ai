@@ -22,7 +22,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import StatusBadge from "@/components/ui/StatusBadge";
 import { cn } from "@/utils";
 import { propertyIntelligenceService } from "@/services/propertyIntelligence";
-import { PropertyMarketTrends } from "@/types";
 
 // Types for market data
 interface MarketData {

@@ -4,16 +4,13 @@ import {
   ArrowRight, 
   ArrowLeft, 
   CheckCircle, 
-  FileText, 
   Shield, 
   TrendingUp,
   Scale,
-  MapPin,
   Building2
 } from 'lucide-react'
 
 import Button from '@/components/ui/Button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Select from '@/components/ui/Select'
 import { cn } from '@/utils'
 

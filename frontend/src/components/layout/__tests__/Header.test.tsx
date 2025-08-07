@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@/test/utils'
+import { render } from '@/test/utils'
 import Header from '../Header'
 
 // Mock stores

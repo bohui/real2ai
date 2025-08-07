@@ -6,7 +6,6 @@ import {
   AlertTriangle, 
   XCircle, 
   Shield, 
-  Star,
   Crown,
   Verified
 } from 'lucide-react'

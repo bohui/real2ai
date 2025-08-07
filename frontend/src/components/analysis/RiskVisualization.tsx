@@ -5,7 +5,6 @@ import {
   Shield, 
   TrendingUp, 
   Scale, 
-  FileText,
   Info
 } from 'lucide-react'
 

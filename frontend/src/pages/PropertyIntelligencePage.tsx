@@ -2,26 +2,18 @@ import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Search,
-  MapPin,
   TrendingUp,
-  Home,
-  DollarSign,
   AlertTriangle,
   Bookmark,
   BookmarkCheck,
   Filter,
-  ArrowRight,
   BarChart3,
   Calculator,
   Bell,
   Star,
-  Eye,
-  Heart,
   Building,
-  Coins,
   ShieldCheck,
   Calendar,
-  ChevronDown,
 } from "lucide-react";
 
 import Button from "@/components/ui/Button";
@@ -31,11 +23,8 @@ import { cn } from "@/utils";
 import { propertyIntelligenceService } from "@/services/propertyIntelligence";
 import {
   PropertySearchRequest,
-  PropertySearchResponse,
   PropertyListing,
-  PropertyMarketInsight,
   PropertyWatchlistItem,
-  AustralianState,
 } from "@/types";
 
 // Property display interface for UI compatibility
@@ -78,7 +67,6 @@ const PropertyIntelligencePage: React.FC = () => {
   // UI State
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedView, setSelectedView] = useState<"grid" | "list">("grid");
-  const [selectedProperty, setSelectedProperty] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
 
   // Data State
@@ -87,7 +75,6 @@ const PropertyIntelligencePage: React.FC = () => {
     null
   );
   const [watchlist, setWatchlist] = useState<PropertyWatchlistItem[]>([]);
-  const [hotSuburbs, setHotSuburbs] = useState<PropertyMarketInsight[]>([]);
 
   // Loading and Error States
   const [isLoading, setIsLoading] = useState(false);
@@ -119,15 +106,10 @@ const PropertyIntelligencePage: React.FC = () => {
       setSavedProperties(watchlistData.map((item) => item.id));
 
       // Load market insights for trending suburbs
-      const insights = await propertyIntelligenceService.getMarketInsights(
+      await propertyIntelligenceService.getMarketInsights(
         "Australia",
         ["trends", "forecasts"],
         10
-      );
-      setHotSuburbs(
-        insights
-          .filter((insight) => insight.insight_type === "trend")
-          .slice(0, 3)
       );
 
       // Set mock market insights (replace with real API call when available)
@@ -135,9 +117,7 @@ const PropertyIntelligencePage: React.FC = () => {
         nationalGrowth: 5.2,
         interestRate: 4.25,
         averageSettlement: 28,
-        hotSuburbs: insights
-          .map((insight) => insight.affected_areas[0] || "Unknown Location")
-          .slice(0, 3),
+        hotSuburbs: ["Teneriffe", "Paddington", "Newstead"],
         marketTrend: "rising",
         confidenceIndex: 78,
       });

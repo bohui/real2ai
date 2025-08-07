@@ -10,7 +10,8 @@ from contextlib import asynccontextmanager
 import uvicorn
 import os
 import logging
-from typing import Dict
+from typing import Dict, Optional, Any
+from asyncio import AbstractEventLoop
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -21,6 +22,7 @@ from app.models.contract_state import RealEstateAgentState, create_initial_state
 from app.agents.contract_workflow import ContractAnalysisWorkflow
 from app.core.config import get_settings
 from app.clients.factory import get_supabase_client
+from app.clients.supabase.client import SupabaseClient
 from app.services.document_service import DocumentService
 from app.services.websocket_service import WebSocketManager
 from app.core.langsmith_init import initialize_langsmith, get_langsmith_status
@@ -42,7 +44,7 @@ from app.middleware.auth_middleware import setup_auth_middleware
 settings = get_settings()
 security = HTTPBearer()
 # db_client will be initialized in lifespan function
-db_client = None
+db_client: Optional[SupabaseClient] = None
 document_service = DocumentService()
 websocket_manager = WebSocketManager()
 
@@ -53,7 +55,7 @@ contract_workflow = ContractAnalysisWorkflow(
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> Any:
     """Lifespan context manager for startup and shutdown events"""
     # Startup
     logger.info("Starting Real2.AI API...")

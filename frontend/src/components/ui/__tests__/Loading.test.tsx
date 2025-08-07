@@ -89,7 +89,7 @@ describe('Loading Component', () => {
         { state: 'analyzing', message: 'Analyzing...' }
       ]
 
-      states.forEach(({ state, message }) => {
+      states.forEach(({ message }) => {
         const { unmount } = render(<Loading text={message} />)
         expect(screen.getByText(message)).toBeInTheDocument()
         unmount()

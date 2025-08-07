@@ -14,7 +14,7 @@ import { useUIStore } from "@/store/uiStore";
 import { cn } from "@/utils";
 
 const AnalysisPage: React.FC = () => {
-  const { contractId } = useParams();
+  const { } = useParams();
   const {
     currentAnalysis,
     currentDocument,

@@ -1,6 +1,6 @@
 import React from 'react'
 import { motion } from 'framer-motion'
-import { AlertTriangle, Shield, TrendingUp, Info } from 'lucide-react'
+import { AlertTriangle, Shield, TrendingUp } from 'lucide-react'
 import { cn } from '@/utils'
 
 export type RiskLevel = 'low' | 'medium' | 'high' | 'critical'
