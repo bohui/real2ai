@@ -22,6 +22,7 @@ const AnalysisPage: React.FC = () => {
     isAnalyzing,
     analysisError,
     cacheStatus,
+    retryAvailable,
     triggerAnalysisStart,
     triggerAnalysisRetry,
     clearCurrentAnalysis,
@@ -31,40 +32,48 @@ const AnalysisPage: React.FC = () => {
   // Dynamic SEO based on current analysis
   const propertyAddress = currentAnalysis?.contract_terms?.property_address;
   const riskScore = currentAnalysis?.executive_summary?.overall_risk_score;
-  
+
   const dynamicSEOData = React.useMemo(() => {
-    if (typeof propertyAddress !== 'string') return undefined;
+    if (typeof propertyAddress !== "string") return undefined;
     return {
       address: propertyAddress,
       riskScore: riskScore,
-      publishedTime: new Date().toISOString()
+      publishedTime: new Date().toISOString(),
     };
   }, [propertyAddress, riskScore]);
-  
+
   usePageSEO(
     {
-      title: propertyAddress 
+      title: propertyAddress
         ? `Contract Analysis - ${propertyAddress} - Real2AI`
-        : 'Contract Analysis - Real2AI',
-      description: propertyAddress && riskScore !== undefined
-        ? `Comprehensive AI analysis of ${propertyAddress} property contract. Risk level: ${riskScore >= 7 ? 'high' : riskScore >= 4 ? 'moderate' : 'low'}. Professional insights for Australian real estate transactions.`
-        : 'AI-powered contract analysis for Australian real estate. Get comprehensive risk assessment, compliance checks, and professional insights.',
+        : "Contract Analysis - Real2AI",
+      description:
+        propertyAddress && riskScore !== undefined
+          ? `Comprehensive AI analysis of ${propertyAddress} property contract. Risk level: ${
+              riskScore >= 7 ? "high" : riskScore >= 4 ? "moderate" : "low"
+            }. Professional insights for Australian real estate transactions.`
+          : "AI-powered contract analysis for Australian real estate. Get comprehensive risk assessment, compliance checks, and professional insights.",
       keywords: [
-        'contract analysis',
-        'AI analysis',
-        'real estate contracts',
-        'risk assessment',
-        'compliance check',
-        'Australian property law',
-        ...(typeof propertyAddress === 'string' ? [`${propertyAddress} contract`, `${propertyAddress} property analysis`] : [])
+        "contract analysis",
+        "AI analysis",
+        "real estate contracts",
+        "risk assessment",
+        "compliance check",
+        "Australian property law",
+        ...(typeof propertyAddress === "string"
+          ? [
+              `${propertyAddress} contract`,
+              `${propertyAddress} property analysis`,
+            ]
+          : []),
       ],
-      canonical: contractId ? `/app/analysis/${contractId}` : '/app/analysis',
+      canonical: contractId ? `/app/analysis/${contractId}` : "/app/analysis",
       noIndex: true, // Private analysis pages
-      ogType: 'article',
-      ...(typeof propertyAddress === 'string' && {
+      ogType: "article",
+      ...(typeof propertyAddress === "string" && {
         publishedTime: new Date().toISOString(),
-        section: 'Contract Analysis'
-      })
+        section: "Contract Analysis",
+      }),
     },
     dynamicSEOData
   );
@@ -76,8 +85,8 @@ const AnalysisPage: React.FC = () => {
   // Handle document upload completion - now with smart cache handling
   const handleUploadComplete = async (_documentId: string) => {
     try {
-      console.log('📡 Document uploaded, WebSocket should be connected');
-      
+      console.log("📡 Document uploaded, WebSocket should be connected");
+
       // The WebSocket connection is established during upload
       // Cache status will determine next steps automatically
       addNotification({
@@ -85,20 +94,19 @@ const AnalysisPage: React.FC = () => {
         title: "Document uploaded",
         message: "Checking for existing analysis...",
       });
-      
+
       // Wait for cache status to determine next steps
       // The WebSocket will handle cache status and trigger analysis if needed
-      
     } catch (error) {
       console.error("Upload completion error:", error);
       addNotification({
         type: "error",
-        title: "Upload error", 
+        title: "Upload error",
         message: "Failed to process uploaded document.",
       });
     }
   };
-  
+
   // Handle manual analysis start (for cache miss scenarios)
   const handleStartAnalysis = async () => {
     try {
@@ -106,7 +114,8 @@ const AnalysisPage: React.FC = () => {
       addNotification({
         type: "info",
         title: "Analysis started",
-        message: "Your contract is being analyzed. This may take a few minutes.",
+        message:
+          "Your contract is being analyzed. This may take a few minutes.",
       });
     } catch (error) {
       console.error("Failed to start analysis:", error);
@@ -117,7 +126,7 @@ const AnalysisPage: React.FC = () => {
       });
     }
   };
-  
+
   // Handle analysis retry (for failed scenarios)
   const handleRetryAnalysis = async () => {
     try {
@@ -248,31 +257,31 @@ const AnalysisPage: React.FC = () => {
                       <h3 className="font-semibold text-sm text-neutral-700 mb-1">
                         Document Status
                       </h3>
-                      {cacheStatus === 'complete' && (
+                      {cacheStatus === "complete" && (
                         <p className="text-sm text-success-600">
                           ✅ Analysis complete - results ready!
                         </p>
                       )}
-                      {cacheStatus === 'in_progress' && (
+                      {cacheStatus === "in_progress" && (
                         <p className="text-sm text-warning-600">
                           🔄 Analysis in progress - streaming updates...
                         </p>
                       )}
-                      {cacheStatus === 'failed' && (
+                      {cacheStatus === "failed" && (
                         <p className="text-sm text-danger-600">
                           ❌ Previous analysis failed
                         </p>
                       )}
-                      {cacheStatus === 'miss' && (
+                      {cacheStatus === "miss" && (
                         <p className="text-sm text-neutral-600">
                           🆕 New document - ready to analyze
                         </p>
                       )}
                     </div>
-                    
+
                     {/* Action Buttons */}
                     <div className="flex gap-2">
-                      {cacheStatus === 'miss' && (
+                      {cacheStatus === "miss" && (
                         <Button
                           variant="primary"
                           size="sm"
@@ -282,22 +291,24 @@ const AnalysisPage: React.FC = () => {
                           Start Analysis
                         </Button>
                       )}
-                      {cacheStatus === 'failed' && (
-                        <Button
-                          variant="primary"
-                          size="sm"
-                          onClick={handleRetryAnalysis}
-                          disabled={isAnalyzing}
-                        >
-                          Retry Analysis
-                        </Button>
-                      )}
+                      {cacheStatus === "failed" &&
+                        retryAvailable &&
+                        !isAnalyzing && (
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            onClick={handleRetryAnalysis}
+                            disabled={isAnalyzing}
+                          >
+                            Retry Analysis
+                          </Button>
+                        )}
                     </div>
                   </div>
                 </CardContent>
               </Card>
             )}
-            
+
             <AnalysisProgress />
 
             {/* Navigation Tabs (Mobile) */}

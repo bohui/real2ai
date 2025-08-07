@@ -31,6 +31,7 @@ interface AnalysisState {
   currentDocumentId: string | null;
   currentContractId: string | null;
   cacheStatus: "complete" | "in_progress" | "failed" | "miss" | null;
+  retryAvailable: boolean; // New field to track if retry is available
 
   // Recent analyses
   recentAnalyses: ContractAnalysisResult[];
@@ -75,6 +76,7 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
   currentDocumentId: null,
   currentContractId: null,
   cacheStatus: null,
+  retryAvailable: false,
   recentAnalyses: [],
 
   uploadDocument: async (file: File, contractType: string, state: string) => {
@@ -630,12 +632,18 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
   handleCacheStatus: (cacheData: any) => {
     console.log("📊 Cache status received:", cacheData);
 
-    const { cache_status, contract_id, analysis_result, error_message } =
-      cacheData;
+    const {
+      cache_status,
+      contract_id,
+      analysis_result,
+      error_message,
+      retry_available,
+    } = cacheData;
 
     set({
       cacheStatus: cache_status,
       currentContractId: contract_id,
+      retryAvailable: retry_available || false,
     });
 
     switch (cache_status) {
@@ -761,6 +769,7 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
       isAnalyzing: false,
       analysisError: null,
       cacheStatus: null,
+      retryAvailable: false,
     });
   },
 
