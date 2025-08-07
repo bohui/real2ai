@@ -771,61 +771,6 @@ class MarketInsight(TimestampedBaseModel):
     valid_until: datetime
 
 
-# Cache Architecture Models
-class HotPropertiesCache(TimestampedBaseModel):
-    """Hot properties cache for popular property analyses (no RLS - shared across users)"""
-
-    id: UUID = Field(..., description="Hot property cache UUID")
-    property_hash: str = Field(..., description="Hash of normalized address")
-    property_address: str = Field(..., max_length=500)
-    normalized_address: str = Field(
-        ..., max_length=500, description="Normalized for consistent hashing"
-    )
-    analysis_result: Dict[str, Any] = Field(default_factory=dict)
-    popularity_score: int = Field(default=1, ge=1)
-    access_count: int = Field(default=1, ge=1)
-    expires_at: datetime
-    updated_at: Optional[datetime] = None
-
-
-class HotContractsCache(TimestampedBaseModel):
-    """Hot contracts cache for popular contract analyses (no RLS - shared across users)"""
-
-    id: UUID = Field(..., description="Hot contract cache UUID")
-    content_hash: str = Field(..., description="SHA-256 hash of document content")
-    contract_analysis: Dict[str, Any] = Field(default_factory=dict)
-    property_address: Optional[str] = Field(None, max_length=500)
-    contract_type: Optional[ContractType] = None
-    access_count: int = Field(default=1, ge=1)
-    expires_at: datetime
-    updated_at: Optional[datetime] = None
-
-
-class UserPropertyView(TimestampedBaseModel):
-    """User property views (with RLS - user's search history)"""
-
-    id: UUID = Field(..., description="User property view UUID")
-    user_id: UUID = Field(..., description="Reference to profiles.id")
-    property_hash: str = Field(..., description="Hash of normalized address")
-    property_address: str = Field(..., max_length=500)
-    viewed_at: datetime
-    source: ViewSource = ViewSource.SEARCH
-
-
-class UserContractView(TimestampedBaseModel):
-    """User contract views (with RLS - user's contract analysis history)"""
-
-    id: UUID = Field(..., description="User contract view UUID")
-    user_id: UUID = Field(..., description="Reference to profiles.id")
-    content_hash: str = Field(..., description="SHA-256 hash of document content")
-    property_address: Optional[str] = Field(None, max_length=500)
-    analysis_id: Optional[UUID] = Field(
-        None, description="Reference to contract_analyses.id"
-    )
-    viewed_at: datetime
-    source: ViewSource = ViewSource.UPLOAD
-
-
 # View Models (Read-only database views)
 class AnalysisProgressDetailed(BaseModel):
     """Detailed analysis progress view combining multiple tables"""

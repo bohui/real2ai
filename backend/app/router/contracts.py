@@ -669,12 +669,14 @@ async def _start_background_analysis_with_cache(
                 "content_hash": content_hash,
                 "enable_caching": True,
                 "progress_tracking": True,
-                "comprehensive_processing": True
-            }
+                "comprehensive_processing": True,
+            },
         }
 
-        logger.info(f"Starting comprehensive analysis task for contract {contract_id} with progress tracking")
-        
+        logger.info(
+            f"Starting comprehensive analysis task for contract {contract_id} with progress tracking"
+        )
+
         task = comprehensive_document_analysis.delay(**task_params)
 
         if not task or not task.id:
@@ -878,7 +880,7 @@ async def get_analysis_progress(
 ) -> Dict[str, Any]:
     """
     Get detailed analysis progress with real-time updates.
-    
+
     This endpoint provides granular progress information including:
     - Current processing step
     - Progress percentage
@@ -886,36 +888,34 @@ async def get_analysis_progress(
     - Estimated completion time
     - Error messages (if any)
     """
-    
+
     context = create_error_context(
-        user_id=str(user.id), 
-        contract_id=contract_id, 
-        operation="get_analysis_progress"
+        user_id=str(user.id), contract_id=contract_id, operation="get_analysis_progress"
     )
 
     try:
         # Get authenticated client
         db_client = await AuthContext.get_authenticated_client(require_auth=True)
-        
+
         # Get progress record from analysis_progress table
         progress_result = await db_client.database.select(
             "analysis_progress",
             columns="*",
-            filters={"contract_id": contract_id, "user_id": str(user.id)}
+            filters={"contract_id": contract_id, "user_id": str(user.id)},
         )
-        
+
         # Get analysis status as fallback
         analysis_result = await db_client.database.select(
             "contract_analyses",
             columns="id, status, created_at, updated_at, processing_time",
-            filters={"contract_id": contract_id}
+            filters={"contract_id": contract_id},
         )
-        
+
         if not analysis_result.get("data"):
             raise HTTPException(status_code=404, detail="Analysis not found")
-        
+
         analysis = analysis_result["data"][0]
-        
+
         # If we have detailed progress, use that
         if progress_result.get("data"):
             progress = progress_result["data"][0]
@@ -926,14 +926,16 @@ async def get_analysis_progress(
                 "current_step": progress["current_step"],
                 "step_description": progress["step_description"],
                 "status": progress["status"],
-                "estimated_completion_minutes": progress.get("estimated_completion_minutes"),
+                "estimated_completion_minutes": progress.get(
+                    "estimated_completion_minutes"
+                ),
                 "step_started_at": progress["step_started_at"],
                 "total_elapsed_seconds": progress.get("total_elapsed_seconds", 0),
                 "error_message": progress.get("error_message"),
                 "last_updated": progress.get("updated_at"),
-                "has_detailed_progress": True
+                "has_detailed_progress": True,
             }
-        
+
         # Fallback to basic progress calculation from analysis status
         else:
             progress_info = _calculate_analysis_progress(analysis)
@@ -949,7 +951,7 @@ async def get_analysis_progress(
                 "total_elapsed_seconds": 0,
                 "error_message": None,
                 "last_updated": analysis["updated_at"],
-                "has_detailed_progress": False
+                "has_detailed_progress": False,
             }
 
     except HTTPException:

@@ -1,15 +1,15 @@
 -- Row Level Security policies for Real2.AI
 -- Ensures users can only access their own data
 
--- Enable RLS on all tables
+-- Enable RLS on user-specific tables only
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE documents ENABLE ROW LEVEL SECURITY;
-ALTER TABLE contracts ENABLE ROW LEVEL SECURITY;
-ALTER TABLE contract_analyses ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE contracts ENABLE ROW LEVEL SECURITY; -- DISABLED for caching efficiency
+-- ALTER TABLE contract_analyses ENABLE ROW LEVEL SECURITY; -- DISABLED for caching efficiency
 ALTER TABLE usage_logs ENABLE ROW LEVEL SECURITY;
-ALTER TABLE property_data ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE property_data ENABLE ROW LEVEL SECURITY; -- DISABLED for caching efficiency
 ALTER TABLE user_subscriptions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE analysis_progress ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE analysis_progress ENABLE ROW LEVEL SECURITY; -- DISABLED for caching efficiency
 
 -- Profiles policies
 CREATE POLICY "Users can view own profile" 
@@ -41,39 +41,43 @@ CREATE POLICY "Users can delete own documents"
     ON documents FOR DELETE 
     USING (auth.uid() = user_id);
 
--- Contracts policies
-CREATE POLICY "Users can view own contracts" 
-    ON contracts FOR SELECT 
-    USING (auth.uid() = user_id);
+-- Contracts policies - DISABLED for caching efficiency
+-- RLS disabled on contracts table to enable cross-user cache sharing
+-- Access control handled at application level
+-- CREATE POLICY "Users can view own contracts" 
+--     ON contracts FOR SELECT 
+--     USING (auth.uid() = user_id);
 
-CREATE POLICY "Users can insert own contracts" 
-    ON contracts FOR INSERT 
-    WITH CHECK (auth.uid() = user_id);
+-- CREATE POLICY "Users can insert own contracts" 
+--     ON contracts FOR INSERT 
+--     WITH CHECK (auth.uid() = user_id);
 
-CREATE POLICY "Users can update own contracts" 
-    ON contracts FOR UPDATE 
-    USING (auth.uid() = user_id);
+-- CREATE POLICY "Users can update own contracts" 
+--     ON contracts FOR UPDATE 
+--     USING (auth.uid() = user_id);
 
-CREATE POLICY "Users can delete own contracts" 
-    ON contracts FOR DELETE 
-    USING (auth.uid() = user_id);
+-- CREATE POLICY "Users can delete own contracts" 
+--     ON contracts FOR DELETE 
+--     USING (auth.uid() = user_id);
 
--- Contract analyses policies
-CREATE POLICY "Users can view own analyses" 
-    ON contract_analyses FOR SELECT 
-    USING (auth.uid() = user_id);
+-- Contract analyses policies - DISABLED for caching efficiency
+-- RLS disabled on contract_analyses table to enable cross-user cache sharing
+-- Access control handled at application level
+-- CREATE POLICY "Users can view own analyses" 
+--     ON contract_analyses FOR SELECT 
+--     USING (auth.uid() = user_id);
 
-CREATE POLICY "Users can insert own analyses" 
-    ON contract_analyses FOR INSERT 
-    WITH CHECK (auth.uid() = user_id);
+-- CREATE POLICY "Users can insert own analyses" 
+--     ON contract_analyses FOR INSERT 
+--     WITH CHECK (auth.uid() = user_id);
 
-CREATE POLICY "Users can update own analyses" 
-    ON contract_analyses FOR UPDATE 
-    USING (auth.uid() = user_id);
+-- CREATE POLICY "Users can update own analyses" 
+--     ON contract_analyses FOR UPDATE 
+--     USING (auth.uid() = user_id);
 
-CREATE POLICY "Service can update any analysis" 
-    ON contract_analyses FOR UPDATE 
-    USING (auth.jwt() ->> 'role' = 'service_role');
+-- CREATE POLICY "Service can update any analysis" 
+--     ON contract_analyses FOR UPDATE 
+--     USING (auth.jwt() ->> 'role' = 'service_role');
 
 -- Usage logs policies
 CREATE POLICY "Users can view own usage logs" 
@@ -84,18 +88,20 @@ CREATE POLICY "Service can insert usage logs"
     ON usage_logs FOR INSERT 
     WITH CHECK (auth.jwt() ->> 'role' = 'service_role' OR auth.uid() = user_id);
 
--- Property data policies
-CREATE POLICY "Users can view own property data" 
-    ON property_data FOR SELECT 
-    USING (auth.uid() = user_id);
+-- Property data policies - DISABLED for caching efficiency
+-- RLS disabled on property_data table to enable cross-user cache sharing
+-- Access control handled at application level
+-- CREATE POLICY "Users can view own property data" 
+--     ON property_data FOR SELECT 
+--     USING (auth.uid() = user_id);
 
-CREATE POLICY "Users can insert own property data" 
-    ON property_data FOR INSERT 
-    WITH CHECK (auth.uid() = user_id);
+-- CREATE POLICY "Users can insert own property data" 
+--     ON property_data FOR INSERT 
+--     WITH CHECK (auth.uid() = user_id);
 
-CREATE POLICY "Users can update own property data" 
-    ON property_data FOR UPDATE 
-    USING (auth.uid() = user_id);
+-- CREATE POLICY "Users can update own property data" 
+--     ON property_data FOR UPDATE 
+--     USING (auth.uid() = user_id);
 
 -- User subscriptions policies
 CREATE POLICY "Users can view own subscriptions" 
@@ -106,14 +112,16 @@ CREATE POLICY "Service can manage subscriptions"
     ON user_subscriptions FOR ALL 
     USING (auth.jwt() ->> 'role' = 'service_role');
 
--- Analysis progress policies
-CREATE POLICY "Users can view own analysis progress" 
-    ON analysis_progress FOR SELECT 
-    USING (auth.uid() = user_id);
+-- Analysis progress policies - DISABLED for caching efficiency
+-- RLS disabled on analysis_progress table to enable cross-user progress sharing
+-- Access control handled at application level
+-- CREATE POLICY "Users can view own analysis progress" 
+--     ON analysis_progress FOR SELECT 
+--     USING (auth.uid() = user_id);
 
-CREATE POLICY "Service can manage analysis progress" 
-    ON analysis_progress FOR ALL 
-    USING (auth.jwt() ->> 'role' = 'service_role');
+-- CREATE POLICY "Service can manage analysis progress" 
+--     ON analysis_progress FOR ALL 
+--     USING (auth.jwt() ->> 'role' = 'service_role');
 
 -- Analysis progress detailed view policies
 -- Note: RLS cannot be enabled on views, but the view inherits security from underlying tables

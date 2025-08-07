@@ -81,27 +81,37 @@ class CacheService:
         self._ensure_initialized()
 
         try:
-            # Check hot contracts cache
-            cache_result = await self.db_client.database.select(
-                "hot_contracts_cache",
+            # Check contract_analyses table directly (RLS disabled for caching)
+            # This enables cross-user cache sharing
+            analysis_result = await self.db_client.database.select(
+                "contract_analyses",
                 columns="*",
-                filters={
-                    "content_hash": content_hash,
-                    "expires_at__gte": datetime.utcnow().isoformat(),
-                },
+                filters={"content_hash": content_hash, "status": "completed"},
+                order_by="created_at DESC",
+                limit=1,
             )
 
-            if not cache_result.get("data"):
-                logger.debug(f"No cache entry found for content_hash: {content_hash}")
-                return None
+            if analysis_result.get("data"):
+                analysis = analysis_result["data"][0]
+                logger.info(
+                    f"Cache hit for content_hash: {content_hash} (direct source)"
+                )
 
-            cache_entry = cache_result["data"][0]
+                # Return the analysis result in the expected format
+                return {
+                    "analysis_result": analysis.get("analysis_result", {}),
+                    "risk_score": analysis.get("risk_score"),
+                    "overall_risk_score": analysis.get("overall_risk_score"),
+                    "confidence_score": analysis.get("confidence_score"),
+                    "processing_time": analysis.get("processing_time"),
+                    "property_address": analysis.get("property_address"),
+                    "contract_type": analysis.get("contract_type"),
+                    "cached_from_user_id": analysis.get("user_id"),  # Track source user
+                    "cached_at": analysis.get("created_at"),
+                }
 
-            # Update access count and extend expiration for popular content
-            await self._increment_cache_access(content_hash, "contract")
-
-            logger.info(f"Cache hit for content_hash: {content_hash}")
-            return cache_entry["contract_analysis"]
+            logger.debug(f"No cache entry found for content_hash: {content_hash}")
+            return None
 
         except Exception as e:
             logger.error(f"Error checking contract cache: {str(e)}")
@@ -116,50 +126,30 @@ class CacheService:
         ttl_hours: int = 24,
     ) -> bool:
         """
-        Cache contract analysis result.
+        Cache contract analysis result - now just logs the operation since we link directly to source.
 
         Args:
             content_hash: SHA-256 hash of document content
             analysis_result: Analysis result to cache
             property_address: Optional property address
             contract_type: Optional contract type
-            ttl_hours: Time to live in hours (default: 24)
+            ttl_hours: Time to live in hours (default: 24) - no longer used
 
         Returns:
-            True if cached successfully, False otherwise
+            True if logged successfully, False otherwise
         """
         self._ensure_initialized()
 
         try:
-            expires_at = datetime.utcnow() + timedelta(hours=ttl_hours)
-
-            cache_data = {
-                "content_hash": content_hash,
-                "contract_analysis": analysis_result,
-                "property_address": property_address,
-                "contract_type": contract_type,
-                "access_count": 1,
-                "expires_at": expires_at.isoformat(),
-            }
-
-            # Use upsert to handle duplicate hash entries
-            result = await self.db_client.database.upsert(
-                "hot_contracts_cache", cache_data, on_conflict="content_hash"
+            # No longer need to cache - analysis is already stored in contract_analyses table
+            # Just log the cache operation for monitoring
+            logger.info(
+                f"Contract analysis already stored in source table for hash: {content_hash}"
             )
-
-            if result.get("success"):
-                logger.info(
-                    f"Successfully cached contract analysis for hash: {content_hash}"
-                )
-                return True
-            else:
-                logger.error(
-                    f"Failed to cache contract analysis: {result.get('error')}"
-                )
-                return False
+            return True
 
         except Exception as e:
-            logger.error(f"Error caching contract analysis: {str(e)}")
+            logger.error(f"Error logging contract analysis: {str(e)}")
             return False
 
     async def create_user_contract_from_cache(
@@ -253,13 +243,13 @@ class CacheService:
         try:
             property_hash = self.generate_property_hash(address)
 
+            # Check property_data table directly (RLS disabled for caching)
             cache_result = await self.db_client.database.select(
-                "hot_properties_cache",
+                "property_data",
                 columns="*",
-                filters={
-                    "property_hash": property_hash,
-                    "expires_at__gte": datetime.utcnow().isoformat(),
-                },
+                filters={"property_hash": property_hash},
+                order_by="created_at DESC",
+                limit=1,
             )
 
             if not cache_result.get("data"):
@@ -267,10 +257,6 @@ class CacheService:
                 return None
 
             cache_entry = cache_result["data"][0]
-
-            # Update popularity and extend expiration
-            await self._increment_cache_access(property_hash, "property")
-
             logger.info(f"Cache hit for property: {address}")
             return cache_entry["analysis_result"]
 
@@ -282,48 +268,28 @@ class CacheService:
         self, address: str, analysis_result: Dict[str, Any], ttl_hours: int = 48
     ) -> bool:
         """
-        Cache property analysis result.
+        Cache property analysis result - now just logs the operation since we link directly to source.
 
         Args:
             address: Property address
             analysis_result: Analysis result to cache
-            ttl_hours: Time to live in hours (default: 48)
+            ttl_hours: Time to live in hours (default: 48) - no longer used
 
         Returns:
-            True if cached successfully, False otherwise
+            True if logged successfully, False otherwise
         """
         self._ensure_initialized()
 
         try:
-            property_hash = self.generate_property_hash(address)
-            normalized_address = self.normalize_address(address)
-            expires_at = datetime.utcnow() + timedelta(hours=ttl_hours)
-
-            cache_data = {
-                "property_hash": property_hash,
-                "property_address": address,
-                "normalized_address": normalized_address,
-                "analysis_result": analysis_result,
-                "popularity_score": 1,
-                "access_count": 1,
-                "expires_at": expires_at.isoformat(),
-            }
-
-            result = await self.db_client.database.upsert(
-                "hot_properties_cache", cache_data, on_conflict="property_hash"
+            # No longer need to cache - analysis is already stored in property_data table
+            # Just log the cache operation for monitoring
+            logger.info(
+                f"Property analysis already stored in source table for address: {address}"
             )
-
-            if result.get("success"):
-                logger.info(f"Successfully cached property analysis for: {address}")
-                return True
-            else:
-                logger.error(
-                    f"Failed to cache property analysis: {result.get('error')}"
-                )
-                return False
+            return True
 
         except Exception as e:
-            logger.error(f"Error caching property analysis: {str(e)}")
+            logger.error(f"Error logging property analysis: {str(e)}")
             return False
 
     async def log_user_property_view(
@@ -455,50 +421,34 @@ class CacheService:
     # =====================================================
 
     async def _increment_cache_access(self, hash_value: str, cache_type: str) -> None:
-        """
-        Increment cache access count and extend expiration for popular content.
-
-        Args:
-            hash_value: Cache key hash
-            cache_type: 'contract' or 'property'
-        """
+        """Increment cache access count - now just logs the operation."""
         try:
-            await self.db_client.rpc(
-                "increment_cache_popularity",
-                {"cache_type": cache_type, "hash_value": hash_value},
-            )
+            # No longer need to update cache tables - just log the access
+            logger.debug(f"Cache access logged for {cache_type} hash: {hash_value}")
         except Exception as e:
-            logger.error(f"Error incrementing cache access: {str(e)}")
+            logger.error(f"Error logging cache access: {str(e)}")
 
     async def cleanup_expired_cache(self) -> Dict[str, int]:
         """
-        Clean up expired cache entries.
+        Cleanup expired cache entries - now just returns empty since no cache tables.
 
         Returns:
-            Dictionary with counts of deleted entries
+            Dictionary with cleanup statistics (all zeros now)
         """
         self._ensure_initialized()
 
         try:
-            result = await self.db_client.rpc("cleanup_expired_cache")
-
-            if result and len(result) > 0:
-                cleanup_stats = result[0]
-                logger.info(f"Cache cleanup completed: {cleanup_stats}")
-                return {
-                    "properties_deleted": cleanup_stats.get("properties_deleted", 0),
-                    "contracts_deleted": cleanup_stats.get("contracts_deleted", 0),
-                }
-            else:
-                return {"properties_deleted": 0, "contracts_deleted": 0}
+            # No cache tables to clean up - just return empty stats
+            logger.info("No cache tables to clean up - using direct source access")
+            return {"properties_deleted": 0, "contracts_deleted": 0, "total_deleted": 0}
 
         except Exception as e:
-            logger.error(f"Error during cache cleanup: {str(e)}")
-            return {"properties_deleted": 0, "contracts_deleted": 0}
+            logger.error(f"Error in cache cleanup: {str(e)}")
+            return {"properties_deleted": 0, "contracts_deleted": 0, "total_deleted": 0}
 
     async def get_cache_stats(self) -> Dict[str, Any]:
         """
-        Get cache statistics.
+        Get cache statistics - now returns source table stats.
 
         Returns:
             Dictionary with cache statistics
@@ -506,97 +456,60 @@ class CacheService:
         self._ensure_initialized()
 
         try:
-            # Get contract cache stats
+            # Get contract analysis stats from source table
             contract_stats = await self.db_client.database.select(
-                "hot_contracts_cache",
-                columns="COUNT(*) as total, AVG(access_count) as avg_access",
-                filters={"expires_at__gte": datetime.utcnow().isoformat()},
+                "contract_analyses",
+                columns="COUNT(*) as total, AVG(processing_time) as avg_processing_time",
+                filters={"status": "completed"},
             )
 
-            # Get property cache stats
+            # Get property data stats from source table
             property_stats = await self.db_client.database.select(
-                "hot_properties_cache",
-                columns="COUNT(*) as total, AVG(access_count) as avg_access, AVG(popularity_score) as avg_popularity",
-                filters={"expires_at__gte": datetime.utcnow().isoformat()},
+                "property_data",
+                columns="COUNT(*) as total, AVG(processing_time) as avg_processing_time",
             )
 
             return {
-                "contracts": {
-                    "total_cached": (
-                        contract_stats["data"][0]["total"]
+                "contract_analyses": {
+                    "total": (
+                        contract_stats.get("data", [{}])[0].get("total", 0)
                         if contract_stats.get("data")
                         else 0
                     ),
-                    "average_access": (
-                        contract_stats["data"][0]["avg_access"]
+                    "avg_processing_time": (
+                        contract_stats.get("data", [{}])[0].get(
+                            "avg_processing_time", 0
+                        )
                         if contract_stats.get("data")
                         else 0
                     ),
                 },
-                "properties": {
-                    "total_cached": (
-                        property_stats["data"][0]["total"]
+                "property_data": {
+                    "total": (
+                        property_stats.get("data", [{}])[0].get("total", 0)
                         if property_stats.get("data")
                         else 0
                     ),
-                    "average_access": (
-                        property_stats["data"][0]["avg_access"]
-                        if property_stats.get("data")
-                        else 0
-                    ),
-                    "average_popularity": (
-                        property_stats["data"][0]["avg_popularity"]
+                    "avg_processing_time": (
+                        property_stats.get("data", [{}])[0].get(
+                            "avg_processing_time", 0
+                        )
                         if property_stats.get("data")
                         else 0
                     ),
                 },
-                "last_updated": datetime.utcnow().isoformat(),
+                "cache_type": "direct_source_access",
+                "architecture": "simplified_no_cache_tables",
             }
 
         except Exception as e:
             logger.error(f"Error getting cache stats: {str(e)}")
             return {
-                "contracts": {"total_cached": 0, "average_access": 0},
-                "properties": {
-                    "total_cached": 0,
-                    "average_access": 0,
-                    "average_popularity": 0,
-                },
-                "last_updated": datetime.utcnow().isoformat(),
-                "error": str(e),
+                "contract_analyses": {"total": 0, "avg_processing_time": 0},
+                "property_data": {"total": 0, "avg_processing_time": 0},
+                "cache_type": "direct_source_access",
+                "architecture": "simplified_no_cache_tables",
             }
-
-    async def validate_hash_consistency(self) -> Dict[str, Dict[str, Any]]:
-        """
-        Validate hash consistency across tables.
-
-        Returns:
-            Dictionary with consistency validation results
-        """
-        self._ensure_initialized()
-
-        try:
-            result = await self.db_client.rpc("validate_hash_consistency")
-
-            if result:
-                consistency_data = {}
-                for row in result:
-                    consistency_data[row["table_name"]] = {
-                        "total_records": row["total_records"],
-                        "records_with_hashes": row["records_with_hashes"],
-                        "consistency_percentage": row["consistency_percentage"],
-                    }
-
-                logger.info(
-                    f"Hash consistency validation completed: {consistency_data}"
-                )
-                return consistency_data
-            else:
-                return {}
-
-        except Exception as e:
-            logger.error(f"Error validating hash consistency: {str(e)}")
-            return {"error": str(e)}
 
 
 # Global cache service instance
