@@ -1,9 +1,11 @@
 """Contract analysis router with enhanced error handling."""
 
-from typing import Any
+from typing import Dict, List, Optional, Union, TypedDict
 from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
 from fastapi.responses import JSONResponse
 import logging
+from datetime import datetime
+from uuid import UUID
 
 from app.core.auth import get_current_user, User
 from app.core.auth_context import AuthContext
@@ -15,7 +17,147 @@ from app.core.notification_system import (
     notify_user_error,
     notify_user_success,
 )
-from app.schema.contract import ContractAnalysisRequest, ContractAnalysisResponse
+from app.schema.contract import ContractAnalysisRequest, ContractAnalysisResponse, AnalysisOptions
+from app.models.supabase_models import Document, Contract, ContractAnalysis, Profile
+from app.clients.base.interfaces import DatabaseOperations, AuthOperations
+from app.clients.supabase.client import SupabaseClient
+
+
+# Database Result Types
+class DatabaseSelectResult(TypedDict):
+    """Result from database select operations."""
+    data: List[Dict[str, Union[str, int, float, bool, datetime, UUID, None, Dict, List]]]
+    count: int
+
+
+class DatabaseMutationResult(TypedDict):
+    """Result from database insert/update/delete operations."""
+    success: bool
+    data: Optional[Dict[str, Union[str, int, float, bool, datetime, UUID, None, Dict, List]]]
+    error: Optional[str]
+
+
+# Domain Record Types (database row representations)
+class DocumentRecord(TypedDict):
+    """Document database record."""
+    id: str
+    user_id: str
+    original_filename: str
+    storage_path: str
+    file_type: str
+    file_size: int
+    processing_status: str
+    processing_results: Dict[str, Union[str, Dict, List]]
+    created_at: str
+    updated_at: str
+    # Additional optional fields
+    document_type: Optional[str]
+    contract_type: Optional[str]
+    australian_state: Optional[str]
+
+
+class ContractRecord(TypedDict):
+    """Contract database record."""
+    id: str
+    document_id: str
+    user_id: str
+    contract_type: str
+    australian_state: str
+    contract_terms: Dict[str, Union[str, int, float, bool, List, Dict]]
+    created_at: str
+    updated_at: str
+
+
+class AnalysisRecord(TypedDict):
+    """Contract analysis database record."""
+    id: str
+    contract_id: str
+    user_id: str
+    status: str
+    agent_version: str
+    analysis_result: Dict[str, Union[str, int, float, bool, List, Dict]]
+    risk_score: Optional[float]
+    processing_time: Optional[float]
+    error_message: Optional[str]
+    created_at: str
+    updated_at: str
+
+
+class UserNotificationData(TypedDict):
+    """User notification structure."""
+    id: str
+    user_id: str
+    title: str
+    message: str
+    type: str
+    acknowledged: bool
+    created_at: str
+
+
+# API Response Types
+class AnalysisStatusResponse(TypedDict):
+    """Response for analysis status endpoint."""
+    contract_id: str
+    analysis_id: str
+    status: str
+    progress: int
+    processing_time: float
+    created_at: str
+    updated_at: str
+    estimated_completion: Optional[str]
+    status_message: str
+    next_update_in_seconds: Optional[int]
+
+
+class AnalysisProgressInfo(TypedDict):
+    """Analysis progress calculation result."""
+    progress: int
+    status_message: str
+    estimated_completion: Optional[str]
+    next_update_in_seconds: Optional[int]
+
+
+class ContractAnalysisResultResponse(TypedDict):
+    """Response for contract analysis results."""
+    contract_id: str
+    analysis_status: str
+    analysis_result: Dict[str, Union[str, int, float, bool, List, Dict]]
+    risk_score: Optional[float]
+    processing_time: Optional[float]
+    created_at: str
+
+
+class NotificationsResponse(TypedDict):
+    """Response for user notifications."""
+    notifications: List[UserNotificationData]
+    total_count: int
+    unread_count: int
+
+
+class DeleteContractResponse(TypedDict):
+    """Response for contract deletion."""
+    message: str
+    contract_id: str
+    analyses_deleted: int
+
+
+class NotificationDismissResponse(TypedDict):
+    """Response for notification dismissal."""
+    message: str
+
+
+# Background Task Types
+class CeleryTaskResult:
+    """Celery task result wrapper."""
+    id: str
+    
+    def __init__(self, id: str):
+        self.id = id
+
+
+# Client Type Aliases
+UserAuthenticatedClient = SupabaseClient
+SystemClient = SupabaseClient
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/contracts", tags=["contracts"])
@@ -38,7 +180,7 @@ async def start_contract_analysis(
     background_tasks: BackgroundTasks,
     user: User = Depends(get_current_user),
     document_service: DocumentService = Depends(get_user_document_service),
-):
+) -> ContractAnalysisResponse:
     """Start contract analysis with enhanced error handling and validation"""
 
     # Create error context for better error reporting
@@ -147,14 +289,16 @@ async def start_contract_analysis(
 
 
 @retry_database_operation(max_attempts=3)
-async def _initialize_database_client(db_client: Any) -> None:
+async def _initialize_database_client(db_client: SupabaseClient) -> None:
     """Initialize database client with retry logic"""
     if not hasattr(db_client, "_client") or db_client._client is None:
         await db_client.initialize()
 
 
 @retry_database_operation(max_attempts=3)
-async def _get_user_document(user_client: Any, document_id: str, user_id: str) -> Any:
+async def _get_user_document(
+    user_client: UserAuthenticatedClient, document_id: str, user_id: str
+) -> DocumentRecord:
     """Get user document with user context (RLS enforced)"""
     try:
         doc_result = await user_client.database.select(
@@ -182,14 +326,19 @@ async def _get_user_document(user_client: Any, document_id: str, user_id: str) -
         raise ValueError(f"Failed to retrieve document: {str(e)}")
 
 
-def _is_valid_contract_document(document) -> bool:
+def _is_valid_contract_document(document: DocumentRecord) -> bool:
     """Validate that document is suitable for contract analysis"""
     # Check file size (basic validation)
     if document.get("file_size", 0) > 10 * 1024 * 1024:  # 10MB limit
         raise ValueError("File is too large. Please use a file smaller than 10MB")
 
-    # Check if document has content
-    if not document.get("content") and not document.get("file_path"):
+    # Check if document has content - either extracted text in processing_results or storage_path
+    processing_results = document.get("processing_results", {})
+    text_extraction = processing_results.get("text_extraction", {})
+    full_text = text_extraction.get("full_text", "")
+    storage_path = document.get("storage_path", "")
+
+    if not full_text and not storage_path:
         raise ValueError("The document appears to be empty or corrupted")
 
     return True
@@ -197,7 +346,7 @@ def _is_valid_contract_document(document) -> bool:
 
 @retry_database_operation(max_attempts=3)
 async def _create_contract_record(
-    db_client, document_id: str, document: dict, user: User
+    db_client: UserAuthenticatedClient, document_id: str, document: DocumentRecord, user: User
 ) -> str:
     """Create contract record with retry logic"""
     contract_data = {
@@ -216,7 +365,9 @@ async def _create_contract_record(
 
 
 @retry_database_operation(max_attempts=3)
-async def _create_analysis_record(db_client, contract_id: str, user_id: str) -> str:
+async def _create_analysis_record(
+    db_client: UserAuthenticatedClient, contract_id: str, user_id: str
+) -> str:
     """Create analysis record with retry logic"""
     analysis_data = {
         "contract_id": contract_id,
@@ -237,7 +388,11 @@ async def _create_analysis_record(db_client, contract_id: str, user_id: str) -> 
 
 @retry_api_call(max_attempts=2)
 async def _start_background_analysis(
-    contract_id: str, analysis_id: str, user_id: str, document: dict, analysis_options
+    contract_id: str,
+    analysis_id: str,
+    user_id: str,
+    document: DocumentRecord,
+    analysis_options: AnalysisOptions,
 ) -> str:
     """Start background analysis with retry logic"""
     try:
@@ -268,7 +423,7 @@ async def _start_background_analysis(
 async def get_analysis_status(
     contract_id: str,
     user: User = Depends(get_current_user),
-):
+) -> AnalysisStatusResponse:
     """Get contract analysis status and progress with enhanced error handling"""
 
     context = create_error_context(
@@ -315,8 +470,8 @@ async def get_analysis_status(
 
 @retry_database_operation(max_attempts=3)
 async def _get_analysis_status_with_validation(
-    db_client, contract_id: str, user_id: str
-):
+    db_client: UserAuthenticatedClient, contract_id: str, user_id: str
+) -> AnalysisRecord:
     """Get analysis status with validation and retry logic"""
 
     # First verify the contract belongs to the user
@@ -350,7 +505,7 @@ async def _get_analysis_status_with_validation(
     return result.data[0]
 
 
-def _calculate_analysis_progress(analysis: dict) -> dict:
+def _calculate_analysis_progress(analysis: AnalysisRecord) -> AnalysisProgressInfo:
     """Calculate detailed progress information"""
 
     status = analysis["status"]
@@ -410,7 +565,7 @@ def _calculate_analysis_progress(analysis: dict) -> dict:
 async def get_contract_analysis(
     contract_id: str,
     user: User = Depends(get_current_user),
-):
+) -> ContractAnalysisResultResponse:
     """Get contract analysis results"""
 
     try:
@@ -475,7 +630,7 @@ async def download_analysis_report(
     contract_id: str,
     format: str = "pdf",
     user: User = Depends(get_current_user),
-):
+) -> Union[JSONResponse, ContractAnalysisResultResponse]:
     """Download analysis report"""
 
     try:
@@ -506,7 +661,7 @@ async def download_analysis_report(
 async def delete_contract_analysis(
     contract_id: str,
     user: User = Depends(get_current_user),
-):
+) -> DeleteContractResponse:
     """Delete contract analysis and related data"""
 
     try:
@@ -574,7 +729,7 @@ async def delete_contract_analysis(
 @router.get("/notifications")
 async def get_user_notifications(
     user: User = Depends(get_current_user), include_acknowledged: bool = False
-):
+) -> NotificationsResponse:
     """Get user notifications with enhanced feedback"""
 
     try:
@@ -596,7 +751,7 @@ async def get_user_notifications(
 @router.post("/notifications/{notification_id}/dismiss")
 async def dismiss_notification(
     notification_id: str, user: User = Depends(get_current_user)
-):
+) -> NotificationDismissResponse:
     """Dismiss a user notification"""
 
     try:

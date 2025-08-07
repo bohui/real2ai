@@ -364,10 +364,13 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
             # Log successful upload
             self.log_operation("create", "document", document_id)
 
-            # Step 3: Update processing status (USER OPERATION)
+            # Step 3: Update processing status and start timestamp (USER OPERATION)
             await self._update_document_status(
                 document_id, ProcessingStatus.PROCESSING.value
             )
+            
+            # Set processing started timestamp
+            await self._set_processing_started(document_id)
 
             # All subsequent operations are user-scoped and use RLS
             # Step 4: Extract text with comprehensive analysis
@@ -379,15 +382,57 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
                 )
             )
 
-            # Step 5: Aggregate diagram detection results from pages
-            diagram_processing_result = self._aggregate_diagram_detections(
-                text_extraction_result
-            )
+            # Step 5: Persist analysis results to database with transaction-like behavior
+            try:
+                # Save page data to database
+                await self._save_document_pages(document_id, text_extraction_result)
 
-            # Step 6: Create page processing summary
-            page_processing_result = self._create_page_processing_summary(
-                text_extraction_result
-            )
+                # Aggregate diagram detection results from pages
+                diagram_processing_result = self._aggregate_diagram_detections(
+                    text_extraction_result
+                )
+
+                # Save diagram data to database
+                await self._save_document_diagrams(document_id, text_extraction_result)
+
+                # Update main document with aggregated metrics
+                await self._update_document_metrics(
+                    document_id, text_extraction_result, diagram_processing_result
+                )
+
+                # Create page processing summary
+                page_processing_result = self._create_page_processing_summary(
+                    text_extraction_result
+                )
+
+                # Mark document as completed
+                await self._update_document_status(
+                    document_id, ProcessingStatus.BASIC_COMPLETE.value
+                )
+
+                self.logger.info(f"Successfully completed document processing for {document_id}")
+
+            except Exception as db_error:
+                self.logger.error(f"Database persistence failed for document {document_id}: {str(db_error)}")
+                
+                # Attempt to rollback by marking document as failed with detailed error info
+                try:
+                    await self._update_document_status(
+                        document_id,
+                        ProcessingStatus.FAILED.value,
+                        error_details={
+                            "error": "Database persistence failed",
+                            "details": str(db_error),
+                            "stage": "database_persistence",
+                            "timestamp": datetime.now(UTC).isoformat(),
+                            "text_extraction_successful": text_extraction_result.get("success", False),
+                        },
+                    )
+                except Exception as rollback_error:
+                    self.logger.error(f"Rollback failed for document {document_id}: {str(rollback_error)}")
+                
+                # Re-raise the original database error
+                raise db_error
 
             processing_time = (datetime.now(UTC) - processing_start).total_seconds()
 
@@ -534,6 +579,20 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
                 "extraction_method": "failed",
                 "confidence": 0.0,
             }
+
+    async def _set_processing_started(self, document_id: str):
+        """Set processing started timestamp - USER OPERATION"""
+        try:
+            user_client = await self.get_user_client()
+            
+            update_data = {
+                "processing_started_at": datetime.now(UTC),
+            }
+
+            await user_client.database.update("documents", document_id, update_data)
+            
+        except Exception as e:
+            self.logger.error(f"Failed to set processing started timestamp: {str(e)}")
 
     async def _update_document_status(
         self,
@@ -1542,6 +1601,179 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
                 ),
             },
         }
+
+    async def _save_document_pages(
+        self, document_id: str, text_extraction_result: Dict[str, Any]
+    ) -> None:
+        """Save page analysis data to document_pages table - USER OPERATION"""
+        try:
+            if not text_extraction_result.get("success") or not text_extraction_result.get("pages"):
+                self.logger.info(f"No pages to save for document {document_id}")
+                return
+
+            user_client = await self.get_user_client()
+            pages = text_extraction_result["pages"]
+
+            for page in pages:
+                page_analysis = page.get("content_analysis", {})
+                layout_features = page_analysis.get("layout_features", {})
+                quality_indicators = page_analysis.get("quality_indicators", {})
+
+                page_data = {
+                    "id": str(uuid.uuid4()),
+                    "document_id": document_id,
+                    "page_number": page.get("page_number", 1),
+                    
+                    # Content analysis
+                    "text_content": page.get("text_content", ""),
+                    "text_length": page.get("text_length", 0),
+                    "word_count": page.get("word_count", 0),
+                    
+                    # Content classification
+                    "content_types": page_analysis.get("content_types", []),
+                    "primary_content_type": page_analysis.get("primary_type", "empty"),
+                    
+                    # Quality metrics
+                    "extraction_confidence": page.get("confidence", 0.0),
+                    "content_quality_score": quality_indicators.get("structure_score", 0.0),
+                    
+                    # Layout analysis
+                    "has_header": layout_features.get("has_header", False),
+                    "has_footer": layout_features.get("has_footer", False),
+                    "has_signatures": layout_features.get("has_signatures", False),
+                    "has_diagrams": layout_features.get("has_diagrams", False),
+                    "has_tables": layout_features.get("has_tables", False),
+                    
+                    # Processing metadata
+                    "processed_at": datetime.now(UTC),
+                    "processing_method": page.get("extraction_method", "unknown"),
+                }
+
+                # Save page record
+                await user_client.database.create("document_pages", page_data)
+
+            self.logger.info(f"Saved {len(pages)} pages for document {document_id}")
+            self.log_operation("create", "document_pages", document_id)
+
+        except Exception as e:
+            self.logger.error(f"Failed to save document pages: {str(e)}")
+            raise
+
+    async def _save_document_diagrams(
+        self, document_id: str, text_extraction_result: Dict[str, Any]
+    ) -> None:
+        """Save diagram detection data to document_diagrams table - USER OPERATION"""
+        try:
+            if not text_extraction_result.get("success") or not text_extraction_result.get("pages"):
+                return
+
+            user_client = await self.get_user_client()
+            diagrams_saved = 0
+
+            for page in text_extraction_result["pages"]:
+                page_analysis = page.get("content_analysis", {})
+                layout_features = page_analysis.get("layout_features", {})
+                
+                # Only save if diagrams were detected on this page
+                if layout_features.get("has_diagrams", False):
+                    diagram_data = {
+                        "id": str(uuid.uuid4()),
+                        "document_id": document_id,
+                        "page_number": page.get("page_number", 1),
+                        
+                        # Classification - would need more sophisticated analysis to determine specific type
+                        "diagram_type": "unknown",  # Default until we implement detailed classification
+                        "classification_confidence": page.get("confidence", 0.0),
+                        
+                        # Analysis status
+                        "basic_analysis_completed": True,
+                        "detailed_analysis_completed": False,
+                        
+                        # Basic analysis results
+                        "basic_analysis": {
+                            "content_types": page_analysis.get("content_types", []),
+                            "primary_type": page_analysis.get("primary_type"),
+                            "detection_method": "text_analysis",
+                            "quality_indicators": page_analysis.get("quality_indicators", {}),
+                        },
+                        
+                        # Quality metrics
+                        "image_quality_score": page_analysis.get("quality_indicators", {}).get("structure_score", 0.0),
+                        "clarity_score": page_analysis.get("quality_indicators", {}).get("readability_score", 0.0),
+                        
+                        # Metadata
+                        "detected_at": datetime.now(UTC),
+                        "basic_analysis_at": datetime.now(UTC),
+                    }
+
+                    await user_client.database.create("document_diagrams", diagram_data)
+                    diagrams_saved += 1
+
+            if diagrams_saved > 0:
+                self.logger.info(f"Saved {diagrams_saved} diagrams for document {document_id}")
+                self.log_operation("create", "document_diagrams", document_id)
+
+        except Exception as e:
+            self.logger.error(f"Failed to save document diagrams: {str(e)}")
+            raise
+
+    async def _update_document_metrics(
+        self, 
+        document_id: str, 
+        text_extraction_result: Dict[str, Any],
+        diagram_processing_result: Dict[str, Any]
+    ) -> None:
+        """Update main document with aggregated metrics - USER OPERATION"""
+        try:
+            user_client = await self.get_user_client()
+
+            # Calculate aggregated metrics
+            pages = text_extraction_result.get("pages", [])
+            total_pages = len(pages)
+            total_word_count = sum(p.get("word_count", 0) for p in pages)
+            total_text_length = sum(p.get("text_length", 0) for p in pages)
+            
+            # Calculate average confidence
+            confidences = [p.get("confidence", 0.0) for p in pages if p.get("confidence", 0.0) > 0]
+            avg_confidence = sum(confidences) / len(confidences) if confidences else 0.0
+            
+            # Diagram information
+            total_diagrams = diagram_processing_result.get("total_diagrams", 0)
+            has_diagrams = total_diagrams > 0
+            
+            # Determine text extraction method
+            extraction_methods = text_extraction_result.get("extraction_methods", [])
+            primary_method = extraction_methods[0] if extraction_methods else "unknown"
+
+            update_data = {
+                "total_pages": total_pages,
+                "total_word_count": total_word_count,
+                "total_text_length": total_text_length,
+                "has_diagrams": has_diagrams,
+                "diagram_count": total_diagrams,
+                "extraction_confidence": avg_confidence,
+                "overall_quality_score": avg_confidence,  # Use confidence as quality proxy for now
+                "text_extraction_method": primary_method,
+                "processing_completed_at": datetime.now(UTC),
+                "processing_results": {
+                    "text_extraction": text_extraction_result,
+                    "diagram_processing": diagram_processing_result,
+                    "processing_summary": {
+                        "total_pages": total_pages,
+                        "total_diagrams": total_diagrams,
+                        "extraction_methods": extraction_methods,
+                        "avg_confidence": avg_confidence,
+                    }
+                }
+            }
+
+            await user_client.database.update("documents", document_id, update_data)
+            self.logger.info(f"Updated document {document_id} with processing metrics")
+            self.log_operation("update", "document_metrics", document_id)
+
+        except Exception as e:
+            self.logger.error(f"Failed to update document metrics: {str(e)}")
+            raise
 
     # Placeholder implementations
     async def _extract_docx_text_comprehensive(
