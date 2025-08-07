@@ -15,7 +15,7 @@ from app.services.contract_analysis_service import (
 from app.services.interfaces import IContractAnalyzer
 from app.schema.enums import AustralianState, ProcessingStatus
 from app.models.contract_state import RealEstateAgentState
-from app.config.enhanced_workflow_config import EnhancedWorkflowConfig
+from app.core.config import EnhancedWorkflowConfig
 from app.clients.base.exceptions import ClientError
 
 

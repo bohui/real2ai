@@ -8,7 +8,7 @@ from typing import Dict, Any, Optional, List
 from datetime import datetime, UTC
 
 from app.agents.contract_workflow import ContractAnalysisWorkflow
-from app.config.enhanced_workflow_config import (
+from app.core.config import (
     get_enhanced_workflow_config,
     validate_workflow_configuration,
     EnhancedWorkflowConfig,

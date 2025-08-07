@@ -20,7 +20,7 @@ from app.services.contract_analysis_service import (
 )
 from app.models.contract_state import AustralianState, ContractType
 from app.services.ocr_performance_service import ProcessingPriority
-from app.config.enhanced_workflow_config import EnhancedWorkflowConfig
+from app.core.config import EnhancedWorkflowConfig
 
 # Set up logging
 logging.basicConfig(
