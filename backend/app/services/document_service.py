@@ -1181,7 +1181,7 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
 
         # Method 3: Enhanced keyword detection
         if text_content:
-            return self._has_diagram_keywords(text_content)
+            return self._has_diagram_keywords(text_content, strict_mode=True)
 
         return False
 
