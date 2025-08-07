@@ -58,7 +58,17 @@ export function SEOProvider({ children, baseConfig = {} }: SEOProviderProps) {
     [baseConfig]
   );
 
-  // Generate initial SEO data for current route
+  // Store refs for stable functions
+  const configRef = useRef(config);
+  const locationRef = useRef(location);
+  
+  // Update refs when values change
+  useEffect(() => {
+    configRef.current = config;
+    locationRef.current = location;
+  }, [config, location]);
+
+  // Create truly stable functions using refs
   const initializeSEOForRoute = useCallback(
     (pathname: string, dynamicData?: DynamicSEOData) => {
       setIsLoading(true);
@@ -69,21 +79,21 @@ export function SEOProvider({ children, baseConfig = {} }: SEOProviderProps) {
         console.error("Failed to generate SEO data:", error);
         // Fallback to default SEO - use stable references
         setCurrentSEO({
-          title: config.defaultTitle,
-          description: config.defaultDescription,
+          title: configRef.current.defaultTitle,
+          description: configRef.current.defaultDescription,
           canonical: pathname,
         });
       } finally {
         setIsLoading(false);
       }
     },
-    [config.defaultTitle, config.defaultDescription]
+    [] // No dependencies - function is stable
   );
 
-  // Update SEO when route changes
+  // Update SEO when route changes - only depend on pathname
   useEffect(() => {
     initializeSEOForRoute(location.pathname);
-  }, [location.pathname, initializeSEOForRoute]);
+  }, [location.pathname]); // Removed initializeSEOForRoute dependency
 
   const updateGlobalSEO = useCallback((seo: Partial<SEOData>) => {
     setCurrentSEO((prev) => ({
@@ -95,7 +105,7 @@ export function SEOProvider({ children, baseConfig = {} }: SEOProviderProps) {
   const updateDynamicSEO = useCallback((data: DynamicSEOData) => {
     setIsLoading(true);
     try {
-      const generatedSEO = generateSEOData(location.pathname, data);
+      const generatedSEO = generateSEOData(locationRef.current.pathname, data);
       setCurrentSEO((prev) => ({
         ...prev,
         ...generatedSEO,
@@ -105,17 +115,17 @@ export function SEOProvider({ children, baseConfig = {} }: SEOProviderProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [location.pathname]);
+  }, []); // No dependencies - function is stable
 
   const resetSEO = useCallback(() => {
-    initializeSEOForRoute(location.pathname);
-  }, [location.pathname, initializeSEOForRoute]);
+    initializeSEOForRoute(locationRef.current.pathname);
+  }, []); // No dependencies - function is stable
 
   const setSEOForRoute = useCallback(
     (pathname: string, dynamicData?: DynamicSEOData) => {
       initializeSEOForRoute(pathname, dynamicData);
     },
-    [initializeSEOForRoute]
+    [] // No dependencies - function is stable
   );
 
   const value: SEOContextValue = React.useMemo(
@@ -158,29 +168,20 @@ export function usePageSEO(
   const { updateGlobalSEO, updateDynamicSEO, currentSEO, isLoading } =
     useSEOContext();
 
-  // Store stable references to functions to prevent infinite loops
-  const updateGlobalSEORef = useRef(updateGlobalSEO);
-  const updateDynamicSEORef = useRef(updateDynamicSEO);
-  
-  // Update refs when functions change
-  useEffect(() => {
-    updateGlobalSEORef.current = updateGlobalSEO;
-    updateDynamicSEORef.current = updateDynamicSEO;
-  }, [updateGlobalSEO, updateDynamicSEO]);
-
-  // Update SEO with static data on mount - only run when staticSEO changes
+  // Since context functions are now stable, we can use them directly
+  // Update SEO with static data on mount
   useEffect(() => {
     if (staticSEO && Object.keys(staticSEO).length > 0) {
-      updateGlobalSEORef.current(staticSEO);
+      updateGlobalSEO(staticSEO);
     }
-  }, [staticSEO]);
+  }, [staticSEO]); // Only depend on staticSEO since updateGlobalSEO is stable
 
-  // Update SEO with dynamic data when it changes - only run when dynamicData changes  
+  // Update SEO with dynamic data when it changes
   useEffect(() => {
     if (dynamicData && Object.keys(dynamicData).length > 0) {
-      updateDynamicSEORef.current(dynamicData);
+      updateDynamicSEO(dynamicData);
     }
-  }, [dynamicData]);
+  }, [dynamicData]); // Only depend on dynamicData since updateDynamicSEO is stable
 
   const convenienceMethods = useMemo(
     () => ({
