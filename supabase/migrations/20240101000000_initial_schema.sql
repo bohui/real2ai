@@ -278,6 +278,9 @@ CREATE TABLE property_data (
     contract_id UUID REFERENCES contracts(id) ON DELETE CASCADE,
     user_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
     
+    -- Cache key
+    property_hash TEXT UNIQUE, -- Hash of normalized address for caching
+    
     -- Property details
     address TEXT NOT NULL,
     suburb TEXT,
@@ -299,6 +302,8 @@ CREATE TABLE property_data (
     -- Analysis data
     market_analysis JSONB DEFAULT '{}',
     property_insights JSONB DEFAULT '{}',
+    analysis_result JSONB DEFAULT '{}', -- Cached analysis result
+    processing_time FLOAT,
     
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -403,6 +408,7 @@ CREATE INDEX idx_usage_logs_action_type ON usage_logs(action_type);
 CREATE INDEX idx_property_data_contract_id ON property_data(contract_id);
 CREATE INDEX idx_property_data_location ON property_data(suburb, state, postcode);
 CREATE INDEX idx_property_data_property_type ON property_data(property_type);
+CREATE INDEX idx_property_data_property_hash ON property_data(property_hash);
 
 CREATE INDEX idx_user_subscriptions_user_id ON user_subscriptions(user_id);
 CREATE INDEX idx_user_subscriptions_status ON user_subscriptions(status);
@@ -577,34 +583,138 @@ GRANT EXECUTE ON FUNCTION find_or_create_property TO authenticated;
 GRANT EXECUTE ON FUNCTION find_or_create_property TO service_role;
 GRANT EXECUTE ON FUNCTION cleanup_expired_property_data TO service_role;
 
--- View combining user contract views with analysis data
-CREATE OR REPLACE VIEW user_contract_history AS
-SELECT 
-    ucv.*,
-    ca.analysis_result,
-    ca.risk_score,
-    ca.overall_risk_score,
-    ca.confidence_score,
-    ca.status as analysis_status,
-    ca.analysis_timestamp,
-    d.original_filename,
-    d.file_type,
-    d.file_size
-FROM user_contract_views ucv
-LEFT JOIN contract_analyses ca ON ucv.analysis_id = ca.id
-LEFT JOIN documents d ON ucv.content_hash = d.content_hash AND d.user_id = ucv.user_id;
+-- User tracking tables for cache history
+-- User property search history (Private with RLS)
+CREATE TABLE user_property_views (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    property_hash TEXT NOT NULL,
+    property_address TEXT NOT NULL,
+    source TEXT DEFAULT 'search',
+    viewed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
 
--- View for user property search history
-CREATE OR REPLACE VIEW user_property_history AS
-SELECT 
-    upv.*,
-    pd.analysis_result
-FROM user_property_views upv
-LEFT JOIN property_data pd ON upv.property_hash = pd.property_hash;
+-- Enable RLS for user property views
+ALTER TABLE user_property_views ENABLE ROW LEVEL SECURITY;
 
--- Grant permissions on views
-GRANT SELECT ON user_contract_history TO authenticated;
-GRANT SELECT ON user_property_history TO authenticated;
+-- RLS Policy: Users can only see their own property views
+CREATE POLICY "Users can view own property views" ON user_property_views
+    FOR ALL USING (auth.uid() = user_id);
+
+-- User contract analysis history (Private with RLS)
+CREATE TABLE user_contract_views (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    content_hash TEXT NOT NULL,
+    property_address TEXT,
+    analysis_id UUID, -- References contract_analyses
+    viewed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    source TEXT CHECK (source IN ('upload', 'cache_hit')) DEFAULT 'upload',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Enable RLS for user contract views
+ALTER TABLE user_contract_views ENABLE ROW LEVEL SECURITY;
+
+-- RLS Policy: Users can only see their own contract views
+CREATE POLICY "Users can view own contract views" ON user_contract_views
+    FOR ALL USING (auth.uid() = user_id);
+
+-- Create indexes for user view tables
+CREATE INDEX idx_user_property_views_user_id ON user_property_views(user_id);
+CREATE INDEX idx_user_property_views_property_hash ON user_property_views(property_hash);
+CREATE INDEX idx_user_contract_views_user_id ON user_contract_views(user_id);
+CREATE INDEX idx_user_contract_views_content_hash ON user_contract_views(content_hash);
+
+-- Function to get user contract history (bypasses RLS issues with views)
+CREATE OR REPLACE FUNCTION get_user_contract_history(p_user_id UUID)
+RETURNS TABLE (
+    id UUID,
+    user_id UUID,
+    content_hash TEXT,
+    property_address TEXT,
+    analysis_id UUID,
+    viewed_at TIMESTAMP WITH TIME ZONE,
+    source TEXT,
+    created_at TIMESTAMP WITH TIME ZONE,
+    analysis_result JSONB,
+    risk_score DECIMAL,
+    overall_risk_score INTEGER,
+    confidence_score FLOAT,
+    analysis_status TEXT,
+    analysis_timestamp TIMESTAMP WITH TIME ZONE,
+    original_filename TEXT,
+    file_type TEXT,
+    file_size BIGINT
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        ucv.id,
+        ucv.user_id,
+        ucv.content_hash,
+        ucv.property_address,
+        ucv.analysis_id,
+        ucv.viewed_at,
+        ucv.source,
+        ucv.created_at,
+        ca.analysis_result,
+        ca.risk_score,
+        ca.overall_risk_score,
+        ca.confidence_score,
+        ca.status as analysis_status,
+        ca.analysis_timestamp,
+        d.original_filename,
+        d.file_type,
+        d.file_size
+    FROM user_contract_views ucv
+    LEFT JOIN contract_analyses ca ON ucv.analysis_id = ca.id
+    LEFT JOIN documents d ON ucv.content_hash = d.content_hash AND d.user_id = ucv.user_id
+    WHERE ucv.user_id = p_user_id
+    ORDER BY ucv.viewed_at DESC;
+END;
+$$;
+
+-- Function to get user property history (bypasses RLS issues with views)
+CREATE OR REPLACE FUNCTION get_user_property_history(p_user_id UUID)
+RETURNS TABLE (
+    id UUID,
+    user_id UUID,
+    property_hash TEXT,
+    property_address TEXT,
+    source TEXT,
+    viewed_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE,
+    analysis_result JSONB
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        upv.id,
+        upv.user_id,
+        upv.property_hash,
+        upv.property_address,
+        upv.source,
+        upv.viewed_at,
+        upv.created_at,
+        pd.analysis_result
+    FROM user_property_views upv
+    LEFT JOIN property_data pd ON upv.property_hash = pd.property_hash
+    WHERE upv.user_id = p_user_id
+    ORDER BY upv.viewed_at DESC;
+END;
+$$;
+
+-- Grant execute permissions on functions
+GRANT EXECUTE ON FUNCTION get_user_contract_history TO authenticated;
+GRANT EXECUTE ON FUNCTION get_user_property_history TO authenticated;
 
 -- Function to automatically update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()

@@ -354,22 +354,20 @@ class CacheService:
         self._ensure_initialized()
 
         try:
-            # Use view that combines contract views with analysis data
+            # Use function that combines contract views with analysis data (bypasses RLS issues)
             user_client = await AuthContext.get_authenticated_client()
-            result = await user_client.database.select(
-                "user_contract_history",
-                columns="*",
-                filters={"user_id": user_id},
-                order={"viewed_at": "desc"},
-                limit=limit,
-                offset=offset,
+            result = await user_client.rpc(
+                "get_user_contract_history",
+                {"p_user_id": user_id}
             )
 
-            if result.get("data"):
+            if result:
+                # Apply limit and offset manually since RPC function returns all records
+                records = result[offset:offset + limit] if offset else result[:limit]
                 logger.debug(
-                    f"Retrieved {len(result['data'])} contract history records for user {user_id}"
+                    f"Retrieved {len(records)} contract history records for user {user_id}"
                 )
-                return result["data"]
+                return records
             else:
                 return []
 
@@ -394,21 +392,20 @@ class CacheService:
         self._ensure_initialized()
 
         try:
+            # Use function that combines property views with analysis data (bypasses RLS issues)
             user_client = await AuthContext.get_authenticated_client()
-            result = await user_client.database.select(
-                "user_property_history",
-                columns="*",
-                filters={"user_id": user_id},
-                order={"viewed_at": "desc"},
-                limit=limit,
-                offset=offset,
+            result = await user_client.rpc(
+                "get_user_property_history",
+                {"p_user_id": user_id}
             )
 
-            if result.get("data"):
+            if result:
+                # Apply limit and offset manually since RPC function returns all records
+                records = result[offset:offset + limit] if offset else result[:limit]
                 logger.debug(
-                    f"Retrieved {len(result['data'])} property history records for user {user_id}"
+                    f"Retrieved {len(records)} property history records for user {user_id}"
                 )
-                return result["data"]
+                return records
             else:
                 return []
 

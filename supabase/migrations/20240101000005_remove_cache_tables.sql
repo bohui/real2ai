@@ -40,20 +40,9 @@ CREATE INDEX IF NOT EXISTS idx_property_data_property_hash
 CREATE INDEX IF NOT EXISTS idx_property_data_created_at 
     ON property_data(created_at DESC);
 
--- Update view to use property_data instead of cache table
-CREATE OR REPLACE VIEW user_property_history AS
-SELECT 
-    upv.*,
-    pd.analysis_result
-FROM user_property_views upv
-LEFT JOIN property_data pd ON upv.property_hash = pd.property_hash;
-
 -- Add comment explaining the new architecture
 COMMENT ON TABLE contract_analyses IS 'Contract analysis results - RLS disabled for cross-user cache sharing via content hash';
 COMMENT ON TABLE property_data IS 'Property analysis data - RLS disabled for cross-user cache sharing via property hash';
-
--- Grant necessary permissions
-GRANT SELECT ON user_property_history TO authenticated;
 
 -- Log migration completion
 DO $$
