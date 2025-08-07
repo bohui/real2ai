@@ -380,12 +380,12 @@ async def _create_contract_record(
         "user_id": user.id,
     }
 
-    contract_result = await db_client.database.insert("contracts", contract_data)
+    contract_result = await db_client.database.create("contracts", contract_data)
 
-    if not contract_result.get("success") or not contract_result.get("data"):
+    if not contract_result or not contract_result.get("id"):
         raise ValueError("Failed to create contract record")
 
-    return contract_result["data"]["id"]
+    return contract_result["id"]
 
 
 @retry_database_operation(max_attempts=3)
@@ -400,14 +400,14 @@ async def _create_analysis_record(
         "status": "pending",
     }
 
-    analysis_result = await db_client.database.insert(
+    analysis_result = await db_client.database.create(
         "contract_analyses", analysis_data
     )
 
-    if not analysis_result.get("success") or not analysis_result.get("data"):
+    if not analysis_result or not analysis_result.get("id"):
         raise ValueError("Failed to create analysis record")
 
-    return analysis_result["data"]["id"]
+    return analysis_result["id"]
 
 
 @retry_api_call(max_attempts=2)
