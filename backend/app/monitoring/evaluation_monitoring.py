@@ -27,7 +27,7 @@ from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.trace import TracerProvider
 
 from app.core.config import get_settings
-from app.dependencies.supabase import get_supabase_client
+from app.clients.factory import get_supabase_client
 from app.core.langsmith_config import get_langsmith_config
 
 # Configure structured logging

@@ -22,7 +22,7 @@ import uuid
 from app.core.auth import get_current_user
 from app.schema.user import User
 from app.services.evaluation_service import get_evaluation_orchestrator, EvaluationStatus
-from app.dependencies.supabase import get_supabase_client
+from app.clients.factory import get_supabase_client
 
 router = APIRouter(prefix="/api/v1/evaluation", tags=["evaluation"])
 

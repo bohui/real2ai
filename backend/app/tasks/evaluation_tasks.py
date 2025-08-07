@@ -20,7 +20,7 @@ import json
 
 from app.core.config import get_settings
 from app.services.evaluation_service import get_evaluation_orchestrator, EvaluationStatus
-from app.dependencies.supabase import get_supabase_client
+from app.clients.factory import get_supabase_client
 from app.core.langsmith_config import langsmith_trace
 
 # Configure logging

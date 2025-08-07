@@ -23,7 +23,7 @@ from app.clients.base.interfaces import AIOperations
 from app.clients.factory import get_openai_client, get_gemini_client
 from app.core.langsmith_config import langsmith_trace, langsmith_session, get_langsmith_config
 from app.core.config import get_settings
-from app.dependencies.supabase import get_supabase_client
+from app.clients.factory import get_supabase_client
 
 logger = logging.getLogger(__name__)
 
