@@ -7,14 +7,11 @@ import logging
 from app.core.auth import get_current_user, User
 from app.core.auth_context import AuthContext
 from app.core.config import get_settings
-from app.core.error_handler import (
-    handle_api_error, 
-    create_error_context, 
-    ErrorCategory
-)
+from app.core.error_handler import handle_api_error, create_error_context, ErrorCategory
 from app.schema.enums import ContractType, AustralianState
 from app.services.document_service import DocumentService
-from app.services.websocket_service import WebSocketManager
+from app.services.websocket_singleton import websocket_manager
+from app.services.websocket_service import WebSocketEvents
 from app.schema.document import (
     DocumentUploadResponse,
     ReportGenerationRequest,
@@ -44,18 +41,15 @@ async def get_document_service(
 ) -> DocumentService:
     """Get initialized document service with user-aware architecture"""
     logger.info(f"Creating DocumentService instance for user {user.id}...")
-    
+
     # Get user-authenticated client for dependency injection
     user_client = await AuthContext.get_authenticated_client(require_auth=True)
-    
+
     # Initialize service with user client injection
     service = DocumentService(user_client=user_client)
     await service.initialize()
     logger.info("DocumentService initialized with user-aware authentication")
     return service
-
-
-websocket_manager = WebSocketManager()
 
 
 @router.get("/test-document-service")
@@ -68,10 +62,10 @@ async def test_document_service(
         user_client = await AuthContext.get_authenticated_client(require_auth=True)
         service = DocumentService(user_client=user_client)
         await service.initialize()
-        
+
         # Test auth context
         from app.core.auth_context import AuthContext
-        
+
         return {
             "status": "success",
             "message": "DocumentService initialized successfully",
@@ -95,25 +89,27 @@ async def upload_document(
 ):
     """
     Fast document upload - stores file and creates record only.
-    
+
     This endpoint now focuses solely on file storage and basic validation.
     For document processing and analysis, use /api/contracts/analyze endpoint.
     """
-    
+
     context = create_error_context(
         user_id=str(user.id),
         operation="upload_document",
         metadata={
             "filename": file.filename,
             "contract_type": contract_type.value,
-            "australian_state": australian_state.value
-        }
+            "australian_state": australian_state.value,
+        },
     )
 
     try:
         # Log upload attempt
-        logger.info(f"Fast upload attempt: filename={file.filename}, size={file.size}, content_type={file.content_type}")
-        
+        logger.info(
+            f"Fast upload attempt: filename={file.filename}, size={file.size}, content_type={file.content_type}"
+        )
+
         # Basic file validation
         if file.size == 0:
             logger.warning(f"Empty file upload attempted: {file.filename}")
@@ -121,7 +117,7 @@ async def upload_document(
                 status_code=400,
                 detail="Empty file uploaded. Please select a valid document with content.",
             )
-            
+
         if file.size > settings.max_file_size:
             raise HTTPException(
                 status_code=413,
@@ -139,10 +135,10 @@ async def upload_document(
         logger.info("Starting fast document upload...")
         try:
             upload_result = await document_service.upload_document_fast(
-                file=file, 
-                user_id=str(user.id), 
+                file=file,
+                user_id=str(user.id),
                 contract_type=contract_type.value if contract_type else None,
-                australian_state=australian_state.value if australian_state else None
+                australian_state=australian_state.value if australian_state else None,
             )
             logger.info(f"Fast upload result: {upload_result}")
         except Exception as upload_error:
@@ -168,7 +164,9 @@ async def upload_document(
             upload_status="uploaded",  # Status is now "uploaded" not "processed"
             processing_time=upload_result.get("processing_time", 0.0),
         )
-        logger.info(f"Document uploaded successfully - document_id: {upload_result['document_id']}")
+        logger.info(
+            f"Document uploaded successfully - document_id: {upload_result['document_id']}"
+        )
         return response
 
     except HTTPException:
@@ -183,24 +181,23 @@ async def upload_document(
         raise handle_api_error(e, context, ErrorCategory.FILE_PROCESSING)
 
 
-
 @router.get("/{document_id}")
 async def get_document(
     document_id: str,
     user: User = Depends(get_current_user),
 ):
     """Get document details"""
-    
+
     context = create_error_context(
         user_id=str(user.id),
         operation="get_document",
-        metadata={"document_id": document_id}
+        metadata={"document_id": document_id},
     )
 
     try:
         # Get authenticated client through context
         supabase_client = await AuthContext.get_authenticated_client()
-        
+
         # RLS will automatically filter by authenticated user
         result = (
             supabase_client.table("documents")
@@ -253,9 +250,7 @@ async def reprocess_document_with_ocr(
             raise HTTPException(status_code=503, detail="OCR service not available")
 
         # Get user profile for context - RLS ensures we only get our own profile
-        user_result = (
-            supabase_client.table("profiles").select("*").execute()
-        )
+        user_result = supabase_client.table("profiles").select("*").execute()
         user_profile = user_result.data[0] if user_result.data else {}
 
         # Create contract context
@@ -344,9 +339,7 @@ async def batch_process_ocr(
             raise HTTPException(status_code=503, detail="OCR service not available")
 
         # Get user profile - RLS ensures we only get our own profile
-        user_result = (
-            supabase_client.table("profiles").select("*").execute()
-        )
+        user_result = supabase_client.table("profiles").select("*").execute()
         user_profile = user_result.data[0] if user_result.data else {}
 
         # Create batch context
@@ -533,9 +526,7 @@ async def validate_contract_document(
         document = doc_result.data[0]
 
         # Get user profile for context - RLS ensures we only get our own profile
-        user_result = (
-            supabase_client.table("profiles").select("*").execute()
-        )
+        user_result = supabase_client.table("profiles").select("*").execute()
         user_profile = user_result.data[0] if user_result.data else {}
 
         # Create contract context
@@ -609,9 +600,7 @@ async def assess_document_quality(
         processing_results = document.get("processing_results", {})
 
         # Get user profile for context - RLS ensures we only get our own profile
-        user_result = (
-            supabase_client.table("profiles").select("*").execute()
-        )
+        user_result = supabase_client.table("profiles").select("*").execute()
         user_profile = user_result.data[0] if user_result.data else {}
 
         # Create contract context
