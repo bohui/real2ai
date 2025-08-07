@@ -24,7 +24,7 @@ def serialize_datetime_values(data: Dict[str, Any]) -> Dict[str, Any]:
     """Serialize datetime objects to ISO format strings for JSON compatibility."""
     if not isinstance(data, dict):
         return data
-    
+
     serialized = {}
     for key, value in data.items():
         if isinstance(value, datetime):
@@ -33,9 +33,15 @@ def serialize_datetime_values(data: Dict[str, Any]) -> Dict[str, Any]:
             serialized[key] = serialize_datetime_values(value)
         elif isinstance(value, list):
             serialized[key] = [
-                item.isoformat() if isinstance(item, datetime)
-                else serialize_datetime_values(item) if isinstance(item, dict)
-                else item
+                (
+                    item.isoformat()
+                    if isinstance(item, datetime)
+                    else (
+                        serialize_datetime_values(item)
+                        if isinstance(item, dict)
+                        else item
+                    )
+                )
                 for item in value
             ]
         else:
@@ -46,30 +52,30 @@ def serialize_datetime_values(data: Dict[str, Any]) -> Dict[str, Any]:
 def is_jwt_expired_error(error: Exception) -> bool:
     """Check if the error indicates JWT expiration."""
     error_str = str(error).lower()
-    error_details = getattr(error, 'details', None) or getattr(error, 'message', None)
-    
+    error_details = getattr(error, "details", None) or getattr(error, "message", None)
+
     # Check main error message
     jwt_indicators = [
-        'jwt expired',
-        'pgrst301',
-        'token expired',
-        'unauthorized',
-        'invalid_token'
+        "jwt expired",
+        "pgrst301",
+        "token expired",
+        "unauthorized",
+        "invalid_token",
     ]
-    
+
     if any(indicator in error_str for indicator in jwt_indicators):
         return True
-    
+
     # Check error details/message if available
     if error_details:
         details_str = str(error_details).lower()
         if any(indicator in details_str for indicator in jwt_indicators):
             return True
-    
+
     # Check if error code is PGRST301 specifically
-    if hasattr(error, 'code') and error.code == 'PGRST301':
+    if hasattr(error, "code") and error.code == "PGRST301":
         return True
-        
+
     return False
 
 
@@ -149,16 +155,18 @@ class SupabaseDatabaseClient(DatabaseOperations):
 
         except APIError as e:
             self.logger.error(f"API error creating record in table '{table}': {e}")
-            
+
             # Check if this is a JWT expiration error
             if is_jwt_expired_error(e):
-                self.logger.info(f"JWT expiration detected in database create operation for table '{table}'")
+                self.logger.info(
+                    f"JWT expiration detected in database create operation for table '{table}'"
+                )
                 raise ClientError(
                     f"JWT expired: {str(e)}",
                     client_name=self.client_name,
                     original_error=e,
                 )
-            
+
             # For other API errors
             raise ClientError(
                 f"Failed to create record in table '{table}': {str(e)}",
@@ -203,16 +211,18 @@ class SupabaseDatabaseClient(DatabaseOperations):
 
         except APIError as e:
             self.logger.error(f"API error reading from table '{table}': {e}")
-            
+
             # Check if this is a JWT expiration error
             if is_jwt_expired_error(e):
-                self.logger.info(f"JWT expiration detected in database read operation for table '{table}'")
+                self.logger.info(
+                    f"JWT expiration detected in database read operation for table '{table}'"
+                )
                 raise ClientError(
                     f"JWT expired: {str(e)}",
                     client_name=self.client_name,
                     original_error=e,
                 )
-            
+
             # For other API errors
             raise ClientError(
                 f"Failed to read from table '{table}': {str(e)}",
@@ -235,7 +245,9 @@ class SupabaseDatabaseClient(DatabaseOperations):
         try:
             # Serialize datetime objects to ISO format strings
             serialized_data = serialize_datetime_values(data)
-            self.logger.debug(f"Updating record {record_id} in table '{table}': {serialized_data}")
+            self.logger.debug(
+                f"Updating record {record_id} in table '{table}': {serialized_data}"
+            )
 
             result = (
                 self.supabase_client.table(table)
@@ -258,16 +270,18 @@ class SupabaseDatabaseClient(DatabaseOperations):
             self.logger.error(
                 f"API error updating record {record_id} in table '{table}': {e}"
             )
-            
+
             # Check if this is a JWT expiration error
             if is_jwt_expired_error(e):
-                self.logger.info(f"JWT expiration detected in database update operation for table '{table}'")
+                self.logger.info(
+                    f"JWT expiration detected in database update operation for table '{table}'"
+                )
                 raise ClientError(
                     f"JWT expired: {str(e)}",
                     client_name=self.client_name,
                     original_error=e,
                 )
-            
+
             # For other API errors
             raise ClientError(
                 f"Failed to update record {record_id} in table '{table}': {str(e)}",
@@ -386,7 +400,9 @@ class SupabaseDatabaseClient(DatabaseOperations):
             )
 
             if serialized_params:
-                result = self.supabase_client.rpc(function_name, serialized_params).execute()
+                result = self.supabase_client.rpc(
+                    function_name, serialized_params
+                ).execute()
             else:
                 result = self.supabase_client.rpc(function_name).execute()
 
@@ -395,32 +411,45 @@ class SupabaseDatabaseClient(DatabaseOperations):
 
         except APIError as e:
             # Handle specific case for ensure_bucket_exists which returns 200 but with JSON parsing issues
-            if function_name == "ensure_bucket_exists" and hasattr(e, 'details'):
+            if function_name == "ensure_bucket_exists" and hasattr(e, "details"):
                 try:
                     # Extract the actual response from the error details
                     import json
                     import re
-                    
+
                     # The details often contain the actual response in a nested format
                     details_str = str(e.details)
-                    
+
                     # Look for JSON pattern in the details
-                    json_match = re.search(r'b\'({.*})\'', details_str)
+                    json_match = re.search(r"b\'({.*})\'", details_str)
                     if json_match:
                         json_str = json_match.group(1)
                         response_data = json.loads(json_str)
-                        self.logger.debug(f"Successfully parsed ensure_bucket_exists response: {response_data}")
+                        self.logger.debug(
+                            f"Successfully parsed ensure_bucket_exists response: {response_data}"
+                        )
                         return response_data
-                    
+
                     # Fallback: try to parse the details directly
-                    if 'bucket already exists' in details_str.lower():
-                        self.logger.debug(f"Bucket already exists (parsed from error): {function_name}")
-                        return {"created": False, "bucket_name": params.get("bucket_name", "unknown"), "message": "Bucket already exists"}
-                        
+                    if "bucket already exists" in details_str.lower():
+                        self.logger.debug(
+                            f"Bucket already exists (parsed from error): {function_name}"
+                        )
+                        return {
+                            "created": False,
+                            "bucket_name": params.get("bucket_name", "unknown"),
+                            "message": "Bucket already exists",
+                        }
+
                 except Exception as parse_error:
-                    self.logger.debug(f"Could not parse ensure_bucket_exists response, treating as non-critical: {parse_error}")
-                    return {"created": False, "message": "Bucket operation completed (parsing failed)"}
-            
+                    self.logger.debug(
+                        f"Could not parse ensure_bucket_exists response, treating as non-critical: {parse_error}"
+                    )
+                    return {
+                        "created": False,
+                        "message": "Bucket operation completed (parsing failed)",
+                    }
+
             self.logger.error(
                 f"API error executing RPC function '{function_name}': {e}"
             )
@@ -444,52 +473,74 @@ class SupabaseDatabaseClient(DatabaseOperations):
         """Insert a new record in the specified table - wrapper for compatibility."""
         try:
             created_record = await self.create(table, data)
-            return {
-                "success": True,
-                "data": created_record
-            }
+            return {"success": True, "data": created_record}
         except Exception as e:
             self.logger.error(f"Insert operation failed for table '{table}': {e}")
-            return {
-                "success": False,
-                "data": None,
-                "error": str(e)
-            }
+            return {"success": False, "data": None, "error": str(e)}
 
     @with_retry(max_retries=3, backoff_factor=1.0)
     async def select(
-        self, table: str, columns: str = "*", filters: Dict[str, Any] = None
+        self,
+        table: str,
+        columns: str = "*",
+        filters: Dict[str, Any] = None,
+        order_by: Optional[str] = None,
+        limit: Optional[int] = None,
     ) -> Dict[str, Any]:
-        """Select records with optional filtering - used by contract router."""
+        """Select records with optional filtering, ordering, and limiting - used by contract router."""
         try:
-            self.logger.debug(f"Selecting from table '{table}' columns '{columns}' with filters: {filters}")
-            
+            self.logger.debug(
+                f"Selecting from table '{table}' columns '{columns}' with filters: {filters}, order_by: {order_by}, limit: {limit}"
+            )
+
             query = self.supabase_client.table(table).select(columns)
-            
+
             # Apply filters if provided
             if filters:
                 for key, value in filters.items():
-                    query = query.eq(key, value)
-            
+                    # Skip None values to prevent database errors
+                    if value is not None:
+                        query = query.eq(key, value)
+
+            # Apply ordering if provided
+            if order_by:
+                # Parse order_by string (e.g., "created_at DESC" or "updated_at ASC")
+                order_parts = order_by.strip().split()
+                if len(order_parts) >= 1:
+                    column = order_parts[0]
+                    direction = (
+                        order_parts[1].upper() if len(order_parts) > 1 else "ASC"
+                    )
+                    if direction == "DESC":
+                        query = query.order(column, desc=True)
+                    else:
+                        query = query.order(column, desc=False)
+
+            # Apply limit if provided
+            if limit:
+                query = query.limit(limit)
+
             result = query.execute()
-            
+
             return {
                 "data": result.data or [],
-                "count": len(result.data) if result.data else 0
+                "count": len(result.data) if result.data else 0,
             }
-            
+
         except APIError as e:
             self.logger.error(f"API error selecting from table '{table}': {e}")
-            
+
             # Check if this is a JWT expiration error
             if is_jwt_expired_error(e):
-                self.logger.info(f"JWT expiration detected in database select operation for table '{table}'")
+                self.logger.info(
+                    f"JWT expiration detected in database select operation for table '{table}'"
+                )
                 raise ClientError(
                     f"JWT expired: {str(e)}",
                     client_name=self.client_name,
                     original_error=e,
                 )
-            
+
             # For other API errors
             raise ClientError(
                 f"Failed to select from table '{table}': {str(e)}",

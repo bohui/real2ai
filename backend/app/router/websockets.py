@@ -3,7 +3,7 @@
 import json
 import asyncio
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
 from datetime import datetime, UTC, timedelta
 
@@ -293,6 +293,19 @@ async def document_analysis_websocket(
             f"Authentication successful for document {document_id} by user {user.id}"
         )
 
+        # STEP 2.5: Set authentication context for the WebSocket connection
+        AuthContext.set_auth_context(
+            token=token,
+            user_id=str(user.id),
+            user_email=user.email,
+            metadata={
+                "websocket_document_id": document_id,
+                "connection_type": "websocket",
+                "connected_at": datetime.now(UTC).isoformat(),
+            },
+        )
+        logger.debug(f"Auth context set for WebSocket user: {user.id}")
+
         # STEP 3: Check cache status and get document info
         cache_status_result = await check_document_cache_status(
             document_id, str(user.id)
@@ -416,14 +429,18 @@ async def document_analysis_websocket(
         except Exception as close_error:
             logger.error(f"Error closing WebSocket: {str(close_error)}")
     finally:
-        # Cleanup - disconnect from manager
+        # Cleanup - disconnect from manager and clear auth context
         if user:  # Only cleanup if we had a successful authentication
             websocket_manager.disconnect(websocket, document_id)
             logger.info(f"WebSocket cleanup completed for document {document_id}")
 
+        # Always clear authentication context for WebSocket connections
+        AuthContext.clear_auth_context()
+        logger.debug("WebSocket authentication context cleared")
+
 
 async def handle_websocket_messages(
-    websocket: WebSocket, document_id: str, contract_id: str, user_id: str
+    websocket: WebSocket, document_id: str, contract_id: Optional[str], user_id: str
 ):
     """
     Handle WebSocket messages for document-based analysis.
@@ -464,7 +481,7 @@ async def handle_websocket_messages(
 async def handle_client_message(
     websocket: WebSocket,
     document_id: str,
-    contract_id: str,
+    contract_id: Optional[str],
     user_id: str,
     data: Dict[str, Any],
 ):
@@ -527,7 +544,7 @@ async def handle_client_message(
 async def handle_start_analysis_request(
     websocket: WebSocket,
     document_id: str,
-    contract_id: str,
+    contract_id: Optional[str],
     user_id: str,
     data: Dict[str, Any],
 ):
@@ -595,7 +612,7 @@ async def handle_start_analysis_request(
 async def handle_retry_analysis_request(
     websocket: WebSocket,
     document_id: str,
-    contract_id: str,
+    contract_id: Optional[str],
     user_id: str,
     data: Dict[str, Any],
 ):
@@ -644,12 +661,30 @@ async def handle_retry_analysis_request(
 
 
 async def handle_status_request(
-    websocket: WebSocket, document_id: str, contract_id: str, user_id: str
+    websocket: WebSocket, document_id: str, contract_id: Optional[str], user_id: str
 ):
     """Handle status request with user context (RLS enforced)."""
     from app.core.auth_context import AuthContext
 
     try:
+        # Check if contract_id is provided
+        if not contract_id or contract_id == "None":
+            # No contract_id means no analysis has been started yet
+            status_message = {
+                "event_type": "status_update",
+                "timestamp": datetime.now(UTC).isoformat(),
+                "data": {
+                    "contract_id": None,
+                    "status": "not_started",
+                    "message": "No analysis has been started for this document",
+                    "progress_percent": 0,
+                },
+            }
+            await websocket_manager.send_personal_message(
+                document_id, websocket, status_message
+            )
+            return
+
         # Get user-authenticated client (respects RLS)
         user_client = await AuthContext.get_authenticated_client(require_auth=True)
 
@@ -736,7 +771,7 @@ async def handle_status_request(
 
 
 async def handle_cancellation_request(
-    websocket: WebSocket, document_id: str, contract_id: str, user_id: str
+    websocket: WebSocket, document_id: str, contract_id: Optional[str], user_id: str
 ):
     """Handle analysis cancellation request."""
     logger.info(
