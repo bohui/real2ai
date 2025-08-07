@@ -548,7 +548,7 @@ async def handle_start_analysis_request(
     user_id: str,
     data: Dict[str, Any],
 ):
-    """Handle request to start new analysis (for cache miss scenarios)."""
+    """Handle request to start new analysis and actually dispatch the task."""
 
     logger.info(f"🎆 Starting new analysis for document {document_id}")
 
@@ -567,14 +567,7 @@ async def handle_start_analysis_request(
             },
         )
 
-        # If no contract_id, we need to create contract record first
-        if not contract_id:
-            # This will be handled by the existing contract creation logic
-            logger.info(
-                f"No contract_id provided - analysis will create contract record"
-            )
-
-        # Send acknowledgment
+        # Send initial acknowledgment
         await websocket_manager.send_personal_message(
             document_id,
             websocket,
@@ -590,8 +583,32 @@ async def handle_start_analysis_request(
             },
         )
 
-        # The actual analysis trigger will be handled by the frontend calling /api/contracts/analyze
-        # This WebSocket message just acknowledges the request
+        # Actually dispatch the analysis task
+        task_result = await _dispatch_analysis_task(
+            document_id=document_id,
+            contract_id=contract_id,
+            user_id=user_id,
+            analysis_options=analysis_options
+        )
+
+        # Send success confirmation
+        await websocket_manager.send_personal_message(
+            document_id,
+            websocket,
+            {
+                "event_type": "analysis_dispatched",
+                "timestamp": datetime.now(UTC).isoformat(),
+                "data": {
+                    "document_id": document_id,
+                    "contract_id": task_result["contract_id"],
+                    "analysis_id": task_result["analysis_id"],
+                    "task_id": task_result["task_id"],
+                    "message": "Analysis task dispatched successfully",
+                },
+            },
+        )
+
+        logger.info(f"Analysis task dispatched for document {document_id}, task ID: {task_result['task_id']}")
 
     except Exception as e:
         logger.error(f"Error starting analysis for document {document_id}: {str(e)}")
@@ -616,7 +633,7 @@ async def handle_retry_analysis_request(
     user_id: str,
     data: Dict[str, Any],
 ):
-    """Handle request to retry failed analysis."""
+    """Handle request to retry failed analysis and actually dispatch the task."""
 
     logger.info(
         f"🔄 Retrying analysis for document {document_id}, contract {contract_id}"
@@ -625,6 +642,17 @@ async def handle_retry_analysis_request(
     try:
         if not contract_id:
             raise ValueError("Contract ID required for retry")
+
+        # Get analysis options from client
+        analysis_options = data.get(
+            "analysis_options",
+            {
+                "include_financial_analysis": True,
+                "include_risk_assessment": True,
+                "include_compliance_check": True,
+                "include_recommendations": True,
+            },
+        )
 
         # Send acknowledgment
         await websocket_manager.send_personal_message(
@@ -642,7 +670,32 @@ async def handle_retry_analysis_request(
             },
         )
 
-        # The actual retry will be triggered by frontend calling /api/contracts/analyze with the contract_id
+        # Actually dispatch the retry task
+        task_result = await _dispatch_analysis_task(
+            document_id=document_id,
+            contract_id=contract_id,
+            user_id=user_id,
+            analysis_options=analysis_options
+        )
+
+        # Send success confirmation
+        await websocket_manager.send_personal_message(
+            document_id,
+            websocket,
+            {
+                "event_type": "analysis_retry_dispatched",
+                "timestamp": datetime.now(UTC).isoformat(),
+                "data": {
+                    "document_id": document_id,
+                    "contract_id": task_result["contract_id"],
+                    "analysis_id": task_result["analysis_id"],
+                    "task_id": task_result["task_id"],
+                    "message": "Retry analysis task dispatched successfully",
+                },
+            },
+        )
+
+        logger.info(f"Retry analysis task dispatched for document {document_id}, task ID: {task_result['task_id']}")
 
     except Exception as e:
         logger.error(f"Error retrying analysis for document {document_id}: {str(e)}")
@@ -792,20 +845,225 @@ async def handle_cancellation_request(
         f"Analysis cancellation requested for document {document_id}, contract {contract_id} by user {user_id}"
     )
 
-    # TODO: Implement actual cancellation logic
-    await websocket_manager.send_personal_message(
-        document_id,
-        websocket,
-        {
-            "event_type": "cancellation_received",
-            "timestamp": datetime.now(UTC).isoformat(),
-            "data": {
-                "contract_id": contract_id,
-                "message": "Cancellation request received",
-                "note": "Analysis will stop at the next checkpoint",
+    try:
+        # Get authenticated client
+        user_client = await AuthContext.get_authenticated_client(require_auth=True)
+        
+        # Get the content_hash from the document
+        doc_result = await user_client.database.select(
+            "documents", 
+            columns="content_hash", 
+            filters={"id": document_id, "user_id": user_id}
+        )
+        
+        if not doc_result.get("data"):
+            raise ValueError(f"Document {document_id} not found or access denied")
+            
+        content_hash = doc_result["data"][0].get("content_hash")
+        
+        # Update analysis_progress status to cancelled
+        await user_client.database.update(
+            "analysis_progress",
+            {"status": "cancelled", "error_message": "Analysis cancelled by user"},
+            filters={"content_hash": content_hash, "user_id": user_id, "status": "in_progress"}
+        )
+        
+        # Update contract_analyses status to cancelled if still processing
+        await user_client.database.update(
+            "contract_analyses",
+            {"status": "cancelled", "error_details": {"cancelled_by_user": True}},
+            filters={"content_hash": content_hash, "status": "pending"}
+        )
+        
+        # Try to cancel the Celery task if we can find it
+        try:
+            from app.tasks.background_tasks import comprehensive_document_analysis
+            from celery import Celery
+            
+            # Get all active tasks and try to revoke matching ones
+            app = comprehensive_document_analysis.app
+            active_tasks = app.control.inspect().active()
+            
+            cancelled_tasks = []
+            if active_tasks:
+                for worker, tasks in active_tasks.items():
+                    for task in tasks:
+                        if (
+                            task.get("name") == "app.tasks.background_tasks.comprehensive_document_analysis"
+                            and document_id in str(task.get("args", []))
+                        ):
+                            # Revoke the task
+                            app.control.revoke(task["id"], terminate=True)
+                            cancelled_tasks.append(task["id"])
+                            logger.info(f"Cancelled Celery task {task['id']} for document {document_id}")
+        
+        except Exception as task_cancel_error:
+            logger.warning(f"Could not cancel background task: {str(task_cancel_error)}")
+            # Continue with user notification even if task cancellation fails
+        
+        # Send success confirmation
+        await websocket_manager.send_personal_message(
+            document_id,
+            websocket,
+            {
+                "event_type": "analysis_cancelled",
+                "timestamp": datetime.now(UTC).isoformat(),
+                "data": {
+                    "contract_id": contract_id,
+                    "document_id": document_id,
+                    "message": "Analysis successfully cancelled",
+                    "status": "cancelled",
+                    "cancelled_tasks": len(cancelled_tasks) if 'cancelled_tasks' in locals() else 0,
+                },
             },
-        },
-    )
+        )
+        
+        logger.info(f"Successfully cancelled analysis for document {document_id}")
+        
+    except Exception as e:
+        logger.error(f"Error cancelling analysis for document {document_id}: {str(e)}")
+        
+        # Send error response
+        await websocket_manager.send_personal_message(
+            document_id,
+            websocket,
+            {
+                "event_type": "cancellation_failed",
+                "timestamp": datetime.now(UTC).isoformat(),
+                "data": {
+                    "contract_id": contract_id,
+                    "message": "Failed to cancel analysis",
+                    "error": str(e),
+                },
+            },
+        )
+
+
+async def _dispatch_analysis_task(
+    document_id: str,
+    contract_id: Optional[str],
+    user_id: str,
+    analysis_options: Dict[str, Any],
+) -> Dict[str, str]:
+    """Helper function to dispatch analysis task with proper contract/analysis creation."""
+    try:
+        # Get authenticated client
+        user_client = await AuthContext.get_authenticated_client(require_auth=True)
+
+        # Get document record
+        doc_result = await user_client.database.select(
+            "documents", columns="*", filters={"id": document_id, "user_id": user_id}
+        )
+
+        if not doc_result.get("data"):
+            raise ValueError(f"Document {document_id} not found or access denied")
+
+        document = doc_result["data"][0]
+
+        # Generate content hash for caching
+        content_hash = await _generate_document_content_hash(document)
+
+        # Create contract record if not provided
+        if not contract_id:
+            # Create new contract record
+            contract_data = {
+                "document_id": document_id,
+                "contract_type": document.get("contract_type", "purchase_agreement"),
+                "user_id": user_id,
+                "content_hash": content_hash,
+            }
+
+            contract_result = await user_client.database.insert("contracts", contract_data)
+            if not contract_result.get("success") or not contract_result.get("data"):
+                raise ValueError("Failed to create contract record")
+
+            contract_id = contract_result["data"]["id"]
+            logger.info(f"Created new contract record: {contract_id}")
+
+        # Create analysis record
+        analysis_data = {
+            "contract_id": contract_id,
+            "user_id": user_id,
+            "agent_version": "1.0",
+            "status": "pending",
+            "content_hash": content_hash,
+        }
+
+        analysis_result = await user_client.database.insert(
+            "contract_analyses", analysis_data
+        )
+        if not analysis_result.get("success") or not analysis_result.get("data"):
+            raise ValueError("Failed to create analysis record")
+
+        analysis_id = analysis_result["data"]["id"]
+        logger.info(f"Created new analysis record: {analysis_id}")
+
+        # Import and dispatch the comprehensive analysis task
+        from app.tasks.background_tasks import comprehensive_document_analysis
+
+        # Enhanced task parameters with comprehensive processing
+        task_params = {
+            "document_id": document_id,
+            "analysis_id": analysis_id,
+            "contract_id": contract_id,
+            "user_id": user_id,
+            "analysis_options": {
+                **analysis_options,
+                "content_hash": content_hash,
+                "enable_caching": True,
+                "progress_tracking": True,
+                "comprehensive_processing": True,
+            },
+        }
+
+        logger.info(
+            f"Dispatching comprehensive analysis task for contract {contract_id} with progress tracking"
+        )
+
+        task = comprehensive_document_analysis.delay(**task_params)
+
+        if not task or not task.id:
+            raise ValueError("Failed to queue comprehensive analysis task")
+
+        logger.info(f"Comprehensive analysis task queued with ID: {task.id}")
+
+        return {
+            "contract_id": contract_id,
+            "analysis_id": analysis_id,
+            "task_id": task.id,
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to dispatch analysis task: {str(e)}")
+        raise ValueError(f"Analysis dispatch failed: {str(e)}")
+
+
+async def _generate_document_content_hash(document: Dict[str, Any]) -> Optional[str]:
+    """Generate content hash for document."""
+    try:
+        import hashlib
+
+        # Try to get hash from document record first
+        if document.get("content_hash"):
+            return document["content_hash"]
+
+        # If document has processing results with text, hash that
+        processing_results = document.get("processing_results", {})
+        text_extraction = processing_results.get("text_extraction", {})
+        full_text = text_extraction.get("full_text", "")
+
+        if full_text:
+            # Hash the extracted text content
+            content_bytes = full_text.encode("utf-8")
+            return hashlib.sha256(content_bytes).hexdigest()
+
+        # Fallback: create hash from document metadata
+        metadata = f"{document.get('original_filename', '')}{document.get('file_size', 0)}{document.get('created_at', '')}"
+        return hashlib.sha256(metadata.encode("utf-8")).hexdigest()
+
+    except Exception as e:
+        logger.error(f"Error generating content hash: {str(e)}")
+        return None
 
 
 def get_progress_from_status(status: str) -> int:

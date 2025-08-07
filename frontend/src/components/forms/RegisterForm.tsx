@@ -2,7 +2,7 @@ import React from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Mail, Lock, AlertCircle } from "lucide-react";
 import { motion } from "framer-motion";
 
@@ -67,6 +67,7 @@ const RegisterForm: React.FC<RegisterFormProps> = ({
 }) => {
   const { register: registerUser, isLoading, error } = useAuthStore();
   const { addNotification } = useUIStore();
+  const navigate = useNavigate();
 
   const {
     register,
@@ -98,7 +99,7 @@ const RegisterForm: React.FC<RegisterFormProps> = ({
       if (onSuccess) {
         onSuccess();
       } else {
-        window.location.href = redirectTo;
+        navigate(redirectTo);
       }
     } catch (err) {
       // Error is already handled in the store

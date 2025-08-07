@@ -110,8 +110,11 @@ GEMINI_API_KEY=your-gemini-key
 DOMAIN_API_KEY=your-domain-key
 CORELOGIC_API_KEY=your-corelogic-key
 
-# Redis Configuration (Optional)
-REDIS_URL=redis://localhost:6379
+# Background Processing (Celery)
+CELERY_BROKER_URL=redis://localhost:6379/0
+CELERY_RESULT_BACKEND=redis://localhost:6379/1
+CELERY_CONCURRENCY=2
+CELERY_TIMEZONE=UTC
 
 # Development Settings
 ENVIRONMENT=development
@@ -138,11 +141,15 @@ supabase start
 
 #### Database Schema
 The application uses Supabase with the following key tables:
-- `profiles` - User profiles and preferences
+- `users` - User profiles and authentication
 - `documents` - Uploaded contract documents
-- `contracts` - Parsed contract data
+- `contracts` - Shared contract data (keyed by content_hash)
 - `contract_analyses` - Analysis results and reports
-- `agent_sessions` - LangGraph workflow sessions
+- `user_contract_views` - User access control for contracts
+- `user_property_views` - User access control for property data
+- `property_data` - Shared property information
+
+**Important**: This application uses a shared resource model where contracts and property data are deduplicated by content_hash, with user access tracked through separate view tables.
 
 ### 6. Verify Backend Setup
 ```bash
@@ -157,7 +164,28 @@ python -c "from app.clients.gemini import get_gemini_client; print('Gemini clien
 python -c "from app.main import app; print('FastAPI app created successfully')"
 ```
 
-### 7. Start Backend Server
+### 7. Start Backend Services
+
+#### Start Redis (Required for Celery)
+```bash
+# Using Docker (recommended)
+docker run -d --name redis -p 6379:6379 redis:alpine
+
+# Or install Redis locally
+# macOS: brew install redis && brew services start redis
+# Ubuntu: sudo apt install redis-server && sudo systemctl start redis
+```
+
+#### Start Celery Worker (Background Tasks)
+```bash
+# In a separate terminal, start Celery worker
+celery -A app.core.celery worker --loglevel=info
+
+# Optional: Start Celery flower for monitoring
+celery -A app.core.celery flower
+```
+
+#### Start FastAPI Server
 ```bash
 # Start development server with hot reload
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
@@ -266,12 +294,22 @@ fetch('http://localhost:8000/api/health')
 
 ### 1. Daily Development Setup
 ```bash
-# Backend terminal (Terminal 1)
+# Terminal 1: Redis (if not using Docker)
+redis-server
+# Or start Docker Redis:
+# docker start redis
+
+# Terminal 2: Celery Worker
 cd real2ai/backend
-source .venv/bin/activate  # Activate virtual environment
+source .venv/bin/activate
+celery -A app.core.celery worker --loglevel=info
+
+# Terminal 3: Backend API Server
+cd real2ai/backend
+source .venv/bin/activate
 uvicorn app.main:app --reload --port 8000
 
-# Frontend terminal (Terminal 2) 
+# Terminal 4: Frontend Development Server
 cd real2ai/frontend
 npm run dev
 ```
@@ -286,8 +324,9 @@ black .
 # Sort imports with isort
 isort .
 
-# Lint with flake8
-flake8 .
+# Lint with ruff (modern Python linter)
+ruff check .
+ruff format .
 
 # Type checking with mypy
 mypy app/
@@ -326,6 +365,9 @@ python -m pytest tests/test_contract_analysis.py -v
 
 # Run integration tests
 python -m pytest tests/integration/ -v
+
+# Test with WebSocket functionality
+python -m pytest tests/test_websockets.py -v
 ```
 
 #### Frontend Testing
@@ -347,19 +389,24 @@ npm test -- --grep="DocumentUpload"
 
 #### Managing Schema Changes
 ```bash
-# If using Alembic for migrations
-alembic revision --autogenerate -m "Add new table"
-alembic upgrade head
+# Using Supabase migrations (recommended)
+# Generate migration after schema changes
+supabase db diff --file migration_name
 
-# If using Supabase migrations
-supabase db diff --file new_migration
+# Apply migrations to local database
+supabase db reset
+
+# Push changes to remote database
 supabase db push
 ```
 
 #### Database Reset (Development Only)
 ```bash
-# Reset local database
+# Reset local database (this will recreate all tables and data)
 supabase db reset
+
+# Push latest schema changes
+supabase db push
 
 # Or manually clear tables via Supabase dashboard
 ```
@@ -375,11 +422,17 @@ curl -X POST "http://localhost:8000/api/documents/upload" \
   -F "australian_state=NSW" \
   -F "contract_type=purchase_agreement"
 
-# Test contract analysis
+# Test contract preparation
+curl -X POST "http://localhost:8000/api/contracts/prepare" \
+  -H "Authorization: Bearer <your-jwt-token>" \
+  -H "Content-Type: application/json" \
+  -d '{"document_id": "uuid-here", "contract_type": "purchase_agreement", "australian_state": "NSW"}'
+
+# Test contract analysis (returns content_hash for WebSocket connection)
 curl -X POST "http://localhost:8000/api/contracts/analyze" \
   -H "Authorization: Bearer <your-jwt-token>" \
   -H "Content-Type: application/json" \
-  -d '{"document_id": "uuid-here", "analysis_options": {"include_risk_assessment": true}}'
+  -d '{"contract_id": "content-hash-here", "analysis_options": {"include_risk_assessment": true}}'
 ```
 
 #### Using REST Client (VS Code)
@@ -566,8 +619,10 @@ npm run lint:fix
 
 #### WebSocket connection failures
 - Check firewall settings
-- Verify WebSocket URL format (`ws://` not `wss://` for local development)
+- Verify WebSocket URL format (`ws://localhost:8000/ws/documents/{document_id}?token={jwt_token}`)
 - Ensure backend WebSocket handler is properly configured
+- Check that document_id exists and user has access via user_contract_views table
+- Verify JWT token is valid and not expired
 
 #### File upload failures
 - Check file size limits (50MB default)

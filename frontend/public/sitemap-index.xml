@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+              xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+              xsi:schemaLocation="http://www.sitemaps.org/schemas/sitemap/0.9
+              http://www.sitemaps.org/schemas/sitemap/0.9/siteindex.xsd">
+  <sitemap>
+    <loc>https://real2.ai/sitemap.xml</loc>
+    <lastmod>2025-08-07</lastmod>
+  </sitemap>
+  <!-- Future sitemaps for dynamic content -->
+  <!-- 
+  <sitemap>
+    <loc>https://real2.ai/sitemap-contracts.xml</loc>
+    <lastmod>2025-08-07</lastmod>
+  </sitemap>
+  <sitemap>
+    <loc>https://real2.ai/sitemap-properties.xml</loc>
+    <lastmod>2025-08-07</lastmod>
+  </sitemap>
+  <sitemap>
+    <loc>https://real2.ai/sitemap-reports.xml</loc>
+    <lastmod>2025-08-07</lastmod>
+  </sitemap>
+  -->
+</sitemapindex>

@@ -6,8 +6,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
-    "build:cloudflare": "NODE_ENV=production vite build",
+    "build": "npm run build:sitemap && tsc && vite build && npm run build:sitemap:post",
+    "build:sitemap": "node scripts/generateSitemap.js --production",
+    "build:sitemap:post": "node scripts/generateSitemap.js --production",
+    "build:sitemap:dev": "node scripts/generateSitemap.js --development",
+    "build:cloudflare": "npm run build:sitemap && NODE_ENV=production vite build && npm run build:sitemap:post",
     "build:analyze": "npm run build:cloudflare && npx vite-bundle-analyzer dist/stats.html",
     "preview": "vite preview",
     "preview:cloudflare": "vite preview --host 0.0.0.0 --port 8788",
@@ -17,6 +20,7 @@
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest --coverage",
+    "seo:validate": "node scripts/generateSitemap.js --production --verbose",
     "cloudflare:build": "npm run build:cloudflare",
     "cloudflare:preview": "npm run build:cloudflare && npm run preview:cloudflare"
   },

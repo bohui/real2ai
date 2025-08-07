@@ -1,4 +1,4 @@
-import axios, { AxiosError, AxiosInstance } from "axios";
+import axios, { AxiosError, AxiosInstance, AxiosRequestConfig } from "axios";
 import {
   AuthResponse,
   ContractAnalysisRequest,
@@ -12,6 +12,32 @@ import {
   UserLoginRequest,
   UserRegistrationRequest,
 } from "@/types";
+
+// Extended API types
+interface AxiosRequestConfigExtended extends AxiosRequestConfig {
+  _retry?: boolean;
+}
+
+interface ApiErrorData {
+  error: string;
+  message?: string;
+  details?: any;
+}
+
+interface TokenRefreshResponse {
+  access_token: string;
+  refresh_token?: string;
+  user?: User;
+}
+
+interface RawAnalysisData {
+  contract_id?: string;
+  analysis_id?: string;
+  created_at?: string;
+  analysis_status?: string;
+  risk_score?: number;
+  [key: string]: any; // For backward compatibility with other fields
+}
 
 // API Configuration
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ||
@@ -50,7 +76,7 @@ class ApiService {
     this.client.interceptors.response.use(
       (response) => response,
       async (error: AxiosError) => {
-        const originalRequest = error.config as any;
+        const originalRequest = error.config as AxiosRequestConfigExtended;
 
         if (error.response?.status === 401 && !originalRequest._retry) {
           // Don't attempt token refresh for login/register endpoints
@@ -360,19 +386,20 @@ class ApiService {
     const analysisResult = apiData.analysis_result || {};
 
     // Transform to match ContractAnalysisResult interface
+    const rawData = apiData as RawAnalysisData;
     const transformedResult: ContractAnalysisResult = {
-      contract_id: (apiData as any).contract_id,
-      analysis_id: analysisResult.analysis_id || (apiData as any).contract_id,
+      contract_id: rawData.contract_id,
+      analysis_id: analysisResult.analysis_id || rawData.contract_id,
       analysis_timestamp: analysisResult.analysis_timestamp ||
-        (apiData as any).created_at,
+        rawData.created_at,
       user_id: analysisResult.user_id || "",
       australian_state: analysisResult.australian_state || "NSW",
-      analysis_status: (apiData as any).analysis_status || "completed",
+      analysis_status: rawData.analysis_status || "completed",
       contract_terms: analysisResult.contract_terms || {},
       risk_assessment: {
         overall_risk_score:
           analysisResult.risk_assessment?.overall_risk_score ||
-          (apiData as any).risk_score || 0,
+          rawData.risk_score || 0,
         risk_factors: analysisResult.risk_assessment?.risk_factors || [],
       },
       compliance_check: analysisResult.compliance_check || {

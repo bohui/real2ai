@@ -18,14 +18,42 @@ import StatusBadge from "@/components/ui/StatusBadge";
 import EnhancedContractCard from "@/components/analysis/EnhancedContractCard";
 import { useAnalysisStore } from "@/store/analysisStore";
 import { useAuthStore } from "@/store/authStore";
+import { useUIStore } from "@/store/uiStore";
+import { usePageSEO } from "@/contexts/SEOContext";
 import { cn } from "@/utils";
 
 const DashboardPage: React.FC = () => {
   const { recentAnalyses } = useAnalysisStore();
   const { user } = useAuthStore();
+  const { showOnboarding } = useUIStore();
 
+  // SEO for Dashboard page
+  usePageSEO({
+    title: 'Dashboard - Real2AI',
+    description: 'Your Real2AI dashboard - manage contract analyses, view property intelligence reports, and track your real estate portfolio performance.',
+    keywords: [
+      'Real2AI dashboard',
+      'contract analysis dashboard',
+      'property reports',
+      'AI insights',
+      'real estate management'
+    ],
+    canonical: '/app/dashboard',
+    noIndex: true // Private dashboard
+  });
 
-
+  // If onboarding is required, show a minimal loading state
+  // The onboarding wizard will be rendered by the App component
+  if (showOnboarding) {
+    return (
+      <div className="min-h-screen bg-neutral-50 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 border-4 border-primary-600 border-t-transparent rounded-full animate-spin" />
+          <p className="text-neutral-600">Setting up your account...</p>
+        </div>
+      </div>
+    );
+  }
 
   // Calculate dashboard stats
   const totalAnalyses = recentAnalyses.length;
@@ -80,7 +108,6 @@ const DashboardPage: React.FC = () => {
     })
     .sort((a, b) => b.valueScore - a.valueScore)
     .slice(0, 3); // Top 3 best value properties
-
 
   // Calculate minimal risk properties (properties with lowest risk scores)
   const minimalRiskProperties = recentAnalyses

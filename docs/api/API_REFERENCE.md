@@ -146,7 +146,8 @@ Start comprehensive contract analysis using LangGraph workflow.
     "include_stamp_duty": true,
     "include_compliance_check": true,
     "analysis_depth": "comprehensive",
-    "use_enhanced_prompts": true
+    "use_enhanced_prompts": true,
+    "enable_langsmith_tracing": true
   }
 }
 ```
@@ -157,7 +158,9 @@ Start comprehensive contract analysis using LangGraph workflow.
   "analysis_id": "uuid",
   "contract_id": "uuid",
   "status": "processing",
-  "estimated_completion": "2024-08-06T10:45:00Z",
+  "estimated_completion_minutes": 3,
+  "langraph_workflow_id": "workflow_uuid",
+  "created_at": "2025-01-07T10:30:00Z",
   "workflow_steps": [
     "document_validation",
     "ocr_extraction", 
@@ -567,7 +570,7 @@ wss://api.real2.ai/ws/contracts/{contract_id}/progress
 | `INSUFFICIENT_CREDITS` | 402 | User has insufficient credits |
 | `VALIDATION_ERROR` | 400 | Request validation failed |
 | `DOCUMENT_TOO_LARGE` | 413 | File exceeds size limit |
-| `ANALYSIS_FAILED` | 422 | Contract analysis could not complete |
+| `ANALYSIS_FAILED` | 500 | Contract analysis could not complete |
 | `SERVICE_UNAVAILABLE` | 503 | External service unavailable |
 | `RATE_LIMIT_EXCEEDED` | 429 | Too many requests |
 
@@ -580,6 +583,134 @@ wss://api.real2.ai/ws/contracts/{contract_id}/progress
 | Analysis | 20 analyses | 1 hour |
 | OCR | 50 requests | 1 hour |
 | General API | 1000 requests | 1 hour |
+
+### Property Intelligence
+
+#### POST `/property/analyze`
+Analyze property with market intelligence.
+
+**Request:**
+```json
+{
+  "address": "123 Collins Street, Melbourne VIC 3000",
+  "analysis_depth": "comprehensive",
+  "include_market_trends": true,
+  "include_comparable_sales": true,
+  "include_investment_metrics": true
+}
+```
+
+**Response:**
+```json
+{
+  "property_id": "uuid",
+  "address": "123 Collins Street, Melbourne VIC 3000",
+  "market_data": {
+    "estimated_value": 850000,
+    "confidence_level": 0.89,
+    "price_trend_12m": 0.12,
+    "days_on_market_avg": 28
+  },
+  "investment_metrics": {
+    "rental_yield": 0.042,
+    "capital_growth_5y": 0.067,
+    "roi_projection": 0.089
+  }
+}
+```
+
+### OCR Processing
+
+#### POST `/ocr/extract`
+Extract text from documents using Gemini 2.5 Pro.
+
+**Request:** Multipart form data
+- `file`: Document file
+- `extraction_options`: JSON options
+
+**Response:**
+```json
+{
+  "job_id": "uuid",
+  "status": "processing",
+  "estimated_completion_seconds": 30,
+  "ocr_engine": "gemini_2_5_pro",
+  "created_at": "2025-01-07T10:30:00Z"
+}
+```
+
+### Evaluation System
+
+#### POST `/evaluation/analyze`
+Analyze AI model performance with LangSmith integration.
+
+**Request:**
+```json
+{
+  "evaluation_type": "contract_analysis",
+  "test_dataset_id": "uuid",
+  "model_config": {
+    "model": "gpt-4",
+    "temperature": 0.1,
+    "prompt_version": "v2.1"
+  },
+  "metrics": ["accuracy", "recall", "f1_score"]
+}
+```
+
+**Response:**
+```json
+{
+  "evaluation_id": "uuid",
+  "status": "processing",
+  "langsmith_run_id": "langsmith_uuid",
+  "estimated_completion_minutes": 15
+}
+```
+
+### WebSocket Events
+
+Connect to: `wss://api.real2.ai/ws/documents/{document_id}`
+
+#### Event Types:
+
+**`cache_status`** - Initial cache status check
+```json
+{
+  "event_type": "cache_status",
+  "data": {
+    "cache_status": "miss",
+    "document_id": "uuid",
+    "content_hash": "hash"
+  }
+}
+```
+
+**`analysis_progress`** - Real-time progress updates
+```json
+{
+  "event_type": "analysis_progress",
+  "data": {
+    "progress_percent": 65,
+    "current_step": "risk_assessment",
+    "step_description": "Analyzing contract terms for potential risks",
+    "estimated_completion_minutes": 1
+  }
+}
+```
+
+**`analysis_complete`** - Analysis completion
+```json
+{
+  "event_type": "analysis_complete",
+  "data": {
+    "contract_id": "uuid",
+    "analysis_id": "uuid",
+    "processing_time": 45.2,
+    "status": "completed"
+  }
+}
+```
 
 ## SDK and Integration Examples
 

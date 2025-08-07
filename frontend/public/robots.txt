@@ -1,15 +1,30 @@
+# Real2AI Robots.txt
+# Generated automatically - do not edit manually
+
 User-agent: *
 Allow: /
-
-# Sitemap
-Sitemap: https://real2.ai/sitemap.xml
-
-# Disallow admin/auth pages from search engines
-Disallow: /auth/
-Disallow: /app/settings
-Disallow: /app/analysis/*/private
-
-# Allow important pages
-Allow: /
+Allow: /auth/
 Allow: /auth/login
 Allow: /auth/register
+
+# Block private/sensitive areas
+Disallow: /app/
+Disallow: /api/
+Disallow: /admin/
+Disallow: /private/
+Disallow: /_next/
+Disallow: /assets/
+
+# Block development files
+Disallow: /*.json$
+Disallow: /*.js.map$
+Disallow: /*.css.map$
+
+# Sitemap location
+Sitemap: https://real2.ai/sitemap.xml
+
+# Crawl delay (be respectful to server resources)
+Crawl-delay: 1
+
+# Cache directive for search engines
+Cache-delay: 86400

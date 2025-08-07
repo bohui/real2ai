@@ -2,7 +2,7 @@ import React from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Mail, Lock, AlertCircle } from "lucide-react";
 import { motion } from "framer-motion";
 
@@ -19,10 +19,7 @@ import { useAuthStore } from "@/store/authStore";
 import { useUIStore } from "@/store/uiStore";
 
 const loginSchema = z.object({
-  email: z
-    .string()
-    .min(1, "Email is required")
-    .email("Invalid email address"),
+  email: z.string().min(1, "Email is required").email("Invalid email address"),
   password: z
     .string()
     .min(1, "Password is required")
@@ -42,6 +39,7 @@ const LoginForm: React.FC<LoginFormProps> = ({
 }) => {
   const { login, isLoading, error } = useAuthStore();
   const { addNotification } = useUIStore();
+  const navigate = useNavigate();
 
   const {
     register,
@@ -65,7 +63,7 @@ const LoginForm: React.FC<LoginFormProps> = ({
       if (onSuccess) {
         onSuccess();
       } else {
-        window.location.href = redirectTo;
+        navigate(redirectTo);
       }
     } catch (err) {
       // Error is already handled in the store
@@ -113,7 +111,12 @@ const LoginForm: React.FC<LoginFormProps> = ({
             </motion.div>
           )}
 
-          <form onSubmit={handleSubmit(onSubmit)} role="form" aria-label="Sign in" className="space-y-6">
+          <form
+            onSubmit={handleSubmit(onSubmit)}
+            role="form"
+            aria-label="Sign in"
+            className="space-y-6"
+          >
             <Input
               label="Email address"
               type="email"

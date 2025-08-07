@@ -11,10 +11,11 @@ import RiskAssessment from "@/components/analysis/RiskAssessment";
 import ComplianceCheck from "@/components/analysis/ComplianceCheck";
 import { useAnalysisStore } from "@/store/analysisStore";
 import { useUIStore } from "@/store/uiStore";
+import { usePageSEO } from "@/contexts/SEOContext";
 import { cn } from "@/utils";
 
 const AnalysisPage: React.FC = () => {
-  const { } = useParams();
+  const { contractId } = useParams();
   const {
     currentAnalysis,
     currentDocument,
@@ -26,6 +27,42 @@ const AnalysisPage: React.FC = () => {
     clearCurrentAnalysis,
   } = useAnalysisStore();
   const { addNotification } = useUIStore();
+
+  // Dynamic SEO based on current analysis
+  const propertyAddress = currentAnalysis?.contract_terms?.property_address;
+  const riskScore = currentAnalysis?.executive_summary?.overall_risk_score;
+  
+  usePageSEO(
+    {
+      title: propertyAddress 
+        ? `Contract Analysis - ${propertyAddress} - Real2AI`
+        : 'Contract Analysis - Real2AI',
+      description: propertyAddress && riskScore !== undefined
+        ? `Comprehensive AI analysis of ${propertyAddress} property contract. Risk level: ${riskScore >= 7 ? 'high' : riskScore >= 4 ? 'moderate' : 'low'}. Professional insights for Australian real estate transactions.`
+        : 'AI-powered contract analysis for Australian real estate. Get comprehensive risk assessment, compliance checks, and professional insights.',
+      keywords: [
+        'contract analysis',
+        'AI analysis',
+        'real estate contracts',
+        'risk assessment',
+        'compliance check',
+        'Australian property law',
+        ...(propertyAddress ? [`${propertyAddress} contract`, `${propertyAddress} property analysis`] : [])
+      ],
+      canonical: contractId ? `/app/analysis/${contractId}` : '/app/analysis',
+      noIndex: true, // Private analysis pages
+      ogType: 'article',
+      ...(propertyAddress && {
+        publishedTime: new Date().toISOString(),
+        section: 'Contract Analysis'
+      })
+    },
+    propertyAddress ? {
+      address: propertyAddress,
+      riskScore: riskScore,
+      publishedTime: new Date().toISOString()
+    } : undefined
+  );
 
   const [activeTab, setActiveTab] = React.useState<
     "overview" | "risks" | "compliance"

@@ -14,11 +14,14 @@ Real2.AI is a specialized AI-powered platform for the Australian real estate mar
 ## 🚀 Quick Start
 
 ### Prerequisites
-- Python 3.12+ and pip
-- Node.js 18+ and npm
+- Python 3.11+ and pip
+- Node.js 20+ and npm
 - Supabase account and project
 - OpenAI API key
 - Google Gemini API key (for OCR)
+- LangSmith API key (for tracing)
+- Domain.com.au API key (optional)
+- CoreLogic API key (optional)
 - 4GB+ RAM
 
 ### Backend Setup
@@ -33,8 +36,8 @@ pip install -r requirements.txt
 cp .env.example .env
 # Edit .env with your API keys and configuration
 
-# Run database migrations
-python manage.py migrate
+# Apply Supabase migrations
+supabase db reset
 
 # Start the FastAPI server
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
@@ -68,17 +71,21 @@ For detailed setup instructions, see our [Development Guide](docs/development/SE
 - **Database**: Supabase (PostgreSQL) with real-time capabilities  
 - **AI/ML**: OpenAI GPT-4 with LangGraph multi-agent workflows
 - **OCR**: Gemini 2.5 Pro with advanced prompt management
-- **Prompt System**: Comprehensive PromptManager with template system
-- **Caching**: Redis for performance optimization
+- **AI Orchestration**: LangGraph multi-agent workflow system
+- **Prompt System**: Comprehensive PromptManager with template system and versioning
+- **Caching**: Hash-based content caching with cross-user sharing
+- **Background Tasks**: Celery with Redis for async processing
 - **Storage**: Supabase Storage for secure document management
 - **External APIs**: Domain.com.au and CoreLogic integration
 
 ### Frontend (Current Implementation)
 - **Framework**: React 18 with TypeScript
 - **Build Tool**: Vite with hot module replacement
+- **Routing**: React Router v7 with protected routes
 - **Styling**: Tailwind CSS with responsive design system
-- **State Management**: Zustand with persistent storage
-- **Real-time**: WebSocket integration for live updates
+- **State Management**: Zustand with persistent storage and hydration
+- **API Client**: TanStack Query for server state management
+- **Real-time**: WebSocket integration for live progress updates
 - **Testing**: Vitest with React Testing Library and comprehensive coverage
 - **UI Components**: Custom component library with accessibility support
 
@@ -111,12 +118,14 @@ Our documentation is organized by category:
 
 📊 **Current Capabilities:**
 - Document upload and processing (PDF, DOC, DOCX)
-- OCR extraction with 95%+ accuracy for Australian contracts  
-- Contract analysis with risk scoring and compliance checking
-- Stamp duty calculations for all Australian states
-- Real-time progress tracking via WebSocket
-- Property profile analysis and market data integration
-- User authentication and subscription management
+- OCR extraction with 95%+ accuracy for Australian contracts using Gemini 2.5 Pro
+- LangGraph multi-agent contract analysis with risk scoring and compliance checking
+- Australian state-specific legal compliance (NSW, VIC, QLD, SA, WA, TAS, NT, ACT)
+- Real-time progress tracking via WebSocket with detailed status updates
+- Property intelligence analysis with Domain.com.au and CoreLogic integration
+- Advanced caching system with content-hash based sharing
+- User authentication and subscription management with Supabase Auth
+- Comprehensive evaluation system with LangSmith integration
 
 ### Backend Development
 ```bash
@@ -140,7 +149,8 @@ See component READMEs for detailed setup and architecture information.
 
 - **Backend**: `cd backend && python -m pytest`
 - **Frontend**: `cd frontend && npm test`
-- **E2E**: Integration tests with Playwright
+- **E2E**: Integration tests with comprehensive test suite
+- **Performance**: Performance benchmarks and monitoring
 
 View detailed test reports in [docs/testing/](docs/testing/).
 

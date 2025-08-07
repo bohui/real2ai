@@ -113,7 +113,7 @@ export const ContractAnalysisProgress: React.FC<ContractAnalysisProgressProps> =
 
   // WebSocket connection management
   useEffect(() => {
-    const websocket = new WebSocket(`${process.env.REACT_APP_WS_URL}/contract-analysis/${contractId}`);
+    const websocket = new WebSocket(`${import.meta.env.VITE_WS_BASE_URL}/ws/documents/${contractId}`);
     
     websocket.onopen = () => {
       console.log('WebSocket connected for contract analysis');

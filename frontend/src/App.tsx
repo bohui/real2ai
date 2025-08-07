@@ -28,6 +28,8 @@ import FinancialAnalysisPage from "@/pages/FinancialAnalysisPage";
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
 import NotificationSystem from "@/components/notifications/NotificationSystem";
 import OnboardingWizard from "@/components/onboarding/OnboardingWizard";
+import SEOProvider from "@/contexts/SEOContext";
+import RootSEO from "@/components/seo/RootSEO";
 
 // Hooks and stores
 import { useAuthStore } from "@/store/authStore";
@@ -216,8 +218,10 @@ const App: React.FC = () => {
   return (
     <QueryClientProvider client={queryClient}>
       <Router>
-        <div className="App">
-          <Routes>
+        <SEOProvider>
+          <RootSEO />
+          <div className="App">
+            <Routes>
             {/* Auth routes */}
             <Route path="/auth" element={<AuthLayout />}>
               <Route path="login" element={<LoginPage />} />
@@ -255,13 +259,21 @@ const App: React.FC = () => {
             {/* Root redirect */}
             <Route
               path="/"
-              element={<Navigate to="/app/dashboard" replace />}
+              element={
+                <ProtectedRoute>
+                  <Navigate to="/app/dashboard" replace />
+                </ProtectedRoute>
+              }
             />
 
             {/* Catch-all redirect */}
             <Route
               path="*"
-              element={<Navigate to="/app/dashboard" replace />}
+              element={
+                <ProtectedRoute>
+                  <Navigate to="/app/dashboard" replace />
+                </ProtectedRoute>
+              }
             />
           </Routes>
 
@@ -275,7 +287,8 @@ const App: React.FC = () => {
               onSkip={handleOnboardingSkip}
             />
           )}
-        </div>
+          </div>
+        </SEOProvider>
       </Router>
 
       {/* Development tools */}
