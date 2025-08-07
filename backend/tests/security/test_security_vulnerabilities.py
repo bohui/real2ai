@@ -10,8 +10,8 @@ from fastapi.testclient import TestClient
 from httpx import AsyncClient
 
 from app.main import app
-from app.core.auth import create_access_token, verify_token
-from app.schema.auth import User
+# Token functions removed - need to implement or mock these for tests
+from app.core.auth import User
 
 
 class TestAuthenticationSecurity:

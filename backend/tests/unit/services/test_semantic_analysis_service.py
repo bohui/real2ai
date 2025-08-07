@@ -327,6 +327,8 @@ class TestSemanticAnalysisServiceUtilities:
     def service(self):
         return SemanticAnalysisService()
     
+    @pytest.mark.unit
+    
     def test_detect_image_type_from_context(self, service):
         """Test image type detection from context and filename."""
         test_cases = [
@@ -401,6 +403,8 @@ class TestSemanticAnalysisServiceUtilities:
         assert result["high_priority_risks"] == []
         assert result["recommended_actions"] == []
     
+    @pytest.mark.unit
+    
     def test_determine_risk_severity(self, service):
         """Test risk severity determination."""
         test_cases = [
@@ -415,6 +419,8 @@ class TestSemanticAnalysisServiceUtilities:
             severity = service._determine_risk_severity(element)
             assert severity == expected_severity
     
+    @pytest.mark.unit
+    
     def test_calculate_overall_risk_score(self, service):
         """Test overall risk score calculation."""
         test_cases = [
@@ -428,6 +434,8 @@ class TestSemanticAnalysisServiceUtilities:
         for risks, expected_score in test_cases:
             score = service._calculate_overall_risk_score(risks)
             assert score == expected_score
+    
+    @pytest.mark.unit
     
     def test_generate_risk_actions(self, service):
         """Test risk action generation."""

@@ -372,6 +372,8 @@ class TestDocumentServiceUtilities:
     def service(self):
         return DocumentService()
     
+    @pytest.mark.unit
+    
     def test_calculate_hash(self, service):
         """Test content hash calculation."""
         content = b"test content"
@@ -379,6 +381,8 @@ class TestDocumentServiceUtilities:
         
         assert isinstance(hash_value, str)
         assert len(hash_value) == 64  # SHA-256 hex digest length
+    
+    @pytest.mark.unit
     
     def test_has_security_concerns(self, service):
         """Test security concern detection."""

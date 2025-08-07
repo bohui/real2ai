@@ -14,7 +14,7 @@ from httpx import AsyncClient
 
 from app.main import app
 from app.core.auth_context import AuthContext
-from app.schema.auth import User
+from app.core.auth import User
 from app.schema.contract import ContractAnalysisRequest
 from app.schema.enums import AustralianState, ProcessingStatus
 
@@ -23,13 +23,16 @@ from app.schema.enums import AustralianState, ProcessingStatus
 def test_user():
     """Create a test user for authentication."""
     return User(
-        user_id="test-user-123",
+        id="test-user-123",
         email="test@example.com",
-        is_active=True,
-        subscription_tier="premium",
+        australian_state="NSW",
+        user_type="lawyer",
+        subscription_status="premium",
         credits_remaining=100,
-        created_at=datetime.now(),
-        updated_at=datetime.now()
+        preferences={},
+        onboarding_completed=True,
+        onboarding_completed_at=datetime.now(),
+        onboarding_preferences={}
     )
 
 

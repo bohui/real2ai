@@ -23,6 +23,8 @@ from app.schema.contract import ContractAnalysisRequest
 class TestContractAnalysisServiceInitialization:
     """Test ContractAnalysisService initialization and configuration."""
     
+    @pytest.mark.unit
+    
     def test_service_creation_basic(self):
         """Test ContractAnalysisService can be created with basic configuration."""
         with patch('app.services.contract_analysis_service.get_enhanced_workflow_config') as mock_config:
@@ -36,6 +38,8 @@ class TestContractAnalysisServiceInitialization:
             assert service.workflow is not None
             assert service._service_metrics is not None
     
+    @pytest.mark.unit
+    
     def test_service_creation_with_websocket(self, mock_websocket_manager):
         """Test service creation with WebSocket manager."""
         with patch('app.services.contract_analysis_service.get_enhanced_workflow_config') as mock_config:
@@ -48,6 +52,8 @@ class TestContractAnalysisServiceInitialization:
             
             assert service.websocket_manager == mock_websocket_manager
             assert service.enable_websocket_progress is True
+    
+    @pytest.mark.unit
     
     def test_service_creation_with_custom_config(self):
         """Test service creation with custom configuration."""
@@ -74,6 +80,8 @@ class TestContractAnalysisServiceInitialization:
             assert service.openai_api_key == "test-key"
             assert service.model_name == "gpt-3.5-turbo"
     
+    @pytest.mark.unit
+    
     def test_service_creation_invalid_config(self):
         """Test service creation fails with invalid configuration."""
         invalid_config = self._create_mock_config()
@@ -90,6 +98,8 @@ class TestContractAnalysisServiceInitialization:
                 ContractAnalysisService(config=invalid_config)
             
             assert "Invalid configuration" in str(exc_info.value)
+    
+    @pytest.mark.unit
     
     def test_factory_function(self, mock_websocket_manager):
         """Test service factory function."""
@@ -372,6 +382,8 @@ class TestContractAnalysisServiceValidation:
         mock_config.validate_config.return_value = {"status": "valid"}
         return mock_config
     
+    @pytest.mark.unit
+    
     def test_validate_analysis_inputs_success(self, service):
         """Test successful input validation."""
         validation_result = service._validate_analysis_inputs(
@@ -383,6 +395,8 @@ class TestContractAnalysisServiceValidation:
         
         assert validation_result["valid"] is True
         assert len(validation_result["errors"]) == 0
+    
+    @pytest.mark.unit
     
     def test_validate_analysis_inputs_missing_document(self, service):
         """Test validation with missing document data."""
@@ -396,6 +410,8 @@ class TestContractAnalysisServiceValidation:
         assert validation_result["valid"] is False
         assert "Document content or file path is required" in validation_result["errors"]
     
+    @pytest.mark.unit
+    
     def test_validate_analysis_inputs_invalid_user_id(self, service):
         """Test validation with invalid user ID."""
         validation_result = service._validate_analysis_inputs(
@@ -408,6 +424,8 @@ class TestContractAnalysisServiceValidation:
         assert validation_result["valid"] is False
         assert "Valid user ID is required" in validation_result["errors"]
     
+    @pytest.mark.unit
+    
     def test_validate_analysis_inputs_invalid_state(self, service):
         """Test validation with invalid Australian state."""
         validation_result = service._validate_analysis_inputs(
@@ -419,6 +437,8 @@ class TestContractAnalysisServiceValidation:
         
         assert validation_result["valid"] is False
         assert "Invalid Australian state: INVALID" in validation_result["errors"]
+    
+    @pytest.mark.unit
     
     def test_validate_analysis_inputs_unrecognized_contract_type(self, service):
         """Test validation with unrecognized contract type."""
@@ -551,6 +571,8 @@ class TestContractAnalysisServiceProgressTracking:
         assert "error" not in service.active_analyses[contract_id]
         mock_websocket_manager.send_message.assert_called_once()
     
+    @pytest.mark.unit
+    
     def test_cleanup_completed_analyses(self, service):
         """Test cleaning up old completed analyses."""
         old_time = datetime.now(UTC).timestamp() - (25 * 3600)  # 25 hours ago
@@ -583,6 +605,8 @@ class TestContractAnalysisServiceProgressTracking:
         assert "recent_completed" in service.active_analyses
         assert "current_processing" in service.active_analyses
     
+    @pytest.mark.unit
+    
     def test_get_active_analyses_count(self, service):
         """Test getting count of active analyses."""
         service.active_analyses = {
@@ -595,6 +619,8 @@ class TestContractAnalysisServiceProgressTracking:
         
         count = service.get_active_analyses_count()
         assert count == 3  # processing, starting, retrying
+    
+    @pytest.mark.unit
     
     def test_get_all_analyses_summary(self, service):
         """Test getting summary of all analyses."""
@@ -689,6 +715,8 @@ class TestContractAnalysisServiceHealthAndMetrics:
         
         assert health["components"]["prompt_manager"]["status"] == "healthy"
     
+    @pytest.mark.unit
+    
     def test_get_service_metrics(self, service):
         """Test getting comprehensive service metrics."""
         service._service_metrics["total_requests"] = 50
@@ -768,6 +796,8 @@ class TestContractAnalysisServiceUtilities:
         mock_config.validate_config.return_value = {"status": "valid"}
         return mock_config
     
+    @pytest.mark.unit
+    
     def test_create_initial_state(self, service):
         """Test creating initial state for workflow."""
         document_data = {"content": "Test contract"}
@@ -794,6 +824,8 @@ class TestContractAnalysisServiceUtilities:
         assert initial_state["user_type"] == "buyer"
         assert initial_state["current_step"] == "initialized"
         assert initial_state["parsing_status"] == ProcessingStatus.PENDING
+    
+    @pytest.mark.unit
     
     def test_create_analysis_response_success(self, service):
         """Test creating successful analysis response."""
@@ -834,6 +866,8 @@ class TestContractAnalysisServiceUtilities:
         assert response["workflow_metadata"]["steps_completed"] == 6
         assert response["enhancement_features"]["structured_parsing_used"] is True
     
+    @pytest.mark.unit
+    
     def test_create_error_response(self, service):
         """Test creating error response."""
         start_time = datetime.now(UTC)
@@ -850,6 +884,8 @@ class TestContractAnalysisServiceUtilities:
         assert response["workflow_version"] == "unified_v1.0"
         assert "processing_time_seconds" in response
         assert "service_metrics" in response
+    
+    @pytest.mark.unit
     
     def test_extract_warnings_from_state(self, service):
         """Test extracting warnings from workflow state."""

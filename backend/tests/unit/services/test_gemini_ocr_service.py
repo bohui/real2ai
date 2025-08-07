@@ -61,6 +61,8 @@ def sample_document_data():
 class TestGeminiOCRServiceInitialization:
     """Test GeminiOCRService initialization"""
     
+    @pytest.mark.unit
+    
     def test_service_initialization(self, gemini_ocr_service):
         """Test service initializes with correct defaults"""
         assert gemini_ocr_service.max_file_size == 50 * 1024 * 1024  # 50MB
@@ -68,15 +70,17 @@ class TestGeminiOCRServiceInitialization:
         assert "png" in gemini_ocr_service.supported_formats
         assert "jpg" in gemini_ocr_service.supported_formats
     
+    @pytest.mark.unit
+    
     def test_service_inherits_mixins(self, gemini_ocr_service):
         """Test service properly inherits from required mixins"""
         # Should have PromptEnabledService methods
-        assert hasattr(gemini_ocr_service, 'get_prompt')
-        assert hasattr(gemini_ocr_service, 'format_prompt')
+        assert hasattr(gemini_ocr_service, 'render_prompt')
+        assert hasattr(gemini_ocr_service, 'prompt_manager')
         
         # Should have UserAwareService methods
-        assert hasattr(gemini_ocr_service, 'get_user_context')
-        assert hasattr(gemini_ocr_service, 'ensure_user_access')
+        assert hasattr(gemini_ocr_service, 'get_user_client')
+        assert hasattr(gemini_ocr_service, 'get_current_user_id')
 
 
 class TestFileValidation:
@@ -321,6 +325,8 @@ class TestUtilityMethods:
         assert "OCR prompt template" in prompt
         assert image_data == b"Image content"
     
+    @pytest.mark.unit
+    
     def test_calculate_confidence_score_high_quality(self, gemini_ocr_service):
         """Test confidence calculation for high quality text"""
         extracted_text = "This is clear, well-formatted text with proper punctuation."
@@ -329,6 +335,8 @@ class TestUtilityMethods:
         assert confidence > 0.8
         assert isinstance(confidence, float)
         assert 0.0 <= confidence <= 1.0
+    
+    @pytest.mark.unit
     
     def test_calculate_confidence_score_poor_quality(self, gemini_ocr_service):
         """Test confidence calculation for poor quality text"""
@@ -339,12 +347,16 @@ class TestUtilityMethods:
         assert isinstance(confidence, float)
         assert 0.0 <= confidence <= 1.0
     
+    @pytest.mark.unit
+    
     def test_calculate_confidence_score_empty_text(self, gemini_ocr_service):
         """Test confidence calculation for empty text"""
         extracted_text = ""
         confidence = gemini_ocr_service._calculate_confidence_score(extracted_text)
         
         assert confidence == 0.0
+    
+    @pytest.mark.unit
     
     def test_extract_text_metrics(self, gemini_ocr_service):
         """Test text metrics extraction"""
@@ -356,6 +368,8 @@ class TestUtilityMethods:
         assert metrics["word_count"] == len(text.split())
         assert metrics["line_count"] == 1
         assert "average_word_length" in metrics
+    
+    @pytest.mark.unit
     
     def test_extract_text_metrics_multiline(self, gemini_ocr_service):
         """Test text metrics for multiline text"""

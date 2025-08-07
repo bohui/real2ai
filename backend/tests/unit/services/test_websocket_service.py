@@ -12,7 +12,7 @@ from typing import Dict, Any
 from fastapi import WebSocket, WebSocketDisconnect
 from fastapi.websockets import WebSocketState
 
-from app.services.websocket_service import ConnectionManager, WebSocketService
+from app.services.websocket_service import ConnectionManager, EnhancedWebSocketService as WebSocketService
 
 
 @pytest.fixture

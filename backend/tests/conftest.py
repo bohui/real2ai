@@ -17,7 +17,8 @@ from httpx import AsyncClient, ASGITransport
 os.environ["ENVIRONMENT"] = "test"
 os.environ["TESTING"] = "true"
 os.environ["SUPABASE_URL"] = "https://test.supabase.co"
-os.environ["SUPABASE_KEY"] = "test-key"
+os.environ["SUPABASE_ANON_KEY"] = "test-anon-key"
+os.environ["SUPABASE_SERVICE_KEY"] = "test-service-key"
 os.environ["OPENAI_API_KEY"] = "test-openai-key"
 
 from app.main import app
@@ -69,14 +70,19 @@ def client(
     # Mock global db_client used in main module and router modules
     import app.main
     from app.clients.factory import get_supabase_client as real_get_supabase_client
-
-    with patch.object(app.main, "db_client", mock_db_client):
-        # Also patch the get_supabase_client function directly in all modules that import it
-        with patch(
-            "app.clients.factory.get_supabase_client", return_value=mock_db_client
-        ):
+    
+    # Also mock AuthContext to bypass authentication
+    from app.core.auth_context import AuthContext
+    
+    async def mock_get_authenticated_client(require_auth=True):
+        return mock_db_client
+    
+    # Patch AuthContext.get_authenticated_client
+    with patch.object(AuthContext, "get_authenticated_client", side_effect=mock_get_authenticated_client):
+        with patch.object(app.main, "db_client", mock_db_client):
+            # Also patch the get_supabase_client function directly in all modules that import it
             with patch(
-                "app.router.documents.get_supabase_client", return_value=mock_db_client
+                "app.clients.factory.get_supabase_client", return_value=mock_db_client
             ):
                 test_client = TestClient(fastapi_app)
                 yield test_client
@@ -183,7 +189,8 @@ def setup_test_environment(monkeypatch):
         "TESTING": "true",
         "LOG_LEVEL": "DEBUG",
         "SUPABASE_URL": "https://test.supabase.co",
-        "SUPABASE_KEY": "test-key",
+        "SUPABASE_ANON_KEY": "test-anon-key",
+        "SUPABASE_SERVICE_KEY": "test-service-key",
         "OPENAI_API_KEY": "test-openai-key",
         "REDIS_URL": "redis://localhost:6379/1",  # Use test DB
     }
