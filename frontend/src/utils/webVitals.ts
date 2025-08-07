@@ -233,19 +233,17 @@ class WebVitalsMonitor {
   }
 
   /**
-   * Update overall performance score (0-100)
+   * Update overall performance score
    */
   private updateOverallScore(): void {
-    const metrics = [this.metrics.lcp, this.metrics.fid, this.metrics.cls, this.metrics.fcp, this.metrics.ttfb];
-    const validMetrics = metrics.filter(m => m !== null) as WebVitalMetric[];
-    
-    if (validMetrics.length === 0) {
-      this.metrics.overallScore = 0;
-      return;
-    }
-
-    const scores = validMetrics.map(metric => {
-      switch (metric.rating) {
+    const scores: number[] = [
+      this.metrics.lcp?.rating,
+      this.metrics.fid?.rating,
+      this.metrics.cls?.rating,
+      this.metrics.fcp?.rating,
+      this.metrics.ttfb?.rating
+    ].map(rating => {
+      switch (rating) {
         case 'good': return 100;
         case 'needs-improvement': return 65;
         case 'poor': return 25;
@@ -253,7 +251,8 @@ class WebVitalsMonitor {
       }
     });
 
-    this.metrics.overallScore = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
+    const totalScore = scores.reduce((a, b) => a + b, 0);
+    this.metrics.overallScore = Math.round(totalScore / scores.length);
     this.generateRecommendations();
   }
 

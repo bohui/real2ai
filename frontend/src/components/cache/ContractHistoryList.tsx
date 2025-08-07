@@ -29,12 +29,13 @@ export const ContractHistoryList: React.FC<ContractHistoryListProps> = ({
   }, [limit]);
 
   const loadHistory = async (loadOffset: number = 0) => {
+    setIsLoading(true);
+    
     try {
-      setIsLoading(true);
-      const response = await cacheService.getContractHistory(limit, loadOffset);
+      const response = await cacheService.getContractHistory(loadOffset, limit);
       
       if (response.status === 'success') {
-        const newHistory = response.data.history;
+        const newHistory = response.data.history.filter(item => 'content_hash' in item) as UserContractView[];
         
         if (loadOffset === 0) {
           setHistory(newHistory);

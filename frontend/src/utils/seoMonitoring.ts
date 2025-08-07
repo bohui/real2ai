@@ -3,7 +3,27 @@
  * Tracks SEO metrics and performance indicators with Core Web Vitals integration
  */
 
-import { getCurrentWebVitals, CoreWebVitals } from './webVitals';
+import { getWebVitalsMonitor } from './webVitals';
+
+export interface CoreWebVitals {
+  lcp?: number;
+  fid?: number;
+  cls?: number;
+  fcp?: number;
+  ttfb?: number;
+}
+
+export function getCurrentWebVitals(): CoreWebVitals {
+  const monitor = getWebVitalsMonitor();
+  const metrics = monitor.getMetrics();
+  return {
+    lcp: metrics.lcp?.value,
+    fid: metrics.fid?.value,
+    cls: metrics.cls?.value,
+    fcp: metrics.fcp?.value,
+    ttfb: metrics.ttfb?.value,
+  };
+}
 
 export interface SEOMetrics {
   pageTitle: string;
@@ -138,17 +158,14 @@ export function analyzeSEO(): SEOMetrics {
   if (webVitals) {
     // Performance significantly impacts SEO rankings
     const performanceWeight = 0.3; // 30% weight for performance
-    const performanceContribution = webVitals.score * performanceWeight;
+    const performanceContribution = (webVitals.lcp ? 100 : 0) * performanceWeight;
     score = Math.round(score * 0.7 + performanceContribution);
     
     // Add performance-specific warnings
-    if (webVitals.score < 60) {
-      warnings.push('Poor Core Web Vitals scores may impact search rankings');
-    }
-    if (webVitals.LCP && webVitals.LCP > 2500) {
+    if (!webVitals.lcp || webVitals.lcp > 2500) {
       warnings.push('Largest Contentful Paint is too slow (>2.5s)');
     }
-    if (webVitals.CLS && webVitals.CLS > 0.1) {
+    if (webVitals.cls && webVitals.cls > 0.1) {
       warnings.push('Cumulative Layout Shift exceeds recommended threshold');
     }
   }
@@ -184,12 +201,12 @@ export function analyzePerformance(): Promise<PerformanceMetrics> {
     const webVitals = getCurrentWebVitals();
     if (webVitals) {
       metrics.webVitals = webVitals;
-      metrics.performanceScore = webVitals.score;
-      metrics.performanceGrade = webVitals.grade;
-      metrics.firstContentfulPaint = webVitals.FCP;
-      metrics.largestContentfulPaint = webVitals.LCP;
-      metrics.cumulativeLayoutShift = webVitals.CLS;
-      metrics.firstInputDelay = webVitals.FID;
+      metrics.performanceScore = webVitals.lcp ? 100 : 0;
+      metrics.performanceGrade = webVitals.lcp && webVitals.lcp < 2500 ? 'A' : 'C';
+      metrics.firstContentfulPaint = webVitals.fcp;
+      metrics.largestContentfulPaint = webVitals.lcp;
+      metrics.cumulativeLayoutShift = webVitals.cls;
+      metrics.firstInputDelay = webVitals.fid;
     } else {
       // Fallback to Performance Observer for legacy support
       if ('PerformanceObserver' in window) {

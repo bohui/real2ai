@@ -1,23 +1,23 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { motion } from 'framer-motion';
-import { 
-  CheckCircle, 
-  XCircle, 
-  AlertTriangle, 
-  FileText, 
-  Brain, 
-  Shield, 
+import React, { useState, useEffect, useCallback } from "react";
+import { motion } from "framer-motion";
+import {
+  CheckCircle,
+  XCircle,
+  AlertTriangle,
+  FileText,
+  Brain,
+  Shield,
   Clock,
   X,
   Pause,
-  Play
-} from 'lucide-react';
+  Play,
+} from "lucide-react";
 
 export interface AnalysisStage {
   id: string;
   name: string;
   description: string;
-  status: 'pending' | 'in-progress' | 'completed' | 'error' | 'skipped';
+  status: "pending" | "in-progress" | "completed" | "error" | "skipped";
   progress: number; // 0-100
   duration?: number; // in seconds
   error?: string;
@@ -26,7 +26,12 @@ export interface AnalysisStage {
 
 export interface ContractAnalysisProgressProps {
   contractId: string;
-  contractType: 'purchase-agreement' | 'lease' | 'employment' | 'nda' | 'service-agreement';
+  contractType:
+    | "purchase-agreement"
+    | "lease"
+    | "employment"
+    | "nda"
+    | "service-agreement";
   contractName: string;
   onCancel: () => void;
   onComplete: (results: any) => void;
@@ -35,88 +40,97 @@ export interface ContractAnalysisProgressProps {
 }
 
 const CONTRACT_TYPE_LABELS = {
-  'purchase-agreement': 'Purchase Agreement',
-  'lease': 'Lease Agreement',
-  'employment': 'Employment Contract',
-  'nda': 'Non-Disclosure Agreement',
-  'service-agreement': 'Service Agreement'
+  "purchase-agreement": "Purchase Agreement",
+  lease: "Lease Agreement",
+  employment: "Employment Contract",
+  nda: "Non-Disclosure Agreement",
+  "service-agreement": "Service Agreement",
 };
 
-const ANALYSIS_STAGES: Omit<AnalysisStage, 'status' | 'progress' | 'duration' | 'error'>[] = [
+const ANALYSIS_STAGES: Omit<
+  AnalysisStage,
+  "status" | "progress" | "duration" | "error"
+>[] = [
   {
-    id: 'upload',
-    name: 'Document Validation',
-    description: 'Verifying document integrity and format',
-    icon: <FileText className="w-5 h-5" />
+    id: "upload",
+    name: "Document Validation",
+    description: "Verifying document integrity and format",
+    icon: <FileText className="w-5 h-5" />,
   },
   {
-    id: 'extraction',
-    name: 'Text Extraction',
-    description: 'Extracting text content with OCR fallback',
-    icon: <FileText className="w-5 h-5" />
+    id: "extraction",
+    name: "Text Extraction",
+    description: "Extracting text content with OCR fallback",
+    icon: <FileText className="w-5 h-5" />,
   },
   {
-    id: 'analysis',
-    name: 'AI Analysis',
-    description: 'Analyzing contract clauses and terms',
-    icon: <Brain className="w-5 h-5" />
+    id: "analysis",
+    name: "AI Analysis",
+    description: "Analyzing contract clauses and terms",
+    icon: <Brain className="w-5 h-5" />,
   },
   {
-    id: 'risk-assessment',
-    name: 'Risk Assessment',
-    description: 'Calculating risk scores and flagging issues',
-    icon: <AlertTriangle className="w-5 h-5" />
+    id: "risk-assessment",
+    name: "Risk Assessment",
+    description: "Calculating risk scores and flagging issues",
+    icon: <AlertTriangle className="w-5 h-5" />,
   },
   {
-    id: 'compliance',
-    name: 'Compliance Check',
-    description: 'Verifying regulatory and legal compliance',
-    icon: <Shield className="w-5 h-5" />
+    id: "compliance",
+    name: "Compliance Check",
+    description: "Verifying regulatory and legal compliance",
+    icon: <Shield className="w-5 h-5" />,
   },
   {
-    id: 'recommendations',
-    name: 'Recommendations',
-    description: 'Generating improvement suggestions',
-    icon: <CheckCircle className="w-5 h-5" />
+    id: "recommendations",
+    name: "Recommendations",
+    description: "Generating improvement suggestions",
+    icon: <CheckCircle className="w-5 h-5" />,
   },
   {
-    id: 'completion',
-    name: 'Analysis Complete',
-    description: 'Finalizing results and preparing report',
-    icon: <CheckCircle className="w-5 h-5" />
-  }
+    id: "completion",
+    name: "Analysis Complete",
+    description: "Finalizing results and preparing report",
+    icon: <CheckCircle className="w-5 h-5" />,
+  },
 ];
 
-export const ContractAnalysisProgress: React.FC<ContractAnalysisProgressProps> = ({
+export const ContractAnalysisProgress: React.FC<
+  ContractAnalysisProgressProps
+> = ({
   contractId,
   contractType,
   contractName,
   onCancel,
   onComplete,
   onError,
-  className = ''
+  className = "",
 }) => {
   const [stages, setStages] = useState<AnalysisStage[]>(() =>
-    ANALYSIS_STAGES.map(stage => ({
+    ANALYSIS_STAGES.map((stage) => ({
       ...stage,
-      status: 'pending' as const,
+      status: "pending" as const,
       progress: 0,
-      duration: 0
+      duration: 0,
     }))
   );
   const [currentStageIndex, setCurrentStageIndex] = useState(0);
   const [overallProgress, setOverallProgress] = useState(0);
-  const [estimatedTimeRemaining, setEstimatedTimeRemaining] = useState<number | null>(null);
+  const [estimatedTimeRemaining, setEstimatedTimeRemaining] = useState<
+    number | null
+  >(null);
   const [isPaused, setIsPaused] = useState(false);
   const [startTime] = useState(Date.now());
   const [ws, setWs] = useState<WebSocket | null>(null);
 
   // WebSocket connection management
   useEffect(() => {
-    const websocket = new WebSocket(`${import.meta.env.VITE_WS_BASE_URL}/ws/documents/${contractId}`);
-    
+    const websocket = new WebSocket(
+      `${import.meta.env.VITE_WS_BASE_URL}/ws/documents/${contractId}`
+    );
+
     websocket.onopen = () => {
-      console.log('WebSocket connected for contract analysis');
+      console.log("WebSocket connected for contract analysis");
       setWs(websocket);
     };
 
@@ -126,12 +140,12 @@ export const ContractAnalysisProgress: React.FC<ContractAnalysisProgressProps> =
     };
 
     websocket.onerror = (error) => {
-      console.error('WebSocket error:', error);
-      onError('Connection error occurred during analysis');
+      console.error("WebSocket error:", error);
+      onError("Connection error occurred during analysis");
     };
 
     websocket.onclose = () => {
-      console.log('WebSocket connection closed');
+      console.log("WebSocket connection closed");
       setWs(null);
     };
 
@@ -140,69 +154,91 @@ export const ContractAnalysisProgress: React.FC<ContractAnalysisProgressProps> =
     };
   }, [contractId]);
 
-  const handleProgressUpdate = useCallback((data: any) => {
-    const { stage, progress, status, error, estimatedTimeRemaining: etr, results } = data;
+  const handleProgressUpdate = useCallback(
+    (data: any) => {
+      const {
+        stage,
+        progress,
+        status,
+        error,
+        estimatedTimeRemaining: etr,
+        results,
+      } = data;
 
-    if (results && status === 'completed') {
-      onComplete(results);
-      return;
-    }
-
-    if (error && status === 'error') {
-      setStages(prev => prev.map((s, index) => 
-        s.id === stage ? { ...s, status: 'error', error } : 
-        index < currentStageIndex ? { ...s, status: 'completed' } : s
-      ));
-      onError(error);
-      return;
-    }
-
-    setStages(prev => prev.map((s, index) => {
-      if (s.id === stage) {
-        return {
-          ...s,
-          status: status as AnalysisStage['status'],
-          progress: progress || 0,
-          duration: (Date.now() - startTime) / 1000
-        };
+      if (results && status === "completed") {
+        onComplete(results);
+        return;
       }
-      
-      // Mark previous stages as completed
-      if (index < prev.findIndex(s => s.id === stage)) {
-        return { ...s, status: 'completed' as const, progress: 100 };
+
+      if (error && status === "error") {
+        setStages((prev) =>
+          prev.map((s, index) =>
+            s.id === stage
+              ? { ...s, status: "error", error }
+              : index < currentStageIndex
+              ? { ...s, status: "completed" }
+              : s
+          )
+        );
+        onError(error);
+        return;
       }
-      
-      return s;
-    }));
 
-    // Update current stage index
-    const stageIndex = ANALYSIS_STAGES.findIndex(s => s.id === stage);
-    if (stageIndex !== -1) {
-      setCurrentStageIndex(stageIndex);
-    }
+      setStages((prev) =>
+        prev.map((s, index) => {
+          if (s.id === stage) {
+            return {
+              ...s,
+              status: status as AnalysisStage["status"],
+              progress: progress || 0,
+              duration: (Date.now() - startTime) / 1000,
+            };
+          }
 
-    // Update overall progress
-    const completedStages = stages.filter(s => s.status === 'completed').length;
-    const currentProgress = progress || 0;
-    const overall = ((completedStages * 100) + currentProgress) / (ANALYSIS_STAGES.length * 100) * 100;
-    setOverallProgress(Math.min(overall, 100));
+          // Mark previous stages as completed
+          if (index < prev.findIndex((s) => s.id === stage)) {
+            return { ...s, status: "completed" as const, progress: 100 };
+          }
 
-    // Update estimated time
-    if (etr) {
-      setEstimatedTimeRemaining(etr);
-    }
-  }, [stages, currentStageIndex, startTime, onComplete, onError]);
+          return s;
+        })
+      );
+
+      // Update current stage index
+      const stageIndex = ANALYSIS_STAGES.findIndex((s) => s.id === stage);
+      if (stageIndex !== -1) {
+        setCurrentStageIndex(stageIndex);
+      }
+
+      // Update overall progress
+      const completedStages = stages.filter(
+        (s) => s.status === "completed"
+      ).length;
+      const currentProgress = progress || 0;
+      const overall =
+        ((completedStages * 100 + currentProgress) /
+          (ANALYSIS_STAGES.length * 100)) *
+        100;
+      setOverallProgress(Math.min(overall, 100));
+
+      // Update estimated time
+      if (etr) {
+        setEstimatedTimeRemaining(etr);
+      }
+    },
+    [stages, currentStageIndex, startTime, onComplete, onError]
+  );
 
   const handleCancel = () => {
     if (ws) {
-      ws.send(JSON.stringify({ action: 'cancel' }));
+      ws.send(JSON.stringify({ action: "cancel" }));
     }
     onCancel();
   };
 
   const handlePauseResume = () => {
     if (ws) {
-      ws.send(JSON.stringify({ action: isPaused ? 'resume' : 'pause' }));
+      ws.send(JSON.stringify({ action: isPaused ? "resume" : "pause" }));
       setIsPaused(!isPaused);
     }
   };
@@ -216,11 +252,11 @@ export const ContractAnalysisProgress: React.FC<ContractAnalysisProgressProps> =
 
   const getStageStatusIcon = (stage: AnalysisStage) => {
     switch (stage.status) {
-      case 'completed':
+      case "completed":
         return <CheckCircle className="w-5 h-5 text-green-600" />;
-      case 'error':
+      case "error":
         return <XCircle className="w-5 h-5 text-red-600" />;
-      case 'in-progress':
+      case "in-progress":
         return (
           <motion.div
             animate={{ rotate: 360 }}
@@ -229,12 +265,16 @@ export const ContractAnalysisProgress: React.FC<ContractAnalysisProgressProps> =
           />
         );
       default:
-        return <div className="w-5 h-5 border-2 border-gray-300 rounded-full" />;
+        return (
+          <div className="w-5 h-5 border-2 border-gray-300 rounded-full" />
+        );
     }
   };
 
   return (
-    <div className={`bg-white rounded-xl shadow-lg border border-gray-200 ${className}`}>
+    <div
+      className={`bg-white rounded-xl shadow-lg border border-gray-200 ${className}`}
+    >
       {/* Header */}
       <div className="px-6 py-4 border-b border-gray-200">
         <div className="flex items-center justify-between">
@@ -246,14 +286,18 @@ export const ContractAnalysisProgress: React.FC<ContractAnalysisProgressProps> =
               {CONTRACT_TYPE_LABELS[contractType]} • {contractName}
             </p>
           </div>
-          
+
           <div className="flex items-center space-x-2">
             <button
               onClick={handlePauseResume}
               className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
-              disabled={stages[currentStageIndex]?.status === 'completed'}
+              disabled={stages[currentStageIndex]?.status === "completed"}
             >
-              {isPaused ? <Play className="w-5 h-5" /> : <Pause className="w-5 h-5" />}
+              {isPaused ? (
+                <Play className="w-5 h-5" />
+              ) : (
+                <Pause className="w-5 h-5" />
+              )}
             </button>
             <button
               onClick={handleCancel}
@@ -278,15 +322,19 @@ export const ContractAnalysisProgress: React.FC<ContractAnalysisProgressProps> =
               transition={{ duration: 0.3 }}
             />
           </div>
-          
+
           {estimatedTimeRemaining && (
             <div className="flex items-center justify-between mt-2 text-xs text-gray-500">
               <div className="flex items-center space-x-1">
                 <Clock className="w-3 h-3" />
-                <span>Estimated time remaining: {formatTime(estimatedTimeRemaining)}</span>
+                <span>
+                  Estimated time remaining: {formatTime(estimatedTimeRemaining)}
+                </span>
               </div>
               {isPaused && (
-                <span className="text-amber-600 font-medium">Analysis Paused</span>
+                <span className="text-amber-600 font-medium">
+                  Analysis Paused
+                </span>
               )}
             </div>
           )}
@@ -303,13 +351,13 @@ export const ContractAnalysisProgress: React.FC<ContractAnalysisProgressProps> =
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: index * 0.1 }}
               className={`flex items-start space-x-4 p-4 rounded-lg transition-all ${
-                stage.status === 'in-progress'
-                  ? 'bg-blue-50 border border-blue-200'
-                  : stage.status === 'completed'
-                  ? 'bg-green-50 border border-green-200'
-                  : stage.status === 'error'
-                  ? 'bg-red-50 border border-red-200'
-                  : 'bg-gray-50 border border-gray-200'
+                stage.status === "in-progress"
+                  ? "bg-blue-50 border border-blue-200"
+                  : stage.status === "completed"
+                  ? "bg-green-50 border border-green-200"
+                  : stage.status === "error"
+                  ? "bg-red-50 border border-red-200"
+                  : "bg-gray-50 border border-gray-200"
               }`}
             >
               {/* Stage Icon */}
@@ -320,33 +368,43 @@ export const ContractAnalysisProgress: React.FC<ContractAnalysisProgressProps> =
               {/* Stage Content */}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between">
-                  <h4 className={`text-sm font-medium ${
-                    stage.status === 'error' ? 'text-red-900' :
-                    stage.status === 'completed' ? 'text-green-900' :
-                    stage.status === 'in-progress' ? 'text-blue-900' :
-                    'text-gray-700'
-                  }`}>
+                  <h4
+                    className={`text-sm font-medium ${
+                      stage.status === "error"
+                        ? "text-red-900"
+                        : stage.status === "completed"
+                        ? "text-green-900"
+                        : stage.status === "in-progress"
+                        ? "text-blue-900"
+                        : "text-gray-700"
+                    }`}
+                  >
                     {stage.name}
                   </h4>
-                  
-                  {stage.status === 'in-progress' && (
+
+                  {stage.status === "in-progress" && (
                     <span className="text-xs text-blue-600 font-medium">
                       {stage.progress}%
                     </span>
                   )}
                 </div>
 
-                <p className={`text-xs mt-1 ${
-                  stage.status === 'error' ? 'text-red-700' :
-                  stage.status === 'completed' ? 'text-green-700' :
-                  stage.status === 'in-progress' ? 'text-blue-700' :
-                  'text-gray-500'
-                }`}>
+                <p
+                  className={`text-xs mt-1 ${
+                    stage.status === "error"
+                      ? "text-red-700"
+                      : stage.status === "completed"
+                      ? "text-green-700"
+                      : stage.status === "in-progress"
+                      ? "text-blue-700"
+                      : "text-gray-500"
+                  }`}
+                >
                   {stage.error || stage.description}
                 </p>
 
                 {/* Progress Bar for Current Stage */}
-                {stage.status === 'in-progress' && (
+                {stage.status === "in-progress" && (
                   <div className="mt-2">
                     <div className="w-full bg-blue-200 rounded-full h-1.5">
                       <motion.div
@@ -360,7 +418,7 @@ export const ContractAnalysisProgress: React.FC<ContractAnalysisProgressProps> =
                 )}
 
                 {/* Duration for Completed Stages */}
-                {stage.status === 'completed' && stage.duration && (
+                {stage.status === "completed" && stage.duration && (
                   <span className="text-xs text-green-600 mt-1 block">
                     Completed in {formatTime(stage.duration)}
                   </span>
@@ -378,7 +436,7 @@ export const ContractAnalysisProgress: React.FC<ContractAnalysisProgressProps> =
             <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
             <span>Real-time analysis in progress</span>
           </div>
-          
+
           <div className="text-gray-500">
             Contract ID: {contractId.slice(0, 8)}...
           </div>
@@ -387,3 +445,5 @@ export const ContractAnalysisProgress: React.FC<ContractAnalysisProgressProps> =
     </div>
   );
 };
+
+export default ContractAnalysisProgress;

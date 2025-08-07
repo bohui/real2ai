@@ -3,11 +3,11 @@
  * Manages global SEO state and provides utilities for all components
  */
 
-import React, { createContext, useContext, useCallback, useState, useEffect } from 'react';
+import React, { createContext, useContext, useCallback, useState, useEffect, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 import { SEOData } from '@/components/seo/SEOHead';
 import { DynamicSEOData } from '@/hooks/useSEO';
-import { generateSEOData, SEO_CONFIG } from '@/config/seoConfig';
+import { generateSEOData } from '@/config/seoConfig';
 
 interface SEOContextValue {
   currentSEO: SEOData;
@@ -36,10 +36,15 @@ export function SEOProvider({ children, baseConfig = {} }: SEOProviderProps) {
   const [currentSEO, setCurrentSEO] = useState<SEOData>({});
   const [isLoading, setIsLoading] = useState(false);
 
-  const config = {
-    ...SEO_CONFIG,
+  const config = useMemo(() => ({
+    baseUrl: "https://real2.ai",
+    siteName: "Real2AI",
+    defaultTitle: "Real2AI - Property Analysis Platform",
+    defaultDescription: "Advanced AI-powered property analysis and contract review platform for Australian real estate professionals.",
+    titleSeparator: " - ",
+    defaultImage: "/images/og-default.jpg",
     ...baseConfig
-  };
+  }), [baseConfig]);
 
   // Generate initial SEO data for current route
   const initializeSEOForRoute = useCallback((pathname: string, dynamicData?: DynamicSEOData) => {
@@ -58,12 +63,12 @@ export function SEOProvider({ children, baseConfig = {} }: SEOProviderProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [config]);
+  }, []); // Remove config from dependencies as it's stable
 
   // Update SEO when route changes
   useEffect(() => {
     initializeSEOForRoute(location.pathname);
-  }, [location.pathname, initializeSEOForRoute]);
+  }, [location.pathname]); // Remove initializeSEOForRoute from dependencies
 
   const updateGlobalSEO = useCallback((seo: Partial<SEOData>) => {
     setCurrentSEO(prev => ({
@@ -85,24 +90,24 @@ export function SEOProvider({ children, baseConfig = {} }: SEOProviderProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [location.pathname]);
+  }, []); // Remove location.pathname from dependencies as it's handled by the route change effect
 
   const resetSEO = useCallback(() => {
     initializeSEOForRoute(location.pathname);
-  }, [location.pathname, initializeSEOForRoute]);
+  }, [location.pathname]); // Remove initializeSEOForRoute from dependencies
 
   const setSEOForRoute = useCallback((pathname: string, dynamicData?: DynamicSEOData) => {
     initializeSEOForRoute(pathname, dynamicData);
-  }, [initializeSEOForRoute]);
+  }, []); // Remove initializeSEOForRoute from dependencies
 
-  const value: SEOContextValue = {
+  const value: SEOContextValue = React.useMemo(() => ({
     currentSEO,
     updateGlobalSEO,
     updateDynamicSEO,
     resetSEO,
     setSEOForRoute,
     isLoading
-  };
+  }), [currentSEO, updateGlobalSEO, updateDynamicSEO, resetSEO, setSEOForRoute, isLoading]);
 
   return (
     <SEOContext.Provider value={value}>
@@ -133,27 +138,29 @@ export function usePageSEO(
     if (staticSEO && Object.keys(staticSEO).length > 0) {
       updateGlobalSEO(staticSEO);
     }
-  }, [staticSEO, updateGlobalSEO]);
+  }, [staticSEO]); // Remove updateGlobalSEO from dependencies
 
   // Update SEO with dynamic data when it changes
   useEffect(() => {
     if (dynamicData && Object.keys(dynamicData).length > 0) {
       updateDynamicSEO(dynamicData);
     }
-  }, [dynamicData, updateDynamicSEO]);
+  }, [dynamicData]); // Remove updateDynamicSEO from dependencies
+
+  const convenienceMethods = useMemo(() => ({
+    setTitle: (title: string) => updateGlobalSEO({ title }),
+    setDescription: (description: string) => updateGlobalSEO({ description }),
+    setKeywords: (keywords: string[]) => updateGlobalSEO({ keywords }),
+    setCanonical: (canonical: string) => updateGlobalSEO({ canonical }),
+    setOGImage: (ogImage: string) => updateGlobalSEO({ ogImage }),
+  }), [updateGlobalSEO]);
 
   return {
     seoData: currentSEO,
     updateSEO: updateGlobalSEO,
     updateDynamicSEO,
     isLoading,
-    
-    // Convenience methods
-    setTitle: (title: string) => updateGlobalSEO({ title }),
-    setDescription: (description: string) => updateGlobalSEO({ description }),
-    setKeywords: (keywords: string[]) => updateGlobalSEO({ keywords }),
-    setCanonical: (canonical: string) => updateGlobalSEO({ canonical }),
-    setOGImage: (ogImage: string) => updateGlobalSEO({ ogImage }),
+    ...convenienceMethods,
   };
 }
 

@@ -1,5 +1,6 @@
 import apiService from "./api";
 import {
+  AlertPreferences,
   BulkPropertyAnalysisRequest,
   PropertyAnalyticsRequest,
   PropertyAnalyticsResponse,
@@ -9,7 +10,6 @@ import {
   PropertySearchRequest,
   PropertySearchResponse,
   PropertyWatchlistItem,
-  AlertPreferences
 } from "../types";
 
 export class PropertyIntelligenceService {
@@ -30,11 +30,14 @@ export class PropertyIntelligenceService {
     request: PropertySearchRequest,
   ): Promise<PropertySearchResponse> {
     try {
-      const response = await apiService.post(`${this.baseUrl}/search`, request);
-      return response.data;
+      const response = await apiService.post(
+        "/api/property-intelligence/search",
+        request,
+      );
+      return response.data as PropertySearchResponse;
     } catch (error) {
       console.error("Property search failed:", error);
-      throw new Error("Failed to search properties");
+      throw error;
     }
   }
 
@@ -49,7 +52,7 @@ export class PropertyIntelligenceService {
         `${this.baseUrl}/analyze`,
         request,
       );
-      return response.data;
+      return response.data as PropertyAnalyticsResponse;
     } catch (error) {
       console.error("Property analysis failed:", error);
       throw new Error("Failed to analyze property");
@@ -85,7 +88,7 @@ export class PropertyIntelligenceService {
       const response = await apiService.get(`${this.baseUrl}/watchlist`, {
         params: { limit, offset },
       });
-      return response.data;
+      return response.data as PropertyWatchlistItem[];
     } catch (error) {
       console.error("Failed to get watchlist:", error);
       throw new Error("Failed to retrieve property watchlist");
@@ -137,7 +140,7 @@ export class PropertyIntelligenceService {
       const response = await apiService.get(`${this.baseUrl}/market-insights`, {
         params: { location, insight_types: insightTypes.join(","), limit },
       });
-      return response.data;
+      return response.data as PropertyMarketInsight[];
     } catch (error) {
       console.error("Failed to get market insights:", error);
       throw new Error("Failed to retrieve market insights");
@@ -156,7 +159,7 @@ export class PropertyIntelligenceService {
         properties,
         comparison_criteria: comparisonCriteria,
       });
-      return response.data;
+      return response.data as PropertyComparisonResult;
     } catch (error) {
       console.error("Property comparison failed:", error);
       throw new Error("Failed to compare properties");
@@ -177,7 +180,7 @@ export class PropertyIntelligenceService {
       }, {
         responseType: "blob",
       });
-      return response.data;
+      return response.data as Blob;
     } catch (error) {
       console.error("Export failed:", error);
       throw new Error("Failed to export property data");
@@ -192,7 +195,7 @@ export class PropertyIntelligenceService {
       const response = await apiService.get(
         `${this.baseUrl}/property/${propertyId}/analysis`,
       );
-      return response.data;
+      return response.data as PropertyProfile;
     } catch (error) {
       console.error("Failed to get property analysis:", error);
       throw new Error("Failed to retrieve property analysis");
@@ -315,7 +318,8 @@ export class PropertyIntelligenceService {
         location: filters.location,
         radius_km: 50,
         limit: filters.limit || 20,
-        sort_by: (filters.sortBy as PropertySearchRequest['sort_by']) || "relevance",
+        sort_by: (filters.sortBy as PropertySearchRequest["sort_by"]) ||
+          "relevance",
         include_off_market: false,
         include_historical: false,
       };
@@ -375,7 +379,7 @@ export class PropertyIntelligenceService {
           responseType: "blob",
         },
       );
-      return response.data;
+      return response.data as Blob;
     } catch (error) {
       console.error("Failed to generate property report:", error);
       throw new Error("Failed to generate property report");

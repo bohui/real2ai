@@ -3,15 +3,15 @@
  * Shows SEO dev tools in development mode only
  */
 
-import React, { useState } from 'react';
-import { Search } from 'lucide-react';
-import SEODevTools from './SEODevTools';
+import React, { useState } from "react";
+import { Search } from "lucide-react";
+import SEODevTools from "./SEODevTools";
 
 const SEOFloatingButton: React.FC = () => {
   const [showDevTools, setShowDevTools] = useState(false);
 
   // Only show in development mode
-  if (process.env.NODE_ENV !== 'development') {
+  if (process.env.NODE_ENV !== "development") {
     return null;
   }
 
@@ -25,9 +25,9 @@ const SEOFloatingButton: React.FC = () => {
         <Search className="w-5 h-5 group-hover:scale-110 transition-transform" />
       </button>
 
-      <SEODevTools 
-        isOpen={showDevTools} 
-        onClose={() => setShowDevTools(false)} 
+      <SEODevTools
+        isOpen={showDevTools}
+        onClose={() => setShowDevTools(false)}
       />
     </>
   );

@@ -3,7 +3,7 @@
  * Features: WebP support, intersection observer, blur-to-sharp transition
  */
 
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 
 interface LazyImageProps {
   src: string;
@@ -184,24 +184,24 @@ export default function LazyImage({
 /**
  * Utility function to generate blur data URL from image
  */
-export function generateBlurDataURL(src: string, width: number = 40, height: number = 40): string {
-  // This is a simple implementation - in production, you might generate this server-side
+export function generateBlurDataURL(_src: string, width: number = 40, height: number = 40): string {
+  // This is a placeholder implementation
+  // In a real app, you might use a service like Cloudinary or similar
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
-  
   const ctx = canvas.getContext('2d');
-  if (!ctx) return '';
   
-  // Create a simple gray blur placeholder
-  const gradient = ctx.createLinearGradient(0, 0, width, height);
-  gradient.addColorStop(0, '#f3f4f6');
-  gradient.addColorStop(1, '#e5e7eb');
+  if (ctx) {
+    // Create a simple gradient as placeholder
+    const gradient = ctx.createLinearGradient(0, 0, width, height);
+    gradient.addColorStop(0, '#f3f4f6');
+    gradient.addColorStop(1, '#e5e7eb');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, width, height);
+  }
   
-  ctx.fillStyle = gradient;
-  ctx.fillRect(0, 0, width, height);
-  
-  return canvas.toDataURL('image/jpeg', 0.1);
+  return canvas.toDataURL();
 }
 
 /**

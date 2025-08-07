@@ -70,7 +70,13 @@ const MarketAnalysisPage: React.FC = () => {
 
   // SEO for Market Analysis page
   const regionText = selectedRegion === 'national' ? 'Australia' : selectedRegion === 'state' ? 'State' : 'Suburb';
-  const trend = marketData?.nationalStats?.priceGrowth > 0 ? 'rising' : marketData?.nationalStats?.priceGrowth < 0 ? 'falling' : 'stable';
+  // Determine market trend
+  const trend = (marketData?.nationalStats?.priceGrowth ?? 0) > 0 ? 'rising' : (marketData?.nationalStats?.priceGrowth ?? 0) < 0 ? 'falling' : 'stable';
+  
+  const dynamicSEOData = React.useMemo(() => ({
+    region: regionText,
+    trend: trend
+  }), [regionText, trend]);
   
   usePageSEO(
     {
@@ -89,10 +95,7 @@ const MarketAnalysisPage: React.FC = () => {
       canonical: '/app/market-analysis',
       noIndex: true // Private market analysis page
     },
-    {
-      region: regionText,
-      trend: trend
-    }
+    dynamicSEOData
   );
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -290,7 +293,7 @@ const MarketAnalysisPage: React.FC = () => {
           insights.status === "fulfilled" ? insights.value : [];
         const trendsData = trends.status === "fulfilled" ? trends.value : [];
 
-        const data = await generateMarketData(insightsData, trendsData);
+        const data = await generateMarketData(insightsData, trendsData as any[]);
         setMarketData(data);
       } catch (error) {
         console.error("Failed to load market data:", error);

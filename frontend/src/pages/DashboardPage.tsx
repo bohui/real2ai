@@ -61,23 +61,22 @@ const DashboardPage: React.FC = () => {
     (a) => a.executive_summary.overall_risk_score >= 7
   ).length;
 
-  // Calculate best value properties
+  // Calculate best value properties (combination of low risk and good price-to-value ratio)
   const bestValueProperties = recentAnalyses
     .filter((analysis) => {
-      // Only include completed analyses with property data
       return (
         analysis.analysis_status === "completed" &&
-        analysis.contract_terms?.property_address &&
+        (analysis.contract_terms as any)?.property_address &&
         analysis.executive_summary?.overall_risk_score !== undefined
       );
     })
     .map((analysis) => {
       const riskScore = analysis.executive_summary.overall_risk_score;
-      const propertyAddress = analysis.contract_terms.property_address;
+      const propertyAddress = (analysis.contract_terms as any).property_address;
       const purchasePrice =
-        analysis.contract_terms?.financial_terms?.purchase_price;
+        (analysis.contract_terms as any)?.financial_terms?.purchase_price;
       const marketValue =
-        analysis.contract_terms?.property_details?.market_value;
+        (analysis.contract_terms as any)?.property_details?.market_value;
 
       // Calculate value score (lower risk = better value, higher price-to-value ratio = better value)
       let valueScore = 0;
@@ -114,12 +113,12 @@ const DashboardPage: React.FC = () => {
     .filter((analysis) => {
       return (
         analysis.analysis_status === "completed" &&
-        analysis.contract_terms?.property_address &&
+        (analysis.contract_terms as any)?.property_address &&
         analysis.executive_summary?.overall_risk_score !== undefined
       );
     })
     .map((analysis) => ({
-      address: analysis.contract_terms.property_address,
+      address: (analysis.contract_terms as any).property_address,
       riskScore: analysis.executive_summary.overall_risk_score,
       analysis,
     }))
@@ -147,7 +146,7 @@ const DashboardPage: React.FC = () => {
       value: minimalRiskCount,
       change:
         minimalRiskProperties.length > 0
-          ? minimalRiskProperties[0].address.split(",")[0]
+          ? (minimalRiskProperties[0].address as string).split(",")[0]
           : "0",
       trend:
         averageMinimalRiskScore < 3

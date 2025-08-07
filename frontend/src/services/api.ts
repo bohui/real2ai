@@ -18,18 +18,6 @@ interface AxiosRequestConfigExtended extends AxiosRequestConfig {
   _retry?: boolean;
 }
 
-interface ApiErrorData {
-  error: string;
-  message?: string;
-  details?: any;
-}
-
-interface TokenRefreshResponse {
-  access_token: string;
-  refresh_token?: string;
-  user?: User;
-}
-
 interface RawAnalysisData {
   contract_id?: string;
   analysis_id?: string;
@@ -388,13 +376,18 @@ class ApiService {
     // Transform to match ContractAnalysisResult interface
     const rawData = apiData as RawAnalysisData;
     const transformedResult: ContractAnalysisResult = {
-      contract_id: rawData.contract_id,
-      analysis_id: analysisResult.analysis_id || rawData.contract_id,
+      contract_id: rawData.contract_id || "",
+      analysis_id: analysisResult.analysis_id || rawData.contract_id || "",
       analysis_timestamp: analysisResult.analysis_timestamp ||
-        rawData.created_at,
+        rawData.created_at || new Date().toISOString(),
       user_id: analysisResult.user_id || "",
       australian_state: analysisResult.australian_state || "NSW",
-      analysis_status: rawData.analysis_status || "completed",
+      analysis_status:
+        (rawData.analysis_status as
+          | "pending"
+          | "processing"
+          | "completed"
+          | "failed") || "completed",
       contract_terms: analysisResult.contract_terms || {},
       risk_assessment: {
         overall_risk_score:
@@ -507,17 +500,20 @@ class ApiService {
       // Handle specific status codes
       switch (status) {
         case 400:
-          return data?.detail || "Invalid request. Please check your input.";
+          return (data?.detail as string) ||
+            "Invalid request. Please check your input.";
         case 401:
           return "Authentication required. Please log in again.";
         case 403:
           return "Access denied. You don't have permission for this action.";
         case 404:
-          return data?.detail || "The requested resource was not found.";
+          return (data?.detail as string) ||
+            "The requested resource was not found.";
         case 409:
-          return data?.detail || "Conflict with existing data.";
+          return (data?.detail as string) || "Conflict with existing data.";
         case 422:
-          return data?.detail || "Validation error. Please check your input.";
+          return (data?.detail as string) ||
+            "Validation error. Please check your input.";
         case 429:
           return "Rate limit exceeded. Please try again later.";
         case 500:
@@ -527,7 +523,8 @@ class ApiService {
         case 504:
           return "Service temporarily unavailable. Please try again later.";
         default:
-          return data?.detail || data?.message || `Server error (${status})`;
+          return (data?.detail as string) || (data?.message as string) ||
+            `Server error (${status})`;
       }
     } else if (error.request) {
       // Request made but no response received
@@ -639,7 +636,7 @@ export class WebSocketService {
     if (this.isConnecting || this.isConnected) {
       console.log(
         `🔍 WebSocket already connecting/connected for contract ${this.contractId}`,
-        { isConnecting: this.isConnecting, isConnected: this.isConnected }
+        { isConnecting: this.isConnecting, isConnected: this.isConnected },
       );
       return Promise.resolve();
     }
@@ -663,7 +660,9 @@ export class WebSocketService {
     return new Promise((resolve, reject) => {
       try {
         this.isConnecting = true;
-        console.log(`🔗 Starting WebSocket connection for ${this.contractId}...`);
+        console.log(
+          `🔗 Starting WebSocket connection for ${this.contractId}...`,
+        );
 
         // Close existing connection if any
         if (this.ws) {
@@ -680,7 +679,9 @@ export class WebSocketService {
         }
 
         console.log(
-          `🏗️ Creating new WebSocket connection for contract ${this.contractId}: ${this.url.replace(/token=[^&]+/, "token=[REDACTED]")}`,
+          `🏗️ Creating new WebSocket connection for contract ${this.contractId}: ${
+            this.url.replace(/token=[^&]+/, "token=[REDACTED]")
+          }`,
         );
         this.ws = new WebSocket(this.url);
 
@@ -711,19 +712,26 @@ export class WebSocketService {
         };
 
         this.ws.onmessage = (event) => {
-          console.log(`📨 WebSocket message received for ${this.contractId}:`, event.data);
+          console.log(
+            `📨 WebSocket message received for ${this.contractId}:`,
+            event.data,
+          );
           try {
             const message = JSON.parse(event.data);
             console.log(`📨 Parsed WebSocket message:`, message);
-            
+
             // Emit custom event for the store to handle
             window.dispatchEvent(
               new CustomEvent("analysis:update", {
                 detail: message,
-              })
+              }),
             );
           } catch (error) {
-            console.error("❌ Failed to parse WebSocket message:", error, event.data);
+            console.error(
+              "❌ Failed to parse WebSocket message:",
+              error,
+              event.data,
+            );
           }
         };
 
@@ -737,28 +745,35 @@ export class WebSocketService {
           console.log(`🔌 WebSocket closed for ${this.contractId}:`, {
             code: event.code,
             reason: event.reason,
-            wasClean: event.wasClean
+            wasClean: event.wasClean,
           });
           this.isConnected = false;
           this.isConnecting = false;
-          
+
           if (this.heartbeatInterval) {
             clearInterval(this.heartbeatInterval);
             this.heartbeatInterval = null;
           }
 
           // Attempt reconnection if not manually closed
-          if (event.code !== 1000 && this.reconnectAttempts < this.maxReconnectAttempts) {
-            console.log(`🔄 Attempting to reconnect WebSocket for ${this.contractId}...`);
+          if (
+            event.code !== 1000 &&
+            this.reconnectAttempts < this.maxReconnectAttempts
+          ) {
+            console.log(
+              `🔄 Attempting to reconnect WebSocket for ${this.contractId}...`,
+            );
             this.reconnectAttempts++;
             setTimeout(() => {
               this.reconnect();
             }, this.reconnectDelay * this.reconnectAttempts);
           }
         };
-
       } catch (error) {
-        console.error(`❌ Failed to create WebSocket for ${this.contractId}:`, error);
+        console.error(
+          `❌ Failed to create WebSocket for ${this.contractId}:`,
+          error,
+        );
         this.isConnecting = false;
         reject(error);
       }

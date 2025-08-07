@@ -16,6 +16,9 @@ BACKEND_ONLY=false
 COVERAGE=false
 PARALLEL=false
 VERBOSE=false
+COMPREHENSIVE=false
+TEST_TYPE="unit"
+COVERAGE_THRESHOLD=80
 
 # Function to print colored output
 print_header() {
@@ -105,67 +108,68 @@ run_backend_tests() {
         print_warning "No virtual environment found. Using system Python."
     fi
     
-    # Check if backend test script exists
-    if [[ -f "scripts/test.sh" ]]; then
-        print_status "Using existing backend test script..."
+    # Use comprehensive test runner if requested
+    if [[ "$COMPREHENSIVE" == true ]]; then
+        print_status "Running comprehensive test suite..."
         
-        local test_cmd="./scripts/test.sh --type all"
-        
-        if [[ "$COVERAGE" == true ]]; then
-            test_cmd="$test_cmd --html"
-        fi
-        
-        if [[ "$PARALLEL" == true ]]; then
-            test_cmd="$test_cmd --parallel"
-        fi
-        
-        if [[ "$VERBOSE" == true ]]; then
-            test_cmd="$test_cmd --verbose"
-        fi
-        
-        # Make script executable
-        chmod +x scripts/test.sh
-        
-        print_status "Executing: $test_cmd"
-        
-        if eval "$test_cmd"; then
-            print_success "Backend tests passed!"
-            cd ..
-            return 0
+        if [[ -f "scripts/run_comprehensive_tests.py" ]]; then
+            chmod +x scripts/run_comprehensive_tests.py
+            if python scripts/run_comprehensive_tests.py; then
+                print_success "Comprehensive backend tests passed!"
+                cd ..
+                return 0
+            else
+                print_error "Comprehensive backend tests failed!"
+                cd ..
+                return 1
+            fi
         else
-            print_error "Backend tests failed!"
-            cd ..
-            return 1
+            print_warning "Comprehensive test script not found, falling back to regular tests."
         fi
+    fi
+    
+    # Build pytest command directly
+    local test_cmd="pytest"
+    
+    # Add test type filter
+    case $TEST_TYPE in
+        unit)
+            test_cmd="$test_cmd -m 'unit'"
+            ;;
+        integration)
+            test_cmd="$test_cmd -m 'integration'"
+            ;;
+        all)
+            # Run all tests - no marker filter
+            ;;
+    esac
+    
+    # Add coverage
+    if [[ "$COVERAGE" == true ]]; then
+        test_cmd="$test_cmd --cov=app --cov-fail-under=$COVERAGE_THRESHOLD --cov-report=term-missing --cov-report=xml"
+        test_cmd="$test_cmd --cov-report=html:htmlcov"
+    fi
+    
+    # Add parallel execution
+    if [[ "$PARALLEL" == true ]]; then
+        test_cmd="$test_cmd -n auto"
+    fi
+    
+    # Add verbosity
+    if [[ "$VERBOSE" == true ]]; then
+        test_cmd="$test_cmd -v"
+    fi
+    
+    print_status "Executing: $test_cmd"
+    
+    if eval "$test_cmd"; then
+        print_success "Backend tests passed!"
+        cd ..
+        return 0
     else
-        # Fallback to direct pytest
-        print_status "Using direct pytest command..."
-        
-        local test_cmd="pytest"
-        
-        if [[ "$COVERAGE" == true ]]; then
-            test_cmd="$test_cmd --cov=app --cov-report=html:htmlc--cov-report=term-missing"
-        fi
-        
-        if [[ "$PARALLEL" == true ]]; then
-            test_cmd="$test_cmd -n auto"
-        fi
-        
-        if [[ "$VERBOSE" == true ]]; then
-            test_cmd="$test_cmd -v"
-        fi
-        
-        print_status "Executing: $test_cmd"
-        
-        if eval "$test_cmd"; then
-            print_success "Backend tests passed!"
-            cd ..
-            return 0
-        else
-            print_error "Backend tests failed!"
-            cd ..
-            return 1
-        fi
+        print_error "Backend tests failed!"
+        cd ..
+        return 1
     fi
 }
 
@@ -176,19 +180,23 @@ show_help() {
     echo "A unified test runner for Real2.AI frontend and backend"
     echo ""
     echo "Options:"
-    echo "  --frontend-only     Run only frontend tests"
-    echo "  --backend-only      Run only backend tests"
-    echo "  --coverage          Generate coverage reports"
-    echo "  --parallel          Run tests in parallel (backend only)"
-    echo "  --verbose           Enable verbose output"
-    echo "  -h, --help          Show this help message"
+    echo "  --frontend-only        Run only frontend tests"
+    echo "  --backend-only         Run only backend tests"
+    echo "  --coverage             Generate coverage reports"
+    echo "  --parallel             Run tests in parallel"
+    echo "  --verbose              Enable verbose output"
+    echo "  --comprehensive        Run comprehensive backend test suite (linting, type checking, security)"
+    echo "  --test-type TYPE       Backend test type: unit, integration, all (default: unit)"
+    echo "  --coverage-threshold N Coverage threshold percentage (default: 80)"
+    echo "  -h, --help             Show this help message"
     echo ""
     echo "Examples:"
-    echo "  $0                     # Run both frontend and backend tests"
-    echo "  $0 --frontend-only     # Run only frontend tests"
-    echo "  $0 --backend-only      # Run only backend tests"
-    echo "  $0 --coverage          # Run tests with coverage reports"
-    echo "  $0 --parallel --verbose # Run tests in parallel with verbose output"
+    echo "  $0                                    # Run both frontend and backend unit tests"
+    echo "  $0 --frontend-only                   # Run only frontend tests"
+    echo "  $0 --backend-only --test-type all    # Run all backend tests"
+    echo "  $0 --coverage --coverage-threshold 90 # Run with 90% coverage requirement"
+    echo "  $0 --comprehensive                   # Run comprehensive backend suite"
+    echo "  $0 --parallel --verbose              # Run tests in parallel with verbose output"
 }
 
 # Parse command line arguments
@@ -214,6 +222,18 @@ while [[ $# -gt 0 ]]; do
             VERBOSE=true
             shift
             ;;
+        --comprehensive)
+            COMPREHENSIVE=true
+            shift
+            ;;
+        --test-type)
+            TEST_TYPE="$2"
+            shift 2
+            ;;
+        --coverage-threshold)
+            COVERAGE_THRESHOLD="$2"
+            shift 2
+            ;;
         -h|--help)
             show_help
             exit 0
@@ -229,6 +249,18 @@ done
 # Validate mutually exclusive options
 if [[ "$FRONTEND_ONLY" == true && "$BACKEND_ONLY" == true ]]; then
     print_error "Cannot specify both --frontend-only and --backend-only"
+    exit 1
+fi
+
+# Validate test type
+if [[ ! "$TEST_TYPE" =~ ^(unit|integration|all)$ ]]; then
+    print_error "Invalid test type: $TEST_TYPE. Valid types: unit, integration, all"
+    exit 1
+fi
+
+# Validate coverage threshold
+if ! [[ "$COVERAGE_THRESHOLD" =~ ^[0-9]+$ ]] || [[ "$COVERAGE_THRESHOLD" -lt 0 ]] || [[ "$COVERAGE_THRESHOLD" -gt 100 ]]; then
+    print_error "Invalid coverage threshold: $COVERAGE_THRESHOLD. Must be a number between 0-100"
     exit 1
 fi
 

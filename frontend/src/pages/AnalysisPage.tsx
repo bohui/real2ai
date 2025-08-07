@@ -32,6 +32,15 @@ const AnalysisPage: React.FC = () => {
   const propertyAddress = currentAnalysis?.contract_terms?.property_address;
   const riskScore = currentAnalysis?.executive_summary?.overall_risk_score;
   
+  const dynamicSEOData = React.useMemo(() => {
+    if (typeof propertyAddress !== 'string') return undefined;
+    return {
+      address: propertyAddress,
+      riskScore: riskScore,
+      publishedTime: new Date().toISOString()
+    };
+  }, [propertyAddress, riskScore]);
+  
   usePageSEO(
     {
       title: propertyAddress 
@@ -57,11 +66,7 @@ const AnalysisPage: React.FC = () => {
         section: 'Contract Analysis'
       })
     },
-    (typeof propertyAddress === 'string') ? {
-      address: propertyAddress,
-      riskScore: riskScore,
-      publishedTime: new Date().toISOString()
-    } : undefined
+    dynamicSEOData
   );
 
   const [activeTab, setActiveTab] = React.useState<

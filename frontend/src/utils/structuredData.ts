@@ -3,7 +3,9 @@
  * Creates JSON-LD structured data for different content types
  */
 
-import { SEO_CONFIG } from '@/config/seoConfig';
+// Constants for structured data
+const BASE_URL = "https://real2.ai";
+const SITE_NAME = "Real2AI";
 
 export interface BreadcrumbItem {
   name: string;
@@ -119,7 +121,7 @@ export function generateBreadcrumbData(breadcrumbs: BreadcrumbItem[]) {
       '@type': 'ListItem',
       position: index + 1,
       name: crumb.name,
-      item: `${SEO_CONFIG.baseUrl}${crumb.url}`
+      item: `${BASE_URL}${crumb.url}`
     }))
   };
 }
@@ -133,12 +135,12 @@ export function generateArticleData(data: ArticleData) {
     '@type': 'Article',
     headline: data.title,
     description: data.description,
-    image: data.image ? `${SEO_CONFIG.baseUrl}${data.image}` : `${SEO_CONFIG.baseUrl}${SEO_CONFIG.defaultImage}`,
+    image: data.image ? `${BASE_URL}${data.image}` : `${BASE_URL}/images/og-default.jpg`,
     datePublished: data.publishedTime || new Date().toISOString(),
     dateModified: data.modifiedTime || new Date().toISOString(),
     author: {
       '@type': 'Person',
-      name: data.author || SEO_CONFIG.author
+      name: data.author || SITE_NAME
     },
     publisher: generateOrganizationData(),
     mainEntityOfPage: {

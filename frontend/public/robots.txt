@@ -1,4 +1,6 @@
 # Real2AI Robots.txt
+# Generated automatically - do not edit manually
+
 User-agent: *
 Allow: /
 Allow: /auth/
@@ -10,27 +12,19 @@ Disallow: /app/
 Disallow: /api/
 Disallow: /admin/
 Disallow: /private/
+Disallow: /_next/
+Disallow: /assets/
 
-# Block development and build files
-Disallow: /src/
-Disallow: /dist/
-Disallow: /node_modules/
-Disallow: /*.js$
-Disallow: /*.css$
-Disallow: /*.map$
+# Block development files
+Disallow: /*.json$
+Disallow: /*.js.map$
+Disallow: /*.css.map$
 
 # Sitemap location
-Sitemap: http://localhost:5173/sitemap.xml
+Sitemap: https://real2.ai/sitemap.xml
 
-# Crawl delay (be respectful)
+# Crawl delay (be respectful to server resources)
 Crawl-delay: 1
 
-# Allow common search engines
-User-agent: Googlebot
-Allow: /
-
-User-agent: Bingbot
-Allow: /
-
-User-agent: Slurp
-Allow: /
+# Cache directive for search engines
+Cache-delay: 86400

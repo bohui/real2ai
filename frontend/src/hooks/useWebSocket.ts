@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export interface WebSocketMessage {
   type: string;
@@ -29,7 +29,7 @@ export interface UseWebSocketReturn {
 
 export const useWebSocket = (
   url: string | null,
-  options: UseWebSocketOptions = {}
+  options: UseWebSocketOptions = {},
 ): UseWebSocketReturn => {
   const {
     onOpen,
@@ -38,14 +38,14 @@ export const useWebSocket = (
     onMessage,
     reconnectAttempts = 3,
     reconnectInterval = 5000,
-    heartbeatInterval = 30000
+    heartbeatInterval = 30000,
   } = options;
 
   const [ws, setWs] = useState<WebSocket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
+
   const reconnectAttemptsRef = useRef(0);
   const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -67,11 +67,13 @@ export const useWebSocket = (
 
   const startHeartbeat = useCallback(() => {
     clearHeartbeat();
-    
+
     if (heartbeatInterval > 0) {
       heartbeatIntervalRef.current = setInterval(() => {
         if (wsRef.current?.readyState === WebSocket.OPEN) {
-          wsRef.current.send(JSON.stringify({ type: 'ping', timestamp: Date.now() }));
+          wsRef.current.send(
+            JSON.stringify({ type: "ping", timestamp: Date.now() }),
+          );
         }
       }, heartbeatInterval);
     }
@@ -103,20 +105,20 @@ export const useWebSocket = (
       websocket.onmessage = (event) => {
         try {
           const message = JSON.parse(event.data);
-          
+
           // Handle pong response
-          if (message.type === 'pong') {
+          if (message.type === "pong") {
             return;
           }
 
           onMessage?.(message);
         } catch (err) {
-          console.error('Failed to parse WebSocket message:', err);
+          console.error("Failed to parse WebSocket message:", err);
         }
       };
 
       websocket.onerror = (event) => {
-        setError('WebSocket connection error');
+        setError("WebSocket connection error");
         setIsConnecting(false);
         onError?.(event);
       };
@@ -127,37 +129,41 @@ export const useWebSocket = (
         wsRef.current = null;
         setWs(null);
         clearHeartbeat();
-        
+
         onClose?.();
 
         // Attempt reconnection if not manually closed
-        if (event.code !== 1000 && reconnectAttemptsRef.current < reconnectAttempts) {
+        if (
+          event.code !== 1000 &&
+          reconnectAttemptsRef.current < reconnectAttempts
+        ) {
           reconnectAttemptsRef.current++;
-          setError(`Connection lost. Retrying... (${reconnectAttemptsRef.current}/${reconnectAttempts})`);
-          
+          setError(
+            `Connection lost. Retrying... (${reconnectAttemptsRef.current}/${reconnectAttempts})`,
+          );
+
           reconnectTimeoutRef.current = setTimeout(() => {
             connect();
           }, reconnectInterval);
         } else if (reconnectAttemptsRef.current >= reconnectAttempts) {
-          setError('Failed to reconnect after multiple attempts');
+          setError("Failed to reconnect after multiple attempts");
         }
       };
-
     } catch (err) {
-      setError('Failed to create WebSocket connection');
+      setError("Failed to create WebSocket connection");
       setIsConnecting(false);
     }
-  }, [url, isConnecting, ws, onOpen, onMessage, onError, onClose, reconnectAttempts, reconnectInterval, startHeartbeat, clearReconnectTimeout]);
+  }, [url, isConnecting, reconnectAttempts, reconnectInterval]); // Simplified dependencies
 
   const disconnect = useCallback(() => {
     clearHeartbeat();
     clearReconnectTimeout();
-    
+
     if (wsRef.current) {
-      wsRef.current.close(1000, 'Manual disconnect');
+      wsRef.current.close(1000, "Manual disconnect");
       wsRef.current = null;
     }
-    
+
     setWs(null);
     setIsConnected(false);
     setIsConnecting(false);
@@ -173,15 +179,17 @@ export const useWebSocket = (
   const send = useCallback((message: any) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       try {
-        const payload = typeof message === 'string' ? message : JSON.stringify(message);
+        const payload = typeof message === "string"
+          ? message
+          : JSON.stringify(message);
         wsRef.current.send(payload);
       } catch (err) {
-        console.error('Failed to send WebSocket message:', err);
-        setError('Failed to send message');
+        console.error("Failed to send WebSocket message:", err);
+        setError("Failed to send message");
       }
     } else {
-      console.warn('WebSocket is not connected');
-      setError('WebSocket is not connected');
+      console.warn("WebSocket is not connected");
+      setError("WebSocket is not connected");
     }
   }, []);
 
@@ -215,6 +223,6 @@ export const useWebSocket = (
     send,
     connect,
     disconnect,
-    reconnect
+    reconnect,
   };
 };

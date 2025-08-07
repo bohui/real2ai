@@ -4,7 +4,6 @@ import {
   ContractAnalysisRequest,
   ContractAnalysisResult,
   DocumentDetails,
-  WebSocketEventData,
 } from "@/types";
 import {
   apiService,
@@ -712,8 +711,7 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
   },
 
   disconnectWebSocket: () => {
-    const { wsService, wsEventListener, currentDocumentId, currentContractId } =
-      get();
+    const { wsService, wsEventListener, currentDocumentId } = get();
 
     console.log(`Disconnecting WebSocket for document ${currentDocumentId}`);
 

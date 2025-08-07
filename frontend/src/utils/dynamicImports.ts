@@ -3,7 +3,7 @@
  * Optimizes bundle size with intelligent lazy loading and preloading
  */
 
-import React, { ComponentType, LazyExoticComponent } from 'react';
+import React, { ComponentType, LazyExoticComponent } from "react";
 
 export interface LoadingComponentProps {
   error?: Error | null;
@@ -30,14 +30,12 @@ export interface BundleAnalysis {
  */
 export function createDynamicImport<T extends ComponentType<any>>(
   importFn: () => Promise<{ default: T }>,
-  options: DynamicImportOptions = {}
+  options: DynamicImportOptions = {},
 ): LazyExoticComponent<T> {
   const {
-    loading: LoadingComponent,
-    fallback: FallbackComponent,
     preload = false,
     timeout = 10000,
-    retryCount = 3
+    retryCount = 3,
   } = options;
 
   // Preload the component if specified
@@ -52,26 +50,28 @@ export function createDynamicImport<T extends ComponentType<any>>(
   // Create enhanced import function with retry logic
   const enhancedImportFn = async (): Promise<{ default: T }> => {
     let lastError: Error;
-    
+
     for (let attempt = 1; attempt <= retryCount; attempt++) {
       try {
         const timeoutPromise = new Promise<never>((_, reject) => {
-          setTimeout(() => reject(new Error('Import timeout')), timeout);
+          setTimeout(() => reject(new Error("Import timeout")), timeout);
         });
-        
+
         const importPromise = importFn();
-        
+
         return await Promise.race([importPromise, timeoutPromise]);
       } catch (error) {
         lastError = error as Error;
-        
+
         if (attempt < retryCount) {
           // Exponential backoff
-          await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+          await new Promise((resolve) =>
+            setTimeout(resolve, Math.pow(2, attempt) * 1000)
+          );
         }
       }
     }
-    
+
     throw lastError!;
   };
 
@@ -84,39 +84,39 @@ export function createDynamicImport<T extends ComponentType<any>>(
 export const RouteComponents = {
   // Auth routes
   LoginPage: createDynamicImport(
-    () => import('@/pages/auth/LoginPage'),
-    { preload: true } // Preload auth pages as they're likely needed
+    () => import("@/pages/auth/LoginPage"),
+    { preload: true }, // Preload auth pages as they're likely needed
   ),
   RegisterPage: createDynamicImport(
-    () => import('@/pages/auth/RegisterPage')
+    () => import("@/pages/auth/RegisterPage"),
   ),
 
   // Main application pages
   DashboardPage: createDynamicImport(
-    () => import('@/pages/DashboardPage'),
-    { preload: true }
+    () => import("@/pages/DashboardPage"),
+    { preload: true },
   ),
   AnalysisPage: createDynamicImport(
-    () => import('@/pages/AnalysisPage')
+    () => import("@/pages/AnalysisPage"),
   ),
   PropertyIntelligencePage: createDynamicImport(
-    () => import('@/pages/PropertyIntelligencePage')
+    () => import("@/pages/PropertyIntelligencePage"),
   ),
   MarketAnalysisPage: createDynamicImport(
-    () => import('@/pages/MarketAnalysisPage')
+    () => import("@/pages/MarketAnalysisPage"),
   ),
   FinancialAnalysisPage: createDynamicImport(
-    () => import('@/pages/FinancialAnalysisPage')
+    () => import("@/pages/FinancialAnalysisPage"),
   ),
   ReportsPage: createDynamicImport(
-    () => import('@/pages/ReportsPage')
+    () => import("@/pages/ReportsPage"),
   ),
   HistoryPage: createDynamicImport(
-    () => import('@/pages/HistoryPage')
+    () => import("@/pages/HistoryPage"),
   ),
   SettingsPage: createDynamicImport(
-    () => import('@/pages/SettingsPage')
-  )
+    () => import("@/pages/SettingsPage"),
+  ),
 };
 
 /**
@@ -125,29 +125,29 @@ export const RouteComponents = {
 export const FeatureComponents = {
   // Document analysis components
   ContractAnalysisModal: createDynamicImport(
-    () => import('@/components/contract/ContractAnalysisModal')
+    () => import("@/components/contract/ContractAnalysisModal"),
   ),
   ContractAnalysisProgress: createDynamicImport(
-    () => import('@/components/contract/ContractAnalysisProgress')
+    () => import("@/components/contract/ContractAnalysisProgress"),
   ),
-  
+
   // Advanced analysis components
   RiskVisualization: createDynamicImport(
-    () => import('@/components/analysis/RiskVisualization')
+    () => import("@/components/analysis/RiskVisualization"),
   ),
   ComplianceCheck: createDynamicImport(
-    () => import('@/components/analysis/ComplianceCheck')
+    () => import("@/components/analysis/ComplianceCheck"),
   ),
 
   // Performance monitoring
   PerformanceDashboard: createDynamicImport(
-    () => import('@/components/performance/PerformanceDashboard')
+    () => import("@/components/performance/PerformanceDashboard"),
   ),
 
   // SEO components
   SEODevTools: createDynamicImport(
-    () => import('@/components/seo/SEODevTools')
-  )
+    () => import("@/components/seo/SEODevTools"),
+  ),
 };
 
 /**
@@ -163,16 +163,16 @@ export class ComponentPreloader {
    */
   preloadByRoute(currentRoute: string) {
     const preloadMap: Record<string, string[]> = {
-      '/dashboard': ['AnalysisPage', 'PropertyIntelligencePage'],
-      '/auth/login': ['DashboardPage'],
-      '/analysis': ['ContractAnalysisModal', 'RiskVisualization'],
-      '/reports': ['PerformanceDashboard'],
-      '/settings': ['SEODevTools']
+      "/dashboard": ["AnalysisPage", "PropertyIntelligencePage"],
+      "/auth/login": ["DashboardPage"],
+      "/analysis": ["ContractAnalysisModal", "RiskVisualization"],
+      "/reports": ["PerformanceDashboard"],
+      "/settings": ["SEODevTools"],
     };
 
     const componentsToPreload = preloadMap[currentRoute] || [];
-    
-    componentsToPreload.forEach(componentName => {
+
+    componentsToPreload.forEach((componentName) => {
       this.preloadComponent(componentName);
     });
   }
@@ -195,27 +195,34 @@ export class ComponentPreloader {
     }
   }
 
-  private getPreloadFunction(componentName: string): (() => Promise<any>) | null {
+  private getPreloadFunction(
+    componentName: string,
+  ): (() => Promise<any>) | null {
     const preloadMap: Record<string, () => Promise<any>> = {
       // Routes
-      'LoginPage': () => import('@/pages/auth/LoginPage'),
-      'RegisterPage': () => import('@/pages/auth/RegisterPage'),
-      'DashboardPage': () => import('@/pages/DashboardPage'),
-      'AnalysisPage': () => import('@/pages/AnalysisPage'),
-      'PropertyIntelligencePage': () => import('@/pages/PropertyIntelligencePage'),
-      'MarketAnalysisPage': () => import('@/pages/MarketAnalysisPage'),
-      'FinancialAnalysisPage': () => import('@/pages/FinancialAnalysisPage'),
-      'ReportsPage': () => import('@/pages/ReportsPage'),
-      'HistoryPage': () => import('@/pages/HistoryPage'),
-      'SettingsPage': () => import('@/pages/SettingsPage'),
-      
+      "LoginPage": () => import("@/pages/auth/LoginPage"),
+      "RegisterPage": () => import("@/pages/auth/RegisterPage"),
+      "DashboardPage": () => import("@/pages/DashboardPage"),
+      "AnalysisPage": () => import("@/pages/AnalysisPage"),
+      "PropertyIntelligencePage": () =>
+        import("@/pages/PropertyIntelligencePage"),
+      "MarketAnalysisPage": () => import("@/pages/MarketAnalysisPage"),
+      "FinancialAnalysisPage": () => import("@/pages/FinancialAnalysisPage"),
+      "ReportsPage": () => import("@/pages/ReportsPage"),
+      "HistoryPage": () => import("@/pages/HistoryPage"),
+      "SettingsPage": () => import("@/pages/SettingsPage"),
+
       // Features
-      'ContractAnalysisModal': () => import('@/components/contract/ContractAnalysisModal'),
-      'ContractAnalysisProgress': () => import('@/components/contract/ContractAnalysisProgress'),
-      'RiskVisualization': () => import('@/components/analysis/RiskVisualization'),
-      'ComplianceCheck': () => import('@/components/analysis/ComplianceCheck'),
-      'PerformanceDashboard': () => import('@/components/performance/PerformanceDashboard'),
-      'SEODevTools': () => import('@/components/seo/SEODevTools')
+      "ContractAnalysisModal": () =>
+        import("@/components/contract/ContractAnalysisModal"),
+      "ContractAnalysisProgress": () =>
+        import("@/components/contract/ContractAnalysisProgress"),
+      "RiskVisualization": () =>
+        import("@/components/analysis/RiskVisualization"),
+      "ComplianceCheck": () => import("@/components/analysis/ComplianceCheck"),
+      "PerformanceDashboard": () =>
+        import("@/components/performance/PerformanceDashboard"),
+      "SEODevTools": () => import("@/components/seo/SEODevTools"),
     };
 
     return preloadMap[componentName] || null;
@@ -236,9 +243,9 @@ export class ComponentPreloader {
           try {
             await preloadFn();
             // Small delay between preloads
-            await new Promise(resolve => setTimeout(resolve, 100));
+            await new Promise((resolve) => setTimeout(resolve, 100));
           } catch (error) {
-            console.warn('Component preload failed:', error);
+            console.warn("Component preload failed:", error);
           }
         }
       }
@@ -260,11 +267,11 @@ export class ComponentPreloader {
       }
     };
 
-    element.addEventListener('mouseenter', handleMouseEnter, { once: true });
+    element.addEventListener("mouseenter", handleMouseEnter, { once: true });
 
     // Cleanup function
     return () => {
-      element.removeEventListener('mouseenter', handleMouseEnter);
+      element.removeEventListener("mouseenter", handleMouseEnter);
     };
   }
 }
@@ -274,8 +281,6 @@ export class ComponentPreloader {
  */
 export class BundleAnalyzer {
   private static instance: BundleAnalyzer;
-  private chunkSizes: Record<string, number> = {};
-  private recommendations: string[] = [];
 
   static getInstance(): BundleAnalyzer {
     if (!BundleAnalyzer.instance) {
@@ -291,18 +296,20 @@ export class BundleAnalyzer {
     const analysis: BundleAnalysis = {
       totalSize: 0,
       chunkSizes: {},
-      recommendations: []
+      recommendations: [],
     };
 
     try {
       // Get resource timing data
-      const resources = performance.getEntriesByType('resource') as PerformanceResourceTiming[];
-      
-      resources.forEach(resource => {
-        if (resource.name.includes('.js') || resource.name.includes('.css')) {
+      const resources = performance.getEntriesByType(
+        "resource",
+      ) as PerformanceResourceTiming[];
+
+      resources.forEach((resource) => {
+        if (resource.name.includes(".js") || resource.name.includes(".css")) {
           const size = resource.transferSize || 0;
-          const filename = resource.name.split('/').pop() || resource.name;
-          
+          const filename = resource.name.split("/").pop() || resource.name;
+
           analysis.chunkSizes[filename] = size;
           analysis.totalSize += size;
         }
@@ -313,7 +320,7 @@ export class BundleAnalyzer {
 
       return analysis;
     } catch (error) {
-      console.error('Bundle analysis failed:', error);
+      console.error("Bundle analysis failed:", error);
       return analysis;
     }
   }
@@ -327,28 +334,38 @@ export class BundleAnalyzer {
 
     // Check total bundle size
     if (analysis.totalSize > 2000000) { // 2MB
-      recommendations.push('Total bundle size exceeds 2MB. Consider implementing more aggressive code splitting.');
+      recommendations.push(
+        "Total bundle size exceeds 2MB. Consider implementing more aggressive code splitting.",
+      );
     }
 
     // Check individual chunk sizes
     Object.entries(analysis.chunkSizes).forEach(([filename, size]) => {
       if (size > sizeThresholds.large) {
-        recommendations.push(`Large chunk detected: ${filename} (${Math.round(size / 1024)}KB). Consider splitting further.`);
+        recommendations.push(
+          `Large chunk detected: ${filename} (${
+            Math.round(size / 1024)
+          }KB). Consider splitting further.`,
+        );
       }
     });
 
     // Check for vendor chunks
-    const vendorChunks = Object.keys(analysis.chunkSizes).filter(name => 
-      name.includes('vendor') || name.includes('node_modules')
+    const vendorChunks = Object.keys(analysis.chunkSizes).filter((name) =>
+      name.includes("vendor") || name.includes("node_modules")
     );
 
     if (vendorChunks.length === 0) {
-      recommendations.push('No vendor chunks detected. Consider extracting third-party libraries into separate chunks.');
+      recommendations.push(
+        "No vendor chunks detected. Consider extracting third-party libraries into separate chunks.",
+      );
     }
 
     // Performance recommendations
     if (analysis.totalSize > 1000000) { // 1MB
-      recommendations.push('Consider implementing service worker caching for better repeat visit performance.');
+      recommendations.push(
+        "Consider implementing service worker caching for better repeat visit performance.",
+      );
     }
 
     return recommendations;
@@ -358,22 +375,26 @@ export class BundleAnalyzer {
    * Monitor runtime chunk loading performance
    */
   monitorChunkLoading() {
-    if ('PerformanceObserver' in window) {
+    if ("PerformanceObserver" in window) {
       const observer = new PerformanceObserver((list) => {
         list.getEntries().forEach((entry) => {
           const resource = entry as PerformanceResourceTiming;
-          
-          if (resource.name.includes('.js') && resource.name.includes('chunk')) {
+
+          if (
+            resource.name.includes(".js") && resource.name.includes("chunk")
+          ) {
             const loadTime = resource.responseEnd - resource.requestStart;
-            
+
             if (loadTime > 3000) { // 3 seconds
-              console.warn(`Slow chunk loading detected: ${resource.name} took ${loadTime}ms`);
+              console.warn(
+                `Slow chunk loading detected: ${resource.name} took ${loadTime}ms`,
+              );
             }
           }
         });
       });
 
-      observer.observe({ entryTypes: ['resource'] });
+      observer.observe({ entryTypes: ["resource"] });
     }
   }
 }
@@ -388,11 +409,11 @@ export function useSmartPreloading() {
     // Monitor user interactions for preloading hints
     const handleMouseMove = (event: MouseEvent) => {
       const target = event.target as HTMLElement;
-      const link = target.closest('a[href]') as HTMLAnchorElement;
-      
+      const link = target.closest("a[href]") as HTMLAnchorElement;
+
       if (link) {
-        const href = link.getAttribute('href');
-        if (href?.startsWith('/')) {
+        const href = link.getAttribute("href");
+        if (href?.startsWith("/")) {
           preloader.preloadByRoute(href);
         }
       }
@@ -402,17 +423,19 @@ export function useSmartPreloading() {
     let throttleTimer: number;
     const throttledMouseMove = (event: MouseEvent) => {
       if (throttleTimer) return;
-      
+
       throttleTimer = window.setTimeout(() => {
         handleMouseMove(event);
         throttleTimer = 0;
       }, 200);
     };
 
-    document.addEventListener('mousemove', throttledMouseMove, { passive: true });
+    document.addEventListener("mousemove", throttledMouseMove, {
+      passive: true,
+    });
 
     return () => {
-      document.removeEventListener('mousemove', throttledMouseMove);
+      document.removeEventListener("mousemove", throttledMouseMove);
       if (throttleTimer) {
         clearTimeout(throttleTimer);
       }
@@ -427,7 +450,7 @@ export const componentPreloader = new ComponentPreloader();
 export const bundleAnalyzer = BundleAnalyzer.getInstance();
 
 // Initialize monitoring
-if (typeof window !== 'undefined') {
+if (typeof window !== "undefined") {
   bundleAnalyzer.monitorChunkLoading();
 }
 
@@ -439,5 +462,5 @@ export default {
   BundleAnalyzer,
   useSmartPreloading,
   componentPreloader,
-  bundleAnalyzer
+  bundleAnalyzer,
 };

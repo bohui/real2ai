@@ -61,7 +61,7 @@ const App: React.FC = () => {
   // Initialize authentication on app start
   React.useEffect(() => {
     initializeAuth();
-  }, [initializeAuth]);
+  }, []); // Remove initializeAuth from dependencies as it's stable
 
   // Check onboarding status for authenticated users only
   React.useEffect(() => {
@@ -124,7 +124,7 @@ const App: React.FC = () => {
     };
 
     checkOnboardingStatus();
-  }, [user?.id, isAuthenticated, isLoading, setShowOnboarding]);
+  }, [user?.id, isAuthenticated, isLoading]); // Remove setShowOnboarding from dependencies as it's stable
 
   // Reset onboarding check ref when user changes
   const prevUserIdRef = React.useRef<string | undefined>(undefined);
@@ -223,72 +223,78 @@ const App: React.FC = () => {
           <RootSEO />
           <div className="App">
             <Routes>
-            {/* Auth routes */}
-            <Route path="/auth" element={<AuthLayout />}>
-              <Route path="login" element={<LoginPage />} />
-              <Route path="register" element={<RegisterPage />} />
-              <Route index element={<Navigate to="/auth/login" replace />} />
-            </Route>
+              {/* Auth routes */}
+              <Route path="/auth" element={<AuthLayout />}>
+                <Route path="login" element={<LoginPage />} />
+                <Route path="register" element={<RegisterPage />} />
+                <Route index element={<Navigate to="/auth/login" replace />} />
+              </Route>
 
-            {/* Protected app routes */}
-            <Route
-              path="/app"
-              element={
-                <ProtectedRoute>
-                  <Layout />
-                </ProtectedRoute>
-              }
-            >
-              <Route path="dashboard" element={<DashboardPage />} />
-              <Route path="analysis" element={<AnalysisPage />} />
-              <Route path="analysis/:contractId" element={<AnalysisPage />} />
-              <Route path="history" element={<HistoryPage />} />
-              <Route path="reports" element={<ReportsPage />} />
+              {/* Protected app routes */}
               <Route
-                path="property-intelligence"
-                element={<PropertyIntelligencePage />}
-              />
-              <Route path="market-analysis" element={<MarketAnalysisPage />} />
+                path="/app"
+                element={
+                  <ProtectedRoute>
+                    <Layout />
+                  </ProtectedRoute>
+                }
+              >
+                <Route path="dashboard" element={<DashboardPage />} />
+                <Route path="analysis" element={<AnalysisPage />} />
+                <Route path="analysis/:contractId" element={<AnalysisPage />} />
+                <Route path="history" element={<HistoryPage />} />
+                <Route path="reports" element={<ReportsPage />} />
+                <Route
+                  path="property-intelligence"
+                  element={<PropertyIntelligencePage />}
+                />
+                <Route
+                  path="market-analysis"
+                  element={<MarketAnalysisPage />}
+                />
+                <Route
+                  path="financial-analysis"
+                  element={<FinancialAnalysisPage />}
+                />
+                <Route path="settings" element={<SettingsPage />} />
+                <Route
+                  index
+                  element={<Navigate to="/app/dashboard" replace />}
+                />
+              </Route>
+
+              {/* Root redirect */}
               <Route
-                path="financial-analysis"
-                element={<FinancialAnalysisPage />}
+                path="/"
+                element={
+                  <ProtectedRoute>
+                    <Navigate to="/app/dashboard" replace />
+                  </ProtectedRoute>
+                }
               />
-              <Route path="settings" element={<SettingsPage />} />
-              <Route index element={<Navigate to="/app/dashboard" replace />} />
-            </Route>
 
-            {/* Root redirect */}
-            <Route
-              path="/"
-              element={
-                <ProtectedRoute>
-                  <Navigate to="/app/dashboard" replace />
-                </ProtectedRoute>
-              }
-            />
+              {/* Catch-all redirect */}
+              <Route
+                path="*"
+                element={
+                  <ProtectedRoute>
+                    <Navigate to="/app/dashboard" replace />
+                  </ProtectedRoute>
+                }
+              />
+            </Routes>
 
-            {/* Catch-all redirect */}
-            <Route
-              path="*"
-              element={
-                <ProtectedRoute>
-                  <Navigate to="/app/dashboard" replace />
-                </ProtectedRoute>
-              }
-            />
-          </Routes>
+            {/* Global components */}
+            <NotificationSystem />
+            <SEOFloatingButton />
 
-          {/* Global components */}
-          <NotificationSystem />
-          <SEOFloatingButton />
-
-          {/* Onboarding Wizard - Only show for fully authenticated users */}
-          {showOnboarding && user && isAuthenticated && !isLoading && (
-            <OnboardingWizard
-              onComplete={handleOnboardingComplete}
-              onSkip={handleOnboardingSkip}
-            />
-          )}
+            {/* Onboarding Wizard - Only show for fully authenticated users */}
+            {showOnboarding && user && isAuthenticated && !isLoading && (
+              <OnboardingWizard
+                onComplete={handleOnboardingComplete}
+                onSkip={handleOnboardingSkip}
+              />
+            )}
           </div>
         </SEOProvider>
       </Router>

@@ -109,21 +109,20 @@ export function generateSitemapUrls(routes: typeof PUBLIC_ROUTES, baseUrl: strin
  * Generate XML sitemap content
  */
 export function generateSitemapXml(sitemapData: SitemapData): string {
-  const { urls, baseUrl } = sitemapData;
+  const { urls } = sitemapData;
   
-  const urlEntries = urls.map(url => `  <url>
-    <loc>${url.loc}</loc>
-    <lastmod>${url.lastmod}</lastmod>
-    <changefreq>${url.changefreq}</changefreq>
-    <priority>${url.priority}</priority>
-  </url>`).join('\n');
-  
+  const urlElements = urls.map(url => `
+    <url>
+      <loc>${url.loc}</loc>
+      <lastmod>${url.lastmod}</lastmod>
+      <changefreq>${url.changefreq}</changefreq>
+      <priority>${url.priority}</priority>
+    </url>
+  `).join('');
+
   return `<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
-        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-        xsi:schemaLocation="http://www.sitemaps.org/schemas/sitemap/0.9
-        http://www.sitemaps.org/schemas/sitemap/0.9/sitemap.xsd">
-${urlEntries}
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urlElements}
 </urlset>`;
 }
 
@@ -131,18 +130,17 @@ ${urlEntries}
  * Generate sitemap index XML for multiple sitemaps
  * Future-proofing for content-based sitemaps
  */
-export function generateSitemapIndexXml(sitemaps: { loc: string; lastmod: string }[], baseUrl: string): string {
-  const sitemapEntries = sitemaps.map(sitemap => `  <sitemap>
-    <loc>${sitemap.loc}</loc>
-    <lastmod>${sitemap.lastmod}</lastmod>
-  </sitemap>`).join('\n');
-  
+export function generateSitemapIndexXml(sitemaps: { loc: string; lastmod: string }[]): string {
+  const sitemapElements = sitemaps.map(sitemap => `
+    <sitemap>
+      <loc>${sitemap.loc}</loc>
+      <lastmod>${sitemap.lastmod}</lastmod>
+    </sitemap>
+  `).join('');
+
   return `<?xml version="1.0" encoding="UTF-8"?>
-<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
-              xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-              xsi:schemaLocation="http://www.sitemaps.org/schemas/sitemap/0.9
-              http://www.sitemaps.org/schemas/sitemap/0.9/siteindex.xsd">
-${sitemapEntries}
+<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${sitemapElements}
 </sitemapindex>`;
 }
 

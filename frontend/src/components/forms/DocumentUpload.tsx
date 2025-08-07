@@ -9,7 +9,6 @@ import { Upload, FileText, X, CheckCircle, AlertCircle } from "lucide-react";
 import Button from "@/components/ui/Button";
 import Select from "@/components/ui/Select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
-import { apiService } from "@/services/api";
 import { useAuthStore } from "@/store/authStore";
 import { useAnalysisStore } from "@/store/analysisStore";
 import { useUIStore } from "@/store/uiStore";

@@ -29,12 +29,13 @@ export const PropertyHistoryList: React.FC<PropertyHistoryListProps> = ({
   }, [limit]);
 
   const loadHistory = async (loadOffset: number = 0) => {
+    setIsLoading(true);
+    
     try {
-      setIsLoading(true);
-      const response = await cacheService.getPropertyHistory(limit, loadOffset);
+      const response = await cacheService.getPropertyHistory(loadOffset, limit);
       
       if (response.status === 'success') {
-        const newHistory = response.data.history;
+        const newHistory = response.data.history.filter(item => 'property_hash' in item) as UserPropertyView[];
         
         if (loadOffset === 0) {
           setHistory(newHistory);

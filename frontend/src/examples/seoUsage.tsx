@@ -4,196 +4,104 @@
  */
 
 import React from 'react';
-import { usePageSEO } from '@/contexts/SEOContext';
-import { withSEO, useSEOForPage } from '@/components/seo';
-import { generateArticleData, generatePropertyData } from '@/utils/structuredData';
+import { useSEO } from '@/hooks/useSEO';
 
-// Example 1: Using usePageSEO hook directly
-const ExampleDashboardPage: React.FC = () => {
-  usePageSEO({
-    title: 'Dashboard - Real2AI',
-    description: 'Your comprehensive real estate analysis dashboard with AI-powered insights.',
-    keywords: ['dashboard', 'real estate analytics', 'AI insights'],
-    canonical: '/app/dashboard',
-    noIndex: true // Private page
+const SEOUsageExample: React.FC = () => {
+  // Example 1: Basic SEO for a page
+  const basicSEO = useSEO({
+    title: 'Real2AI - Property Analysis Platform',
+    description: 'Advanced AI-powered property analysis and contract review platform for Australian real estate professionals.',
+    keywords: ['property analysis', 'contract review', 'AI real estate', 'Australian property'],
+    ogTitle: 'Real2AI - Smart Property Analysis',
+    ogDescription: 'Transform your property analysis with AI-powered insights and contract review.',
+    ogImage: 'https://real2.ai/og-image.jpg',
+    ogUrl: 'https://real2.ai',
+    canonical: 'https://real2.ai'
   });
 
-  return <div>Dashboard content...</div>;
-};
-
-// Example 2: Dynamic SEO based on data
-const ExampleContractAnalysisPage: React.FC = () => {
-  const [analysisData, setAnalysisData] = React.useState<any>(null);
-
-  // Dynamic SEO updates when data changes
-  const propertyAddress = analysisData?.property_address;
-  const riskScore = analysisData?.risk_score;
-  
-  usePageSEO(
-    {
-      title: propertyAddress 
-        ? `Contract Analysis - ${propertyAddress} - Real2AI`
-        : 'Contract Analysis - Real2AI',
-      description: propertyAddress && riskScore !== undefined
-        ? `Comprehensive AI analysis of ${propertyAddress}. Risk level: ${riskScore >= 7 ? 'high' : 'low'}.`
-        : 'AI-powered contract analysis for Australian real estate.',
-      keywords: [
-        'contract analysis',
-        'real estate AI',
-        'risk assessment',
-        ...(propertyAddress ? [`${propertyAddress} contract`] : [])
-      ],
-      canonical: '/app/analysis',
-      ogType: 'article',
-      structuredData: propertyAddress ? [
-        generateArticleData({
-          title: `Contract Analysis - ${propertyAddress}`,
-          description: `AI analysis results for ${propertyAddress}`,
-          section: 'Contract Analysis',
-          tags: ['real estate', 'contract analysis', 'AI']
-        }),
-        generatePropertyData({
-          address: propertyAddress,
-          propertyType: 'House'
-        })
-      ] : undefined
-    },
-    propertyAddress ? {
-      address: propertyAddress,
-      riskScore: riskScore,
-      publishedTime: new Date().toISOString()
-    } : undefined
-  );
-
-  return <div>Contract analysis content...</div>;
-};
-
-// Example 3: Using the hook-based approach for complex SEO
-const ExamplePropertyListingPage: React.FC = () => {
-  const [properties, setProperties] = React.useState([]);
-
-  const { SEOComponent, updateSEO } = useSEOForPage({
-    staticSEO: {
-      title: 'Property Listings - Real2AI',
-      description: 'Browse AI-analyzed property listings with comprehensive insights.',
-      keywords: ['property listings', 'real estate', 'AI analysis'],
-      canonical: '/app/properties'
-    }
+  // Example 2: Dynamic SEO for property analysis
+  const dynamicSEO = useSEO({
+    title: 'Property Analysis - 123 Main St, Sydney',
+    description: 'Comprehensive property analysis for 123 Main St, Sydney. Get detailed insights on market value, risk assessment, and investment potential.',
+    keywords: ['Sydney property', 'market analysis', 'investment property', 'real estate'],
+    ogTitle: 'Property Analysis - 123 Main St, Sydney',
+    ogDescription: 'Get detailed property insights and market analysis for 123 Main St, Sydney.',
+    ogImage: 'https://real2.ai/property-123-main-st.jpg',
+    ogUrl: 'https://real2.ai/analysis/123-main-st',
+    canonical: 'https://real2.ai/analysis/123-main-st'
+  }, {
+    address: '123 Main St',
+    suburb: 'Sydney',
+    state: 'NSW',
+    riskScore: 7.2,
+    medianPrice: '$1,200,000',
+    region: 'Sydney Metro',
+    trend: 'rising',
+    publishedTime: '2024-01-15T10:00:00Z',
+    modifiedTime: '2024-01-15T15:30:00Z'
   });
 
-  // Update SEO when properties change
-  React.useEffect(() => {
-    if (properties.length > 0) {
-      updateSEO({
-        title: `${properties.length} Properties - AI Analyzed - Real2AI`,
-        description: `Browse ${properties.length} AI-analyzed properties with comprehensive risk assessments and market insights.`
-      });
-    }
-  }, [properties, updateSEO]);
+  // Example 3: SEO for contract analysis
+  const contractSEO = useSEO({
+    title: 'Contract Analysis - Purchase Agreement',
+    description: 'AI-powered contract analysis for property purchase agreement. Review terms, identify risks, and ensure compliance.',
+    keywords: ['contract analysis', 'purchase agreement', 'legal review', 'property contract'],
+    ogTitle: 'Contract Analysis - Purchase Agreement',
+    ogDescription: 'AI-powered contract analysis and legal review for property purchase agreements.',
+    ogImage: 'https://real2.ai/contract-analysis.jpg',
+    ogUrl: 'https://real2.ai/contract/analysis',
+    canonical: 'https://real2.ai/contract/analysis'
+  }, {
+    address: '456 Oak Ave',
+    suburb: 'Melbourne',
+    state: 'VIC',
+    riskScore: 4.8,
+    medianPrice: '$850,000',
+    region: 'Melbourne Metro',
+    trend: 'stable',
+    publishedTime: '2024-01-15T14:00:00Z',
+    modifiedTime: '2024-01-15T16:45:00Z'
+  });
 
   return (
-    <>
-      {SEOComponent}
-      <div>Property listings content...</div>
-    </>
+    <div className="space-y-8">
+      <div>
+        <h2 className="text-xl font-semibold mb-4">SEO Usage Examples</h2>
+        <p className="text-gray-600">
+          This component demonstrates different ways to use the SEO hook for various page types.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="p-4 border rounded-lg">
+          <h3 className="font-semibold mb-2">Basic SEO</h3>
+          <p className="text-sm text-gray-600 mb-2">Standard page SEO</p>
+          <div className="text-xs text-gray-500">
+            <div>Title: {basicSEO.seoData.title}</div>
+            <div>Description: {basicSEO.seoData.description?.substring(0, 50)}...</div>
+          </div>
+        </div>
+
+        <div className="p-4 border rounded-lg">
+          <h3 className="font-semibold mb-2">Dynamic SEO</h3>
+          <p className="text-sm text-gray-600 mb-2">Property-specific SEO</p>
+          <div className="text-xs text-gray-500">
+            <div>Title: {dynamicSEO.seoData.title}</div>
+            <div>Description: {dynamicSEO.seoData.description?.substring(0, 50)}...</div>
+          </div>
+        </div>
+
+        <div className="p-4 border rounded-lg">
+          <h3 className="font-semibold mb-2">Contract SEO</h3>
+          <p className="text-sm text-gray-600 mb-2">Contract analysis SEO</p>
+          <div className="text-xs text-gray-500">
+            <div>Title: {contractSEO.seoData.title}</div>
+            <div>Description: {contractSEO.seoData.description?.substring(0, 50)}...</div>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 };
 
-// Example 4: Using Higher-Order Component (HOC) approach
-const ExampleReportsPageBase: React.FC = () => {
-  return <div>Reports content...</div>;
-};
-
-const ExampleReportsPage = withSEO(ExampleReportsPageBase, {
-  staticSEO: {
-    title: 'Reports - Real2AI',
-    description: 'Generate comprehensive property analysis reports.',
-    keywords: ['reports', 'property analysis', 'real estate documentation'],
-    canonical: '/app/reports',
-    noIndex: true
-  }
-});
-
-// Example 5: SEO for a specific contract with breadcrumbs
-const ExampleSpecificContractPage: React.FC<{ contractId: string }> = ({ contractId }) => {
-  const [contractData, setContractData] = React.useState<any>(null);
-
-  usePageSEO({
-    title: contractData?.property_address 
-      ? `Analysis - ${contractData.property_address} - Real2AI`
-      : `Contract Analysis ${contractId} - Real2AI`,
-    description: contractData?.property_address
-      ? `Detailed AI analysis for ${contractData.property_address}. Risk assessment, compliance checks, and market insights.`
-      : 'Comprehensive AI-powered contract analysis results.',
-    canonical: `/app/analysis/${contractId}`,
-    noIndex: true,
-    breadcrumbs: [
-      { name: 'Dashboard', url: '/app/dashboard' },
-      { name: 'Analysis History', url: '/app/history' },
-      { name: contractData?.property_address || `Contract ${contractId}`, url: `/app/analysis/${contractId}` }
-    ],
-    structuredData: contractData ? [
-      generateArticleData({
-        title: `Contract Analysis - ${contractData.property_address}`,
-        description: `Professional AI analysis of real estate contract for ${contractData.property_address}`,
-        publishedTime: contractData.created_at,
-        modifiedTime: contractData.updated_at,
-        section: 'Contract Analysis',
-        tags: ['contract analysis', 'real estate', 'AI', contractData.property_address]
-      })
-    ] : undefined
-  });
-
-  return <div>Specific contract analysis content...</div>;
-};
-
-// Example 6: Public marketing page with full SEO
-const ExampleLandingPage: React.FC = () => {
-  usePageSEO({
-    title: 'Real2AI - Transform Australian Real Estate with AI',
-    description: 'Advanced AI-powered real estate contract analysis and property intelligence for Australian professionals. Analyze contracts, assess properties, and make informed decisions.',
-    keywords: [
-      'Real2AI',
-      'real estate AI',
-      'contract analysis',
-      'property intelligence',
-      'Australian real estate',
-      'AI assistant',
-      'property analysis',
-      'real estate technology'
-    ],
-    canonical: '/',
-    ogTitle: 'Real2AI - Transform Real Estate with AI',
-    ogDescription: 'Advanced AI-powered tools for Australian real estate professionals.',
-    ogImage: '/images/og-homepage.jpg',
-    twitterCard: 'summary_large_image',
-    structuredData: [
-      {
-        '@context': 'https://schema.org',
-        '@type': 'WebSite',
-        name: 'Real2AI',
-        description: 'AI-powered real estate analysis platform',
-        url: 'https://real2.ai'
-      },
-      {
-        '@context': 'https://schema.org',
-        '@type': 'Organization',
-        name: 'Real2AI',
-        description: 'Advanced AI-powered real estate analysis',
-        url: 'https://real2.ai',
-        logo: 'https://real2.ai/images/logo.png'
-      }
-    ]
-  });
-
-  return <div>Landing page content...</div>;
-};
-
-export {
-  ExampleDashboardPage,
-  ExampleContractAnalysisPage,
-  ExamplePropertyListingPage,
-  ExampleReportsPage,
-  ExampleSpecificContractPage,
-  ExampleLandingPage
-};
+export default SEOUsageExample;

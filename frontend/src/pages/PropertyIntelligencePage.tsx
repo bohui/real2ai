@@ -71,6 +71,14 @@ const PropertyIntelligencePage: React.FC = () => {
   const [showFilters, setShowFilters] = useState(false);
 
   // SEO for Property Intelligence page
+  const dynamicSEOData = React.useMemo(() => {
+    if (!searchQuery) return undefined;
+    return {
+      suburb: searchQuery.split(',')[0]?.trim(),
+      state: searchQuery.split(',')[1]?.trim(),
+    };
+  }, [searchQuery]);
+
   usePageSEO(
     {
       title: 'Property Intelligence - Real2AI',
@@ -87,10 +95,7 @@ const PropertyIntelligencePage: React.FC = () => {
       canonical: '/app/property-intelligence',
       noIndex: true // Private property intelligence page
     },
-    searchQuery ? {
-      suburb: searchQuery.split(',')[0]?.trim(),
-      state: searchQuery.split(',')[1]?.trim(),
-    } : undefined
+    dynamicSEOData
   );
 
   // Data State

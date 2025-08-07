@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { X, AlertCircle, CheckCircle } from 'lucide-react';
-import { ContractAnalysisProgress } from './ContractAnalysisProgress';
+import React, { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { X, AlertCircle, CheckCircle } from "lucide-react";
+import { ContractAnalysisProgress } from "./ContractAnalysisProgress";
 
 export interface ContractAnalysisModalProps {
   isOpen: boolean;
@@ -9,30 +9,35 @@ export interface ContractAnalysisModalProps {
   contract: {
     id: string;
     name: string;
-    type: 'purchase-agreement' | 'lease' | 'employment' | 'nda' | 'service-agreement';
+    type:
+      | "purchase-agreement"
+      | "lease"
+      | "employment"
+      | "nda"
+      | "service-agreement";
     size: number;
     uploadedAt: string;
   };
   onAnalysisComplete: (results: any) => void;
 }
 
-type ModalState = 'analyzing' | 'completed' | 'error' | 'cancelled';
+type ModalState = "analyzing" | "completed" | "error" | "cancelled";
 
 export const ContractAnalysisModal: React.FC<ContractAnalysisModalProps> = ({
   isOpen,
   onClose,
   contract,
-  onAnalysisComplete
+  onAnalysisComplete,
 }) => {
-  const [modalState, setModalState] = useState<ModalState>('analyzing');
+  const [modalState, setModalState] = useState<ModalState>("analyzing");
   const [error, setError] = useState<string | null>(null);
   const [results, setResults] = useState<any>(null);
 
   const handleCancel = () => {
-    setModalState('cancelled');
+    setModalState("cancelled");
     setTimeout(() => {
       onClose();
-      setModalState('analyzing');
+      setModalState("analyzing");
       setError(null);
       setResults(null);
     }, 500);
@@ -40,27 +45,27 @@ export const ContractAnalysisModal: React.FC<ContractAnalysisModalProps> = ({
 
   const handleComplete = (analysisResults: any) => {
     setResults(analysisResults);
-    setModalState('completed');
+    setModalState("completed");
     onAnalysisComplete(analysisResults);
   };
 
   const handleError = (errorMessage: string) => {
     setError(errorMessage);
-    setModalState('error');
+    setModalState("error");
   };
 
   const handleRetry = () => {
-    setModalState('analyzing');
+    setModalState("analyzing");
     setError(null);
     setResults(null);
   };
 
   const formatFileSize = (bytes: number): string => {
-    if (bytes === 0) return '0 Bytes';
+    if (bytes === 0) return "0 Bytes";
     const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const sizes = ["Bytes", "KB", "MB", "GB"];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
   };
 
   return (
@@ -84,7 +89,7 @@ export const ContractAnalysisModal: React.FC<ContractAnalysisModalProps> = ({
               exit={{ opacity: 0, scale: 0.95 }}
               className="relative w-full max-w-2xl"
             >
-              {modalState === 'analyzing' && (
+              {modalState === "analyzing" && (
                 <ContractAnalysisProgress
                   contractId={contract.id}
                   contractType={contract.type}
@@ -95,7 +100,7 @@ export const ContractAnalysisModal: React.FC<ContractAnalysisModalProps> = ({
                 />
               )}
 
-              {modalState === 'completed' && (
+              {modalState === "completed" && (
                 <div className="bg-white rounded-xl shadow-lg border border-gray-200">
                   {/* Header */}
                   <div className="px-6 py-4 border-b border-gray-200">
@@ -129,13 +134,17 @@ export const ContractAnalysisModal: React.FC<ContractAnalysisModalProps> = ({
                         <div className="text-2xl font-bold text-blue-900">
                           {results?.overallScore || 85}
                         </div>
-                        <div className="text-sm text-blue-700">Overall Score</div>
+                        <div className="text-sm text-blue-700">
+                          Overall Score
+                        </div>
                       </div>
                       <div className="bg-amber-50 p-4 rounded-lg border border-amber-200">
                         <div className="text-2xl font-bold text-amber-900">
                           {results?.riskCount || 3}
                         </div>
-                        <div className="text-sm text-amber-700">Risk Issues</div>
+                        <div className="text-sm text-amber-700">
+                          Risk Issues
+                        </div>
                       </div>
                       <div className="bg-green-50 p-4 rounded-lg border border-green-200">
                         <div className="text-2xl font-bold text-green-900">
@@ -163,7 +172,7 @@ export const ContractAnalysisModal: React.FC<ContractAnalysisModalProps> = ({
                 </div>
               )}
 
-              {modalState === 'error' && (
+              {modalState === "error" && (
                 <div className="bg-white rounded-xl shadow-lg border border-gray-200">
                   {/* Header */}
                   <div className="px-6 py-4 border-b border-gray-200">
@@ -194,7 +203,8 @@ export const ContractAnalysisModal: React.FC<ContractAnalysisModalProps> = ({
                   <div className="px-6 py-6">
                     <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
                       <p className="text-red-800 text-sm">
-                        {error || 'An unexpected error occurred during analysis.'}
+                        {error ||
+                          "An unexpected error occurred during analysis."}
                       </p>
                     </div>
 
@@ -216,7 +226,7 @@ export const ContractAnalysisModal: React.FC<ContractAnalysisModalProps> = ({
                 </div>
               )}
 
-              {modalState === 'cancelled' && (
+              {modalState === "cancelled" && (
                 <div className="bg-white rounded-xl shadow-lg border border-gray-200">
                   <div className="px-6 py-8 text-center">
                     <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -238,3 +248,5 @@ export const ContractAnalysisModal: React.FC<ContractAnalysisModalProps> = ({
     </AnimatePresence>
   );
 };
+
+export default ContractAnalysisModal;
