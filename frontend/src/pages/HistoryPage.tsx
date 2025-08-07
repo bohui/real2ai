@@ -20,6 +20,7 @@ import Input from "@/components/ui/Input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { useAnalysisStore } from "@/store/analysisStore";
 import { useUIStore } from "@/store/uiStore";
+import { usePageSEO } from "@/contexts/SEOContext";
 import { cn } from "@/utils";
 import type { ContractAnalysis } from "@/types";
 
@@ -32,6 +33,21 @@ const HistoryPage: React.FC = () => {
   const navigate = useNavigate();
   const { recentAnalyses, deleteAnalysis } = useAnalysisStore();
   const { addNotification } = useUIStore();
+
+  // SEO for History page
+  usePageSEO({
+    title: 'Analysis History - Real2AI',
+    description: 'View your complete contract analysis history. Track insights, compare properties, and review past AI-powered assessments.',
+    keywords: [
+      'analysis history',
+      'contract history',
+      'property analysis records',
+      'Real2AI reports',
+      'contract analysis dashboard'
+    ],
+    canonical: '/app/history',
+    noIndex: true // Private history page
+  });
 
   const [searchQuery, setSearchQuery] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState<

@@ -21,6 +21,7 @@ import {
 import Button from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import StatusBadge from "@/components/ui/StatusBadge";
+import { usePageSEO } from "@/contexts/SEOContext";
 import { cn } from "@/utils";
 
 // Financial calculation interfaces
@@ -88,6 +89,24 @@ const FinancialAnalysisPage: React.FC = () => {
   const [annualIncome, setAnnualIncome] = useState(120000);
   const [deposit, setDeposit] = useState(170000);
   const [interestRate, setInterestRate] = useState(6.5);
+
+  // SEO for Financial Analysis page
+  usePageSEO({
+    title: 'Financial Analysis - Real Estate ROI - Real2AI',
+    description: 'Calculate ROI, analyze cash flow, and assess investment potential with AI-powered financial tools designed for Australian property investors.',
+    keywords: [
+      'financial analysis',
+      'real estate ROI',
+      'investment calculator',
+      'property finance',
+      'cash flow analysis',
+      'Australian property investment',
+      'ROI calculator',
+      'mortgage calculator'
+    ],
+    canonical: '/app/financial-analysis',
+    noIndex: true // Private financial analysis page
+  });
   const [weeklyRent, setWeeklyRent] = useState(650);
   const [taxRate, setTaxRate] = useState(35); // Marginal tax rate %
   const [loanTerm, setLoanTerm] = useState(30); // years

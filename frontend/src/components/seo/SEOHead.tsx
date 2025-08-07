@@ -153,7 +153,7 @@ export const SEOHead: React.FC<SEOHeadProps> = ({
       if (!linkTag) {
         linkTag = document.createElement('link');
         linkTag.rel = rel;
-        if (hreflang) linkTag.hrefLang = hreflang;
+        if (hreflang) linkTag.setAttribute('hreflang', hreflang);
         document.head.appendChild(linkTag);
       }
       

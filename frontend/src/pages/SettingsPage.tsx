@@ -16,12 +16,28 @@ import Input from "@/components/ui/Input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { useAuthStore } from "@/store/authStore";
 import { useUIStore } from "@/store/uiStore";
+import { usePageSEO } from "@/contexts/SEOContext";
 import { cn } from "@/utils";
 import type { AustralianState } from "@/types";
 
 const SettingsPage: React.FC = () => {
   const { user, updateProfile } = useAuthStore();
   const { addNotification } = useUIStore();
+
+  // SEO for Settings page
+  usePageSEO({
+    title: 'Settings - Real2AI',
+    description: 'Manage your Real2AI account settings, preferences, and subscription. Customize your AI-powered real estate analysis experience.',
+    keywords: [
+      'account settings',
+      'Real2AI settings',
+      'user preferences',
+      'subscription management',
+      'profile settings'
+    ],
+    canonical: '/app/settings',
+    noIndex: true // Private settings page
+  });
 
   // Form states
   const [activeTab, setActiveTab] = React.useState<

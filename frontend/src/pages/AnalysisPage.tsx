@@ -47,17 +47,17 @@ const AnalysisPage: React.FC = () => {
         'risk assessment',
         'compliance check',
         'Australian property law',
-        ...(propertyAddress ? [`${propertyAddress} contract`, `${propertyAddress} property analysis`] : [])
+        ...(typeof propertyAddress === 'string' ? [`${propertyAddress} contract`, `${propertyAddress} property analysis`] : [])
       ],
       canonical: contractId ? `/app/analysis/${contractId}` : '/app/analysis',
       noIndex: true, // Private analysis pages
       ogType: 'article',
-      ...(propertyAddress && {
+      ...(typeof propertyAddress === 'string' && {
         publishedTime: new Date().toISOString(),
         section: 'Contract Analysis'
       })
     },
-    propertyAddress ? {
+    (typeof propertyAddress === 'string') ? {
       address: propertyAddress,
       riskScore: riskScore,
       publishedTime: new Date().toISOString()
@@ -69,7 +69,7 @@ const AnalysisPage: React.FC = () => {
   >("overview");
 
   // Handle document upload completion - now with smart cache handling
-  const handleUploadComplete = async (documentId: string) => {
+  const handleUploadComplete = async (_documentId: string) => {
     try {
       console.log('📡 Document uploaded, WebSocket should be connected');
       

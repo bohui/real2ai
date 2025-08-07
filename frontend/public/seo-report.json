@@ -1,0 +1,26 @@
+{
+  "generated": "2025-08-07T14:29:31.605Z",
+  "baseUrl": "http://localhost:5173",
+  "totalUrls": 2,
+  "urls": [
+    {
+      "path": "/auth/login",
+      "title": "Login - Real2AI",
+      "description": "Sign in to your Real2AI account",
+      "priority": "0.8",
+      "changefreq": "weekly",
+      "lastmod": "2025-08-07"
+    },
+    {
+      "path": "/auth/register",
+      "title": "Register - Real2AI",
+      "description": "Create your Real2AI account",
+      "priority": "0.8",
+      "changefreq": "weekly",
+      "lastmod": "2025-08-07"
+    }
+  ],
+  "recommendations": [
+    "Consider adding a public homepage for better SEO."
+  ]
+}

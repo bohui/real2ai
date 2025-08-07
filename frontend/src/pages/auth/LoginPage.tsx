@@ -5,9 +5,21 @@ import { Zap } from 'lucide-react'
 
 import LoginForm from '@/components/forms/LoginForm'
 import { useAuthStore } from '@/store/authStore'
+import { usePageSEO } from '@/contexts/SEOContext'
 
 const LoginPage: React.FC = () => {
   const { isAuthenticated } = useAuthStore()
+
+  // SEO for Login page
+  usePageSEO({
+    title: 'Login - Real2AI',
+    description: 'Sign in to your Real2AI account to access powerful AI-driven real estate analysis tools and property intelligence.',
+    keywords: ['Real2AI login', 'sign in', 'real estate platform', 'user authentication'],
+    canonical: '/auth/login',
+    noIndex: true,
+    ogTitle: 'Login to Real2AI - Access Your Real Estate AI Tools',
+    ogDescription: 'Sign in to analyze contracts, get property intelligence, and make informed real estate decisions with AI.'
+  })
 
   // Redirect if already authenticated
   if (isAuthenticated) {

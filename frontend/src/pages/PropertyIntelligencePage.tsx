@@ -20,6 +20,7 @@ import Button from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import StatusBadge from "@/components/ui/StatusBadge";
 import { cn } from "@/utils";
+import { usePageSEO } from "@/contexts/SEOContext";
 import { propertyIntelligenceService } from "@/services/propertyIntelligence";
 import {
   PropertySearchRequest,
@@ -68,6 +69,29 @@ const PropertyIntelligencePage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedView, setSelectedView] = useState<"grid" | "list">("grid");
   const [showFilters, setShowFilters] = useState(false);
+
+  // SEO for Property Intelligence page
+  usePageSEO(
+    {
+      title: 'Property Intelligence - Real2AI',
+      description: 'Comprehensive property intelligence powered by AI. Market analysis, price trends, suburb insights, and investment potential for Australian real estate.',
+      keywords: [
+        'property intelligence',
+        'real estate data',
+        'market analysis',
+        'property prices',
+        'Australian property market',
+        'suburb analysis',
+        'investment insights'
+      ],
+      canonical: '/app/property-intelligence',
+      noIndex: true // Private property intelligence page
+    },
+    searchQuery ? {
+      suburb: searchQuery.split(',')[0]?.trim(),
+      state: searchQuery.split(',')[1]?.trim(),
+    } : undefined
+  );
 
   // Data State
   const [properties, setProperties] = useState<PropertyDisplay[]>([]);

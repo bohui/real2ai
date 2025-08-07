@@ -21,6 +21,7 @@ import Button from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import StatusBadge from "@/components/ui/StatusBadge";
 import { cn } from "@/utils";
+import { usePageSEO } from "@/contexts/SEOContext";
 import { propertyIntelligenceService } from "@/services/propertyIntelligence";
 
 // Types for market data
@@ -66,6 +67,33 @@ const MarketAnalysisPage: React.FC = () => {
     "national" | "state" | "suburb"
   >("national");
   const [marketData, setMarketData] = useState<MarketData | null>(null);
+
+  // SEO for Market Analysis page
+  const regionText = selectedRegion === 'national' ? 'Australia' : selectedRegion === 'state' ? 'State' : 'Suburb';
+  const trend = marketData?.nationalStats?.priceGrowth > 0 ? 'rising' : marketData?.nationalStats?.priceGrowth < 0 ? 'falling' : 'stable';
+  
+  usePageSEO(
+    {
+      title: `Market Analysis - ${regionText} - Real2AI`,
+      description: `Advanced market analysis for Australian real estate in ${regionText.toLowerCase()}. Current trend: ${trend}. Expert insights, price trends, and market forecasts powered by AI.`,
+      keywords: [
+        'market analysis',
+        'real estate trends',
+        'property market',
+        'Australian real estate',
+        'market forecast',
+        'investment insights',
+        'property trends',
+        `${regionText.toLowerCase()} market`
+      ],
+      canonical: '/app/market-analysis',
+      noIndex: true // Private market analysis page
+    },
+    {
+      region: regionText,
+      trend: trend
+    }
+  );
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 

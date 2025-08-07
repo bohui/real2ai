@@ -5,12 +5,10 @@
  */
 
 import React from 'react';
-import { useLocation } from 'react-router-dom';
 import SEOHead from './SEOHead';
 import { useSEOContext } from '@/contexts/SEOContext';
 
 const RootSEO: React.FC = () => {
-  const location = useLocation();
   const { currentSEO } = useSEOContext();
 
   // Don't render anything if no SEO data is available

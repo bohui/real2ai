@@ -5,9 +5,20 @@ import { Zap } from 'lucide-react'
 
 import RegisterForm from '@/components/forms/RegisterForm'
 import { useAuthStore } from '@/store/authStore'
+import { usePageSEO } from '@/contexts/SEOContext'
 
 const RegisterPage: React.FC = () => {
   const { isAuthenticated } = useAuthStore()
+
+  // SEO for Register page
+  usePageSEO({
+    title: 'Register - Real2AI',
+    description: 'Create your Real2AI account and start analyzing real estate contracts with AI technology. Join thousands of Australian property professionals.',
+    keywords: ['Real2AI register', 'sign up', 'create account', 'real estate AI'],
+    canonical: '/auth/register',
+    ogTitle: 'Join Real2AI - Start Your AI-Powered Real Estate Journey',
+    ogDescription: 'Create your account and access advanced real estate analysis tools trusted by Australian professionals.',
+  })
 
   // Redirect if already authenticated
   if (isAuthenticated) {

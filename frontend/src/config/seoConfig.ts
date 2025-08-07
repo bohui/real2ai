@@ -4,6 +4,12 @@
  */
 
 import type { SEOData } from '@/components/seo/SEOHead';
+import {
+  generateDefaultStructuredData,
+  generateBreadcrumbData,
+  generateArticleData,
+  generatePropertyData
+} from '@/utils/structuredData';
 
 // Base configuration
 export const SEO_CONFIG = {
@@ -169,7 +175,7 @@ export const PAGE_SEO_CONFIG: Record<string, SEOData> = {
     ogTitle: 'Real2AI - Transform Real Estate with AI',
     ogDescription: 'Advanced AI-powered tools for Australian real estate professionals. Analyze contracts, assess properties, and make informed decisions.',
     canonical: '/',
-    structuredData: [WEBSITE_STRUCTURED_DATA, ORGANIZATION_STRUCTURED_DATA]
+    structuredData: generateDefaultStructuredData()
   },
 
   // Auth pages
@@ -420,12 +426,22 @@ export const generateSEOData = (
 
     // Add article data for analysis pages
     if (path.includes('/analysis') && (address || dynamicConfig.title)) {
-      structuredData.push(generateArticleStructuredData(
-        dynamicConfig.title || baseConfig.title || SEO_CONFIG.defaultTitle,
-        dynamicConfig.description || baseConfig.description || SEO_CONFIG.defaultDescription,
+      structuredData.push(generateArticleData({
+        title: dynamicConfig.title || baseConfig.title || SEO_CONFIG.defaultTitle,
+        description: dynamicConfig.description || baseConfig.description || SEO_CONFIG.defaultDescription,
         publishedTime,
-        modifiedTime
-      ));
+        modifiedTime,
+        section: 'Contract Analysis',
+        tags: dynamicConfig.keywords || baseConfig.keywords
+      }));
+    }
+
+    // Add property data for property intelligence pages
+    if (path.includes('/property-intelligence') && address) {
+      structuredData.push(generatePropertyData({
+        address,
+        propertyType: 'House' // Default, could be enhanced with more data
+      }));
     }
 
     dynamicConfig.structuredData = structuredData;

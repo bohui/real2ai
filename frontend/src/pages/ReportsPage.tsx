@@ -13,10 +13,27 @@ import {
 import Button from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { useAnalysisStore } from "@/store/analysisStore";
+import { usePageSEO } from "@/contexts/SEOContext";
 import { cn } from "@/utils";
 
 const ReportsPage: React.FC = () => {
   const { recentAnalyses } = useAnalysisStore();
+
+  // SEO for Reports page
+  usePageSEO({
+    title: 'Reports - Real2AI',
+    description: 'Generate comprehensive reports from your property analyses. Professional documentation for contracts, valuations, and investment assessments.',
+    keywords: [
+      'property reports',
+      'analysis reports',
+      'contract reports',
+      'professional documentation',
+      'Real2AI reports',
+      'property analysis documentation'
+    ],
+    canonical: '/app/reports',
+    noIndex: true // Private reports page
+  });
 
   // Calculate summary statistics
   const totalAnalyses = recentAnalyses.length;

@@ -30,6 +30,7 @@ import NotificationSystem from "@/components/notifications/NotificationSystem";
 import OnboardingWizard from "@/components/onboarding/OnboardingWizard";
 import SEOProvider from "@/contexts/SEOContext";
 import RootSEO from "@/components/seo/RootSEO";
+import SEOFloatingButton from "@/components/seo/SEOFloatingButton";
 
 // Hooks and stores
 import { useAuthStore } from "@/store/authStore";
@@ -279,6 +280,7 @@ const App: React.FC = () => {
 
           {/* Global components */}
           <NotificationSystem />
+          <SEOFloatingButton />
 
           {/* Onboarding Wizard - Only show for fully authenticated users */}
           {showOnboarding && user && isAuthenticated && !isLoading && (

@@ -25,7 +25,7 @@ export function withSEO<P extends object>(
   WrappedComponent: React.ComponentType<P>,
   options: WithSEOOptions = {}
 ) {
-  const WithSEOComponent = React.forwardRef<any, P>((props, ref) => {
+  const WithSEOComponent = (props: P) => {
     const location = useLocation();
     const {
       staticSEO,
@@ -50,10 +50,10 @@ export function withSEO<P extends object>(
           titleSeparator={titleSeparator}
           defaultImage={defaultImage}
         />
-        <WrappedComponent ref={ref} {...props} />
+        <WrappedComponent {...props} />
       </>
     );
-  });
+  };
 
   WithSEOComponent.displayName = `withSEO(${WrappedComponent.displayName || WrappedComponent.name})`;
   
