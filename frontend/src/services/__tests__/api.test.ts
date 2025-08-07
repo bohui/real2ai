@@ -295,6 +295,15 @@ describe('ApiService', () => {
 
       await expect(apiService.getAnalysisResult('nonexistent')).rejects.toThrow()
     })
+    
+    it('should fetch user stats successfully', async () => {
+      const mockStats = {
+        data: {
+          total_analyses: 15,
+          remaining_credits: 85,
+          subscription_tier: 'premium'
+        }
+      }
       mockAxiosInstance.get.mockResolvedValueOnce(mockStats)
 
       const result = await apiService.getUserStats()
