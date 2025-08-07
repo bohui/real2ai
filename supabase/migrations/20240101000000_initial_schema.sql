@@ -339,10 +339,10 @@ CREATE TABLE user_subscriptions (
 
 -- Analysis progress tracking for real-time updates
 -- Enhanced table with comprehensive progress tracking and timing
+-- Note: Uses content_hash to link to shared resources
 CREATE TABLE analysis_progress (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    contract_id UUID REFERENCES contracts(id) ON DELETE CASCADE NOT NULL,
-    analysis_id UUID REFERENCES contract_analyses(id) ON DELETE CASCADE NOT NULL,
+    content_hash TEXT NOT NULL, -- Links to shared analysis content
     user_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
     
     -- Progress tracking fields
@@ -365,8 +365,8 @@ CREATE TABLE analysis_progress (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     
-    -- Constraints
-    CONSTRAINT unique_analysis_progress UNIQUE (analysis_id),
+    -- Constraints  
+    CONSTRAINT unique_analysis_progress UNIQUE (content_hash, user_id),
     CONSTRAINT valid_progress_percent CHECK (progress_percent BETWEEN 0 AND 100)
 );
 
@@ -407,8 +407,8 @@ CREATE INDEX idx_user_subscriptions_user_id ON user_subscriptions(user_id);
 CREATE INDEX idx_user_subscriptions_status ON user_subscriptions(status);
 CREATE INDEX idx_user_subscriptions_stripe_id ON user_subscriptions(stripe_subscription_id);
 
-CREATE INDEX idx_analysis_progress_contract_id ON analysis_progress(contract_id);
-CREATE INDEX idx_analysis_progress_analysis_id ON analysis_progress(analysis_id);
+CREATE INDEX idx_analysis_progress_content_hash ON analysis_progress(content_hash);
+CREATE INDEX idx_analysis_progress_user ON analysis_progress(user_id);
 CREATE INDEX idx_analysis_progress_user_id ON analysis_progress(user_id);
 CREATE INDEX idx_analysis_progress_status ON analysis_progress(status);
 CREATE INDEX idx_analysis_progress_created_at ON analysis_progress(created_at);
@@ -433,7 +433,7 @@ CREATE INDEX idx_document_analyses_status ON document_analyses(status);
 CREATE INDEX idx_document_analyses_analysis_type ON document_analyses(analysis_type);
 
 -- Create partial index for active progress tracking
-CREATE INDEX idx_analysis_progress_active ON analysis_progress(contract_id, updated_at) 
+CREATE INDEX idx_analysis_progress_active ON analysis_progress(content_hash, user_id, updated_at) 
 WHERE status = 'in_progress';
 
 -- Create composite indexes for common queries
@@ -442,23 +442,63 @@ CREATE INDEX idx_documents_user_status ON documents(user_id, processing_status);
 -- Contract analyses composite indexes (user_id removed)
 CREATE INDEX idx_usage_logs_user_timestamp ON usage_logs(user_id, timestamp DESC);
 
--- Views for enhanced data access
--- View for analysis progress with contract and analysis details
-CREATE OR REPLACE VIEW analysis_progress_detailed AS
-SELECT 
-    ap.*,
-    c.contract_type,
-    ca.agent_version,
-    ca.status as analysis_status,
-    d.original_filename as document_filename,
-    d.file_type as document_file_type
-FROM analysis_progress ap
-JOIN contracts c ON ap.contract_id = c.id
-JOIN contract_analyses ca ON ap.analysis_id = ca.id
-JOIN documents d ON c.document_id = d.id;
+-- Replace view with SECURITY DEFINER function due to schema changes
+-- analysis_progress table may also need refactoring for shared resource model
+CREATE OR REPLACE FUNCTION get_analysis_progress_detailed(p_user_id UUID)
+RETURNS TABLE (
+    id UUID,
+    content_hash TEXT,
+    user_id UUID,
+    current_step VARCHAR,
+    progress_percent INTEGER,
+    step_description TEXT,
+    estimated_completion_minutes INTEGER,
+    step_started_at TIMESTAMP WITH TIME ZONE,
+    step_completed_at TIMESTAMP WITH TIME ZONE,
+    total_elapsed_seconds INTEGER,
+    status VARCHAR,
+    error_message TEXT,
+    metadata JSONB,
+    created_at TIMESTAMP WITH TIME ZONE,
+    updated_at TIMESTAMP WITH TIME ZONE,
+    contract_type contract_type,
+    agent_version TEXT,
+    analysis_status analysis_status
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        ap.id,
+        ap.content_hash,
+        ap.user_id,
+        ap.current_step,
+        ap.progress_percent,
+        ap.step_description,
+        ap.estimated_completion_minutes,
+        ap.step_started_at,
+        ap.step_completed_at,
+        ap.total_elapsed_seconds,
+        ap.status,
+        ap.error_message,
+        ap.metadata,
+        ap.created_at,
+        ap.updated_at,
+        c.contract_type,
+        ca.agent_version,
+        ca.status as analysis_status
+    FROM analysis_progress ap
+    LEFT JOIN contracts c ON ap.content_hash = c.content_hash
+    LEFT JOIN contract_analyses ca ON ap.content_hash = ca.content_hash
+    WHERE ap.user_id = p_user_id
+    ORDER BY ap.updated_at DESC;
+END;
+$$;
 
--- Grant permissions on the view
-GRANT SELECT ON analysis_progress_detailed TO authenticated;
+-- Grant permissions on the function
+GRANT EXECUTE ON FUNCTION get_analysis_progress_detailed TO authenticated;
 
 -- Grant permissions on new document processing tables
 GRANT ALL ON document_pages TO authenticated;
