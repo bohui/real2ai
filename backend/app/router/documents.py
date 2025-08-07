@@ -87,14 +87,18 @@ async def test_document_service(
 
 @router.post("/upload", response_model=DocumentUploadResponse)
 async def upload_document(
-    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     contract_type: ContractType = ContractType.PURCHASE_AGREEMENT,
     australian_state: AustralianState = AustralianState.NSW,
     user: User = Depends(get_current_user),
     document_service: DocumentService = Depends(get_document_service),
 ):
-    """Upload contract document for analysis"""
+    """
+    Fast document upload - stores file and creates record only.
+    
+    This endpoint now focuses solely on file storage and basic validation.
+    For document processing and analysis, use /api/contracts/analyze endpoint.
+    """
     
     context = create_error_context(
         user_id=str(user.id),
@@ -108,9 +112,9 @@ async def upload_document(
 
     try:
         # Log upload attempt
-        logger.info(f"File upload attempt: filename={file.filename}, size={file.size}, content_type={file.content_type}")
+        logger.info(f"Fast upload attempt: filename={file.filename}, size={file.size}, content_type={file.content_type}")
         
-        # Validate file
+        # Basic file validation
         if file.size == 0:
             logger.warning(f"Empty file upload attempted: {file.filename}")
             raise HTTPException(
@@ -131,47 +135,41 @@ async def upload_document(
                 detail=f"Invalid file type. Allowed: {', '.join(settings.allowed_file_types_list)}",
             )
 
-        # Process document (this includes upload, validation and database insertion)
-        # The document service handles all operations using auth context internally
-        logger.info("Starting document processing...")
+        # Fast upload - just store file and create record
+        logger.info("Starting fast document upload...")
         try:
-            upload_result = await document_service.process_document(
+            upload_result = await document_service.upload_document_fast(
                 file=file, 
                 user_id=str(user.id), 
                 contract_type=contract_type.value if contract_type else None,
                 australian_state=australian_state.value if australian_state else None
             )
-            logger.info(f"Document processing result: {upload_result}")
-        except Exception as process_error:
-            logger.error(f"Document service processing failed: {str(process_error)}", exc_info=True)
+            logger.info(f"Fast upload result: {upload_result}")
+        except Exception as upload_error:
+            logger.error(f"Fast upload failed: {str(upload_error)}", exc_info=True)
             raise
 
-        # Check if processing was successful
+        # Check if upload was successful
         if not upload_result.get("success"):
             logger.error(
-                f"Document processing failed: {upload_result.get('error', 'Unknown error')}"
+                f"Document upload failed: {upload_result.get('error', 'Unknown error')}"
             )
             raise HTTPException(
                 status_code=500,
-                detail=f"Document processing failed: {upload_result.get('error', 'Unknown error')}",
+                detail=f"Document upload failed: {upload_result.get('error', 'Unknown error')}",
             )
 
-        logger.info("Document processing completed successfully")
+        logger.info("Fast document upload completed successfully")
 
-        logger.info("Preparing upload response...")
-        try:
-            response = DocumentUploadResponse(
-                document_id=upload_result["document_id"],
-                filename=file.filename,
-                file_size=file.size,
-                upload_status="processed",  # Changed to "processed" since document is fully processed
-                processing_time=upload_result.get("processing_time", 0.0),
-            )
-            logger.info(f"Document processing successful - document_id: {upload_result['document_id']}")
-            return response
-        except Exception as response_error:
-            logger.error(f"Response creation failed: {str(response_error)}", exc_info=True)
-            raise
+        response = DocumentUploadResponse(
+            document_id=upload_result["document_id"],
+            filename=file.filename,
+            file_size=file.size,
+            upload_status="uploaded",  # Status is now "uploaded" not "processed"
+            processing_time=upload_result.get("processing_time", 0.0),
+        )
+        logger.info(f"Document uploaded successfully - document_id: {upload_result['document_id']}")
+        return response
 
     except HTTPException:
         # Re-raise HTTPExceptions (validation errors) without modification
@@ -183,6 +181,7 @@ async def upload_document(
         logger.error(f"Exception args: {e.args}")
         # Use enhanced error handling
         raise handle_api_error(e, context, ErrorCategory.FILE_PROCESSING)
+
 
 
 @router.get("/{document_id}")

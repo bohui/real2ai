@@ -389,7 +389,7 @@ async def start_contract_analysis(
             analysis_id=analysis_id,
             status="queued",
             task_id=task_id,
-            estimated_completion_minutes=2,
+            estimated_completion_minutes=3,  # Comprehensive processing takes slightly longer
             cached=False,
             cache_hit=False,
         )
@@ -654,30 +654,37 @@ async def _start_background_analysis_with_cache(
     content_hash: Optional[str],
     cache_service: CacheService,
 ) -> str:
-    """Start background analysis with cache integration."""
+    """Start comprehensive background analysis with progress tracking and cache integration."""
     try:
-        from app.tasks.background_tasks import analyze_contract_background
+        from app.tasks.background_tasks import comprehensive_document_analysis
 
-        # Enhanced task parameters with cache integration
+        # Enhanced task parameters with comprehensive processing and progress tracking
         task_params = {
-            "contract_id": contract_id,
+            "document_id": document["id"],
             "analysis_id": analysis_id,
+            "contract_id": contract_id,
             "user_id": user_id,
-            "document": document,
-            "analysis_options": analysis_options,
-            "content_hash": content_hash,
-            "enable_caching": True,
+            "analysis_options": {
+                **analysis_options,
+                "content_hash": content_hash,
+                "enable_caching": True,
+                "progress_tracking": True,
+                "comprehensive_processing": True
+            }
         }
 
-        task = analyze_contract_background.delay(**task_params)
+        logger.info(f"Starting comprehensive analysis task for contract {contract_id} with progress tracking")
+        
+        task = comprehensive_document_analysis.delay(**task_params)
 
         if not task or not task.id:
-            raise ValueError("Failed to queue contract analysis")
+            raise ValueError("Failed to queue comprehensive analysis")
 
+        logger.info(f"Comprehensive analysis task queued with ID: {task.id}")
         return task.id
 
     except Exception as e:
-        logger.error(f"Background task creation failed: {str(e)}")
+        logger.error(f"Comprehensive analysis task creation failed: {str(e)}")
         raise ValueError(
             "Our AI service is temporarily busy. Please try again in a few minutes"
         )
@@ -862,6 +869,93 @@ def _calculate_analysis_progress(analysis: AnalysisRecord) -> AnalysisProgressIn
             "next_update_in_seconds": 30,
         },
     )
+
+
+@router.get("/{contract_id}/progress")
+async def get_analysis_progress(
+    contract_id: str,
+    user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """
+    Get detailed analysis progress with real-time updates.
+    
+    This endpoint provides granular progress information including:
+    - Current processing step
+    - Progress percentage
+    - Step description
+    - Estimated completion time
+    - Error messages (if any)
+    """
+    
+    context = create_error_context(
+        user_id=str(user.id), 
+        contract_id=contract_id, 
+        operation="get_analysis_progress"
+    )
+
+    try:
+        # Get authenticated client
+        db_client = await AuthContext.get_authenticated_client(require_auth=True)
+        
+        # Get progress record from analysis_progress table
+        progress_result = await db_client.database.select(
+            "analysis_progress",
+            columns="*",
+            filters={"contract_id": contract_id, "user_id": str(user.id)}
+        )
+        
+        # Get analysis status as fallback
+        analysis_result = await db_client.database.select(
+            "contract_analyses",
+            columns="id, status, created_at, updated_at, processing_time",
+            filters={"contract_id": contract_id}
+        )
+        
+        if not analysis_result.get("data"):
+            raise HTTPException(status_code=404, detail="Analysis not found")
+        
+        analysis = analysis_result["data"][0]
+        
+        # If we have detailed progress, use that
+        if progress_result.get("data"):
+            progress = progress_result["data"][0]
+            return {
+                "contract_id": contract_id,
+                "analysis_id": progress["analysis_id"],
+                "progress": progress["progress_percent"],
+                "current_step": progress["current_step"],
+                "step_description": progress["step_description"],
+                "status": progress["status"],
+                "estimated_completion_minutes": progress.get("estimated_completion_minutes"),
+                "step_started_at": progress["step_started_at"],
+                "total_elapsed_seconds": progress.get("total_elapsed_seconds", 0),
+                "error_message": progress.get("error_message"),
+                "last_updated": progress.get("updated_at"),
+                "has_detailed_progress": True
+            }
+        
+        # Fallback to basic progress calculation from analysis status
+        else:
+            progress_info = _calculate_analysis_progress(analysis)
+            return {
+                "contract_id": contract_id,
+                "analysis_id": analysis["id"],
+                "progress": progress_info["progress"],
+                "current_step": analysis["status"],
+                "step_description": progress_info["status_message"],
+                "status": analysis["status"],
+                "estimated_completion_minutes": None,
+                "step_started_at": analysis["created_at"],
+                "total_elapsed_seconds": 0,
+                "error_message": None,
+                "last_updated": analysis["updated_at"],
+                "has_detailed_progress": False
+            }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise handle_api_error(e, context, ErrorCategory.DATABASE)
 
 
 @router.get("/{contract_id}/analysis")

@@ -29,6 +29,406 @@ from app.core.langsmith_config import langsmith_session, log_trace_info
 logger = logging.getLogger(__name__)
 
 
+# Progress tracking constants
+PROGRESS_STAGES = {
+    "document_processing": {
+        "text_extraction": 25,
+        "page_analysis": 50, 
+        "diagram_detection": 60,
+        "entity_extraction": 70,
+        "document_complete": 75
+    },
+    "contract_analysis": {
+        "analysis_start": 80,
+        "workflow_processing": 90,
+        "results_caching": 95,
+        "analysis_complete": 100
+    }
+}
+
+
+async def update_analysis_progress(
+    user_id: str,
+    analysis_id: str,
+    contract_id: str,
+    progress_percent: int,
+    current_step: str,
+    step_description: str,
+    estimated_completion_minutes: Optional[int] = None,
+    error_message: Optional[str] = None
+):
+    """Update analysis progress with detailed tracking"""
+    try:
+        # Get user-authenticated client
+        user_client = await AuthContext.get_authenticated_client()
+        
+        # Update or create progress record
+        progress_data = {
+            "analysis_id": analysis_id,
+            "contract_id": contract_id,
+            "user_id": user_id,
+            "current_step": current_step,
+            "progress_percent": progress_percent,
+            "step_description": step_description,
+            "step_started_at": datetime.now(timezone.utc).isoformat(),
+            "estimated_completion_minutes": estimated_completion_minutes,
+            "status": "in_progress" if progress_percent < 100 else "completed",
+            "error_message": error_message
+        }
+        
+        # Upsert progress record
+        result = await user_client.database.upsert(
+            "analysis_progress",
+            progress_data,
+            on_conflict="analysis_id"
+        )
+        
+        # Send WebSocket update
+        await websocket_manager.send_progress_update(user_id, {
+            "type": "analysis_progress",
+            "analysis_id": analysis_id,
+            "contract_id": contract_id,
+            "progress": progress_percent,
+            "current_step": current_step,
+            "step_description": step_description,
+            "estimated_completion_minutes": estimated_completion_minutes,
+            "error_message": error_message
+        })
+        
+        # Send Redis pub/sub update
+        publish_progress_sync(
+            contract_id,
+            WebSocketEvents.ANALYSIS_PROGRESS,
+            {
+                "progress": progress_percent,
+                "current_step": current_step,
+                "step_description": step_description,
+                "estimated_completion_minutes": estimated_completion_minutes
+            }
+        )
+        
+        logger.info(f"Progress updated: {current_step} ({progress_percent}%) for analysis {analysis_id}")
+        
+    except Exception as e:
+        logger.error(f"Failed to update progress for analysis {analysis_id}: {str(e)}")
+
+
+@celery_app.task(
+    bind=True,
+    autoretry_for=(Exception,),
+    retry_kwargs={"max_retries": 3, "countdown": 60},
+)
+@user_aware_task
+async def comprehensive_document_analysis(
+    self,
+    document_id: str,
+    analysis_id: str,
+    contract_id: str,
+    user_id: str,
+    analysis_options: Dict[str, Any],
+):
+    """
+    Comprehensive document processing and analysis with detailed progress tracking.
+    
+    This task combines:
+    1. Document processing (text extraction, OCR, page analysis)
+    2. Contract analysis (AI workflow)
+    3. Real-time progress updates
+    4. Result caching
+    """
+    try:
+        # Verify user context matches expected user
+        context_user_id = AuthContext.get_user_id()
+        if context_user_id != user_id:
+            raise ValueError(
+                f"User context mismatch: expected {user_id}, got {context_user_id}"
+            )
+
+        logger.info(
+            f"Starting comprehensive analysis for user {user_id}, document {document_id}, analysis {analysis_id}"
+        )
+
+        async with langsmith_session(
+            "comprehensive_document_analysis",
+            document_id=document_id,
+            analysis_id=analysis_id,
+            contract_id=contract_id,
+            user_id=user_id,
+        ):
+            
+            # Initialize services
+            document_service = DocumentService()
+            await document_service.initialize()
+            user_client = await document_service.get_user_client()
+
+            # Get document record
+            doc_result = await user_client.database.select(
+                "documents", columns="*", filters={"id": document_id}
+            )
+            if not doc_result.get("data"):
+                raise Exception("Document not found or access denied")
+            document = doc_result["data"][0]
+
+            # =============================================
+            # PHASE 1: DOCUMENT PROCESSING (0-75%)
+            # =============================================
+            
+            # Step 1: Text Extraction (0-25%)
+            await update_analysis_progress(
+                user_id, analysis_id, contract_id,
+                progress_percent=5,
+                current_step="text_extraction",
+                step_description="Extracting text from document...",
+                estimated_completion_minutes=3
+            )
+            
+            # Extract text with comprehensive analysis
+            extraction_result = await document_service._extract_text_with_comprehensive_analysis(
+                document_id=document_id,
+                storage_path=document["storage_path"],
+                file_type=document["file_type"],
+            )
+            
+            if not extraction_result.get("success"):
+                error_msg = f"Text extraction failed: {extraction_result.get('error', 'Unknown error')}"
+                await update_analysis_progress(
+                    user_id, analysis_id, contract_id,
+                    progress_percent=0,
+                    current_step="text_extraction",
+                    step_description="Text extraction failed",
+                    error_message=error_msg
+                )
+                raise Exception(error_msg)
+            
+            await update_analysis_progress(
+                user_id, analysis_id, contract_id,
+                progress_percent=PROGRESS_STAGES["document_processing"]["text_extraction"],
+                current_step="text_extraction",
+                step_description="Text extraction completed successfully",
+                estimated_completion_minutes=2
+            )
+            
+            # Step 2: Page Analysis (25-50%)
+            await update_analysis_progress(
+                user_id, analysis_id, contract_id,
+                progress_percent=30,
+                current_step="page_analysis",
+                step_description="Analyzing document pages and content...",
+                estimated_completion_minutes=2
+            )
+            
+            # Save page data to database
+            await document_service._save_document_pages(document_id, extraction_result)
+            
+            await update_analysis_progress(
+                user_id, analysis_id, contract_id,
+                progress_percent=PROGRESS_STAGES["document_processing"]["page_analysis"],
+                current_step="page_analysis", 
+                step_description="Page analysis completed successfully",
+                estimated_completion_minutes=2
+            )
+            
+            # Step 3: Diagram Detection (50-60%)
+            await update_analysis_progress(
+                user_id, analysis_id, contract_id,
+                progress_percent=55,
+                current_step="diagram_detection",
+                step_description="Detecting and analyzing diagrams...",
+                estimated_completion_minutes=1
+            )
+            
+            # Process diagrams
+            await document_service._save_document_diagrams(document_id, extraction_result)
+            
+            await update_analysis_progress(
+                user_id, analysis_id, contract_id,
+                progress_percent=PROGRESS_STAGES["document_processing"]["diagram_detection"],
+                current_step="diagram_detection",
+                step_description="Diagram detection completed",
+                estimated_completion_minutes=1
+            )
+            
+            # Step 4: Entity Extraction (60-70%)
+            await update_analysis_progress(
+                user_id, analysis_id, contract_id,
+                progress_percent=65,
+                current_step="entity_extraction",
+                step_description="Extracting key entities and terms...",
+                estimated_completion_minutes=1
+            )
+            
+            # Update document metrics
+            diagram_result = document_service._aggregate_diagram_detections(extraction_result)
+            await document_service._update_document_metrics(
+                document_id, extraction_result, diagram_result
+            )
+            
+            await update_analysis_progress(
+                user_id, analysis_id, contract_id,
+                progress_percent=PROGRESS_STAGES["document_processing"]["entity_extraction"],
+                current_step="entity_extraction",
+                step_description="Entity extraction completed",
+                estimated_completion_minutes=1
+            )
+            
+            # Step 5: Document Processing Complete (70-75%)
+            await user_client.database.update(
+                "documents",
+                {"id": document_id},
+                {"processing_status": "basic_complete"}
+            )
+            
+            await update_analysis_progress(
+                user_id, analysis_id, contract_id,
+                progress_percent=PROGRESS_STAGES["document_processing"]["document_complete"],
+                current_step="document_complete",
+                step_description="Document processing completed successfully",
+                estimated_completion_minutes=1
+            )
+            
+            # =============================================
+            # PHASE 2: CONTRACT ANALYSIS (75-100%)
+            # =============================================
+            
+            # Step 6: Contract Analysis Start (75-80%)
+            await update_analysis_progress(
+                user_id, analysis_id, contract_id,
+                progress_percent=PROGRESS_STAGES["contract_analysis"]["analysis_start"],
+                current_step="contract_analysis",
+                step_description="Starting AI contract analysis...",
+                estimated_completion_minutes=1
+            )
+            
+            # Initialize contract workflow
+            from app.core.config import get_settings
+            settings = get_settings()
+            contract_workflow = ContractAnalysisWorkflow(
+                openai_api_key=settings.openai_api_key,
+                model_name="gpt-4",
+                openai_api_base=settings.openai_api_base,
+            )
+            
+            # Update analysis status
+            await user_client.database.update(
+                "contract_analyses", 
+                {"id": analysis_id}, 
+                {"status": "processing"}
+            )
+            
+            # Step 7: Workflow Processing (80-90%)
+            await update_analysis_progress(
+                user_id, analysis_id, contract_id,
+                progress_percent=85,
+                current_step="workflow_processing",
+                step_description="AI is analyzing your contract for risks and compliance...",
+                estimated_completion_minutes=1
+            )
+            
+            # Get contract details
+            contract_result = await user_client.database.select(
+                "contracts", columns="*", filters={"id": contract_id}
+            )
+            contract_data = contract_result["data"][0] if contract_result.get("data") else {}
+            
+            # Create contract analysis state
+            contract_state = create_initial_state(
+                document_path=document["storage_path"],
+                contract_type=ContractType(contract_data.get("contract_type", "purchase_agreement")),
+                australian_state=AustralianState(contract_data.get("australian_state", "NSW")),
+                analysis_options=analysis_options
+            )
+            
+            # Execute contract analysis workflow
+            analysis_result = await contract_workflow.run_analysis(contract_state)
+            
+            await update_analysis_progress(
+                user_id, analysis_id, contract_id,
+                progress_percent=PROGRESS_STAGES["contract_analysis"]["workflow_processing"],
+                current_step="workflow_processing",
+                step_description="Contract analysis completed, preparing results...",
+                estimated_completion_minutes=0
+            )
+            
+            # Step 8: Results Caching (90-95%)
+            await update_analysis_progress(
+                user_id, analysis_id, contract_id,
+                progress_percent=PROGRESS_STAGES["contract_analysis"]["results_caching"],
+                current_step="results_caching",
+                step_description="Caching results for future use...",
+                estimated_completion_minutes=0
+            )
+            
+            # Save analysis results
+            analysis_update = {
+                "status": "completed",
+                "analysis_result": analysis_result.get("analysis", {}),
+                "risk_score": analysis_result.get("risk_score", 0.0),
+                "processing_time": (datetime.now(timezone.utc) - datetime.fromisoformat(
+                    doc_result["data"][0]["created_at"].replace("Z", "+00:00")
+                )).total_seconds(),
+                "processing_completed_at": datetime.now(timezone.utc).isoformat()
+            }
+            
+            await user_client.database.update(
+                "contract_analyses",
+                {"id": analysis_id},
+                analysis_update
+            )
+            
+            # Step 9: Complete (95-100%)
+            await update_analysis_progress(
+                user_id, analysis_id, contract_id,
+                progress_percent=PROGRESS_STAGES["contract_analysis"]["analysis_complete"],
+                current_step="analysis_complete",
+                step_description="Analysis completed successfully! Results are ready to view.",
+                estimated_completion_minutes=0
+            )
+            
+            # Send completion notification
+            publish_progress_sync(
+                contract_id,
+                WebSocketEvents.ANALYSIS_COMPLETE,
+                {
+                    "contract_id": contract_id,
+                    "analysis_id": analysis_id,
+                    "risk_score": analysis_result.get("risk_score", 0.0),
+                    "processing_time": analysis_update["processing_time"]
+                }
+            )
+            
+            logger.info(f"Comprehensive analysis completed successfully for contract {contract_id}")
+            
+    except Exception as e:
+        logger.error(f"Comprehensive analysis failed: {str(e)}", exc_info=True)
+        
+        # Update progress with error
+        try:
+            await update_analysis_progress(
+                user_id, analysis_id, contract_id,
+                progress_percent=0,
+                current_step="failed",
+                step_description="Analysis failed. Please try again or contact support.",
+                error_message=str(e)
+            )
+            
+            # Update analysis record with error
+            user_client = await AuthContext.get_authenticated_client()
+            await user_client.database.update(
+                "contract_analyses",
+                {"id": analysis_id},
+                {
+                    "status": "failed",
+                    "error_message": str(e),
+                    "processing_completed_at": datetime.now(timezone.utc).isoformat()
+                }
+            )
+        except Exception as update_error:
+            logger.error(f"Failed to update error status: {str(update_error)}")
+        
+        # Re-raise for Celery retry logic
+        raise
+
+
 @celery_app.task(
     bind=True,
     autoretry_for=(Exception,),

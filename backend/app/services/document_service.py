@@ -475,6 +475,95 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
                 except Exception as cleanup_error:
                     self.logger.warning(f"Failed to cleanup temp file: {cleanup_error}")
 
+    @langsmith_trace(name="upload_document_fast")
+    async def upload_document_fast(
+        self,
+        file: UploadFile,
+        user_id: str,
+        contract_type: Optional[str] = None,
+        australian_state: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Fast document upload - stores file and creates record only.
+        
+        This method handles only the essential upload operations:
+        1. File validation
+        2. Upload to Supabase Storage
+        3. Create document record with status "uploaded"
+        
+        Processing is handled separately by background tasks.
+        """
+        upload_start = datetime.now(UTC)
+        document_id = None
+        
+        try:
+            # Log user operation
+            self.log_operation("upload_document_fast", "document", None)
+            
+            # Step 1: Validate file (same as before)
+            validation_result = await self._validate_uploaded_file(file)
+            if not validation_result["valid"]:
+                return self._create_error_response(
+                    f"File validation failed: {validation_result['error']}",
+                    upload_start,
+                )
+            
+            # Step 2: Upload to Supabase storage and create document record (USER OPERATION)
+            upload_result = await self._upload_and_create_document_record(
+                file,
+                user_id,
+                validation_result["file_info"],
+                contract_type,
+                australian_state,
+            )
+            
+            if not upload_result["success"]:
+                return self._create_error_response(
+                    upload_result["error"], upload_start
+                )
+            
+            document_id = upload_result["document_id"]
+            
+            # Log successful upload
+            self.log_operation("create", "document", document_id)
+            
+            # Step 3: Mark document as uploaded (not processing)
+            await self._update_document_status(
+                document_id, ProcessingStatus.UPLOADED.value
+            )
+            
+            upload_time = (datetime.now(UTC) - upload_start).total_seconds()
+            
+            self.logger.info(f"Fast upload completed for document {document_id} in {upload_time:.2f}s")
+            
+            return {
+                "success": True,
+                "document_id": document_id,
+                "storage_path": upload_result["storage_path"],
+                "processing_time": upload_time,
+                "status": "uploaded"
+            }
+            
+        except Exception as e:
+            upload_time = (datetime.now(UTC) - upload_start).total_seconds()
+            self.logger.error(f"Fast upload failed: {str(e)}", exc_info=True)
+            
+            # Update document status if it exists (USER OPERATION)
+            if document_id:
+                await self._update_document_status(
+                    document_id,
+                    ProcessingStatus.FAILED.value,
+                    error_details={
+                        "error": str(e),
+                        "timestamp": datetime.now(UTC).isoformat(),
+                        "upload_time": upload_time,
+                    },
+                )
+            
+            return self._create_error_response(
+                f"Upload failed: {str(e)}", upload_start
+            )
+
     async def _upload_and_create_document_record(
         self,
         file: UploadFile,

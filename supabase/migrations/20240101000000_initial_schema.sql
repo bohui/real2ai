@@ -346,25 +346,29 @@ CREATE TABLE analysis_progress (
     analysis_id UUID REFERENCES contract_analyses(id) ON DELETE CASCADE NOT NULL,
     user_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
     
-    -- Progress tracking
-    current_step TEXT NOT NULL,
-    progress_percent INTEGER NOT NULL DEFAULT 0 CHECK (progress_percent >= 0 AND progress_percent <= 100),
+    -- Progress tracking fields
+    current_step VARCHAR(100) NOT NULL,
+    progress_percent INTEGER DEFAULT 0 CHECK (progress_percent >= 0 AND progress_percent <= 100),
     step_description TEXT,
-    estimated_completion_minutes INTEGER,
+    estimated_completion_minutes INTEGER CHECK (estimated_completion_minutes >= 0),
     
     -- Timing information
-    step_started_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    step_started_at TIMESTAMP WITH TIME ZONE,
     step_completed_at TIMESTAMP WITH TIME ZONE,
-    total_elapsed_seconds INTEGER DEFAULT 0,
+    total_elapsed_seconds INTEGER DEFAULT 0 CHECK (total_elapsed_seconds >= 0),
     
-    -- Status and metadata
-    status TEXT NOT NULL DEFAULT 'in_progress' CHECK (status IN ('in_progress', 'completed', 'failed', 'cancelled')),
+    -- Status and error handling
+    status VARCHAR(50) DEFAULT 'in_progress' CHECK (status IN ('in_progress', 'completed', 'failed', 'cancelled')),
     error_message TEXT,
     metadata JSONB DEFAULT '{}',
     
-    -- Timestamps
+    -- Timestamps (managed by triggers)
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    
+    -- Constraints
+    CONSTRAINT unique_analysis_progress UNIQUE (analysis_id),
+    CONSTRAINT valid_progress_percent CHECK (progress_percent BETWEEN 0 AND 100)
 );
 
 -- Create performance indexes
@@ -464,14 +468,17 @@ GRANT ALL ON document_diagrams TO authenticated;
 GRANT ALL ON document_analyses TO authenticated;
 
 -- Comments for documentation
-COMMENT ON TABLE analysis_progress IS 'Real-time progress tracking for contract analyses with comprehensive timing and status information';
+COMMENT ON TABLE analysis_progress IS 'Real-time progress tracking for document analysis and contract processing';
 COMMENT ON COLUMN analysis_progress.contract_id IS 'Reference to the contract being analyzed';
-COMMENT ON COLUMN analysis_progress.current_step IS 'Current analysis step (validating_input, processing_document, etc.)';
-COMMENT ON COLUMN analysis_progress.progress_percent IS 'Completion percentage (0-100)';
+COMMENT ON COLUMN analysis_progress.analysis_id IS 'Reference to the specific analysis instance';
+COMMENT ON COLUMN analysis_progress.current_step IS 'Current processing step (e.g., text_extraction, contract_analysis)';
+COMMENT ON COLUMN analysis_progress.progress_percent IS 'Progress percentage from 0 to 100';
 COMMENT ON COLUMN analysis_progress.step_description IS 'Human-readable description of current step';
-COMMENT ON COLUMN analysis_progress.estimated_completion_minutes IS 'Estimated minutes to completion';
-COMMENT ON COLUMN analysis_progress.total_elapsed_seconds IS 'Total processing time elapsed';
-COMMENT ON COLUMN analysis_progress.status IS 'Overall status (in_progress, completed, failed, cancelled)';
+COMMENT ON COLUMN analysis_progress.estimated_completion_minutes IS 'Estimated minutes until completion';
+COMMENT ON COLUMN analysis_progress.total_elapsed_seconds IS 'Total time elapsed since analysis started';
+COMMENT ON COLUMN analysis_progress.status IS 'Overall status: in_progress, completed, failed, or cancelled';
+COMMENT ON COLUMN analysis_progress.error_message IS 'Error message if analysis fails';
+COMMENT ON COLUMN analysis_progress.metadata IS 'Additional metadata for progress tracking';
 
 COMMENT ON COLUMN profiles.onboarding_completed IS 'Tracks if user has completed initial onboarding process';
 COMMENT ON COLUMN profiles.onboarding_completed_at IS 'Timestamp when user completed onboarding';
@@ -1316,3 +1323,28 @@ COMMENT ON FUNCTION cleanup_expired_property_data IS 'Removes expired property c
 
 -- Property table triggers
 CREATE TRIGGER update_properties_updated_at BEFORE UPDATE ON properties FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Analysis progress triggers
+CREATE TRIGGER update_analysis_progress_updated_at_trigger
+    BEFORE UPDATE ON analysis_progress
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+-- Create function to automatically update total_elapsed_seconds
+CREATE OR REPLACE FUNCTION calculate_analysis_progress_elapsed_time()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- If step is being completed, calculate elapsed time
+    IF NEW.step_completed_at IS NOT NULL AND OLD.step_completed_at IS NULL THEN
+        NEW.total_elapsed_seconds = COALESCE(OLD.total_elapsed_seconds, 0) + 
+            EXTRACT(EPOCH FROM (NEW.step_completed_at - COALESCE(NEW.step_started_at, NEW.created_at)))::INTEGER;
+    END IF;
+    
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+CREATE TRIGGER calculate_analysis_progress_elapsed_time_trigger
+    BEFORE UPDATE ON analysis_progress
+    FOR EACH ROW
+    EXECUTE FUNCTION calculate_analysis_progress_elapsed_time();
