@@ -4,6 +4,7 @@ Supabase database client implementation.
 
 import logging
 from typing import Any, Dict, List, Optional
+from datetime import datetime
 from supabase import Client
 from postgrest import APIError
 
@@ -17,6 +18,29 @@ from ..base.exceptions import (
 from .config import SupabaseClientConfig
 
 logger = logging.getLogger(__name__)
+
+
+def serialize_datetime_values(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Serialize datetime objects to ISO format strings for JSON compatibility."""
+    if not isinstance(data, dict):
+        return data
+    
+    serialized = {}
+    for key, value in data.items():
+        if isinstance(value, datetime):
+            serialized[key] = value.isoformat()
+        elif isinstance(value, dict):
+            serialized[key] = serialize_datetime_values(value)
+        elif isinstance(value, list):
+            serialized[key] = [
+                item.isoformat() if isinstance(item, datetime)
+                else serialize_datetime_values(item) if isinstance(item, dict)
+                else item
+                for item in value
+            ]
+        else:
+            serialized[key] = value
+    return serialized
 
 
 def is_jwt_expired_error(error: Exception) -> bool:
@@ -107,9 +131,11 @@ class SupabaseDatabaseClient(DatabaseOperations):
     async def create(self, table: str, data: Dict[str, Any]) -> Dict[str, Any]:
         """Create a new record in the specified table."""
         try:
-            self.logger.debug(f"Creating record in table '{table}': {data}")
+            # Serialize datetime objects to ISO format strings
+            serialized_data = serialize_datetime_values(data)
+            self.logger.debug(f"Creating record in table '{table}': {serialized_data}")
 
-            result = self.supabase_client.table(table).insert(data).execute()
+            result = self.supabase_client.table(table).insert(serialized_data).execute()
 
             if result.data and len(result.data) > 0:
                 created_record = result.data[0]
@@ -207,11 +233,13 @@ class SupabaseDatabaseClient(DatabaseOperations):
     ) -> Dict[str, Any]:
         """Update a record in the specified table."""
         try:
-            self.logger.debug(f"Updating record {record_id} in table '{table}': {data}")
+            # Serialize datetime objects to ISO format strings
+            serialized_data = serialize_datetime_values(data)
+            self.logger.debug(f"Updating record {record_id} in table '{table}': {serialized_data}")
 
             result = (
                 self.supabase_client.table(table)
-                .update(data)
+                .update(serialized_data)
                 .eq("id", record_id)
                 .execute()
             )
@@ -304,9 +332,11 @@ class SupabaseDatabaseClient(DatabaseOperations):
     ) -> Dict[str, Any]:
         """Insert or update a record based on conflict resolution."""
         try:
-            self.logger.debug(f"Upserting record in table '{table}': {data}")
+            # Serialize datetime objects to ISO format strings
+            serialized_data = serialize_datetime_values(data)
+            self.logger.debug(f"Upserting record in table '{table}': {serialized_data}")
 
-            query = self.supabase_client.table(table).upsert(data)
+            query = self.supabase_client.table(table).upsert(serialized_data)
 
             # Add conflict resolution if specified
             if conflict_columns:
@@ -349,12 +379,14 @@ class SupabaseDatabaseClient(DatabaseOperations):
     ) -> Any:
         """Execute a remote procedure call or stored function."""
         try:
+            # Serialize datetime objects in parameters
+            serialized_params = serialize_datetime_values(params) if params else None
             self.logger.debug(
-                f"Executing RPC function '{function_name}' with params: {params}"
+                f"Executing RPC function '{function_name}' with params: {serialized_params}"
             )
 
-            if params:
-                result = self.supabase_client.rpc(function_name, params).execute()
+            if serialized_params:
+                result = self.supabase_client.rpc(function_name, serialized_params).execute()
             else:
                 result = self.supabase_client.rpc(function_name).execute()
 
