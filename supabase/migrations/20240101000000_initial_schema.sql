@@ -598,11 +598,9 @@ LEFT JOIN documents d ON ucv.content_hash = d.content_hash AND d.user_id = ucv.u
 CREATE OR REPLACE VIEW user_property_history AS
 SELECT 
     upv.*,
-    hpc.analysis_result,
-    hpc.popularity_score,
-    hpc.access_count
+    pd.analysis_result
 FROM user_property_views upv
-LEFT JOIN hot_properties_cache hpc ON upv.property_hash = hpc.property_hash;
+LEFT JOIN property_data pd ON upv.property_hash = pd.property_hash;
 
 -- Grant permissions on views
 GRANT SELECT ON user_contract_history TO authenticated;
@@ -617,29 +615,17 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Comments for improved cache architecture
-COMMENT ON TABLE hot_properties_cache IS 'Shared cache for property analysis results with TTL expiration';
-COMMENT ON TABLE hot_contracts_cache IS 'Shared cache for contract analysis results with TTL expiration';
+-- Comments for user view tables
 COMMENT ON TABLE user_property_views IS 'User''s property search history with RLS for privacy';
 COMMENT ON TABLE user_contract_views IS 'User''s contract analysis history with RLS for privacy';
-
-COMMENT ON COLUMN hot_properties_cache.property_hash IS 'SHA-256 hash of normalized property address';
-COMMENT ON COLUMN hot_properties_cache.popularity_score IS 'Popularity score based on access frequency';
-COMMENT ON COLUMN hot_properties_cache.expires_at IS 'Cache expiration timestamp (typically 1-3 days)';
-
-COMMENT ON COLUMN hot_contracts_cache.content_hash IS 'SHA-256 hash of document content - primary cache key';
-COMMENT ON COLUMN hot_contracts_cache.access_count IS 'Number of times this cached analysis was accessed';
-COMMENT ON COLUMN hot_contracts_cache.expires_at IS 'Cache expiration timestamp (typically 1-3 days)';
 
 -- Cache architecture improvements:
 -- 1. Simplified to use only content_hash (removed document_hash redundancy)
 -- 2. Primary indexes on content_hash for fast cache lookups
 -- 3. Secondary indexes on document_id for user-specific operations
 -- 4. Composite indexes for efficient cache + user queries
-COMMENT ON FUNCTION cleanup_expired_cache IS 'Removes expired cache entries and returns deletion counts';
 COMMENT ON FUNCTION normalize_address IS 'Normalizes address strings for consistent hashing';
 COMMENT ON FUNCTION generate_property_hash IS 'Generates consistent hash for property addresses';
-COMMENT ON FUNCTION process_contract_cache_hit IS 'Creates user records from cached analysis (simplified content_hash only)';
 
 -- Property intelligence function comments
 COMMENT ON FUNCTION find_or_create_property IS 'Finds existing property or creates new one by address';

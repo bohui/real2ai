@@ -847,9 +847,8 @@ class UserPropertyHistory(BaseModel):
     source: ViewSource
     created_at: Optional[datetime] = None
 
-    # From hot_properties_cache
+    # From property_data table
     analysis_result: Optional[Dict[str, Any]] = None
-    popularity_score: Optional[int] = None
     access_count: Optional[int] = None
 
     class Config:

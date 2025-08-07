@@ -112,13 +112,13 @@ class CacheManager:
                     else:
                         warnings.append(f"Minor hash inconsistency in {table}: {percentage}%")
             
-            # Check cache sizes
+            # Check source table sizes
             stats = await self.cache_service.get_cache_stats()
-            total_cached = (stats.get("contracts", {}).get("total_cached", 0) + 
-                          stats.get("properties", {}).get("total_cached", 0))
+            total_analyses = (stats.get("contract_analyses", {}).get("total", 0) + 
+                            stats.get("property_data", {}).get("total", 0))
             
-            if total_cached == 0:
-                warnings.append("No active cache entries found")
+            if total_analyses == 0:
+                warnings.append("No analysis data found in source tables")
             
             return {
                 "status": "healthy" if not issues else ("warning" if not issues and warnings else "critical"),
@@ -139,25 +139,24 @@ class CacheManager:
             }
 
     async def list_popular_content(self, limit: int = 20) -> Dict[str, List[Dict[str, Any]]]:
-        """List most popular cached content."""
+        """List most frequently accessed content from source tables."""
         self._ensure_initialized()
         
         try:
-            # Get popular contracts
+            # Get frequently accessed contracts from source table
             popular_contracts = await self.cache_service.db_client.database.select(
-                "hot_contracts_cache",
-                columns="content_hash, property_address, access_count, created_at, expires_at",
-                filters={"expires_at__gte": datetime.utcnow().isoformat()},
-                order={"access_count": "desc"},
+                "contract_analyses",
+                columns="content_hash, property_address, created_at",
+                filters={"status": "completed"},
+                order={"created_at": "desc"},
                 limit=limit
             )
             
-            # Get popular properties
+            # Get property data from source table
             popular_properties = await self.cache_service.db_client.database.select(
-                "hot_properties_cache", 
-                columns="property_hash, property_address, popularity_score, access_count, created_at, expires_at",
-                filters={"expires_at__gte": datetime.utcnow().isoformat()},
-                order={"popularity_score": "desc"},
+                "property_data", 
+                columns="property_hash, property_address, created_at",
+                order={"created_at": "desc"},
                 limit=limit
             )
             
@@ -171,35 +170,15 @@ class CacheManager:
             return {"popular_contracts": [], "popular_properties": []}
 
     async def purge_cache(self, cache_type: Optional[str] = None, confirm: bool = False) -> Dict[str, int]:
-        """Purge cache entries (use with caution)."""
+        """No longer applicable - cache tables removed. Using direct source access."""
         self._ensure_initialized()
         
-        if not confirm:
-            raise ValueError("Cache purge requires explicit confirmation (confirm=True)")
-        
-        try:
-            deleted_counts = {"contracts": 0, "properties": 0}
-            
-            if cache_type in [None, "contracts"]:
-                # Delete all contract cache entries
-                await self.cache_service.db_client.database.delete(
-                    "hot_contracts_cache", filters={}
-                )
-                deleted_counts["contracts"] = "all"
-            
-            if cache_type in [None, "properties"]:
-                # Delete all property cache entries
-                await self.cache_service.db_client.database.delete(
-                    "hot_properties_cache", filters={}
-                )
-                deleted_counts["properties"] = "all"
-            
-            logger.info(f"Cache purge completed: {deleted_counts}")
-            return deleted_counts
-            
-        except Exception as e:
-            logger.error(f"Error purging cache: {str(e)}")
-            raise
+        logger.info("Cache purge not applicable - using direct source table access (no cache tables)")
+        return {
+            "contracts": 0, 
+            "properties": 0,
+            "message": "Cache tables removed - using direct source access"
+        }
 
     async def monitor_performance(self, duration_minutes: int = 5) -> Dict[str, Any]:
         """Monitor cache performance over time."""
@@ -327,13 +306,13 @@ async def main():
             result = await cache_manager.list_popular_content(args.limit)
             print("=== Popular Cached Content ===")
             
-            print("\nTop Contracts:")
+            print("\nRecent Contracts:")
             for contract in result['popular_contracts'][:10]:
-                print(f"  {contract.get('property_address', 'Unknown')} - {contract['access_count']} accesses")
+                print(f"  {contract.get('property_address', 'Unknown')} - {contract.get('created_at', 'N/A')}")
             
-            print("\nTop Properties:")
+            print("\nRecent Properties:")
             for prop in result['popular_properties'][:10]:
-                print(f"  {prop['property_address']} - Score: {prop['popularity_score']}")
+                print(f"  {prop.get('property_address', 'Unknown')} - {prop.get('created_at', 'N/A')}")
 
         elif args.command == "purge":
             if not args.confirm:
