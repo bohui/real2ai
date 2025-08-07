@@ -79,6 +79,11 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
   recentAnalyses: [],
 
   uploadDocument: async (file: File, contractType: string, state: string) => {
+    console.log("🚀 Starting upload process...", {
+      filename: file.name,
+      contractType,
+      state,
+    });
     set({
       isUploading: true,
       uploadProgress: 0,
@@ -89,6 +94,7 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
     try {
       // Listen for upload progress
       const handleProgress = (event: any) => {
+        console.log("📊 Upload progress:", event.detail.progress);
         set({ uploadProgress: event.detail.progress });
       };
       window.addEventListener(
@@ -102,9 +108,12 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
         contractType,
         state,
       );
+      console.log("✅ Upload API response:", response);
 
       // Get document details
+      console.log("📄 Fetching document details...");
       const document = await apiService.getDocument(response.document_id);
+      console.log("✅ Document details fetched:", document);
 
       set({
         currentDocument: document,
@@ -119,11 +128,28 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
 
       // 🎆 KEY CHANGE: Connect WebSocket IMMEDIATELY after upload
       console.log("🔌 Connecting WebSocket immediately after upload...");
+      console.log("📋 Document ID for WebSocket:", response.document_id);
+      console.log("🔍 Current store state before WebSocket connection:", {
+        currentDocumentId: get().currentDocumentId,
+        wsService: get().wsService ? "exists" : "null",
+        isConnected: get().wsService?.isWebSocketConnected() || false,
+      });
+
       try {
         await get().connectDocumentWebSocket(response.document_id);
         console.log("✅ WebSocket connected successfully after upload");
+        console.log("🔍 Store state after WebSocket connection:", {
+          currentDocumentId: get().currentDocumentId,
+          wsService: get().wsService ? "exists" : "null",
+          isConnected: get().wsService?.isWebSocketConnected() || false,
+        });
       } catch (wsError) {
         console.error("❌ WebSocket connection failed after upload:", wsError);
+        console.error("🔍 WebSocket error details:", {
+          error: wsError,
+          message: wsError instanceof Error ? wsError.message : String(wsError),
+          stack: wsError instanceof Error ? wsError.stack : undefined,
+        });
         // Don't fail the upload, just show a warning
         set({
           analysisError:
@@ -137,6 +163,12 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
 
       return response.document_id;
     } catch (error: unknown) {
+      console.error("❌ Upload process failed:", error);
+      console.error("🔍 Upload error details:", {
+        error,
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
       set({
         isUploading: false,
         uploadProgress: 0,
@@ -196,6 +228,11 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
     console.log(
       `🔌 Attempting to connect WebSocket for document: ${documentId}`,
     );
+    console.log("🔍 Initial state check:", {
+      currentDocumentId: state.currentDocumentId,
+      wsService: state.wsService ? "exists" : "null",
+      isConnected: state.wsService?.isWebSocketConnected() || false,
+    });
 
     // Validate document ID
     if (!documentId || documentId.trim() === "") {
@@ -221,27 +258,40 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
     console.log(
       "🏠 Creating new WebSocket connection via connection manager...",
     );
+    console.log("🔍 Connection manager state before creation:", {
+      activeConnections: wsConnectionManager.getActiveConnections(),
+      existingConnection: wsConnectionManager.getConnection(documentId)
+        ? "exists"
+        : "null",
+    });
+
     const wsService = wsConnectionManager.createConnection(documentId);
+    console.log("✅ WebSocket service created:", {
+      serviceExists: !!wsService,
+      serviceState: wsService.getConnectionState(),
+    });
 
     // Create event handler with proper cleanup
     const handleUpdate = (event: any) => {
       const data = event.detail;
 
       console.log(
-        `Processing WebSocket event for document ${documentId}:`,
+        `📨 Processing WebSocket event for document ${documentId}:`,
         data.event_type,
+        data,
       );
 
       switch (data.event_type) {
         case "cache_status":
           // Handle initial cache status response
+          console.log("📊 Cache status received:", data.data);
           get().handleCacheStatus(data.data);
           break;
 
         case "document_uploaded":
           // Handle document uploaded event
           console.log(
-            `Document uploaded event received for document ${documentId}:`,
+            `📄 Document uploaded event received for document ${documentId}:`,
             data.data,
           );
           set({
@@ -264,7 +314,7 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
 
         case "connection_established":
           console.log(
-            `WebSocket connection established for document ${documentId}`,
+            `🔗 WebSocket connection established for document ${documentId}`,
           );
           set({
             currentDocumentId: documentId,
@@ -273,21 +323,28 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
           break;
 
         case "analysis_progress":
+          console.log("📈 Analysis progress received:", data.data);
           get().updateProgress(data.data as AnalysisProgressUpdate);
           break;
 
         case "analysis_completed":
+          console.log("✅ Analysis completed event received");
           // Fetch full analysis result
           const contractId = get().currentContractId;
           if (contractId) {
+            console.log(
+              "📄 Fetching analysis result for contract:",
+              contractId,
+            );
             apiService.getAnalysisResult(contractId)
               .then((result) => {
+                console.log("✅ Analysis result fetched:", result);
                 get().setAnalysisResult(result);
                 get().addRecentAnalysis(result);
                 set({ isAnalyzing: false, analysisError: null });
               })
               .catch((error) => {
-                console.error("Failed to fetch analysis result:", error);
+                console.error("❌ Failed to fetch analysis result:", error);
                 set({
                   analysisError: `Failed to load analysis results: ${
                     apiService.handleError(error)
@@ -298,6 +355,7 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
           break;
 
         case "analysis_failed":
+          console.log("❌ Analysis failed event received:", data.data);
           set({
             isAnalyzing: false,
             analysisError: data.data?.error_message || "Analysis failed",
@@ -307,10 +365,11 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
 
         case "heartbeat":
           // Heartbeat received, connection is alive
+          console.log("💓 WebSocket heartbeat received");
           break;
 
         default:
-          console.log("Received WebSocket event:", data.event_type, data);
+          console.log("❓ Unknown WebSocket event:", data.event_type, data);
       }
     };
 
@@ -322,7 +381,14 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
 
     try {
       console.log("🔗 Establishing WebSocket connection...");
+      console.log("🔍 WebSocket service state before connect:", {
+        serviceExists: !!wsService,
+        serviceState: wsService.getConnectionState(),
+        url: wsService.getConnectionState(), // This will show the URL in the state
+      });
+
       await wsService.connect();
+      console.log("✅ WebSocket connection established successfully");
 
       console.log("🎧 Adding document analysis update event listener...");
       window.addEventListener("analysis:update", handleUpdate as EventListener);
@@ -330,11 +396,24 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
       console.log(
         `✅ WebSocket successfully connected and configured for document ${documentId}`,
       );
+      console.log("🔍 Final WebSocket state:", {
+        currentDocumentId: get().currentDocumentId,
+        wsService: get().wsService ? "exists" : "null",
+        isConnected: get().wsService?.isWebSocketConnected() || false,
+        connectionState: get().wsService?.getConnectionState() || "unknown",
+      });
     } catch (error) {
       console.error(
         `❌ WebSocket connection failed for document ${documentId}:`,
         error,
       );
+      console.error("🔍 WebSocket connection error details:", {
+        error,
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        documentId,
+        serviceState: wsService.getConnectionState(),
+      });
 
       // Clean up the failed connection
       wsConnectionManager.removeConnection(documentId);

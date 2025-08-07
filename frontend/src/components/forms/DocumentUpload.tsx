@@ -4,25 +4,16 @@ import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { motion, AnimatePresence } from "framer-motion";
-import {
-  Upload,
-  FileText,
-  X,
-  CheckCircle,
-  AlertCircle,
-} from "lucide-react";
+import { Upload, FileText, X, CheckCircle, AlertCircle } from "lucide-react";
 
 import Button from "@/components/ui/Button";
 import Select from "@/components/ui/Select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { apiService } from "@/services/api";
 import { useAuthStore } from "@/store/authStore";
+import { useAnalysisStore } from "@/store/analysisStore";
 import { useUIStore } from "@/store/uiStore";
-import {
-  formatFileSize,
-  australianStates,
-  cn,
-} from "@/utils";
+import { formatFileSize, australianStates, cn } from "@/utils";
 
 const uploadSchema = z.object({
   contract_type: z.enum([
@@ -64,9 +55,7 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({
 }) => {
   const { user } = useAuthStore();
   const { addNotification } = useUIStore();
-
-  const [isUploading, setIsUploading] = React.useState(false);
-  const [uploadProgress, setUploadProgress] = React.useState(0);
+  const { uploadDocument, isUploading, uploadProgress } = useAnalysisStore();
 
   const [selectedFiles, setSelectedFiles] = React.useState<File[]>([]);
   const [uploadedFiles, setUploadedFiles] = React.useState<
@@ -174,20 +163,20 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({
     }
 
     try {
-      setIsUploading(true);
-      setUploadProgress(0);
-
       for (const file of selectedFiles) {
         setUploadedFiles((prev) => [...prev, { file, status: "uploading" }]);
 
         try {
-          const response = await apiService.uploadDocument(
+          console.log("🚀 Starting upload via store for file:", file.name);
+          const documentId = await uploadDocument(
             file,
             data.contract_type,
             data.australian_state
           );
-
-          const documentId = response.document_id;
+          console.log(
+            "✅ Upload completed via store, document ID:",
+            documentId
+          );
 
           setUploadedFiles((prev) =>
             prev.map((item) =>
@@ -198,6 +187,10 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({
           );
 
           if (onUploadComplete) {
+            console.log(
+              "📞 Calling onUploadComplete with document ID:",
+              documentId
+            );
             onUploadComplete(documentId);
           }
 
@@ -209,6 +202,7 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({
 
           setUploadSuccess(true);
         } catch (error) {
+          console.error("❌ Upload failed for file:", file.name, error);
           setUploadedFiles((prev) =>
             prev.map((item) =>
               item.file === file

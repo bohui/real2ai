@@ -561,19 +561,29 @@ export class WebSocketService {
   private messageQueue: unknown[] = [];
 
   constructor(documentId: string) {
+    console.log("🏗️ Creating WebSocket service for document:", documentId);
+
     // Fix URL construction for both HTTP and HTTPS
     const wsUrl = API_BASE_URL.replace(
       /^https?/,
       API_BASE_URL.startsWith("https") ? "wss" : "ws",
     );
+    console.log("🔗 API_BASE_URL:", API_BASE_URL);
+    console.log("🔗 Converted WebSocket URL:", wsUrl);
+
     const token = localStorage.getItem("auth_token");
+    console.log("🔑 Auth token exists:", !!token);
 
     if (!token || token.trim() === "") {
-      throw new Error("Authentication token not found. Please log in again.");
+      const error = "Authentication token not found. Please log in again.";
+      console.error("❌ WebSocket creation failed:", error);
+      throw new Error(error);
     }
 
     if (!documentId || documentId.trim() === "") {
-      throw new Error("Document ID is required for WebSocket connection.");
+      const error = "Document ID is required for WebSocket connection.";
+      console.error("❌ WebSocket creation failed:", error);
+      throw new Error(error);
     }
 
     this.contractId = documentId; // Store as contractId for backward compatibility in logs
@@ -587,13 +597,22 @@ export class WebSocketService {
         this.url.replace(/token=[^&]+/, "token=[REDACTED]")
       }`,
     );
+    console.log("🔍 WebSocket service configuration:", {
+      documentId,
+      contractId: this.contractId,
+      urlLength: this.url.length,
+      hasToken: this.url.includes("token="),
+      isWss: this.url.startsWith("wss://"),
+      isWs: this.url.startsWith("ws://"),
+    });
   }
 
   connect(): Promise<void> {
     // Prevent multiple connection attempts
     if (this.isConnecting || this.isConnected) {
       console.log(
-        `WebSocket already connecting/connected for contract ${this.contractId}`,
+        `🔍 WebSocket already connecting/connected for contract ${this.contractId}`,
+        { isConnecting: this.isConnecting, isConnected: this.isConnected }
       );
       return Promise.resolve();
     }
@@ -617,11 +636,12 @@ export class WebSocketService {
     return new Promise((resolve, reject) => {
       try {
         this.isConnecting = true;
+        console.log(`🔗 Starting WebSocket connection for ${this.contractId}...`);
 
         // Close existing connection if any
         if (this.ws) {
           console.log(
-            `Closing existing WebSocket for contract ${this.contractId}`,
+            `🧽 Closing existing WebSocket for contract ${this.contractId}`,
           );
           this.ws.close(1000, "Reconnecting");
           this.ws = null;
@@ -633,7 +653,7 @@ export class WebSocketService {
         }
 
         console.log(
-          `Creating new WebSocket connection for contract ${this.contractId}: ${this.url}`,
+          `🏗️ Creating new WebSocket connection for contract ${this.contractId}: ${this.url.replace(/token=[^&]+/, "token=[REDACTED]")}`,
         );
         this.ws = new WebSocket(this.url);
 
@@ -655,91 +675,64 @@ export class WebSocketService {
           // Request initial status after a brief delay to ensure connection is stable
           setTimeout(() => {
             if (this.isConnected && this.ws?.readyState === WebSocket.OPEN) {
+              console.log("📡 Requesting initial status via WebSocket...");
               this.sendMessage({ type: "get_status" });
             }
-          }, 100);
+          }, 1000);
 
           resolve();
         };
 
         this.ws.onmessage = (event) => {
+          console.log(`📨 WebSocket message received for ${this.contractId}:`, event.data);
           try {
-            const data = JSON.parse(event.data);
-            console.log(
-              `WebSocket message received for contract ${this.contractId}:`,
-              data.event_type,
-            );
-
-            // Validate message structure
-            if (!data.event_type) {
-              console.warn(
-                `Invalid WebSocket message format for contract ${this.contractId}:`,
-                data,
-              );
-              return;
-            }
-
-            // Emit custom event for components to listen to
+            const message = JSON.parse(event.data);
+            console.log(`📨 Parsed WebSocket message:`, message);
+            
+            // Emit custom event for the store to handle
             window.dispatchEvent(
               new CustomEvent("analysis:update", {
-                detail: data,
-              }),
+                detail: message,
+              })
             );
           } catch (error) {
-            console.error(
-              `Error parsing WebSocket message for contract ${this.contractId}:`,
-              error,
-              event.data,
-            );
-          }
-        };
-
-        this.ws.onclose = (event) => {
-          console.log(
-            `🔌 WebSocket disconnected for contract ${this.contractId}: code=${event.code}, reason=${
-              event.reason || "No reason"
-            }`,
-          );
-          console.log(`📊 Connection state: connecting=false, connected=false`);
-          this.isConnecting = false;
-          this.isConnected = false;
-
-          // Only reconnect if it wasn't a clean disconnect (1000) and we haven't exceeded max attempts
-          if (
-            event.code !== 1000 &&
-            event.code !== 1001 && // Going away
-            this.reconnectAttempts < this.maxReconnectAttempts
-          ) {
-            this.reconnect();
+            console.error("❌ Failed to parse WebSocket message:", error, event.data);
           }
         };
 
         this.ws.onerror = (error) => {
-          console.error(
-            `❌ WebSocket connection error for contract ${this.contractId}:`,
-            error,
-          );
-          console.error(
-            `🔗 Failed URL: ${
-              this.url.replace(/token=[^&]+/, "token=[REDACTED]")
-            }`,
-          );
-          console.error(
-            `📊 Connection state: connecting=${this.isConnecting}, connected=${this.isConnected}`,
-          );
-
+          console.error(`❌ WebSocket error for ${this.contractId}:`, error);
           this.isConnecting = false;
-          this.isConnected = false;
-
-          // Create a more descriptive error
-          const errorMessage = error instanceof Event
-            ? `WebSocket connection failed (Check network, authentication, and server status)`
-            : `WebSocket error: ${error}`;
-          reject(new Error(errorMessage));
+          reject(new Error(`WebSocket connection error: ${String(error)}`));
         };
+
+        this.ws.onclose = (event) => {
+          console.log(`🔌 WebSocket closed for ${this.contractId}:`, {
+            code: event.code,
+            reason: event.reason,
+            wasClean: event.wasClean
+          });
+          this.isConnected = false;
+          this.isConnecting = false;
+          
+          if (this.heartbeatInterval) {
+            clearInterval(this.heartbeatInterval);
+            this.heartbeatInterval = null;
+          }
+
+          // Attempt reconnection if not manually closed
+          if (event.code !== 1000 && this.reconnectAttempts < this.maxReconnectAttempts) {
+            console.log(`🔄 Attempting to reconnect WebSocket for ${this.contractId}...`);
+            this.reconnectAttempts++;
+            setTimeout(() => {
+              this.reconnect();
+            }, this.reconnectDelay * this.reconnectAttempts);
+          }
+        };
+
       } catch (error) {
+        console.error(`❌ Failed to create WebSocket for ${this.contractId}:`, error);
         this.isConnecting = false;
-        this.isConnected = false;
         reject(error);
       }
     });
@@ -816,27 +809,27 @@ export class WebSocketService {
       try {
         const messageStr = JSON.stringify(message);
         console.log(
-          `Sending WebSocket message for contract ${this.contractId}:`,
-          message.type,
+          `📤 Sending WebSocket message for contract ${this.contractId}:`,
+          (message as any)?.type || "unknown",
         );
         this.ws.send(messageStr);
       } catch (error) {
         console.error(
-          `Error sending WebSocket message for contract ${this.contractId}:`,
+          `❌ Error sending WebSocket message for contract ${this.contractId}:`,
           error,
         );
         // Queue message for retry only if it's not a heartbeat
-        if (message.type !== "heartbeat") {
+        if ((message as any)?.type !== "heartbeat") {
           this.messageQueue.push(message);
         }
       }
     } else {
       console.warn(
-        `WebSocket not connected for contract ${this.contractId} (state: ${this.getConnectionState()}), queueing message:`,
-        message.type,
+        `⚠️ WebSocket not connected for contract ${this.contractId} (state: ${this.getConnectionState()}), queueing message:`,
+        (message as any)?.type || "unknown",
       );
       // Queue non-heartbeat messages for when connection is established
-      if (message.type !== "heartbeat") {
+      if ((message as any)?.type !== "heartbeat") {
         this.messageQueue.push(message);
       }
     }
@@ -845,7 +838,9 @@ export class WebSocketService {
   private processMessageQueue(): void {
     while (this.messageQueue.length > 0 && this.isConnected) {
       const message = this.messageQueue.shift();
-      this.sendMessage(message);
+      if (message) {
+        this.sendMessage(message);
+      }
     }
   }
 
