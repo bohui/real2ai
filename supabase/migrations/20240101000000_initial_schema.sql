@@ -508,8 +508,7 @@ GRANT ALL ON document_analyses TO authenticated;
 
 -- Comments for documentation
 COMMENT ON TABLE analysis_progress IS 'Real-time progress tracking for document analysis and contract processing';
-COMMENT ON COLUMN analysis_progress.contract_id IS 'Reference to the contract being analyzed';
-COMMENT ON COLUMN analysis_progress.analysis_id IS 'Reference to the specific analysis instance';
+COMMENT ON COLUMN analysis_progress.content_hash IS 'Content hash linking to shared analysis resources';
 COMMENT ON COLUMN analysis_progress.current_step IS 'Current processing step (e.g., text_extraction, contract_analysis)';
 COMMENT ON COLUMN analysis_progress.progress_percent IS 'Progress percentage from 0 to 100';
 COMMENT ON COLUMN analysis_progress.step_description IS 'Human-readable description of current step';
