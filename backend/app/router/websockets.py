@@ -865,10 +865,9 @@ async def handle_cancellation_request(
 
         content_hash = doc_result["data"][0].get("content_hash")
 
-        # Update analysis_progress status to cancelled
-        await user_client.database.update(
+        # Find and update analysis_progress records that match the filters
+        progress_records = await user_client.database.read(
             "analysis_progress",
-            {"status": "cancelled", "error_message": "Analysis cancelled by user"},
             filters={
                 "content_hash": content_hash,
                 "user_id": user_id,
@@ -876,12 +875,27 @@ async def handle_cancellation_request(
             },
         )
 
-        # Update contract_analyses status to cancelled if still processing
-        await user_client.database.update(
+        # Update each matching progress record
+        for record in progress_records:
+            await user_client.database.update(
+                "analysis_progress",
+                record["id"],
+                {"status": "cancelled", "error_message": "Analysis cancelled by user"},
+            )
+
+        # Find and update contract_analyses records that match the filters
+        analysis_records = await user_client.database.read(
             "contract_analyses",
-            {"status": "cancelled", "error_details": {"cancelled_by_user": True}},
             filters={"content_hash": content_hash, "status": "pending"},
         )
+
+        # Update each matching analysis record
+        for record in analysis_records:
+            await user_client.database.update(
+                "contract_analyses",
+                record["id"],
+                {"status": "cancelled", "error_details": {"cancelled_by_user": True}},
+            )
 
         # Try to cancel the Celery task if we can find it
         try:

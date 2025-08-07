@@ -97,7 +97,7 @@ async def update_analysis_progress(
         publish_progress_sync(
             content_hash,
             {
-                "type": "analysis_progress", 
+                "type": "analysis_progress",
                 "content_hash": content_hash,
                 "progress": progress_percent,
                 "current_step": current_step,
@@ -111,7 +111,9 @@ async def update_analysis_progress(
         )
 
     except Exception as e:
-        logger.error(f"Failed to update progress for content_hash {content_hash}: {str(e)}")
+        logger.error(
+            f"Failed to update progress for content_hash {content_hash}: {str(e)}"
+        )
 
 
 @celery_app.task(
@@ -169,11 +171,15 @@ async def comprehensive_document_analysis(
             if not doc_result.get("data"):
                 raise Exception("Document not found or access denied")
             document = doc_result["data"][0]
-            
+
             # Get content_hash for progress tracking
-            content_hash = analysis_options.get("content_hash") or document.get("content_hash")
+            content_hash = analysis_options.get("content_hash") or document.get(
+                "content_hash"
+            )
             if not content_hash:
-                raise Exception("Content hash not found in document or analysis options")
+                raise Exception(
+                    "Content hash not found in document or analysis options"
+                )
 
             # =============================================
             # PHASE 1: DOCUMENT PROCESSING (0-75%)
@@ -303,7 +309,7 @@ async def comprehensive_document_analysis(
             # Step 5: Document Processing Complete (70-75%)
             await user_client.database.update(
                 "documents",
-                {"id": document_id},
+                document_id,
                 {"processing_status": "basic_complete"},
             )
 
@@ -344,7 +350,7 @@ async def comprehensive_document_analysis(
 
             # Update analysis status
             await user_client.database.update(
-                "contract_analyses", {"id": analysis_id}, {"status": "processing"}
+                "contract_analyses", analysis_id, {"status": "processing"}
             )
 
             # Step 7: Workflow Processing (80-90%)
@@ -418,7 +424,7 @@ async def comprehensive_document_analysis(
             }
 
             await user_client.database.update(
-                "contract_analyses", {"id": analysis_id}, analysis_update
+                "contract_analyses", analysis_id, analysis_update
             )
 
             # Step 9: Complete (95-100%)
@@ -467,7 +473,7 @@ async def comprehensive_document_analysis(
             user_client = await AuthContext.get_authenticated_client()
             await user_client.database.update(
                 "contract_analyses",
-                {"id": analysis_id},
+                analysis_id,
                 {
                     "status": "failed",
                     "error_message": str(e),
