@@ -168,20 +168,31 @@ export function usePageSEO(
   const { updateGlobalSEO, updateDynamicSEO, currentSEO, isLoading } =
     useSEOContext();
 
-  // Since context functions are now stable, we can use them directly
-  // Update SEO with static data on mount
+  // Use refs to track previous values and only update when content actually changes
+  const prevStaticSEORef = useRef<string>();
+  const prevDynamicDataRef = useRef<string>();
+
+  // Update SEO with static data only when content actually changes
   useEffect(() => {
     if (staticSEO && Object.keys(staticSEO).length > 0) {
-      updateGlobalSEO(staticSEO);
+      const staticSEOString = JSON.stringify(staticSEO);
+      if (staticSEOString !== prevStaticSEORef.current) {
+        prevStaticSEORef.current = staticSEOString;
+        updateGlobalSEO(staticSEO);
+      }
     }
-  }, [staticSEO]); // Only depend on staticSEO since updateGlobalSEO is stable
+  }); // No dependency array - runs every render but only updates when content changes
 
-  // Update SEO with dynamic data when it changes
+  // Update SEO with dynamic data only when content actually changes
   useEffect(() => {
     if (dynamicData && Object.keys(dynamicData).length > 0) {
-      updateDynamicSEO(dynamicData);
+      const dynamicDataString = JSON.stringify(dynamicData);
+      if (dynamicDataString !== prevDynamicDataRef.current) {
+        prevDynamicDataRef.current = dynamicDataString;
+        updateDynamicSEO(dynamicData);
+      }
     }
-  }, [dynamicData]); // Only depend on dynamicData since updateDynamicSEO is stable
+  }); // No dependency array - runs every render but only updates when content changes
 
   const convenienceMethods = useMemo(
     () => ({
