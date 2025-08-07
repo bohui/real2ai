@@ -385,12 +385,11 @@ CREATE INDEX idx_documents_has_diagrams ON documents(has_diagrams);
 CREATE INDEX idx_documents_content_hash ON documents(content_hash);
 CREATE INDEX idx_documents_created_at ON documents(created_at DESC);
 
-CREATE INDEX idx_contracts_user_id ON contracts(user_id);
 CREATE INDEX idx_contracts_content_hash ON contracts(content_hash);
 CREATE INDEX idx_contracts_type_state ON contracts(contract_type, australian_state);
 
 CREATE INDEX idx_contract_analyses_content_hash ON contract_analyses(content_hash);
-CREATE INDEX idx_contract_analyses_user_id ON contract_analyses(user_id);
+-- Contract analyses indexes (user_id removed, now shared resource)
 CREATE INDEX idx_contract_analyses_status ON contract_analyses(status);
 CREATE INDEX idx_contract_analyses_timestamp ON contract_analyses(analysis_timestamp DESC);
 CREATE INDEX idx_contract_analyses_risk_score ON contract_analyses(overall_risk_score);
@@ -439,8 +438,8 @@ WHERE status = 'in_progress';
 
 -- Create composite indexes for common queries
 CREATE INDEX idx_documents_user_status ON documents(user_id, processing_status);
-CREATE INDEX idx_contracts_user_type ON contracts(user_id, contract_type);
-CREATE INDEX idx_analyses_user_status ON contract_analyses(user_id, status);
+-- Contracts indexes (user_id removed, now shared resource)
+-- Contract analyses composite indexes (user_id removed)
 CREATE INDEX idx_usage_logs_user_timestamp ON usage_logs(user_id, timestamp DESC);
 
 -- Views for enhanced data access

@@ -13,7 +13,6 @@ import {
   Trash2,
   Eye,
   Database,
-  BarChart3,
 } from "lucide-react";
 
 import Button from "@/components/ui/Button";
@@ -24,11 +23,10 @@ import { useUIStore } from "@/store/uiStore";
 import { cn } from "@/utils";
 import type { ContractAnalysis } from "@/types";
 
-// Import new cache components
+// Import cache components (keeping only what's needed for other tabs)
 import CacheEfficiencyBadge from "@/components/cache/CacheEfficiencyBadge";
 import ContractHistoryList from "@/components/cache/ContractHistoryList";
 import PropertyHistoryList from "@/components/cache/PropertyHistoryList";
-import CacheHealthDashboard from "@/components/cache/CacheHealthDashboard";
 
 const HistoryPage: React.FC = () => {
   const navigate = useNavigate();
@@ -43,7 +41,7 @@ const HistoryPage: React.FC = () => {
     "all" | "low" | "medium" | "high"
   >("all");
   const [activeTab, setActiveTab] = React.useState<
-    "legacy" | "contracts" | "properties" | "cache"
+    "legacy" | "contracts" | "properties"
   >("contracts");
 
   // Filter analyses based on search and filters
@@ -160,7 +158,6 @@ const HistoryPage: React.FC = () => {
           {[
             { key: "contracts", label: "Contract History", icon: FileText },
             { key: "properties", label: "Property History", icon: Database },
-            { key: "cache", label: "Cache Management", icon: BarChart3 },
             { key: "legacy", label: "Legacy Analysis", icon: Clock },
           ].map((tab) => {
             const TabIcon = tab.icon;
@@ -195,7 +192,7 @@ const HistoryPage: React.FC = () => {
         {activeTab === "contracts" && (
           <div className="space-y-6">
             <CacheEfficiencyBadge showDetails className="sm:hidden" />
-            <ContractHistoryList 
+            <ContractHistoryList
               onContractSelect={(contractView) => {
                 if (contractView.analysis_id) {
                   addNotification({
@@ -209,10 +206,11 @@ const HistoryPage: React.FC = () => {
                   addNotification({
                     type: "warning",
                     title: "Analysis Not Available",
-                    message: "This contract analysis is not available for viewing.",
+                    message:
+                      "This contract analysis is not available for viewing.",
                   });
                 }
-              }} 
+              }}
             />
           </div>
         )}
@@ -229,7 +227,11 @@ const HistoryPage: React.FC = () => {
                   });
                   // Navigate to property analysis page or property details
                   // Assuming there's a property analysis or property details page
-                  navigate(`/app/property/${encodeURIComponent(propertyView.property_address)}`);
+                  navigate(
+                    `/app/property/${encodeURIComponent(
+                      propertyView.property_address
+                    )}`
+                  );
                 } else {
                   addNotification({
                     type: "info",
@@ -241,12 +243,6 @@ const HistoryPage: React.FC = () => {
                 }
               }}
             />
-          </div>
-        )}
-
-        {activeTab === "cache" && (
-          <div className="space-y-6">
-            <CacheHealthDashboard isAdmin={true} />
           </div>
         )}
 
@@ -310,7 +306,9 @@ const HistoryPage: React.FC = () => {
                             ).toFixed(1)
                           : "0.0"}
                       </div>
-                      <div className="text-sm text-neutral-500">Avg Risk Score</div>
+                      <div className="text-sm text-neutral-500">
+                        Avg Risk Score
+                      </div>
                     </div>
                   </div>
                 </CardContent>
@@ -463,13 +461,17 @@ const HistoryPage: React.FC = () => {
                                     </div>
                                   )}
 
-                                  <div>ID: {analysis.contract_id.slice(0, 8)}...</div>
+                                  <div>
+                                    ID: {analysis.contract_id.slice(0, 8)}...
+                                  </div>
                                 </div>
                               </div>
                             </div>
 
                             <div className="flex items-center gap-2">
-                              <Link to={`/app/analysis/${analysis.contract_id}`}>
+                              <Link
+                                to={`/app/analysis/${analysis.contract_id}`}
+                              >
                                 <Button
                                   variant="ghost"
                                   size="sm"
@@ -520,7 +522,9 @@ const HistoryPage: React.FC = () => {
                       No analyses found
                     </h3>
                     <p className="text-neutral-500 mb-6">
-                      {searchQuery || statusFilter !== "all" || riskFilter !== "all"
+                      {searchQuery ||
+                      statusFilter !== "all" ||
+                      riskFilter !== "all"
                         ? "Try adjusting your search or filter criteria"
                         : "Upload your first contract to get started with analysis"}
                     </p>
