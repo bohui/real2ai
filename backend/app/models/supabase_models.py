@@ -4,7 +4,8 @@ Models that correspond to your existing Supabase migration schema
 Automatic created_at/updated_at handled by database triggers
 """
 
-from typing import Dict, List, Any, Optional, Decimal
+from typing import Dict, List, Any, Optional
+from decimal import Decimal
 from datetime import datetime
 from enum import Enum
 from pydantic import BaseModel, Field
@@ -151,27 +152,30 @@ class AnalysisStatus(str, Enum):
 class TimestampedBaseModel(BaseModel):
     """
     Base model with automatic timestamp fields
-    
+
     Note: created_at and updated_at are managed by database triggers
     - created_at: Set automatically on INSERT with DEFAULT NOW()
     - updated_at: Set automatically on UPDATE by trigger function
     """
-    created_at: Optional[datetime] = Field(None, description="Managed by database DEFAULT NOW()")
-    updated_at: Optional[datetime] = Field(None, description="Managed by database trigger")
+
+    created_at: Optional[datetime] = Field(
+        None, description="Managed by database DEFAULT NOW()"
+    )
+    updated_at: Optional[datetime] = Field(
+        None, description="Managed by database trigger"
+    )
 
     class Config:
         # Allow population by field name (for database results)
         populate_by_name = True
         # Enable JSON serialization
-        json_encoders = {
-            datetime: lambda v: v.isoformat() if v else None
-        }
+        json_encoders = {datetime: lambda v: v.isoformat() if v else None}
 
 
 # Core Models
 class Profile(TimestampedBaseModel):
     """User profiles table (extends auth.users)"""
-    
+
     id: UUID = Field(..., description="User ID from auth.users")
     email: str = Field(..., max_length=255)
     full_name: Optional[str] = None
@@ -192,10 +196,12 @@ class Profile(TimestampedBaseModel):
 
 class Document(TimestampedBaseModel):
     """Documents table for file management"""
-    
+
     id: UUID = Field(..., description="Document UUID")
     user_id: UUID = Field(..., description="Reference to profiles.id")
-    content_hash: Optional[str] = Field(None, description="SHA-256 hash of document content for caching")
+    content_hash: Optional[str] = Field(
+        None, description="SHA-256 hash of document content for caching"
+    )
     original_filename: str = Field(..., max_length=512)
     storage_path: str = Field(..., max_length=1024)
     file_type: str = Field(..., max_length=50)
@@ -203,28 +209,28 @@ class Document(TimestampedBaseModel):
     processing_status: str = DocumentStatus.UPLOADED.value
     upload_metadata: Dict[str, Any] = Field(default_factory=dict)
     processing_results: Dict[str, Any] = Field(default_factory=dict)
-    
+
     # Processing timing
     processing_started_at: Optional[datetime] = None
     processing_completed_at: Optional[datetime] = None
-    
+
     # Quality and extraction metrics
     overall_quality_score: float = Field(default=0.0, ge=0.0, le=1.0)
     extraction_confidence: float = Field(default=0.0, ge=0.0, le=1.0)
     text_extraction_method: Optional[str] = Field(None, max_length=100)
-    
+
     # Document content metrics
     total_pages: int = Field(default=0, ge=0)
     total_text_length: int = Field(default=0, ge=0)
     total_word_count: int = Field(default=0, ge=0)
     has_diagrams: bool = False
     diagram_count: int = Field(default=0, ge=0)
-    
+
     # Classification
     document_type: Optional[str] = Field(None, max_length=100)
     australian_state: Optional[str] = Field(None, max_length=10)
     contract_type: Optional[str] = Field(None, max_length=100)
-    
+
     # Processing metadata
     processing_errors: Optional[Dict[str, Any]] = None
     processing_notes: Optional[str] = None
@@ -232,11 +238,13 @@ class Document(TimestampedBaseModel):
 
 class Contract(TimestampedBaseModel):
     """Contracts table for contract metadata"""
-    
+
     id: UUID = Field(..., description="Contract UUID")
     document_id: UUID = Field(..., description="Reference to documents.id")
     user_id: UUID = Field(..., description="Reference to profiles.id")
-    content_hash: Optional[str] = Field(None, description="SHA-256 hash of document content for caching")
+    content_hash: Optional[str] = Field(
+        None, description="SHA-256 hash of document content for caching"
+    )
     contract_type: ContractType = ContractType.PURCHASE_AGREEMENT
     australian_state: AustralianState = AustralianState.NSW
     contract_terms: Dict[str, Any] = Field(default_factory=dict)
@@ -245,21 +253,23 @@ class Contract(TimestampedBaseModel):
 
 class ContractAnalysis(TimestampedBaseModel):
     """Contract analyses table for AI analysis results"""
-    
+
     id: UUID = Field(..., description="Analysis UUID")
     contract_id: UUID = Field(..., description="Reference to contracts.id")
     user_id: UUID = Field(..., description="Reference to profiles.id")
-    content_hash: Optional[str] = Field(None, description="SHA-256 hash of document content for caching")
+    content_hash: Optional[str] = Field(
+        None, description="SHA-256 hash of document content for caching"
+    )
     agent_version: str = "1.0"
     status: AnalysisStatus = AnalysisStatus.PENDING
-    
+
     # Analysis results structure
     analysis_result: Dict[str, Any] = Field(default_factory=dict)
     executive_summary: Dict[str, Any] = Field(default_factory=dict)
     risk_assessment: Dict[str, Any] = Field(default_factory=dict)
     compliance_check: Dict[str, Any] = Field(default_factory=dict)
     recommendations: List[Dict[str, Any]] = Field(default_factory=list)
-    
+
     # Metrics
     risk_score: float = Field(default=0.0, ge=0.0, le=10.0)
     overall_risk_score: float = Field(default=0.0, ge=0.0, le=10.0)
@@ -267,7 +277,7 @@ class ContractAnalysis(TimestampedBaseModel):
     confidence_level: float = Field(default=0.0, ge=0.0, le=1.0)
     processing_time: float = Field(default=0.0, ge=0.0)
     processing_time_seconds: float = Field(default=0.0, ge=0.0)
-    
+
     # Metadata
     analysis_metadata: Dict[str, Any] = Field(default_factory=dict)
     error_details: Dict[str, Any] = Field(default_factory=dict)
@@ -276,26 +286,28 @@ class ContractAnalysis(TimestampedBaseModel):
 
 class DocumentPage(TimestampedBaseModel):
     """Document pages table for page-level analysis"""
-    
+
     id: UUID = Field(..., description="Page UUID")
     document_id: UUID = Field(..., description="Reference to documents.id")
-    content_hash: Optional[str] = Field(None, description="SHA-256 hash of document content for caching")
+    content_hash: Optional[str] = Field(
+        None, description="SHA-256 hash of document content for caching"
+    )
     page_number: int = Field(..., ge=1)
-    
+
     # Content analysis
     content_summary: Optional[str] = None
     text_content: Optional[str] = None
     text_length: int = Field(default=0, ge=0)
     word_count: int = Field(default=0, ge=0)
-    
+
     # Content classification
     content_types: List[str] = Field(default_factory=list)
     primary_content_type: ContentType = ContentType.EMPTY
-    
+
     # Quality metrics
     extraction_confidence: float = Field(default=0.0, ge=0.0, le=1.0)
     content_quality_score: float = Field(default=0.0, ge=0.0, le=1.0)
-    
+
     # Layout analysis
     has_header: bool = False
     has_footer: bool = False
@@ -303,7 +315,7 @@ class DocumentPage(TimestampedBaseModel):
     has_handwriting: bool = False
     has_diagrams: bool = False
     has_tables: bool = False
-    
+
     # Processing metadata
     processed_at: Optional[datetime] = None
     processing_method: Optional[str] = Field(None, max_length=100)
@@ -311,55 +323,59 @@ class DocumentPage(TimestampedBaseModel):
 
 class DocumentEntity(TimestampedBaseModel):
     """Document entities table for extracted entities"""
-    
+
     id: UUID = Field(..., description="Entity UUID")
     document_id: UUID = Field(..., description="Reference to documents.id")
-    content_hash: Optional[str] = Field(None, description="SHA-256 hash of document content for caching")
+    content_hash: Optional[str] = Field(
+        None, description="SHA-256 hash of document content for caching"
+    )
     page_id: Optional[UUID] = Field(None, description="Reference to document_pages.id")
     page_number: int = Field(..., ge=1)
-    
+
     # Entity data
     entity_type: EntityType
     entity_value: str
     normalized_value: Optional[str] = None
-    
+
     # Context and quality
     context: Optional[str] = None
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
     extraction_method: Optional[str] = Field(None, max_length=100)
-    
+
     # Location metadata
     position_data: Optional[Dict[str, Any]] = None
-    
+
     # Processing metadata
     extracted_at: Optional[datetime] = None
 
 
 class DocumentDiagram(TimestampedBaseModel):
     """Document diagrams table for diagram analysis"""
-    
+
     id: UUID = Field(..., description="Diagram UUID")
     document_id: UUID = Field(..., description="Reference to documents.id")
-    content_hash: Optional[str] = Field(None, description="SHA-256 hash of document content for caching")
+    content_hash: Optional[str] = Field(
+        None, description="SHA-256 hash of document content for caching"
+    )
     page_id: Optional[UUID] = Field(None, description="Reference to document_pages.id")
     page_number: int = Field(..., ge=1)
-    
+
     # Classification
     diagram_type: DiagramType = DiagramType.UNKNOWN
     classification_confidence: float = Field(default=0.0, ge=0.0, le=1.0)
-    
+
     # Storage and processing
     extracted_image_path: Optional[str] = Field(None, max_length=1024)
     basic_analysis_completed: bool = False
     detailed_analysis_completed: bool = False
-    
+
     # Analysis results
     basic_analysis: Optional[Dict[str, Any]] = None
-    
+
     # Quality metrics
     image_quality_score: float = Field(default=0.0, ge=0.0, le=1.0)
     clarity_score: float = Field(default=0.0, ge=0.0, le=1.0)
-    
+
     # Metadata
     detected_at: Optional[datetime] = None
     basic_analysis_at: Optional[datetime] = None
@@ -367,36 +383,36 @@ class DocumentDiagram(TimestampedBaseModel):
 
 class DocumentAnalysis(TimestampedBaseModel):
     """Document analyses table for comprehensive document analysis"""
-    
+
     id: UUID = Field(..., description="Analysis UUID")
     document_id: UUID = Field(..., description="Reference to documents.id")
-    
+
     # Analysis metadata
     analysis_type: str = Field(default="contract_analysis", max_length=100)
     analysis_version: str = Field(default="v1.0", max_length=50)
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
-    
+
     # Analysis status
     status: str = Field(default="pending", max_length=50)
     progress_percentage: int = Field(default=0, ge=0, le=100)
     current_step: Optional[str] = Field(None, max_length=100)
-    
+
     # Results
     detailed_entities: Optional[Dict[str, Any]] = None
     diagram_analyses: Optional[Dict[str, Any]] = None
     compliance_results: Optional[Dict[str, Any]] = None
     risk_assessment: Optional[Dict[str, Any]] = None
     recommendations: Optional[Dict[str, Any]] = None
-    
+
     # Quality and confidence
     overall_confidence: float = Field(default=0.0, ge=0.0, le=1.0)
     analysis_quality_score: float = Field(default=0.0, ge=0.0, le=1.0)
-    
+
     # Processing metadata
     processing_time_seconds: float = Field(default=0.0, ge=0.0)
     langgraph_workflow_id: Optional[str] = Field(None, max_length=255)
-    
+
     # Errors and issues
     analysis_errors: Optional[Dict[str, Any]] = None
     analysis_warnings: Optional[Dict[str, Any]] = None
@@ -404,7 +420,7 @@ class DocumentAnalysis(TimestampedBaseModel):
 
 class UsageLog(TimestampedBaseModel):
     """Usage logs for tracking and billing"""
-    
+
     id: UUID = Field(..., description="Usage log UUID")
     user_id: UUID = Field(..., description="Reference to profiles.id")
     action_type: str = Field(..., max_length=100)
@@ -421,29 +437,29 @@ class UsageLog(TimestampedBaseModel):
 
 class PropertyData(TimestampedBaseModel):
     """Property data table for enhanced property analysis"""
-    
+
     id: UUID = Field(..., description="Property data UUID")
     contract_id: Optional[UUID] = Field(None, description="Reference to contracts.id")
     user_id: UUID = Field(..., description="Reference to profiles.id")
-    
+
     # Property details
     address: str = Field(..., max_length=255)
     suburb: Optional[str] = Field(None, max_length=100)
     state: Optional[AustralianState] = None
     postcode: Optional[str] = Field(None, max_length=10)
     property_type: Optional[str] = Field(None, max_length=50)
-    
+
     # Property features
     bedrooms: Optional[int] = Field(None, ge=0)
     bathrooms: Optional[int] = Field(None, ge=0)
     car_spaces: Optional[int] = Field(None, ge=0)
     land_size: Optional[float] = Field(None, ge=0)
     building_size: Optional[float] = Field(None, ge=0)
-    
+
     # Financial data
     purchase_price: Optional[float] = Field(None, ge=0)
     market_value: Optional[float] = Field(None, ge=0)
-    
+
     # Analysis data
     market_analysis: Dict[str, Any] = Field(default_factory=dict)
     property_insights: Dict[str, Any] = Field(default_factory=dict)
@@ -451,7 +467,7 @@ class PropertyData(TimestampedBaseModel):
 
 class SubscriptionPlan(BaseModel):
     """Subscription plans table"""
-    
+
     id: UUID = Field(..., description="Plan UUID")
     name: str = Field(..., max_length=100, unique=True)
     slug: str = Field(..., max_length=100, unique=True)
@@ -469,13 +485,15 @@ class SubscriptionPlan(BaseModel):
 
 class UserSubscription(TimestampedBaseModel):
     """User subscriptions table"""
-    
+
     id: UUID = Field(..., description="Subscription UUID")
     user_id: UUID = Field(..., description="Reference to profiles.id")
     plan_id: UUID = Field(..., description="Reference to subscription_plans.id")
     stripe_subscription_id: Optional[str] = Field(None, max_length=100)
     stripe_customer_id: Optional[str] = Field(None, max_length=100)
-    status: str = Field(..., max_length=50)  # active, cancelled, past_due, unpaid, trialing
+    status: str = Field(
+        ..., max_length=50
+    )  # active, cancelled, past_due, unpaid, trialing
     trial_end: Optional[datetime] = None
     current_period_start: Optional[datetime] = None
     current_period_end: Optional[datetime] = None
@@ -485,25 +503,27 @@ class UserSubscription(TimestampedBaseModel):
 
 class AnalysisProgress(TimestampedBaseModel):
     """Analysis progress tracking for real-time updates"""
-    
+
     id: UUID = Field(..., description="Progress UUID")
     contract_id: UUID = Field(..., description="Reference to contracts.id")
     analysis_id: UUID = Field(..., description="Reference to contract_analyses.id")
     user_id: UUID = Field(..., description="Reference to profiles.id")
-    
+
     # Progress tracking
     current_step: str = Field(..., max_length=100)
     progress_percent: int = Field(default=0, ge=0, le=100)
     step_description: Optional[str] = None
     estimated_completion_minutes: Optional[int] = Field(None, ge=0)
-    
+
     # Timing information
     step_started_at: Optional[datetime] = None
     step_completed_at: Optional[datetime] = None
     total_elapsed_seconds: int = Field(default=0, ge=0)
-    
+
     # Status and metadata
-    status: str = Field(default="in_progress", max_length=50)  # in_progress, completed, failed, cancelled
+    status: str = Field(
+        default="in_progress", max_length=50
+    )  # in_progress, completed, failed, cancelled
     error_message: Optional[str] = None
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
@@ -511,7 +531,7 @@ class AnalysisProgress(TimestampedBaseModel):
 # Property Intelligence Models
 class Property(TimestampedBaseModel):
     """Properties table for Australian property data"""
-    
+
     id: UUID = Field(..., description="Property UUID")
     address_full: str = Field(..., max_length=500, description="Complete address")
     street_number: Optional[str] = Field(None, max_length=20)
@@ -520,39 +540,41 @@ class Property(TimestampedBaseModel):
     state: Optional[AustralianState] = None
     postcode: Optional[str] = Field(None, max_length=10)
     property_type: Optional[PropertyType] = None
-    
+
     # Location data
     latitude: Optional[float] = Field(None, ge=-90, le=90)
     longitude: Optional[float] = Field(None, ge=-180, le=180)
-    
+
     # Property features
     bedrooms: Optional[int] = Field(None, ge=0)
     bathrooms: Optional[int] = Field(None, ge=0)
     car_spaces: Optional[int] = Field(None, ge=0)
     land_size: Optional[float] = Field(None, ge=0, description="Land size in sqm")
-    building_size: Optional[float] = Field(None, ge=0, description="Building size in sqm")
+    building_size: Optional[float] = Field(
+        None, ge=0, description="Building size in sqm"
+    )
     year_built: Optional[int] = Field(None, ge=1800, le=2030)
-    
+
     # Property identifiers
     lot_number: Optional[str] = Field(None, max_length=20)
     plan_number: Optional[str] = Field(None, max_length=50)
     title_reference: Optional[str] = Field(None, max_length=100)
     council_property_id: Optional[str] = Field(None, max_length=100)
-    
+
     # Data quality and verification
     address_verified: bool = False
     coordinates_verified: bool = False
     property_features_verified: bool = False
     data_source: Optional[str] = Field(None, max_length=100)
     last_updated_source: Optional[str] = Field(None, max_length=100)
-    
+
     # Metadata
     property_metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
 class PropertyValuation(TimestampedBaseModel):
     """Property valuations from various sources"""
-    
+
     id: UUID = Field(..., description="Valuation UUID")
     property_id: UUID = Field(..., description="Reference to properties.id")
     valuation_source: ValuationSource
@@ -569,14 +591,16 @@ class PropertyValuation(TimestampedBaseModel):
 
 class PropertyMarketData(TimestampedBaseModel):
     """Market data and analytics for properties"""
-    
+
     id: UUID = Field(..., description="Market data UUID")
     property_id: UUID = Field(..., description="Reference to properties.id")
     suburb: str = Field(..., max_length=100)
     state: AustralianState
     data_source: ValuationSource
     median_price: Optional[float] = Field(None, ge=0)
-    price_growth_12_month: Optional[float] = Field(None, description="Percentage growth")
+    price_growth_12_month: Optional[float] = Field(
+        None, description="Percentage growth"
+    )
     price_growth_3_year: Optional[float] = Field(None, description="Percentage growth")
     days_on_market: Optional[int] = Field(None, ge=0)
     sales_volume_12_month: Optional[int] = Field(None, ge=0)
@@ -591,7 +615,7 @@ class PropertyMarketData(TimestampedBaseModel):
 
 class PropertyRiskAssessment(TimestampedBaseModel):
     """Risk assessment data for properties"""
-    
+
     id: UUID = Field(..., description="Risk assessment UUID")
     property_id: UUID = Field(..., description="Reference to properties.id")
     overall_risk: RiskLevel
@@ -609,26 +633,26 @@ class PropertyRiskAssessment(TimestampedBaseModel):
 
 class ComparableSale(TimestampedBaseModel):
     """Comparable sales data for property analysis"""
-    
+
     id: UUID = Field(..., description="Comparable sale UUID")
     property_id: UUID = Field(..., description="Reference to properties.id")
     comparable_address: str = Field(..., max_length=500)
     sale_price: float = Field(..., ge=0)
     sale_date: datetime
     days_on_market: Optional[int] = Field(None, ge=0)
-    
+
     # Property comparison features
     bedrooms: Optional[int] = Field(None, ge=0)
     bathrooms: Optional[int] = Field(None, ge=0)
     car_spaces: Optional[int] = Field(None, ge=0)
     land_size: Optional[float] = Field(None, ge=0)
     building_size: Optional[float] = Field(None, ge=0)
-    
+
     # Similarity metrics
     distance_km: Optional[float] = Field(None, ge=0)
     similarity_score: Optional[float] = Field(None, ge=0.0, le=1.0)
     price_per_sqm: Optional[float] = Field(None, ge=0)
-    
+
     # Data source and verification
     data_source: ValuationSource
     verified: bool = False
@@ -637,18 +661,18 @@ class ComparableSale(TimestampedBaseModel):
 
 class PropertySalesHistory(TimestampedBaseModel):
     """Historical sales data for properties"""
-    
+
     id: UUID = Field(..., description="Sales history UUID")
     property_id: UUID = Field(..., description="Reference to properties.id")
     sale_price: float = Field(..., ge=0)
     sale_date: datetime
     sale_type: Optional[str] = Field(None, max_length=50)
     days_on_market: Optional[int] = Field(None, ge=0)
-    
+
     # Market conditions at time of sale
     median_suburb_price: Optional[float] = Field(None, ge=0)
     price_vs_median: Optional[float] = Field(None, description="Percentage vs median")
-    
+
     # Data source
     data_source: ValuationSource
     verified: bool = False
@@ -657,17 +681,17 @@ class PropertySalesHistory(TimestampedBaseModel):
 
 class PropertyRentalHistory(TimestampedBaseModel):
     """Rental history data for properties"""
-    
+
     id: UUID = Field(..., description="Rental history UUID")
     property_id: UUID = Field(..., description="Reference to properties.id")
     weekly_rent: float = Field(..., ge=0)
     lease_date: datetime
     lease_duration_months: Optional[int] = Field(None, ge=1)
-    
+
     # Rental analysis
     rental_yield: Optional[float] = Field(None, ge=0)
     rent_vs_median: Optional[float] = Field(None, description="Percentage vs median")
-    
+
     # Data source
     data_source: ValuationSource
     verified: bool = False
@@ -676,7 +700,7 @@ class PropertyRentalHistory(TimestampedBaseModel):
 
 class UserSavedProperty(TimestampedBaseModel):
     """User saved properties"""
-    
+
     id: UUID = Field(..., description="Saved property UUID")
     user_id: UUID = Field(..., description="Reference to profiles.id")
     property_id: UUID = Field(..., description="Reference to properties.id")
@@ -689,7 +713,7 @@ class UserSavedProperty(TimestampedBaseModel):
 
 class PropertySearch(TimestampedBaseModel):
     """User property search history"""
-    
+
     id: UUID = Field(..., description="Property search UUID")
     user_id: UUID = Field(..., description="Reference to profiles.id")
     search_criteria: Dict[str, Any] = Field(default_factory=dict)
@@ -700,7 +724,7 @@ class PropertySearch(TimestampedBaseModel):
 
 class PropertyReport(TimestampedBaseModel):
     """Generated property reports"""
-    
+
     id: UUID = Field(..., description="Property report UUID")
     property_id: UUID = Field(..., description="Reference to properties.id")
     user_id: UUID = Field(..., description="Reference to profiles.id")
@@ -714,7 +738,7 @@ class PropertyReport(TimestampedBaseModel):
 
 class PropertyAPIUsage(TimestampedBaseModel):
     """Track API usage for billing"""
-    
+
     id: UUID = Field(..., description="API usage UUID")
     user_id: UUID = Field(..., description="Reference to profiles.id")
     api_provider: str = Field(..., max_length=100)
@@ -734,7 +758,7 @@ class PropertyAPIUsage(TimestampedBaseModel):
 
 class MarketInsight(TimestampedBaseModel):
     """Market insights and trends cache"""
-    
+
     id: UUID = Field(..., description="Market insight UUID")
     suburb: str = Field(..., max_length=100)
     state: AustralianState
@@ -750,11 +774,13 @@ class MarketInsight(TimestampedBaseModel):
 # Cache Architecture Models
 class HotPropertiesCache(TimestampedBaseModel):
     """Hot properties cache for popular property analyses (no RLS - shared across users)"""
-    
+
     id: UUID = Field(..., description="Hot property cache UUID")
     property_hash: str = Field(..., description="Hash of normalized address")
     property_address: str = Field(..., max_length=500)
-    normalized_address: str = Field(..., max_length=500, description="Normalized for consistent hashing")
+    normalized_address: str = Field(
+        ..., max_length=500, description="Normalized for consistent hashing"
+    )
     analysis_result: Dict[str, Any] = Field(default_factory=dict)
     popularity_score: int = Field(default=1, ge=1)
     access_count: int = Field(default=1, ge=1)
@@ -764,7 +790,7 @@ class HotPropertiesCache(TimestampedBaseModel):
 
 class HotContractsCache(TimestampedBaseModel):
     """Hot contracts cache for popular contract analyses (no RLS - shared across users)"""
-    
+
     id: UUID = Field(..., description="Hot contract cache UUID")
     content_hash: str = Field(..., description="SHA-256 hash of document content")
     contract_analysis: Dict[str, Any] = Field(default_factory=dict)
@@ -777,7 +803,7 @@ class HotContractsCache(TimestampedBaseModel):
 
 class UserPropertyView(TimestampedBaseModel):
     """User property views (with RLS - user's search history)"""
-    
+
     id: UUID = Field(..., description="User property view UUID")
     user_id: UUID = Field(..., description="Reference to profiles.id")
     property_hash: str = Field(..., description="Hash of normalized address")
@@ -788,12 +814,14 @@ class UserPropertyView(TimestampedBaseModel):
 
 class UserContractView(TimestampedBaseModel):
     """User contract views (with RLS - user's contract analysis history)"""
-    
+
     id: UUID = Field(..., description="User contract view UUID")
     user_id: UUID = Field(..., description="Reference to profiles.id")
     content_hash: str = Field(..., description="SHA-256 hash of document content")
     property_address: Optional[str] = Field(None, max_length=500)
-    analysis_id: Optional[UUID] = Field(None, description="Reference to contract_analyses.id")
+    analysis_id: Optional[UUID] = Field(
+        None, description="Reference to contract_analyses.id"
+    )
     viewed_at: datetime
     source: ViewSource = ViewSource.UPLOAD
 
@@ -801,7 +829,7 @@ class UserContractView(TimestampedBaseModel):
 # View Models (Read-only database views)
 class AnalysisProgressDetailed(BaseModel):
     """Detailed analysis progress view combining multiple tables"""
-    
+
     analysis_id: UUID
     contract_id: UUID
     user_id: UUID
@@ -812,29 +840,29 @@ class AnalysisProgressDetailed(BaseModel):
     step_completed_at: Optional[datetime] = None
     status: str
     error_message: Optional[str] = None
-    
+
     # From contract_analyses
     analysis_status: AnalysisStatus
     agent_version: str
     overall_risk_score: float
     confidence_score: float
-    
+
     # From contracts
     contract_type: ContractType
     australian_state: AustralianState
-    
+
     # From documents
     original_filename: str
     file_type: str
     processing_status: str
-    
+
     class Config:
         from_attributes = True
 
 
 class UserContractHistory(BaseModel):
     """User contract history view combining views with analysis data"""
-    
+
     # From user_contract_views
     id: UUID
     user_id: UUID
@@ -844,7 +872,7 @@ class UserContractHistory(BaseModel):
     viewed_at: datetime
     source: ViewSource
     created_at: Optional[datetime] = None
-    
+
     # From contract_analyses
     analysis_result: Optional[Dict[str, Any]] = None
     risk_score: Optional[float] = None
@@ -852,19 +880,19 @@ class UserContractHistory(BaseModel):
     confidence_score: Optional[float] = None
     analysis_status: Optional[AnalysisStatus] = None
     analysis_timestamp: Optional[datetime] = None
-    
+
     # From documents
     original_filename: Optional[str] = None
     file_type: Optional[str] = None
     file_size: Optional[int] = None
-    
+
     class Config:
         from_attributes = True
 
 
 class UserPropertyHistory(BaseModel):
     """User property search history view"""
-    
+
     # From user_property_views
     id: UUID
     user_id: UUID
@@ -873,12 +901,12 @@ class UserPropertyHistory(BaseModel):
     viewed_at: datetime
     source: ViewSource
     created_at: Optional[datetime] = None
-    
+
     # From hot_properties_cache
     analysis_result: Optional[Dict[str, Any]] = None
     popularity_score: Optional[int] = None
     access_count: Optional[int] = None
-    
+
     class Config:
         from_attributes = True
 
@@ -887,42 +915,42 @@ class UserPropertyHistory(BaseModel):
 def create_model_with_timestamps(model_class, **kwargs) -> dict:
     """
     Create model data dict, excluding timestamp fields that are managed by database
-    
+
     Args:
         model_class: The Pydantic model class
         **kwargs: Model field values
-        
+
     Returns:
         Dictionary with model data, excluding managed timestamp fields
     """
     model = model_class(**kwargs)
     data = model.model_dump(exclude_unset=True)
-    
+
     # Remove timestamp fields that are managed by database
-    data.pop('created_at', None)
-    data.pop('updated_at', None)
-    
+    data.pop("created_at", None)
+    data.pop("updated_at", None)
+
     return data
 
 
 def update_model_with_timestamps(model_class, **kwargs) -> dict:
     """
     Create update data dict, excluding created_at and updated_at
-    
+
     Args:
         model_class: The Pydantic model class
         **kwargs: Model field values to update
-        
+
     Returns:
         Dictionary with update data, excluding timestamp fields
     """
     model = model_class(**kwargs)
     data = model.model_dump(exclude_unset=True)
-    
+
     # Remove timestamp fields that are managed by database
-    data.pop('created_at', None)
-    data.pop('updated_at', None)
-    
+    data.pop("created_at", None)
+    data.pop("updated_at", None)
+
     return data
 
 
@@ -931,64 +959,65 @@ class SupabaseModelManager:
     """
     Helper class for Supabase model operations with automatic timestamp handling
     """
-    
+
     def __init__(self, supabase_client):
         self.client = supabase_client
-    
+
     async def create_record(self, table_name: str, model_class, **data) -> dict:
         """
         Create a new record with automatic timestamp handling
-        
+
         Args:
             table_name: Database table name
             model_class: Pydantic model class
             **data: Record data
-            
+
         Returns:
             Created record from database (includes auto-generated timestamps)
         """
         # Remove timestamp fields - they're handled by database
         clean_data = create_model_with_timestamps(model_class, **data)
-        
+
         result = self.client.table(table_name).insert(clean_data).execute()
         return result.data[0] if result.data else None
-    
-    async def update_record(self, table_name: str, record_id: str, model_class, **data) -> dict:
+
+    async def update_record(
+        self, table_name: str, record_id: str, model_class, **data
+    ) -> dict:
         """
         Update a record with automatic timestamp handling
-        
+
         Args:
             table_name: Database table name
             record_id: ID of record to update
             model_class: Pydantic model class
             **data: Update data
-            
+
         Returns:
             Updated record from database (includes auto-updated timestamps)
         """
         # Remove timestamp fields - updated_at is handled by trigger
         clean_data = update_model_with_timestamps(model_class, **data)
-        
-        result = (self.client.table(table_name)
-                 .update(clean_data)
-                 .eq('id', record_id)
-                 .execute())
+
+        result = (
+            self.client.table(table_name)
+            .update(clean_data)
+            .eq("id", record_id)
+            .execute()
+        )
         return result.data[0] if result.data else None
-    
+
     async def get_record(self, table_name: str, record_id: str) -> dict:
         """Get a record by ID"""
-        result = (self.client.table(table_name)
-                 .select("*")
-                 .eq('id', record_id)
-                 .execute())
+        result = self.client.table(table_name).select("*").eq("id", record_id).execute()
         return result.data[0] if result.data else None
-    
+
     async def list_records(self, table_name: str, **filters) -> List[dict]:
         """List records with optional filters"""
         query = self.client.table(table_name).select("*")
-        
+
         for field, value in filters.items():
             query = query.eq(field, value)
-            
+
         result = query.execute()
         return result.data or []
