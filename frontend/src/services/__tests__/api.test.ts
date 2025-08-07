@@ -243,10 +243,10 @@ describe('ApiService', () => {
     it('should start contract analysis', async () => {
       const mockRequest: ContractAnalysisRequest = {
         document_id: 'doc-123',
-        contract_type: 'purchase_agreement',
-        australian_state: 'NSW',
-        analysis_preferences: {
-          focus_areas: ['risk_assessment'],
+        analysis_options: {
+          include_financial_analysis: true,
+          include_risk_assessment: true,
+          include_compliance_check: true,
           include_recommendations: true
         }
       }

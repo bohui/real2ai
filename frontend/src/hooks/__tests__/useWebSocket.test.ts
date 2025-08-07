@@ -193,7 +193,7 @@ describe('useWebSocket', () => {
 
     it('should handle incoming messages', () => {
       const onMessage = vi.fn()
-      const { result } = renderHook(() => 
+      renderHook(() => 
         useWebSocket('ws://localhost:8000/ws', { onMessage })
       )
       
@@ -215,7 +215,7 @@ describe('useWebSocket', () => {
 
     it('should ignore pong messages', () => {
       const onMessage = vi.fn()
-      const { result } = renderHook(() => 
+      renderHook(() => 
         useWebSocket('ws://localhost:8000/ws', { onMessage })
       )
       
@@ -314,7 +314,7 @@ describe('useWebSocket', () => {
         onMessage: vi.fn()
       }
 
-      const { result } = renderHook(() => 
+      renderHook(() => 
         useWebSocket('ws://localhost:8000/ws', callbacks)
       )
       
