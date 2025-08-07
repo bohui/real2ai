@@ -440,6 +440,23 @@ class SupabaseDatabaseClient(DatabaseOperations):
             )
 
     @with_retry(max_retries=3, backoff_factor=1.0)
+    async def insert(self, table: str, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Insert a new record in the specified table - wrapper for compatibility."""
+        try:
+            created_record = await self.create(table, data)
+            return {
+                "success": True,
+                "data": created_record
+            }
+        except Exception as e:
+            self.logger.error(f"Insert operation failed for table '{table}': {e}")
+            return {
+                "success": False,
+                "data": None,
+                "error": str(e)
+            }
+
+    @with_retry(max_retries=3, backoff_factor=1.0)
     async def select(
         self, table: str, columns: str = "*", filters: Dict[str, Any] = None
     ) -> Dict[str, Any]:
