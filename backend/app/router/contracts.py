@@ -1,7 +1,8 @@
-"""Contract analysis router with enhanced error handling."""
+"""Contract analysis router with cache-first strategy and enhanced error handling."""
 
-from typing import Dict, List, Optional, Union, TypedDict
-from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
+import hashlib
+from typing import Dict, List, Optional, Union, TypedDict, Any
+from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, Body
 from fastapi.responses import JSONResponse, Response
 import logging
 from datetime import datetime
@@ -10,6 +11,7 @@ from uuid import UUID
 from app.core.auth import get_current_user, User
 from app.core.auth_context import AuthContext
 from app.services.document_service import DocumentService
+from app.services.cache_service import get_cache_service, CacheService
 from app.core.error_handler import handle_api_error, create_error_context, ErrorCategory
 from app.core.retry_manager import retry_database_operation, retry_api_call
 from app.core.notification_system import (
@@ -18,9 +20,7 @@ from app.core.notification_system import (
     notify_user_success,
 )
 from app.schema.contract import (
-    ContractAnalysisRequest,
     ContractAnalysisResponse,
-    AnalysisOptions,
 )
 from app.models.supabase_models import Document, Contract, ContractAnalysis, Profile
 from app.clients.base.interfaces import DatabaseOperations, AuthOperations
@@ -122,6 +122,8 @@ class AnalysisStatusResponse(TypedDict):
     estimated_completion: Optional[str]
     status_message: str
     next_update_in_seconds: Optional[int]
+    cached: Optional[bool]
+    cache_source: Optional[str]
 
 
 class AnalysisProgressInfo(TypedDict):
@@ -142,6 +144,8 @@ class ContractAnalysisResultResponse(TypedDict):
     risk_score: Optional[float]
     processing_time: Optional[float]
     created_at: str
+    cached: Optional[bool]
+    cache_source: Optional[str]
 
 
 class NotificationsResponse(TypedDict):
@@ -197,27 +201,43 @@ async def get_user_document_service(
 
 @router.post("/analyze", response_model=ContractAnalysisResponse)
 async def start_contract_analysis(
-    request: ContractAnalysisRequest,
     background_tasks: BackgroundTasks,
+    request: Dict[str, Any] = Body(...),
     user: User = Depends(get_current_user),
     document_service: DocumentService = Depends(get_user_document_service),
+    cache_service: CacheService = Depends(get_cache_service),
 ) -> ContractAnalysisResponse:
-    """Start contract analysis with enhanced error handling and validation"""
+    """
+    Start contract analysis with cache-first strategy.
+
+    Body:
+        - document_id: Document ID to analyze
+        - check_cache: Whether to check cache first (default: true)
+        - content_hash: Optional pre-computed content hash
+        - analysis_options: Analysis configuration options
+    """
+
+    # Enhanced request validation
+    document_id = request.get("document_id")
+    check_cache = request.get("check_cache", True)
+    content_hash = request.get("content_hash")
+    analysis_options = request.get("analysis_options", {})
 
     # Create error context for better error reporting
     context = create_error_context(
         user_id=str(user.id),
         operation="start_contract_analysis",
-        document_id=request.document_id,
+        document_id=document_id,
     )
 
     try:
         # Enhanced request validation with detailed logging
         logger.info(
-            f"Contract analysis request from user {user.id}: document_id={request.document_id}"
+            f"Contract analysis request from user {user.id}: "
+            f"document_id={document_id}, check_cache={check_cache}"
         )
 
-        if not request.document_id:
+        if not document_id:
             logger.warning(f"Missing document_id in request from user {user.id}")
             raise ValueError("Document ID is required")
 
@@ -247,15 +267,13 @@ async def start_contract_analysis(
 
         # Get document with user context (RLS enforced)
         try:
-            document = await _get_user_document(
-                user_client, request.document_id, user.id
-            )
+            document = await _get_user_document(user_client, document_id, str(user.id))
             logger.debug(
-                f"Successfully retrieved document {request.document_id} for user {user.id}"
+                f"Successfully retrieved document {document_id} for user {user.id}"
             )
         except Exception as e:
             logger.error(
-                f"Failed to retrieve document {request.document_id} for user {user.id}: {str(e)}"
+                f"Failed to retrieve document {document_id} for user {user.id}: {str(e)}"
             )
             raise
 
@@ -263,17 +281,82 @@ async def start_contract_analysis(
         if not _is_valid_contract_document(document):
             raise ValueError("This file doesn't appear to be a property contract")
 
+        # Generate content hash if not provided and cache is enabled
+        if not content_hash and check_cache:
+            content_hash = await _generate_document_content_hash(document)
+
+        # CACHE-FIRST STRATEGY
+        if check_cache and content_hash:
+            logger.info(f"Checking cache for content_hash: {content_hash}")
+
+            cached_result = await cache_service.check_contract_cache(content_hash)
+
+            if cached_result:
+                logger.info(f"Cache HIT for content_hash: {content_hash}")
+
+                # Create user records from cache hit
+                try:
+                    document_id_new, contract_id, analysis_id = (
+                        await cache_service.create_user_contract_from_cache(
+                            user_id=str(user.id),
+                            content_hash=content_hash,
+                            cached_analysis=cached_result,
+                            original_filename=document.get(
+                                "original_filename", "Cached Document"
+                            ),
+                            file_size=document.get("file_size", 0),
+                            mime_type=document.get("file_type", "application/pdf"),
+                            property_address=cached_result.get("property_address"),
+                        )
+                    )
+
+                    # Send success notification
+                    await notification_system.send_notification(
+                        template_name="analysis_completed",
+                        user_id=str(user.id),
+                        contract_id=contract_id,
+                        session_id=context.session_id or f"contract_{contract_id}",
+                        additional_data={"cached": True, "processing_time": 0.1},
+                    )
+
+                    return ContractAnalysisResponse(
+                        contract_id=contract_id,
+                        analysis_id=analysis_id,
+                        status="completed",  # Cache hit = instant completion
+                        task_id=f"cache_hit_{analysis_id}",
+                        estimated_completion_minutes=0,
+                        cached=True,
+                        cache_hit=True,
+                    )
+
+                except Exception as cache_error:
+                    logger.error(f"Error processing cache hit: {str(cache_error)}")
+                    # Continue with normal processing if cache processing fails
+                    pass
+            else:
+                logger.info(f"Cache MISS for content_hash: {content_hash}")
+
+        # NORMAL PROCESSING PATH (Cache miss or cache disabled)
+
         # Create contract record with user context (RLS enforced)
-        contract_id = await _create_contract_record(
-            user_client, request.document_id, document, user
+        contract_id = await _create_contract_record_with_cache(
+            user_client, document_id, document, user, content_hash
         )
 
         # Create analysis record with user context (RLS enforced)
-        analysis_id = await _create_analysis_record(user_client, contract_id, user.id)
+        analysis_id = await _create_analysis_record_with_cache(
+            user_client, contract_id, str(user.id), content_hash
+        )
 
-        # Start background analysis with proper error handling
-        task_id = await _start_background_analysis(
-            contract_id, analysis_id, user.id, document, request.analysis_options
+        # Start background analysis with cache integration
+        task_id = await _start_background_analysis_with_cache(
+            contract_id,
+            analysis_id,
+            str(user.id),
+            document,
+            analysis_options,
+            content_hash,
+            cache_service,
         )
 
         # Send success notification to user
@@ -290,6 +373,8 @@ async def start_contract_analysis(
             status="queued",
             task_id=task_id,
             estimated_completion_minutes=2,
+            cached=False,
+            cache_hit=False,
         )
 
     except HTTPException:
@@ -306,6 +391,132 @@ async def start_contract_analysis(
         )
 
         # Use enhanced error handler
+        raise handle_api_error(e, context, ErrorCategory.CONTRACT_ANALYSIS)
+
+
+@router.post("/bulk-analyze")
+async def bulk_contract_analysis(
+    background_tasks: BackgroundTasks,
+    requests: List[Dict[str, Any]] = Body(...),
+    user: User = Depends(get_current_user),
+    cache_service: CacheService = Depends(get_cache_service),
+) -> JSONResponse:
+    """
+    Analyze multiple contracts with intelligent cache utilization.
+
+    Body: List of analysis requests, each containing:
+        - document_id: Document ID to analyze
+        - analysis_options: Optional analysis configuration
+    """
+
+    context = create_error_context(
+        user_id=str(user.id), operation="bulk_contract_analysis"
+    )
+
+    try:
+        if not requests:
+            raise ValueError("At least one analysis request is required")
+
+        if len(requests) > 10:  # Reasonable limit
+            raise ValueError("Maximum 10 contracts can be analyzed at once")
+
+        # Check user has sufficient credits
+        required_credits = len(requests)
+        if (
+            user.credits_remaining < required_credits
+            and user.subscription_status == "free"
+        ):
+            raise ValueError(
+                f"You need {required_credits} credits to analyze {len(requests)} contracts"
+            )
+
+        results = []
+        cache_hits = 0
+        cache_misses = 0
+
+        for i, request_data in enumerate(requests):
+            try:
+                document_id = request_data.get("document_id")
+                if not document_id:
+                    results.append(
+                        {
+                            "index": i,
+                            "document_id": document_id,
+                            "status": "error",
+                            "error": "Document ID is required",
+                        }
+                    )
+                    continue
+
+                # Process each request with cache-first strategy
+                enhanced_request = {
+                    "document_id": document_id,
+                    "check_cache": True,
+                    "analysis_options": request_data.get("analysis_options", {}),
+                }
+
+                response = await start_contract_analysis(
+                    background_tasks,
+                    enhanced_request,
+                    user,
+                    await get_user_document_service(user),
+                    cache_service,
+                )
+
+                if response.get("cache_hit"):
+                    cache_hits += 1
+                else:
+                    cache_misses += 1
+
+                results.append(
+                    {
+                        "index": i,
+                        "document_id": document_id,
+                        "contract_id": response["contract_id"],
+                        "analysis_id": response["analysis_id"],
+                        "status": response["status"],
+                        "cached": response.get("cached", False),
+                        "cache_hit": response.get("cache_hit", False),
+                    }
+                )
+
+            except Exception as req_error:
+                logger.error(f"Error processing bulk request {i}: {str(req_error)}")
+                results.append(
+                    {
+                        "index": i,
+                        "document_id": request_data.get("document_id"),
+                        "status": "error",
+                        "error": str(req_error),
+                    }
+                )
+
+        return JSONResponse(
+            content={
+                "status": "success",
+                "data": {
+                    "results": results,
+                    "summary": {
+                        "total_requests": len(requests),
+                        "cache_hits": cache_hits,
+                        "cache_misses": cache_misses,
+                        "success_count": len(
+                            [r for r in results if r.get("status") != "error"]
+                        ),
+                        "error_count": len(
+                            [r for r in results if r.get("status") == "error"]
+                        ),
+                        "cache_efficiency": (
+                            f"{(cache_hits / len(requests)) * 100:.1f}%"
+                            if requests
+                            else "0%"
+                        ),
+                    },
+                },
+            }
+        )
+
+    except Exception as e:
         raise handle_api_error(e, context, ErrorCategory.CONTRACT_ANALYSIS)
 
 
@@ -366,18 +577,20 @@ def _is_valid_contract_document(document: DocumentRecord) -> bool:
 
 
 @retry_database_operation(max_attempts=3)
-async def _create_contract_record(
-    db_client: UserAuthenticatedClient,
+async def _create_contract_record_with_cache(
+    db_client: SupabaseClient,
     document_id: str,
     document: DocumentRecord,
     user: User,
+    content_hash: Optional[str] = None,
 ) -> str:
-    """Create contract record with retry logic"""
+    """Create contract record with cache integration."""
     contract_data = {
         "document_id": document_id,
         "contract_type": document.get("contract_type", "purchase_agreement"),
         "australian_state": user.australian_state,
-        "user_id": user.id,
+        "user_id": str(user.id),
+        "content_hash": content_hash,  # Same as content_hash for contracts
     }
 
     contract_result = await db_client.database.insert("contracts", contract_data)
@@ -389,15 +602,19 @@ async def _create_contract_record(
 
 
 @retry_database_operation(max_attempts=3)
-async def _create_analysis_record(
-    db_client: UserAuthenticatedClient, contract_id: str, user_id: str
+async def _create_analysis_record_with_cache(
+    db_client: SupabaseClient,
+    contract_id: str,
+    user_id: str,
+    content_hash: Optional[str] = None,
 ) -> str:
-    """Create analysis record with retry logic"""
+    """Create analysis record with cache integration."""
     analysis_data = {
         "contract_id": contract_id,
         "user_id": user_id,
         "agent_version": "1.0",
         "status": "pending",
+        "content_hash": content_hash,  # Same as content_hash for contracts
     }
 
     analysis_result = await db_client.database.insert(
@@ -411,24 +628,31 @@ async def _create_analysis_record(
 
 
 @retry_api_call(max_attempts=2)
-async def _start_background_analysis(
+async def _start_background_analysis_with_cache(
     contract_id: str,
     analysis_id: str,
     user_id: str,
     document: DocumentRecord,
-    analysis_options: AnalysisOptions,
+    analysis_options: Dict[str, Any],
+    content_hash: Optional[str],
+    cache_service: CacheService,
 ) -> str:
-    """Start background analysis with retry logic"""
+    """Start background analysis with cache integration."""
     try:
         from app.tasks.background_tasks import analyze_contract_background
 
-        task = analyze_contract_background.delay(
-            contract_id,
-            analysis_id,
-            user_id,
-            document,
-            analysis_options.model_dump(),
-        )
+        # Enhanced task parameters with cache integration
+        task_params = {
+            "contract_id": contract_id,
+            "analysis_id": analysis_id,
+            "user_id": user_id,
+            "document": document,
+            "analysis_options": analysis_options,
+            "content_hash": content_hash,
+            "enable_caching": True,
+        }
+
+        task = analyze_contract_background.delay(**task_params)
 
         if not task or not task.id:
             raise ValueError("Failed to queue contract analysis")
@@ -436,19 +660,45 @@ async def _start_background_analysis(
         return task.id
 
     except Exception as e:
-        # Log the specific error for debugging
         logger.error(f"Background task creation failed: {str(e)}")
         raise ValueError(
             "Our AI service is temporarily busy. Please try again in a few minutes"
         )
 
 
+async def _generate_document_content_hash(document: DocumentRecord) -> Optional[str]:
+    """Generate content hash for document."""
+    try:
+        # Try to get hash from document record first
+        if document.get("content_hash"):
+            return document["content_hash"]
+
+        # If document has processing results with text, hash that
+        processing_results = document.get("processing_results", {})
+        text_extraction = processing_results.get("text_extraction", {})
+        full_text = text_extraction.get("full_text", "")
+
+        if full_text:
+            # Hash the extracted text content
+            content_bytes = full_text.encode("utf-8")
+            return hashlib.sha256(content_bytes).hexdigest()
+
+        # Fallback: create hash from document metadata
+        metadata = f"{document.get('original_filename', '')}{document.get('file_size', 0)}{document.get('created_at', '')}"
+        return hashlib.sha256(metadata.encode("utf-8")).hexdigest()
+
+    except Exception as e:
+        logger.error(f"Error generating content hash: {str(e)}")
+        return None
+
+
 @router.get("/{contract_id}/status")
 async def get_analysis_status(
     contract_id: str,
     user: User = Depends(get_current_user),
+    cache_service: CacheService = Depends(get_cache_service),
 ) -> AnalysisStatusResponse:
-    """Get contract analysis status and progress with enhanced error handling"""
+    """Get contract analysis status with cache information."""
 
     context = create_error_context(
         user_id=str(user.id), contract_id=contract_id, operation="get_analysis_status"
@@ -473,7 +723,10 @@ async def get_analysis_status(
         # Calculate progress with enhanced information
         progress_info = _calculate_analysis_progress(analysis)
 
-        return {
+        # Check if this was a cached analysis
+        cached_indicator = analysis.get("analysis_metadata", {}).get("cached_from")
+
+        response = {
             "contract_id": contract_id,
             "analysis_id": analysis["id"],
             "status": analysis["status"],
@@ -485,6 +738,13 @@ async def get_analysis_status(
             "status_message": progress_info["status_message"],
             "next_update_in_seconds": progress_info.get("next_update_in_seconds"),
         }
+
+        # Add cache information if available
+        if cached_indicator:
+            response["cached"] = True
+            response["cache_source"] = cached_indicator
+
+        return response
 
     except HTTPException:
         raise
@@ -516,7 +776,9 @@ async def _get_analysis_status_with_validation(
     # Get analysis status
     result = (
         db_client.table("contract_analyses")
-        .select("id, status, created_at, updated_at, processing_time, error_message")
+        .select(
+            "id, status, created_at, updated_at, processing_time, error_message, analysis_metadata"
+        )
         .eq("contract_id", contract_id)
         .order("created_at", desc=True)
         .limit(1)
@@ -590,7 +852,7 @@ async def get_contract_analysis(
     contract_id: str,
     user: User = Depends(get_current_user),
 ) -> ContractAnalysisResultResponse:
-    """Get contract analysis results"""
+    """Get contract analysis results with cache information."""
 
     try:
         # Get authenticated client
@@ -632,7 +894,8 @@ async def get_contract_analysis(
         if not doc_result.data:
             raise HTTPException(status_code=403, detail="Access denied")
 
-        return {
+        # Enhanced response with cache information
+        response = {
             "contract_id": contract_id,
             "analysis_status": analysis["status"],
             "analysis_result": analysis.get("analysis_result", {}),
@@ -640,6 +903,14 @@ async def get_contract_analysis(
             "processing_time": analysis.get("processing_time"),
             "created_at": analysis["created_at"],
         }
+
+        # Add cache information if available
+        metadata = analysis.get("analysis_metadata", {})
+        if metadata.get("cached_from"):
+            response["cached"] = True
+            response["cache_source"] = metadata["cached_from"]
+
+        return response
 
     except HTTPException:
         # Re-raise HTTPExceptions (validation errors) without modification
