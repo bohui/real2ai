@@ -1,3 +1,0 @@
-"""
-API models and schemas
-"""
