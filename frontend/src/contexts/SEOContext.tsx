@@ -10,6 +10,7 @@ import React, {
   useState,
   useEffect,
   useMemo,
+  useRef,
 } from "react";
 import { useLocation } from "react-router-dom";
 import { SEOData } from "@/components/seo/SEOHead";
@@ -66,7 +67,7 @@ export function SEOProvider({ children, baseConfig = {} }: SEOProviderProps) {
         setCurrentSEO(seoData);
       } catch (error) {
         console.error("Failed to generate SEO data:", error);
-        // Fallback to default SEO
+        // Fallback to default SEO - use stable references
         setCurrentSEO({
           title: config.defaultTitle,
           description: config.defaultDescription,
@@ -76,7 +77,7 @@ export function SEOProvider({ children, baseConfig = {} }: SEOProviderProps) {
         setIsLoading(false);
       }
     },
-    [config]
+    [config.defaultTitle, config.defaultDescription]
   );
 
   // Update SEO when route changes
@@ -157,19 +158,29 @@ export function usePageSEO(
   const { updateGlobalSEO, updateDynamicSEO, currentSEO, isLoading } =
     useSEOContext();
 
-  // Update SEO with static data on mount
+  // Store stable references to functions to prevent infinite loops
+  const updateGlobalSEORef = useRef(updateGlobalSEO);
+  const updateDynamicSEORef = useRef(updateDynamicSEO);
+  
+  // Update refs when functions change
+  useEffect(() => {
+    updateGlobalSEORef.current = updateGlobalSEO;
+    updateDynamicSEORef.current = updateDynamicSEO;
+  }, [updateGlobalSEO, updateDynamicSEO]);
+
+  // Update SEO with static data on mount - only run when staticSEO changes
   useEffect(() => {
     if (staticSEO && Object.keys(staticSEO).length > 0) {
-      updateGlobalSEO(staticSEO);
+      updateGlobalSEORef.current(staticSEO);
     }
-  }, [staticSEO, updateGlobalSEO]);
+  }, [staticSEO]);
 
-  // Update SEO with dynamic data when it changes
+  // Update SEO with dynamic data when it changes - only run when dynamicData changes  
   useEffect(() => {
     if (dynamicData && Object.keys(dynamicData).length > 0) {
-      updateDynamicSEO(dynamicData);
+      updateDynamicSEORef.current(dynamicData);
     }
-  }, [dynamicData, updateDynamicSEO]);
+  }, [dynamicData]);
 
   const convenienceMethods = useMemo(
     () => ({
