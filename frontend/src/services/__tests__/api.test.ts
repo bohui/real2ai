@@ -94,6 +94,34 @@ describe('ApiService', () => {
       await expect(apiService.login(loginData)).rejects.toThrow()
     })
 
+    it('should handle network errors', async () => {
+      mockAxiosInstance.post.mockRejectedValueOnce(new Error('Network Error'))
+
+      const loginData: UserLoginRequest = {
+        email: 'test@example.com',
+        password: 'password123'
+      }
+
+      await expect(apiService.login(loginData)).rejects.toThrow('Network Error')
+    })
+
+    it('should handle server errors', async () => {
+      const serverError = {
+        response: {
+          status: 500,
+          data: { detail: 'Internal Server Error' }
+        }
+      }
+      mockAxiosInstance.post.mockRejectedValueOnce(serverError)
+
+      const loginData: UserLoginRequest = {
+        email: 'test@example.com', 
+        password: 'password123'
+      }
+
+      await expect(apiService.login(loginData)).rejects.toThrow()
+    })
+
     it('should set and clear auth token', () => {
       apiService.setToken('test-token')
       // Token is stored internally, we can't access it directly
@@ -143,6 +171,130 @@ describe('ApiService', () => {
           creditsRemaining: 50
         }
       }
+      mockAxiosInstance.get.mockResolvedValueOnce(mockStats)
+
+      const result = await apiService.getUserStats()
+      
+      expect(mockAxiosInstance.get).toHaveBeenCalledWith('/users/stats')
+      expect(result).toEqual(mockStats.data)
+    })
+  })
+
+  describe('Document Management', () => {
+    it('should upload document successfully', async () => {
+      const mockFile = new File(['test content'], 'test.pdf', { type: 'application/pdf' })
+      const mockResponse = {
+        data: {
+          id: 'doc-123',
+          filename: 'test.pdf',
+          status: 'uploaded',
+          document_id: 'doc-123'
+        }
+      }
+      mockAxiosInstance.post.mockResolvedValueOnce(mockResponse)
+
+      const result = await apiService.uploadDocument(mockFile, 'purchase_agreement')
+      
+      expect(mockAxiosInstance.post).toHaveBeenCalledWith(
+        '/documents/upload', 
+        expect.any(FormData),
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'Content-Type': 'multipart/form-data'
+          })
+        })
+      )
+      expect(result).toEqual(mockResponse.data)
+    })
+
+    it('should handle document upload errors', async () => {
+      const mockFile = new File(['test content'], 'test.pdf', { type: 'application/pdf' })
+      const errorResponse = {
+        response: {
+          status: 413,
+          data: { detail: 'File too large' }
+        }
+      }
+      mockAxiosInstance.post.mockRejectedValueOnce(errorResponse)
+
+      await expect(apiService.uploadDocument(mockFile, 'purchase_agreement')).rejects.toThrow()
+    })
+
+    it('should get document details', async () => {
+      const mockDocument = {
+        data: {
+          id: 'doc-123',
+          filename: 'test.pdf',
+          upload_date: '2024-01-01T00:00:00Z',
+          file_size: 1024,
+          status: 'processed'
+        }
+      }
+      mockAxiosInstance.get.mockResolvedValueOnce(mockDocument)
+
+      const result = await apiService.getDocument('doc-123')
+      
+      expect(mockAxiosInstance.get).toHaveBeenCalledWith('/documents/doc-123')
+      expect(result).toEqual(mockDocument.data)
+    })
+  })
+
+  describe('Contract Analysis', () => {
+    it('should start contract analysis', async () => {
+      const mockRequest: ContractAnalysisRequest = {
+        document_id: 'doc-123',
+        contract_type: 'purchase_agreement',
+        australian_state: 'NSW',
+        analysis_preferences: {
+          focus_areas: ['risk_assessment'],
+          include_recommendations: true
+        }
+      }
+      const mockResponse = {
+        data: {
+          analysis_id: 'analysis-456',
+          status: 'started'
+        }
+      }
+      mockAxiosInstance.post.mockResolvedValueOnce(mockResponse)
+
+      const result = await apiService.startAnalysis(mockRequest)
+      
+      expect(mockAxiosInstance.post).toHaveBeenCalledWith('/contracts/analyze', mockRequest)
+      expect(result).toEqual(mockResponse.data)
+    })
+
+    it('should get analysis result with retry logic', async () => {
+      const mockResult = {
+        data: {
+          contract_id: 'doc-123',
+          analysis_status: 'completed',
+          analysis_result: {
+            contract_terms: { price: 500000 },
+            risk_assessment: { overall_risk_score: 3.2 }
+          }
+        }
+      }
+      mockAxiosInstance.get.mockResolvedValueOnce(mockResult)
+
+      const result = await apiService.getAnalysisResult('doc-123')
+      
+      expect(mockAxiosInstance.get).toHaveBeenCalledWith('/contracts/doc-123/analysis')
+      expect(result).toHaveProperty('contract_id', 'doc-123')
+      expect(result).toHaveProperty('analysis_status', 'completed')
+    })
+
+    it('should handle analysis errors', async () => {
+      const errorResponse = {
+        response: {
+          status: 404,
+          data: { detail: 'Analysis not found' }
+        }
+      }
+      mockAxiosInstance.get.mockRejectedValueOnce(errorResponse)
+
+      await expect(apiService.getAnalysisResult('nonexistent')).rejects.toThrow()
+    })
       mockAxiosInstance.get.mockResolvedValueOnce(mockStats)
 
       const result = await apiService.getUserStats()

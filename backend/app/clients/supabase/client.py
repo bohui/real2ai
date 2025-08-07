@@ -193,31 +193,31 @@ class SupabaseClient(BaseClient):
 
     # Convenience methods that delegate to sub-clients
 
-    def table(self, table_name: str):
+    def table(self, table_name: str) -> Any:
         """Get table client (database operation)."""
         return self.database.table(table_name)
 
-    def from_(self, table_name: str):
+    def from_(self, table_name: str) -> Any:
         """Get table client using from_ syntax."""
         return self.database.from_(table_name)
 
-    def storage(self):
+    def storage(self) -> Any:
         """Get storage client."""
         return self.supabase_client.storage
 
-    async def execute_rpc(self, function_name: str, params: Dict[str, Any] = None):
+    async def execute_rpc(self, function_name: str, params: Dict[str, Any] = None) -> Any:
         """Execute RPC function."""
         return await self.database.execute_rpc(function_name, params)
 
-    async def authenticate_user(self, token: str):
+    async def authenticate_user(self, token: str) -> Any:
         """Authenticate user with token."""
         return await self.auth.authenticate_user(token)
 
-    async def get_user(self, user_id: str):
+    async def get_user(self, user_id: str) -> Any:
         """Get user by ID."""
         return await self.auth.get_user(user_id)
 
-    def set_user_token(self, token: str):
+    def set_user_token(self, token: str) -> None:
         """Set user JWT token for RLS-enabled operations."""
         try:
             # Set the auth header for all subsequent requests
@@ -232,11 +232,11 @@ class SupabaseClient(BaseClient):
             self.logger.error(f"Failed to set user token: {e}")
             raise ClientError(f"Failed to set user token: {str(e)}", self.client_name)
     
-    def set_auth_token(self, token: str):
+    def set_auth_token(self, token: str) -> None:
         """Alias for set_user_token for consistency with auth context."""
         self.set_user_token(token)
     
-    def clear_auth_token(self):
+    def clear_auth_token(self) -> None:
         """Clear the auth token to revert to anon key."""
         try:
             if self._supabase_client:

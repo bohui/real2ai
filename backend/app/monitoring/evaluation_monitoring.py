@@ -686,7 +686,7 @@ class EvaluationMonitor:
 
 
 # Global monitor instance
-_monitor = None
+_monitor: Optional["EvaluationMonitor"] = None
 
 
 def get_monitor() -> EvaluationMonitor:

@@ -449,7 +449,7 @@ async def _update_document_status(
 
 # Celery monitoring and health checks
 @celery_app.task
-def health_check():
+def health_check() -> Dict[str, str]:
     """Health check task for monitoring"""
     return {
         "status": "healthy",
@@ -459,7 +459,7 @@ def health_check():
 
 
 @celery_app.task
-def cleanup_failed_tasks():
+def cleanup_failed_tasks() -> None:
     """Cleanup failed OCR tasks"""
     # Implementation for cleaning up failed tasks
     return {"cleanup_completed": True}

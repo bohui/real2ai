@@ -188,19 +188,6 @@ def _is_valid_contract_document(document) -> bool:
     if document.get("file_size", 0) > 10 * 1024 * 1024:  # 10MB limit
         raise ValueError("File is too large. Please use a file smaller than 10MB")
 
-    # Check file type
-    allowed_types = [
-        "application/pdf",
-        "application/msword",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    ]
-
-    file_type = document.get("file_type", "").lower()
-    if file_type and file_type not in allowed_types:
-        raise ValueError(
-            "This file format isn't supported. Please upload a PDF, DOC, or DOCX file"
-        )
-
     # Check if document has content
     if not document.get("content") and not document.get("file_path"):
         raise ValueError("The document appears to be empty or corrupted")
