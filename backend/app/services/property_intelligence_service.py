@@ -10,21 +10,14 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 import json
 
-from app.api.models import (
+from app.schema.property import (
     PropertyProfile,
     PropertyValuation,
     PropertyMarketData,
     PropertyRiskAssessment,
-    PropertySearchRequest,
-    PropertyAnalyticsRequest,
-    PropertyInvestmentAnalysis,
-    PropertyFinancialBreakdown,
-    PropertyMarketTrends,
-    PropertyNeighborhoodAnalysis,
-    ComparableSale,
-    AustralianState,
-    RiskLevel
+    PropertySearchRequest
 )
+from app.models.contract_state import AustralianState, RiskLevel
 from app.clients.factory import get_supabase_client
 from app.services.unified_cache_service import UnifiedCacheService
 

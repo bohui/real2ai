@@ -22,68 +22,17 @@ import json
 from io import StringIO
 import csv
 
-from app.api.models import (
+from app.schema.property import (
     PropertySearchFilters,
     PropertyProfileResponse,
-    PropertyAnalyticsRequest,
-    PropertyAnalyticsResponse,
-    BulkPropertyAnalysisRequest,
-    PropertyWatchlistRequest,
-    PropertyWatchlistResponse,
-    PropertyComparisonResult,
-    PropertyPortfolioMetrics,
-    PropertyMarketInsight,
-    PropertyInvestmentRecommendation,
-    PropertyAlertSettings,
-    AustralianState,
-    RiskLevel,
+    PropertyAnalysisDepth,
+    MarketInsightRequest
 )
+from app.models.contract_state import AustralianState, RiskLevel
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/property-intelligence", tags=["Property Intelligence"])
-
-
-# Request/Response Models
-class PropertySearchRequest(BaseModel):
-    """Enhanced property search request"""
-
-    query: Optional[str] = None
-    filters: PropertySearchFilters = PropertySearchFilters()
-    location: Optional[str] = None
-    radius_km: float = Field(5.0, ge=0.5, le=50.0)
-    limit: int = Field(20, ge=1, le=100)
-    sort_by: str = Field(
-        "relevance",
-        pattern="^(relevance|price_asc|price_desc|size_asc|size_desc|date_asc|date_desc)$",
-    )
-    include_off_market: bool = False
-    include_historical: bool = False
-
-
-class PropertyAnalysisDepth(BaseModel):
-    """Property analysis depth configuration"""
-
-    basic_info: bool = True
-    market_analysis: bool = True
-    valuation: bool = True
-    investment_metrics: bool = True
-    risk_assessment: bool = True
-    neighborhood_analysis: bool = False
-    forecasting: bool = False
-    comparable_analysis: bool = True
-    financial_modeling: bool = False
-
-
-class MarketInsightRequest(BaseModel):
-    """Market insight request parameters"""
-
-    location: str
-    insight_types: List[str] = ["trends", "forecasts", "opportunities"]
-    property_types: List[str] = []
-    time_horizon: str = Field(
-        "12_months", pattern="^(3_months|6_months|12_months|24_months|60_months)$"
-    )
+router = APIRouter(prefix="/property-intelligence", tags=["Property Intelligence"])
 
 
 # Dependency injection for services

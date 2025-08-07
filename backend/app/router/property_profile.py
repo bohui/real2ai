@@ -7,11 +7,12 @@ combining Domain and CoreLogic data sources.
 
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, HTTPException, status, Depends, Query, Body
-from pydantic import BaseModel, Field, field_validator
 import logging
 from datetime import datetime
 
-from app.api.models import (
+from app.schema.property import (
+    PropertyProfileRequestModel,
+    PropertyComparisonRequestModel,
     PropertySearchRequest,
     PropertyProfileResponse,
     PropertyValuationRequest,
@@ -28,61 +29,7 @@ from app.clients.base.exceptions import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/property", tags=["Property Profile"])
-
-
-# Request/Response Models for API endpoints
-
-class PropertyProfileRequestModel(BaseModel):
-    """Request model for property profile generation."""
-    
-    address: str = Field(..., description="Property address", min_length=10, max_length=200)
-    property_type: Optional[str] = Field(None, description="Property type (house, apartment, townhouse, etc.)")
-    valuation_type: str = Field("avm", description="Valuation type (avm, desktop, professional)")
-    include_market_analysis: bool = Field(True, description="Include market analysis data")
-    include_risk_assessment: bool = Field(True, description="Include risk assessment")
-    include_investment_metrics: bool = Field(True, description="Include investment analysis")
-    include_comparable_sales: bool = Field(True, description="Include comparable sales data")
-    radius_km: float = Field(2.0, description="Radius for comparable sales search (km)", ge=0.5, le=10.0)
-    
-    @field_validator("valuation_type")
-    @classmethod
-    def validate_valuation_type(cls, v):
-        if v not in ["avm", "desktop", "professional"]:
-            raise ValueError("Valuation type must be 'avm', 'desktop', or 'professional'")
-        return v
-    
-    @field_validator("address")
-    @classmethod
-    def validate_address(cls, v):
-        if not v or len(v.strip()) < 10:
-            raise ValueError("Address must be at least 10 characters long")
-        return v.strip()
-
-
-class PropertyComparisonRequestModel(BaseModel):
-    """Request model for property comparison."""
-    
-    addresses: List[str] = Field(..., description="List of property addresses to compare", min_length=2, max_length=10)
-    comparison_criteria: Optional[List[str]] = Field(
-        None, 
-        description="Criteria to focus on (valuation, market_performance, risk_assessment, investment_potential)"
-    )
-    
-    @field_validator("addresses")
-    @classmethod
-    def validate_addresses(cls, v):
-        if len(v) < 2:
-            raise ValueError("At least 2 addresses are required for comparison")
-        if len(v) > 10:
-            raise ValueError("Maximum 10 addresses allowed for comparison")
-        
-        # Validate each address
-        for address in v:
-            if not address or len(address.strip()) < 10:
-                raise ValueError(f"Invalid address: {address}")
-        
-        return [addr.strip() for addr in v]
+router = APIRouter(prefix="/property", tags=["Property Profile"])
 
 
 # Dependency to get property profile service

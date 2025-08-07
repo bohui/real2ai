@@ -11,12 +11,10 @@ from decimal import Decimal
 import json
 import statistics
 
-from app.api.models import (
-    PropertyMarketData,
-    PropertyMarketTrends,
-    PropertyMarketInsight,
-    AustralianState
+from app.schema.property import (
+    PropertyMarketData
 )
+from app.models.contract_state import AustralianState
 from app.clients.factory import get_supabase_client
 from app.services.unified_cache_service import UnifiedCacheService
 
