@@ -6,11 +6,11 @@ import {
   ContractAnalysisResult,
   DocumentDetails,
   DocumentUploadResponse,
+  OnboardingPreferences,
   UsageStats,
   User,
   UserLoginRequest,
   UserRegistrationRequest,
-  OnboardingPreferences,
 } from "@/types";
 
 // API Configuration
@@ -20,6 +20,9 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ||
 class ApiService {
   private client: AxiosInstance;
   private token: string | null = null;
+  private refreshToken: string | null = null;
+  private isRefreshing = false;
+  private failedQueue: Array<{ resolve: Function; reject: Function }> = [];
 
   constructor() {
     this.client = axios.create({
@@ -41,39 +44,123 @@ class ApiService {
       (error) => Promise.reject(error),
     );
 
-    // Response interceptor for error handling
+    // Response interceptor for error handling and token refresh
     this.client.interceptors.response.use(
       (response) => response,
-      (error: AxiosError) => {
-        if (error.response?.status === 401) {
-          this.clearToken();
-          // Redirect to login or emit event for auth state update
-          window.dispatchEvent(new CustomEvent("auth:unauthorized"));
+      async (error: AxiosError) => {
+        const originalRequest = error.config as any;
+
+        if (error.response?.status === 401 && !originalRequest._retry) {
+          if (this.isRefreshing) {
+            // If already refreshing, queue the request
+            return new Promise((resolve, reject) => {
+              this.failedQueue.push({ resolve, reject });
+            }).then((token) => {
+              if (originalRequest.headers) {
+                originalRequest.headers.Authorization = `Bearer ${token}`;
+              }
+              return this.client.request(originalRequest);
+            }).catch((err) => {
+              return Promise.reject(err);
+            });
+          }
+
+          originalRequest._retry = true;
+          this.isRefreshing = true;
+
+          try {
+            if (this.refreshToken) {
+              const newTokens = await this.refreshTokens();
+              this.processQueue(null, newTokens.access_token);
+              
+              // Retry the original request with new token
+              if (originalRequest.headers) {
+                originalRequest.headers.Authorization = `Bearer ${newTokens.access_token}`;
+              }
+              return this.client.request(originalRequest);
+            } else {
+              throw new Error("No refresh token available");
+            }
+          } catch (refreshError) {
+            this.processQueue(refreshError, null);
+            this.clearTokens();
+            window.dispatchEvent(new CustomEvent("auth:unauthorized"));
+            return Promise.reject(refreshError);
+          } finally {
+            this.isRefreshing = false;
+          }
         }
+
         return Promise.reject(error);
       },
     );
 
-    // Load token from localStorage
-    this.loadToken();
+    // Load tokens from localStorage
+    this.loadTokens();
   }
 
   // Token management
+  setTokens(accessToken: string, refreshToken: string): void {
+    this.token = accessToken;
+    this.refreshToken = refreshToken;
+    localStorage.setItem("auth_token", accessToken);
+    localStorage.setItem("refresh_token", refreshToken);
+  }
+
   setToken(token: string): void {
     this.token = token;
     localStorage.setItem("auth_token", token);
   }
 
-  clearToken(): void {
+  clearTokens(): void {
     this.token = null;
+    this.refreshToken = null;
     localStorage.removeItem("auth_token");
+    localStorage.removeItem("refresh_token");
   }
 
-  private loadToken(): void {
+  clearToken(): void {
+    this.clearTokens();
+  }
+
+  private loadTokens(): void {
     const token = localStorage.getItem("auth_token");
+    const refreshToken = localStorage.getItem("refresh_token");
     if (token) {
       this.token = token;
     }
+    if (refreshToken) {
+      this.refreshToken = refreshToken;
+    }
+  }
+
+  private processQueue(error: any, token: string | null = null): void {
+    this.failedQueue.forEach(({ resolve, reject }) => {
+      if (error) {
+        reject(error);
+      } else {
+        resolve(token);
+      }
+    });
+    
+    this.failedQueue = [];
+  }
+
+  private async refreshTokens(): Promise<{ access_token: string; refresh_token: string }> {
+    if (!this.refreshToken) {
+      throw new Error("No refresh token available");
+    }
+
+    const response = await this.client.post("/api/auth/refresh", {}, {
+      headers: {
+        "X-Refresh-Token": this.refreshToken,
+      },
+    });
+
+    const { access_token, refresh_token } = response.data;
+    this.setTokens(access_token, refresh_token);
+    
+    return { access_token, refresh_token };
   }
 
   // Authentication endpoints
@@ -82,6 +169,9 @@ class ApiService {
       "/api/auth/register",
       data,
     );
+    if (response.data.access_token && response.data.refresh_token) {
+      this.setTokens(response.data.access_token, response.data.refresh_token);
+    }
     return response.data;
   }
 
@@ -90,14 +180,14 @@ class ApiService {
       "/api/auth/login",
       data,
     );
-    if (response.data.access_token) {
-      this.setToken(response.data.access_token);
+    if (response.data.access_token && response.data.refresh_token) {
+      this.setTokens(response.data.access_token, response.data.refresh_token);
     }
     return response.data;
   }
 
   async logout(): Promise<void> {
-    this.clearToken();
+    this.clearTokens();
     // Could call logout endpoint if it exists
   }
 
@@ -115,7 +205,9 @@ class ApiService {
     return response.data;
   }
 
-  async updateUserPreferences(preferences: Record<string, unknown>): Promise<void> {
+  async updateUserPreferences(
+    preferences: Record<string, unknown>,
+  ): Promise<void> {
     await this.client.put("/api/users/preferences", preferences);
   }
 
@@ -225,7 +317,6 @@ class ApiService {
     const apiData = response.data as any;
     const analysisResult = apiData.analysis_result || {};
 
-
     // Transform to match ContractAnalysisResult interface
     const transformedResult: ContractAnalysisResult = {
       contract_id: (apiData as any).contract_id,
@@ -329,7 +420,10 @@ class ApiService {
     return { data: response.data };
   }
 
-  async delete<T = unknown>(url: string, config?: unknown): Promise<{ data: T }> {
+  async delete<T = unknown>(
+    url: string,
+    config?: unknown,
+  ): Promise<{ data: T }> {
     const response = await this.client.delete<T>(url, config);
     return { data: response.data };
   }
