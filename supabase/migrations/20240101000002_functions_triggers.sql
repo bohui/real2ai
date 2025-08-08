@@ -757,18 +757,32 @@ BEGIN
     FROM contract_analyses
     WHERE content_hash = p_content_hash;
     
-    -- If analysis exists and is in a terminal state, reset it
+    -- If analysis exists and failed or was cancelled, reset it for retry
+    -- Note: Successfully completed analyses should NOT be retried
     IF v_analysis_id IS NOT NULL AND v_existing_status IN ('failed', 'cancelled') THEN
         UPDATE contract_analyses
         SET 
             status = 'pending',
             error_message = NULL,
             analysis_result = '{}',
+            executive_summary = NULL,
+            risk_assessment = NULL,
+            compliance_check = NULL,
+            recommendations = NULL,
+            risk_score = 0,
+            overall_risk_score = 0,
+            processing_time = NULL,
+            processing_completed_at = NULL,
             updated_at = NOW()
         WHERE id = v_analysis_id;
     -- If analysis doesn't exist, create new one
     ELSIF v_analysis_id IS NULL THEN
         v_analysis_id := upsert_contract_analysis(p_content_hash);
+    -- If analysis exists and is completed, don't retry - return the existing ID
+    ELSIF v_existing_status = 'completed' THEN
+        -- Analysis already completed successfully, no retry needed
+        -- Return existing analysis_id without modification
+        NULL; -- No action needed
     END IF;
     
     RETURN v_analysis_id;
@@ -777,7 +791,7 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Add comments for documentation
 COMMENT ON FUNCTION upsert_contract_analysis IS 'Upsert function for contract analyses to handle duplicate content_hash';
-COMMENT ON FUNCTION retry_contract_analysis IS 'Safely retry analysis by checking existing status and resetting if needed';
+COMMENT ON FUNCTION retry_contract_analysis IS 'Safely retry analysis by checking existing status - only retries failed/cancelled analyses, not completed ones';
 
 -- Safely cancel user's analysis without mutating shared rows
 -- Scopes cancellation to user-owned progress; avoids direct writes to shared contract_analyses

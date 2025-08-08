@@ -199,6 +199,20 @@ async def comprehensive_document_analysis(
                     "Content hash not found in document or analysis options"
                 )
 
+            # Check if this is a retry operation and clear progress accordingly
+            is_retry = analysis_options.get("is_retry", False)
+            if is_retry:
+                logger.info(f"Retry detected for content_hash {content_hash}, clearing previous progress")
+                # Clear any existing user progress records for this retry
+                try:
+                    await user_client.database.delete(
+                        "analysis_progress",
+                        filters={"content_hash": content_hash, "user_id": user_id},
+                    )
+                except Exception as cleanup_error:
+                    logger.warning(f"Failed to clear previous progress: {cleanup_error}")
+                    # Continue with retry even if cleanup fails
+
             # =============================================
             # PHASE 1: DOCUMENT PROCESSING (0-75%)
             # =============================================

@@ -783,6 +783,8 @@ async def handle_retry_analysis_request(
                 "include_recommendations": True,
             },
         )
+        # Mark this as a retry operation
+        analysis_options["is_retry"] = True
 
         # Send acknowledgment
         await websocket_manager.send_personal_message(
@@ -812,6 +814,33 @@ async def handle_retry_analysis_request(
             raise ValueError("Contract not found")
 
         content_hash = contract_result["data"][0]["content_hash"]
+
+        # Check current analysis status before attempting retry
+        analysis_status_result = await user_client.database.select(
+            "contract_analyses",
+            columns="status",
+            filters={"content_hash": content_hash},
+        )
+        
+        if analysis_status_result.get("data"):
+            current_status = analysis_status_result["data"][0]["status"]
+            if current_status == "completed":
+                # Analysis already completed successfully, no retry needed
+                await websocket_manager.send_personal_message(
+                    document_id,
+                    websocket,
+                    {
+                        "event_type": "retry_not_needed",
+                        "timestamp": datetime.now(UTC).isoformat(),
+                        "data": {
+                            "document_id": document_id,
+                            "contract_id": contract_id,
+                            "message": "Analysis already completed successfully. No retry needed.",
+                            "current_status": current_status,
+                        },
+                    },
+                )
+                return
 
         # Use the new retry function to safely handle existing analysis records
         retry_analysis_id = await user_client.database.execute_rpc(
