@@ -26,7 +26,7 @@ from app.core.config import get_settings
 from app.clients.factory import get_supabase_client
 from app.clients.supabase.client import SupabaseClient
 from app.services.document_service import DocumentService
-from app.services.websocket_service import WebSocketManager
+from app.services.websocket_singleton import websocket_manager
 from app.core.langsmith_init import initialize_langsmith, get_langsmith_status
 
 # Import routers
@@ -76,7 +76,6 @@ security = HTTPBearer()
 # db_client will be initialized in lifespan function
 db_client: Optional[SupabaseClient] = None
 document_service = DocumentService()
-websocket_manager = WebSocketManager()
 
 # Initialize LangGraph workflow (will be initialized in lifespan)
 contract_workflow = ContractAnalysisWorkflow(

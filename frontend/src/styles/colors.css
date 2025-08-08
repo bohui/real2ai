@@ -116,3 +116,38 @@
   --color-verified-900: #1e3a8a;
   --color-verified-950: #172554;
 }
+
+/* Dark mode variable overrides */
+.dark {
+  /* Primary tweaks for dark surfaces */
+  --color-primary-50: #0b1923;
+  --color-primary-100: #0f2740;
+  --color-primary-200: #123657;
+  --color-primary-300: #15486f;
+  --color-primary-400: #196186;
+  --color-primary-500: #1d7aa0; /* used for focus rings */
+  --color-primary-600: #2090b6;
+  --color-primary-700: #27a7c9;
+  --color-primary-800: #3cb9d7;
+  --color-primary-900: #5ad0e6;
+  --color-primary-950: #a0e9f3;
+
+  /* Accent/semantic hues adapted for dark */
+  --color-accent-100: #3a1d0b;
+  --color-accent-500: #f08a1a;
+  --color-trust-100: #0f2622;
+  --color-trust-500: #16c3ad;
+  --color-secondary-100: #2a2305;
+  --color-secondary-500: #d4a508;
+  --color-success-100: #0e2415;
+  --color-success-500: #1fb969;
+  --color-warning-100: #2a2007;
+  --color-warning-500: #e6910a;
+  --color-danger-100: #2a0e0e;
+  --color-danger-500: #e23a3a;
+
+  --color-compliant-100: #0e2415;
+  --color-compliant-500: #1fb969;
+  --color-verified-100: #0b1a33;
+  --color-verified-500: #2f83f7;
+}

@@ -51,7 +51,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       "focus:outline-none focus:ring-2 focus:ring-offset-2",
       "disabled:opacity-50 disabled:cursor-not-allowed",
       "select-none relative overflow-hidden",
-      "transform active:scale-95 hover:scale-[1.02]",
+      "transform hover:scale-[1.01] active:scale-95 motion-reduce:transform-none motion-reduce:transition-none",
       "whitespace-nowrap",
     ].join(" ");
 

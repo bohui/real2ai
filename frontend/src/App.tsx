@@ -20,9 +20,15 @@ const AnalysisPage = React.lazy(() => import("@/pages/AnalysisPage"));
 const HistoryPage = React.lazy(() => import("@/pages/HistoryPage"));
 const SettingsPage = React.lazy(() => import("@/pages/SettingsPage"));
 const ReportsPage = React.lazy(() => import("@/pages/ReportsPage"));
-const PropertyIntelligencePage = React.lazy(() => import("@/pages/PropertyIntelligencePage"));
-const MarketAnalysisPage = React.lazy(() => import("@/pages/MarketAnalysisPage"));
-const FinancialAnalysisPage = React.lazy(() => import("@/pages/FinancialAnalysisPage"));
+const PropertyIntelligencePage = React.lazy(
+  () => import("@/pages/PropertyIntelligencePage")
+);
+const MarketAnalysisPage = React.lazy(
+  () => import("@/pages/MarketAnalysisPage")
+);
+const FinancialAnalysisPage = React.lazy(
+  () => import("@/pages/FinancialAnalysisPage")
+);
 
 // Components
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
@@ -214,7 +220,10 @@ const App: React.FC = () => {
         aria-busy="true"
       >
         <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-primary-600 border-t-transparent rounded-full animate-spin" aria-hidden="true" />
+          <div
+            className="w-12 h-12 border-4 border-primary-600 border-t-transparent rounded-full animate-spin"
+            aria-hidden="true"
+          />
           <p className="text-neutral-600">Loading Real2.AI...</p>
         </div>
       </div>
@@ -227,68 +236,80 @@ const App: React.FC = () => {
         <SEOProvider>
           <RootSEO />
           <div className="App">
-            <Suspense fallback={<div className="p-8" role="status" aria-live="polite">Loading…</div>}>
-            <Routes>
-              {/* Auth routes */}
-              <Route path="/auth" element={<AuthLayout />}>
-                <Route path="login" element={<LoginPage />} />
-                <Route path="register" element={<RegisterPage />} />
-                <Route index element={<Navigate to="/auth/login" replace />} />
-              </Route>
+            <Suspense
+              fallback={
+                <div className="p-8" role="status" aria-live="polite">
+                  Loading…
+                </div>
+              }
+            >
+              <Routes>
+                {/* Auth routes */}
+                <Route path="/auth" element={<AuthLayout />}>
+                  <Route path="login" element={<LoginPage />} />
+                  <Route path="register" element={<RegisterPage />} />
+                  <Route
+                    index
+                    element={<Navigate to="/auth/login" replace />}
+                  />
+                </Route>
 
-              {/* Protected app routes */}
-              <Route
-                path="/app"
-                element={
-                  <ProtectedRoute>
-                    <Layout />
-                  </ProtectedRoute>
-                }
-              >
-                <Route path="dashboard" element={<DashboardPage />} />
-                <Route path="analysis" element={<AnalysisPage />} />
-                <Route path="analysis/:contractId" element={<AnalysisPage />} />
-                <Route path="history" element={<HistoryPage />} />
-                <Route path="reports" element={<ReportsPage />} />
+                {/* Protected app routes */}
                 <Route
-                  path="property-intelligence"
-                  element={<PropertyIntelligencePage />}
-                />
-                <Route
-                  path="market-analysis"
-                  element={<MarketAnalysisPage />}
-                />
-                <Route
-                  path="financial-analysis"
-                  element={<FinancialAnalysisPage />}
-                />
-                <Route path="settings" element={<SettingsPage />} />
-                <Route
-                  index
-                  element={<Navigate to="/app/dashboard" replace />}
-                />
-              </Route>
+                  path="/app"
+                  element={
+                    <ProtectedRoute>
+                      <Layout />
+                    </ProtectedRoute>
+                  }
+                >
+                  <Route path="dashboard" element={<DashboardPage />} />
+                  <Route path="analysis" element={<AnalysisPage />} />
+                  <Route
+                    path="analysis/:contractId"
+                    element={<AnalysisPage />}
+                  />
+                  <Route path="history" element={<HistoryPage />} />
+                  <Route path="reports" element={<ReportsPage />} />
+                  <Route
+                    path="property-intelligence"
+                    element={<PropertyIntelligencePage />}
+                  />
+                  <Route
+                    path="market-analysis"
+                    element={<MarketAnalysisPage />}
+                  />
+                  <Route
+                    path="financial-analysis"
+                    element={<FinancialAnalysisPage />}
+                  />
+                  <Route path="settings" element={<SettingsPage />} />
+                  <Route
+                    index
+                    element={<Navigate to="/app/dashboard" replace />}
+                  />
+                </Route>
 
-              {/* Root redirect */}
-              <Route
-                path="/"
-                element={
-                  <ProtectedRoute>
-                    <Navigate to="/app/dashboard" replace />
-                  </ProtectedRoute>
-                }
-              />
+                {/* Root redirect */}
+                <Route
+                  path="/"
+                  element={
+                    <ProtectedRoute>
+                      <Navigate to="/app/dashboard" replace />
+                    </ProtectedRoute>
+                  }
+                />
 
-              {/* Catch-all redirect */}
-              <Route
-                path="*"
-                element={
-                  <ProtectedRoute>
-                    <Navigate to="/app/dashboard" replace />
-                  </ProtectedRoute>
-                }
-              />
-            </Routes>
+                {/* Catch-all redirect */}
+                <Route
+                  path="*"
+                  element={
+                    <ProtectedRoute>
+                      <Navigate to="/app/dashboard" replace />
+                    </ProtectedRoute>
+                  }
+                />
+              </Routes>
             </Suspense>
 
             {/* Global components */}

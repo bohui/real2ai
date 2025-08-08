@@ -20,6 +20,8 @@ interface UIState {
   
   // Mobile
   isMobile: boolean
+  // Search overlay
+  isSearchOpen: boolean
   
   // Onboarding
   showOnboarding: boolean
@@ -40,6 +42,8 @@ interface UIState {
   
   setTheme: (theme: 'light' | 'dark' | 'system') => void
   setIsMobile: (isMobile: boolean) => void
+  openSearch: () => void
+  closeSearch: () => void
   
   setShowOnboarding: (show: boolean) => void
   resetOnboardingState: () => void
@@ -54,6 +58,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   modalStack: [],
   theme: 'light',
   isMobile: false,
+  isSearchOpen: false,
   showOnboarding: false,
 
   // Navigation actions
@@ -157,6 +162,10 @@ export const useUIStore = create<UIState>((set, get) => ({
       set({ sidebarOpen: false })
     }
   },
+
+  // Search overlay actions
+  openSearch: () => set({ isSearchOpen: true }),
+  closeSearch: () => set({ isSearchOpen: false }),
 
   // Onboarding actions
   setShowOnboarding: (show: boolean) => {

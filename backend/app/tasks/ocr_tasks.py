@@ -16,7 +16,8 @@ from app.core.celery import celery_app
 from app.core.task_context import user_aware_task
 from app.core.auth_context import AuthContext
 from app.services.document_service import DocumentService
-from app.services.websocket_service import WebSocketManager
+from app.services.websocket_singleton import websocket_manager
+from app.clients.factory import get_supabase_client
 
 logger = logging.getLogger(__name__)
 
@@ -159,7 +160,6 @@ async def _async_process_document_ocr(
     
     db_client = await get_supabase_client()
     document_service = DocumentService()
-    websocket_manager = WebSocketManager()
     
     try:
         # Initialize services
@@ -306,7 +306,7 @@ async def _async_batch_process_documents(
     results = []
     failed_documents = []
     
-    websocket_manager = WebSocketManager()
+    # use shared websocket manager
     
     # Send batch start notification
     await websocket_manager.send_message(

@@ -13,6 +13,7 @@ from app.services.websocket_service import WebSocketEvents
 from app.services.websocket_singleton import websocket_manager
 from app.services.redis_pubsub import redis_pubsub_service
 from app.core.error_handler import handle_api_error, create_error_context, ErrorCategory
+from app.clients.factory import get_service_supabase_client
 from enum import Enum
 
 
@@ -66,8 +67,9 @@ async def check_document_cache_status(document_id: str, user_id: str) -> Dict[st
             f"Checking cache for document {document_id} with content_hash: {content_hash}"
         )
 
-        # Check if we have any existing contract with this content_hash (contracts is now shared resource)
-        contract_result = await user_client.database.select(
+        # Check existing contract with this content_hash using service role (shared resource)
+        service_client = await get_service_supabase_client()
+        contract_result = await service_client.database.select(
             "contracts",
             columns="*",
             filters={"content_hash": content_hash},
@@ -92,8 +94,8 @@ async def check_document_cache_status(document_id: str, user_id: str) -> Dict[st
         contract = contract_result["data"][0]
         contract_id = contract["id"]
 
-        # Check analysis status for this content_hash (contract_analyses is now shared resource)
-        analysis_result = await user_client.database.select(
+        # Check analysis status using service role (shared resource)
+        analysis_result = await service_client.database.select(
             "contract_analyses",
             columns="*",
             filters={"content_hash": content_hash},
@@ -339,6 +341,7 @@ async def document_analysis_websocket(
 
         # Bridge Redis pub/sub updates to this session if not already subscribed
         if document_id not in getattr(redis_pubsub_service, "subscriptions", {}):
+
             async def _forward_pubsub_message(message: Dict[str, Any]):
                 try:
                     await websocket_manager.send_message(document_id, message)
@@ -347,11 +350,53 @@ async def document_analysis_websocket(
 
             try:
                 await redis_pubsub_service.initialize()
-                await redis_pubsub_service.subscribe_to_progress(document_id, _forward_pubsub_message)
+                await redis_pubsub_service.subscribe_to_progress(
+                    document_id, _forward_pubsub_message
+                )
                 subscription_created = True
-                logger.info(f"Redis subscription created for document session {document_id}")
+                logger.info(
+                    f"Redis subscription created for document session {document_id}"
+                )
             except Exception as sub_error:
-                logger.warning(f"Could not subscribe to Redis channel for {document_id}: {sub_error}")
+                logger.warning(
+                    f"Could not subscribe to Redis channel for {document_id}: {sub_error}"
+                )
+
+        # Also subscribe to contract_id and content_hash channels to bridge legacy publishers
+        try:
+            contract_id = cache_status_result.get("contract_id")
+            if contract_id and contract_id not in redis_pubsub_service.subscriptions:
+
+                async def _forward_from_contract(message: Dict[str, Any]):
+                    try:
+                        await websocket_manager.send_message(document_id, message)
+                    except Exception as forward_error:
+                        logger.error(
+                            f"Failed to forward contract pub/sub message: {forward_error}"
+                        )
+
+                await redis_pubsub_service.subscribe_to_progress(
+                    contract_id, _forward_from_contract
+                )
+
+            content_hash = cache_status_result.get("content_hash")
+            if content_hash and content_hash not in redis_pubsub_service.subscriptions:
+
+                async def _forward_from_hash(message: Dict[str, Any]):
+                    try:
+                        await websocket_manager.send_message(document_id, message)
+                    except Exception as forward_error:
+                        logger.error(
+                            f"Failed to forward hash pub/sub message: {forward_error}"
+                        )
+
+                await redis_pubsub_service.subscribe_to_progress(
+                    content_hash, _forward_from_hash
+                )
+        except Exception as extra_sub_error:
+            logger.warning(
+                f"Failed to subscribe to additional channels: {extra_sub_error}"
+            )
 
         # Send cache status and connection confirmation
         await websocket_manager.send_personal_message(

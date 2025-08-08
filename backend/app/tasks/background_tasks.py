@@ -76,7 +76,9 @@ async def update_analysis_progress(
 
         # Upsert progress record using content_hash + user_id unique constraint
         result = await user_client.database.upsert(
-            "analysis_progress", progress_data, conflict_columns=["content_hash", "user_id"]
+            "analysis_progress",
+            progress_data,
+            conflict_columns=["content_hash", "user_id"],
         )
 
         # Send WebSocket update
@@ -238,7 +240,9 @@ async def comprehensive_document_analysis(
             )
 
             # Save page data to database
-            await document_service._save_document_pages(document_id, extraction_result, content_hash)
+            await document_service._save_document_pages(
+                document_id, extraction_result, content_hash
+            )
 
             await update_analysis_progress(
                 user_id,
@@ -750,9 +754,12 @@ async def analyze_contract_background(
         # Log the operation for audit trail
         document_service.log_operation("analyze", "contract", contract_id)
 
-        # Send analysis_started event via Redis Pub/Sub
+        # Derive session id for WebSocket/Redis routing (standardize on document_id)
+        session_id = document.get("id") if isinstance(document, dict) else contract_id
+
+        # Send analysis_started event via Redis Pub/Sub (route via document session id)
         publish_progress_sync(
-            contract_id,
+            session_id,
             {
                 "event_type": "analysis_started",
                 "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -766,7 +773,7 @@ async def analyze_contract_background(
 
         # Also send via WebSocket manager for immediate delivery (if connected)
         await websocket_manager.send_message(
-            contract_id,
+            session_id,
             WebSocketEvents.analysis_started(contract_id, estimated_time=5),
         )
 
@@ -786,7 +793,7 @@ async def analyze_contract_background(
 
         # Progress update: Initial validation complete via Redis Pub/Sub
         publish_progress_sync(
-            contract_id,
+            session_id,
             {
                 "event_type": "analysis_progress",
                 "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -802,7 +809,7 @@ async def analyze_contract_background(
 
         # Also send via WebSocket manager for immediate delivery (if connected)
         await websocket_manager.send_message(
-            contract_id,
+            session_id,
             WebSocketEvents.analysis_progress(
                 contract_id,
                 "validating_input",
@@ -845,7 +852,7 @@ async def analyze_contract_background(
 
         # Progress update: Setting up analysis context via Redis Pub/Sub
         publish_progress_sync(
-            contract_id,
+            session_id,
             {
                 "event_type": "analysis_progress",
                 "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -861,7 +868,7 @@ async def analyze_contract_background(
 
         # Also send via WebSocket manager for immediate delivery (if connected)
         await websocket_manager.send_message(
-            contract_id,
+            session_id,
             WebSocketEvents.analysis_progress(
                 contract_id,
                 "processing_document",
@@ -935,7 +942,7 @@ async def analyze_contract_background(
 
         # Progress update: Preparing document for analysis via Redis Pub/Sub
         publish_progress_sync(
-            contract_id,
+            session_id,
             {
                 "event_type": "analysis_progress",
                 "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -951,7 +958,7 @@ async def analyze_contract_background(
 
         # Also send via WebSocket manager for immediate delivery (if connected)
         await websocket_manager.send_message(
-            contract_id,
+            session_id,
             WebSocketEvents.analysis_progress(
                 contract_id,
                 "extracting_terms",
@@ -990,7 +997,7 @@ async def analyze_contract_background(
 
         # Progress update: Starting AI analysis via Redis Pub/Sub
         publish_progress_sync(
-            contract_id,
+            session_id,
             {
                 "event_type": "analysis_progress",
                 "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -1006,7 +1013,7 @@ async def analyze_contract_background(
 
         # Also send via WebSocket manager for immediate delivery (if connected)
         await websocket_manager.send_message(
-            contract_id,
+            session_id,
             WebSocketEvents.analysis_progress(
                 contract_id,
                 "analyzing_compliance",
@@ -1039,7 +1046,7 @@ async def analyze_contract_background(
 
         # Progress update: Generating risk assessment via Redis Pub/Sub
         publish_progress_sync(
-            contract_id,
+            session_id,
             {
                 "event_type": "analysis_progress",
                 "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -1055,7 +1062,7 @@ async def analyze_contract_background(
 
         # Also send via WebSocket manager for immediate delivery (if connected)
         await websocket_manager.send_message(
-            contract_id,
+            session_id,
             WebSocketEvents.analysis_progress(
                 contract_id,
                 "assessing_risks",
@@ -1085,7 +1092,7 @@ async def analyze_contract_background(
 
         # Progress update: Compiling final report via Redis Pub/Sub
         publish_progress_sync(
-            contract_id,
+            session_id,
             {
                 "event_type": "analysis_progress",
                 "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -1101,7 +1108,7 @@ async def analyze_contract_background(
 
         # Also send via WebSocket manager for immediate delivery (if connected)
         await websocket_manager.send_message(
-            contract_id,
+            session_id,
             WebSocketEvents.analysis_progress(
                 contract_id,
                 "compiling_report",
@@ -1200,7 +1207,7 @@ async def analyze_contract_background(
         }
 
         publish_progress_sync(
-            contract_id,
+            session_id,
             {
                 "event_type": "analysis_completed",
                 "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -1214,7 +1221,7 @@ async def analyze_contract_background(
 
         # Also send via WebSocket manager for immediate delivery (if connected)
         await websocket_manager.send_message(
-            contract_id,
+            session_id,
             WebSocketEvents.analysis_completed(contract_id, analysis_summary),
         )
 
@@ -1280,7 +1287,7 @@ async def analyze_contract_background(
             "rate_limit_error",
         ]
         publish_progress_sync(
-            contract_id,
+            session_id,
             {
                 "event_type": "analysis_failed",
                 "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -1296,7 +1303,7 @@ async def analyze_contract_background(
 
         # Also send via WebSocket manager for immediate delivery (if connected)
         await websocket_manager.send_message(
-            contract_id,
+            session_id,
             WebSocketEvents.analysis_failed(
                 contract_id, error_message, retry_available
             ),

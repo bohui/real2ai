@@ -65,7 +65,7 @@ const Header: React.FC = () => {
             )}
 
             {/* Notifications */}
-            <div className="relative">
+            <div className="relative" aria-live="polite">
               <Button
                 variant="ghost"
                 size="sm"
@@ -79,6 +79,9 @@ const Header: React.FC = () => {
                     {unreadCount > 9 ? "9+" : unreadCount}
                   </span>
                 )}
+                {unreadCount > 0 && (
+                  <span className="sr-only">{`${unreadCount} unread notifications`}</span>
+                )}
               </Button>
             </div>
 
@@ -89,108 +92,113 @@ const Header: React.FC = () => {
 
             {/* User menu */}
             <HeadlessMenu as="div" className="relative">
-              <HeadlessMenu.Button
-                className="flex items-center gap-2 p-2 rounded-lg hover:bg-neutral-100 transition-colors"
-                aria-label={`User menu${
-                  user?.email ? ` for ${user.email}` : ""
-                }`}
-                aria-haspopup="menu"
-              >
-                <div className="w-8 h-8 bg-primary-600 rounded-full flex items-center justify-center text-white font-semibold text-sm">
-                  {user?.email.charAt(0).toUpperCase()}
-                </div>
-                <div className="hidden md:block text-left">
-                  <div className="text-sm font-medium text-neutral-900">
-                    {user?.email.split("@")[0]}
-                  </div>
-                  <div className="text-xs text-neutral-500 capitalize">
-                    {user?.user_type}
-                  </div>
-                </div>
-              </HeadlessMenu.Button>
+              {({ open }) => (
+                <>
+                  <HeadlessMenu.Button
+                    className="flex items-center gap-2 p-2 rounded-lg hover:bg-neutral-100 transition-colors"
+                    aria-label={`User menu${
+                      user?.email ? ` for ${user.email}` : ""
+                    }`}
+                    aria-haspopup="menu"
+                    aria-expanded={open}
+                  >
+                    <div className="w-8 h-8 bg-primary-600 rounded-full flex items-center justify-center text-white font-semibold text-sm">
+                      {user?.email.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="hidden md:block text-left">
+                      <div className="text-sm font-medium text-neutral-900">
+                        {user?.email.split("@")[0]}
+                      </div>
+                      <div className="text-xs text-neutral-500 capitalize">
+                        {user?.user_type}
+                      </div>
+                    </div>
+                  </HeadlessMenu.Button>
 
-              <HeadlessMenu.Items className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-neutral-200 focus:outline-none z-50">
-                <div className="p-3 border-b border-neutral-100">
-                  <div className="text-sm font-medium text-neutral-900">
-                    {user?.email}
-                  </div>
-                  <div className="text-xs text-neutral-500 mt-1">
-                    {user?.australian_state} • {user?.subscription_status}
-                  </div>
-                </div>
+                  <HeadlessMenu.Items className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-neutral-200 focus:outline-none z-50">
+                    <div className="p-3 border-b border-neutral-100">
+                      <div className="text-sm font-medium text-neutral-900">
+                        {user?.email}
+                      </div>
+                      <div className="text-xs text-neutral-500 mt-1">
+                        {user?.australian_state} • {user?.subscription_status}
+                      </div>
+                    </div>
 
-                <div className="py-1">
-                  <HeadlessMenu.Item>
-                    {({ active }) => (
-                      <Link
-                        to="/app/settings"
-                        className={cn(
-                          "flex items-center gap-3 px-3 py-2 text-sm",
-                          active
-                            ? "bg-neutral-50 text-neutral-900"
-                            : "text-neutral-700"
+                    <div className="py-1">
+                      <HeadlessMenu.Item>
+                        {({ active }) => (
+                          <Link
+                            to="/app/settings"
+                            className={cn(
+                              "flex items-center gap-3 px-3 py-2 text-sm",
+                              active
+                                ? "bg-neutral-50 text-neutral-900"
+                                : "text-neutral-700"
+                            )}
+                          >
+                            <User className="w-4 h-4" />
+                            Profile Settings
+                          </Link>
                         )}
-                      >
-                        <User className="w-4 h-4" />
-                        Profile Settings
-                      </Link>
-                    )}
-                  </HeadlessMenu.Item>
+                      </HeadlessMenu.Item>
 
-                  <HeadlessMenu.Item>
-                    {({ active }) => (
-                      <Link
-                        to="/app/billing"
-                        className={cn(
-                          "flex items-center gap-3 px-3 py-2 text-sm",
-                          active
-                            ? "bg-neutral-50 text-neutral-900"
-                            : "text-neutral-700"
+                      <HeadlessMenu.Item>
+                        {({ active }) => (
+                          <Link
+                            to="/app/billing"
+                            className={cn(
+                              "flex items-center gap-3 px-3 py-2 text-sm",
+                              active
+                                ? "bg-neutral-50 text-neutral-900"
+                                : "text-neutral-700"
+                            )}
+                          >
+                            <CreditCard className="w-4 h-4" />
+                            Billing & Credits
+                          </Link>
                         )}
-                      >
-                        <CreditCard className="w-4 h-4" />
-                        Billing & Credits
-                      </Link>
-                    )}
-                  </HeadlessMenu.Item>
+                      </HeadlessMenu.Item>
 
-                  <HeadlessMenu.Item>
-                    {({ active }) => (
-                      <Link
-                        to="/app/settings"
-                        className={cn(
-                          "flex items-center gap-3 px-3 py-2 text-sm",
-                          active
-                            ? "bg-neutral-50 text-neutral-900"
-                            : "text-neutral-700"
+                      <HeadlessMenu.Item>
+                        {({ active }) => (
+                          <Link
+                            to="/app/settings"
+                            className={cn(
+                              "flex items-center gap-3 px-3 py-2 text-sm",
+                              active
+                                ? "bg-neutral-50 text-neutral-900"
+                                : "text-neutral-700"
+                            )}
+                          >
+                            <Settings className="w-4 h-4" />
+                            Preferences
+                          </Link>
                         )}
-                      >
-                        <Settings className="w-4 h-4" />
-                        Preferences
-                      </Link>
-                    )}
-                  </HeadlessMenu.Item>
-                </div>
+                      </HeadlessMenu.Item>
+                    </div>
 
-                <div className="py-1 border-t border-neutral-100">
-                  <HeadlessMenu.Item>
-                    {({ active }) => (
-                      <button
-                        onClick={logout}
-                        className={cn(
-                          "w-full flex items-center gap-3 px-3 py-2 text-sm",
-                          active
-                            ? "bg-neutral-50 text-danger-600"
-                            : "text-danger-600"
+                    <div className="py-1 border-t border-neutral-100">
+                      <HeadlessMenu.Item>
+                        {({ active }) => (
+                          <button
+                            onClick={logout}
+                            className={cn(
+                              "w-full flex items-center gap-3 px-3 py-2 text-sm",
+                              active
+                                ? "bg-neutral-50 text-danger-600"
+                                : "text-danger-600"
+                            )}
+                          >
+                            <LogOut className="w-4 h-4" />
+                            Sign out
+                          </button>
                         )}
-                      >
-                        <LogOut className="w-4 h-4" />
-                        Sign out
-                      </button>
-                    )}
-                  </HeadlessMenu.Item>
-                </div>
-              </HeadlessMenu.Items>
+                      </HeadlessMenu.Item>
+                    </div>
+                  </HeadlessMenu.Items>
+                </>
+              )}
             </HeadlessMenu>
           </div>
         </div>
