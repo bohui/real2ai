@@ -47,7 +47,7 @@ compositions:
         
       - step: "risk_assessment"
         description: "Evaluate contract risks"
-        template: "analysis/risk_assessment"
+        template: "workflow/contract_risk_assessment"
         input_variables: ["structured_data"]
         output_variable: "risk_analysis"
         required_context:
@@ -83,7 +83,7 @@ compositions:
         
       - step: "recommendations"
         description: "Generate final recommendations"
-        template: "analysis/recommendations"
+        template: "workflow/contract_recommendations"
         input_variables: [
           "structured_data",
           "risk_analysis", 
@@ -254,7 +254,7 @@ compositions:
           
       - step: "risk_assessment"
         description: "Assess risks from semantic analysis"
-        template: "analysis/risk_assessment_base"
+        template: "workflow/contract_risk_assessment"
         input_variables: ["semantic_data"]
         output_variable: "risk_analysis"
         dependencies: ["semantic_analysis"]

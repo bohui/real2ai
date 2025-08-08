@@ -105,7 +105,8 @@ class ContractAnalysisWorkflow:
     - final_validation: Use LLM for final output validation
 
     Example:
-        workflow = ContractAnalysisWorkflow(
+        # Development configuration (fail fast, no fallbacks)
+        dev_workflow = ContractAnalysisWorkflow(
             extraction_config={
                 "method": "llm_structured",
                 "fallback_to_rule_based": True,
@@ -122,7 +123,23 @@ class ContractAnalysisWorkflow:
                 "document_quality": True,
                 "terms_validation": True,
                 "final_validation": True,
-            }
+            },
+            enable_fallbacks=False  # Development: fail fast on template issues
+        )
+        
+        # Production configuration (with fallbacks for reliability)
+        prod_workflow = ContractAnalysisWorkflow(
+            use_llm_config={
+                "document_processing": True,
+                "contract_analysis": True,
+                "compliance_analysis": True,
+                "risk_assessment": True,
+                "recommendations": True,
+                "document_quality": True,
+                "terms_validation": True,
+                "final_validation": True,
+            },
+            enable_fallbacks=True  # Production: enable fallbacks for reliability
         )
     """
 
@@ -136,6 +153,7 @@ class ContractAnalysisWorkflow:
         enable_quality_checks: bool = True,
         extraction_config: Optional[Dict[str, Any]] = None,
         use_llm_config: Optional[Dict[str, bool]] = None,
+        enable_fallbacks: bool = False,
     ):
         # Initialize clients (will be set up in initialize method)
         self.openai_client = None
@@ -151,6 +169,7 @@ class ContractAnalysisWorkflow:
 
         self.enable_validation = enable_validation
         self.enable_quality_checks = enable_quality_checks
+        self.enable_fallbacks = enable_fallbacks
 
         # Initialize extraction configuration
         self.extraction_config = extraction_config or {
@@ -190,7 +209,7 @@ class ContractAnalysisWorkflow:
 
         self.workflow = self._create_workflow()
         logger.info(
-            f"Enhanced ContractAnalysisWorkflow initialized with extraction config: {self.extraction_config} and use_llm config: {self.use_llm_config}"
+            f"Enhanced ContractAnalysisWorkflow initialized with extraction config: {self.extraction_config}, use_llm config: {self.use_llm_config}, and fallbacks enabled: {self.enable_fallbacks}"
         )
 
     async def initialize(self):
@@ -2163,6 +2182,7 @@ class ContractAnalysisWorkflow:
                 "validation_enabled": self.enable_validation,
                 "quality_checks_enabled": self.enable_quality_checks,
                 "client_architecture_enabled": True,
+                "fallbacks_enabled": self.enable_fallbacks,
             },
             "parsing_metrics": {
                 "success_rate": self._metrics["successful_parses"]
@@ -2358,48 +2378,24 @@ class ContractAnalysisWorkflow:
     async def _analyze_compliance_with_llm(
         self, contract_terms: Dict[str, Any], australian_state: str
     ) -> Dict[str, Any]:
-        """Analyze compliance using LLM"""
+        """Analyze compliance using LLM with template system"""
         try:
-            prompt = f"""
-            Analyze the compliance of this Australian property contract for {australian_state}:
-            
-            Contract Terms:
-            {json.dumps(contract_terms, indent=2)}
-            
-            Evaluate compliance across these areas:
-            1. Cooling-off period compliance
-            2. Stamp duty requirements
-            3. Special conditions validity
-            4. State-specific requirements
-            5. Consumer protection compliance
-            
-            Return a JSON response with this structure:
-            {{
-                "state_compliance": true/false,
-                "cooling_off_validation": {{
-                    "compliant": true/false,
-                    "period_days": 5,
-                    "warnings": []
-                }},
-                "stamp_duty_calculation": {{
-                    "total_duty": 0,
-                    "calculation_basis": "string",
-                    "concessions_applied": []
-                }},
-                "special_conditions_analysis": {{
-                    "conditions": [],
-                    "validity": true/false
-                }},
-                "compliance_issues": [],
-                "warnings": [],
-                "compliance_confidence": 0.85
-            }}
-            """
+            # Use PromptManager with compliance_check template
+            context = PromptContext(
+                australian_state=australian_state,
+                contract_terms=contract_terms,
+                contract_type="property_contract",
+                analysis_type="compliance_check",
+                user_experience="intermediate"
+            )
 
-            system_message = "You are an expert Australian property lawyer specializing in compliance analysis."
-
+            rendered_prompt = self.prompt_manager.render_template(
+                'analysis/compliance_check', 
+                context
+            )
+            
             llm_response = await self._generate_content_with_fallback(
-                prompt, system_message, use_gemini_fallback=True
+                rendered_prompt, use_gemini_fallback=True
             )
 
             try:
@@ -2414,9 +2410,24 @@ class ContractAnalysisWorkflow:
                 )
 
         except Exception as e:
-            logger.warning(f"LLM compliance analysis failed: {e}")
-            # Fallback to rule-based analysis
-            return self._analyze_compliance_rule_based(contract_terms, australian_state)
+            if not self.enable_fallbacks:
+                logger.error(f"LLM compliance analysis template failed and fallbacks disabled: {e}")
+                raise e
+                
+            logger.warning(f"LLM compliance analysis template failed: {e}")
+            # Try fallback prompt method
+            try:
+                fallback_prompt = self._create_compliance_fallback_prompt(contract_terms, australian_state)
+                llm_response = await self._generate_content_with_fallback(
+                    fallback_prompt, use_gemini_fallback=True
+                )
+                
+                compliance_result = json.loads(llm_response)
+                return compliance_result
+            except Exception as fallback_error:
+                logger.warning(f"LLM compliance analysis fallback failed: {fallback_error}")
+                # Final fallback to rule-based analysis
+                return self._analyze_compliance_rule_based(contract_terms, australian_state)
 
     def _analyze_compliance_rule_based(
         self, contract_terms: Dict[str, Any], australian_state: str
@@ -2526,48 +2537,47 @@ class ContractAnalysisWorkflow:
         compliance_check: Dict[str, Any],
         australian_state: str,
     ) -> Dict[str, Any]:
-        """Assess contract risks using LLM"""
+        """Assess contract risks using LLM with contract_risk_assessment.md template"""
         try:
-            prompt = f"""
-            Assess the risks in this Australian property contract for {australian_state}:
-            
-            Contract Terms:
-            {json.dumps(contract_terms, indent=2)}
-            
-            Compliance Check:
-            {json.dumps(compliance_check, indent=2)}
-            
-            Evaluate risks across these dimensions:
-            1. Financial risks (price, financing, costs)
-            2. Legal risks (compliance, enforceability)
-            3. Property risks (condition, location, title)
-            4. Transaction risks (settlement, timing)
-            5. State-specific risks ({australian_state} regulations)
-            
-            Return a JSON response with this structure:
-            {{
-                "overall_risk_score": 5.5,
-                "risk_factors": [
-                    {{
-                        "factor": "string",
-                        "severity": "low/medium/high/critical",
-                        "description": "string",
-                        "impact": "string",
-                        "australian_specific": true/false,
-                        "mitigation_suggestions": []
-                    }}
-                ],
-                "risk_summary": "string",
-                "confidence_level": 0.85,
-                "critical_issues": [],
-                "state_specific_risks": []
-            }}
-            """
+            # Create enhanced context for risk assessment
+            risk_context = PromptContext(
+                context_type=ContextType.CONTRACT_ANALYSIS,
+                variables={
+                    "australian_state": australian_state,
+                    "contract_type": "purchase_agreement",
+                    "user_experience": "novice",  # Default for now
+                    "contract_terms": contract_terms,
+                    "compliance_check": compliance_check,
+                },
+            )
 
+            # Use the contract_risk_assessment.md template
+            try:
+                rendered_prompt = await self.prompt_manager.render(
+                    template_name="workflow/contract_risk_assessment",
+                    context=risk_context,
+                    service_name="contract_analysis_workflow",
+                )
+                logger.debug("Contract risk assessment prompt rendered successfully")
+            except (
+                PromptNotFoundError,
+                PromptValidationError,
+                PromptContextError,
+            ) as e:
+                if not self.enable_fallbacks:
+                    logger.error(f"Prompt manager failed and fallbacks disabled: {e}")
+                    raise e
+                    
+                logger.warning(f"Prompt manager failed, using fallback: {e}")
+                # Fallback to hardcoded prompt
+                rendered_prompt = self._create_risk_assessment_fallback_prompt(
+                    contract_terms, compliance_check, australian_state
+                )
+
+            # Get LLM response using client architecture
             system_message = "You are an expert Australian property lawyer specializing in risk assessment."
-
             llm_response = await self._generate_content_with_fallback(
-                prompt, system_message, use_gemini_fallback=True
+                rendered_prompt, system_message, use_gemini_fallback=True
             )
 
             try:
@@ -2576,10 +2586,18 @@ class ContractAnalysisWorkflow:
                 risk_result = json.loads(llm_response)
                 return risk_result
             except json.JSONDecodeError:
+                if not self.enable_fallbacks:
+                    logger.error("JSON parsing failed and fallbacks disabled")
+                    raise ValueError("Failed to parse LLM risk assessment response")
+                
                 # Fallback to rule-based analysis
                 return self._assess_risks_rule_based(contract_terms, compliance_check)
 
         except Exception as e:
+            if not self.enable_fallbacks:
+                logger.error(f"LLM risk assessment failed and fallbacks disabled: {e}")
+                raise e
+            
             logger.warning(f"LLM risk assessment failed: {e}")
             # Fallback to rule-based analysis
             return self._assess_risks_rule_based(contract_terms, compliance_check)
@@ -2632,56 +2650,47 @@ class ContractAnalysisWorkflow:
     async def _generate_recommendations_with_llm(
         self, state: RealEstateAgentState
     ) -> List[Dict[str, Any]]:
-        """Generate recommendations using LLM"""
+        """Generate recommendations using LLM with contract_recommendations.md template"""
         try:
-            prompt = f"""
-            Generate actionable recommendations for this Australian property contract analysis:
-            
-            Contract Terms:
-            {json.dumps(state.get("contract_terms", {}), indent=2)}
-            
-            Risk Analysis:
-            {json.dumps(state.get("risk_analysis", {}), indent=2)}
-            
-            Compliance Check:
-            {json.dumps(state.get("compliance_check", {}), indent=2)}
-            
-            User Context:
-            - Experience: {state.get("user_experience", "novice")}
-            - State: {state.get("australian_state", "NSW")}
-            - Contract Type: {state.get("contract_type", "purchase_agreement")}
-            
-            Generate recommendations across these categories:
-            1. Legal recommendations (immediate actions, professional review needs)
-            2. Financial recommendations (cost management, optimization strategies)
-            3. Practical recommendations (timeline planning, due diligence steps)
-            4. Compliance recommendations (state law compliance, mandatory actions)
-            
-            Return a JSON response with this structure:
-            {{
-                "recommendations": [
-                    {{
-                        "priority": "low/medium/high/critical",
-                        "category": "legal/financial/practical/compliance",
-                        "recommendation": "string",
-                        "action_required": true/false,
-                        "australian_context": "string",
-                        "estimated_cost": 0,
-                        "timeline": "string",
-                        "legal_basis": "string",
-                        "consequences_if_ignored": "string"
-                    }}
-                ],
-                "executive_summary": "string",
-                "immediate_actions": [],
-                "next_steps": []
-            }}
-            """
+            # Create enhanced context for recommendations
+            recommendations_context = PromptContext(
+                context_type=ContextType.CONTRACT_ANALYSIS,
+                variables={
+                    "australian_state": state.get("australian_state", "NSW"),
+                    "user_type": state.get("user_type", "buyer"),
+                    "user_experience": state.get("user_experience", "novice"),
+                    "contract_type": state.get("contract_type", "purchase_agreement"),
+                    "risk_assessment": state.get("risk_analysis", {}),
+                    "compliance_check": state.get("compliance_check", {}),
+                    "contract_terms": state.get("contract_terms", {}),
+                },
+            )
 
+            # Use the contract_recommendations.md template
+            try:
+                rendered_prompt = await self.prompt_manager.render(
+                    template_name="workflow/contract_recommendations",
+                    context=recommendations_context,
+                    service_name="contract_analysis_workflow",
+                )
+                logger.debug("Contract recommendations prompt rendered successfully")
+            except (
+                PromptNotFoundError,
+                PromptValidationError,
+                PromptContextError,
+            ) as e:
+                if not self.enable_fallbacks:
+                    logger.error(f"Prompt manager failed and fallbacks disabled: {e}")
+                    raise e
+                
+                logger.warning(f"Prompt manager failed, using fallback: {e}")
+                # Fallback to hardcoded prompt (previous implementation)
+                rendered_prompt = self._create_recommendations_fallback_prompt(state)
+
+            # Get LLM response using client architecture
             system_message = "You are an expert Australian property advisor providing actionable recommendations."
-
             llm_response = await self._generate_content_with_fallback(
-                prompt, system_message, use_gemini_fallback=True
+                rendered_prompt, system_message, use_gemini_fallback=True
             )
 
             try:
@@ -2690,10 +2699,18 @@ class ContractAnalysisWorkflow:
                 recommendations_result = json.loads(llm_response)
                 return recommendations_result.get("recommendations", [])
             except json.JSONDecodeError:
+                if not self.enable_fallbacks:
+                    logger.error("JSON parsing failed and fallbacks disabled")
+                    raise ValueError("Failed to parse LLM recommendations response")
+                
                 # Fallback to rule-based recommendations
                 return self._generate_recommendations_rule_based(state)
 
         except Exception as e:
+            if not self.enable_fallbacks:
+                logger.error(f"LLM recommendations generation failed and fallbacks disabled: {e}")
+                raise e
+            
             logger.warning(f"LLM recommendations generation failed: {e}")
             # Fallback to rule-based recommendations
             return self._generate_recommendations_rule_based(state)
@@ -2743,40 +2760,24 @@ class ContractAnalysisWorkflow:
     async def _validate_document_quality_with_llm(
         self, document_text: str, document_metadata: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """Validate document quality using LLM"""
+        """Validate document quality using LLM with template system"""
         try:
-            prompt = f"""
-            Assess the quality of this document for property contract analysis:
-            
-            Document Text (first 2000 chars):
-            {document_text[:2000]}...
-            
-            Document Metadata:
-            {json.dumps(document_metadata, indent=2)}
-            
-            Evaluate the document quality across these dimensions:
-            1. Text quality (0-1): Clarity, readability, completeness
-            2. Completeness (0-1): How complete is the document content
-            3. Readability (0-1): How easy is it to read and understand
-            4. Key terms coverage (0-1): Coverage of important contract terms
-            5. Extraction confidence (0-1): Confidence in text extraction
-            
-            Return a JSON response with this structure:
-            {{
-                "text_quality_score": 0.85,
-                "completeness_score": 0.9,
-                "readability_score": 0.8,
-                "key_terms_coverage": 0.75,
-                "extraction_confidence": 0.9,
-                "issues_identified": ["list of quality issues found"],
-                "improvement_suggestions": ["list of improvement suggestions"]
-            }}
-            """
+            # Use PromptManager with document_quality_validation template
+            context = PromptContext(
+                document_text=document_text,
+                document_metadata=document_metadata,
+                document_type="property_contract",
+                australian_state=document_metadata.get("state", "NSW"),
+                extraction_method=document_metadata.get("extraction_method", "ocr")
+            )
 
-            system_message = "You are an expert in document quality assessment for property contracts."
-
+            rendered_prompt = self.prompt_manager.render_template(
+                'validation/document_quality_validation', 
+                context
+            )
+            
             llm_response = await self._generate_content_with_fallback(
-                prompt, system_message, use_gemini_fallback=True
+                rendered_prompt, use_gemini_fallback=True
             )
 
             try:
@@ -2795,53 +2796,71 @@ class ContractAnalysisWorkflow:
                 return quality_metrics.dict()
 
         except Exception as e:
-            logger.warning(f"LLM document quality validation failed: {e}")
-            # Fallback to rule-based validation
-            quality_metrics = validate_document_quality.invoke(
-                {"document_text": document_text, "document_metadata": document_metadata}
-            )
-            return quality_metrics.dict()
+            if not self.enable_fallbacks:
+                logger.error(f"LLM document quality validation template failed and fallbacks disabled: {e}")
+                raise e
+                
+            logger.warning(f"LLM document quality validation template failed: {e}")
+            # Try fallback prompt method
+            try:
+                fallback_prompt = self._create_document_quality_fallback_prompt(document_text, document_metadata)
+                llm_response = await self._generate_content_with_fallback(
+                    fallback_prompt, use_gemini_fallback=True
+                )
+                
+                quality_result = json.loads(llm_response)
+                return quality_result
+            except Exception as fallback_error:
+                logger.warning(f"LLM document quality validation fallback failed: {fallback_error}")
+                # Final fallback to rule-based validation
+                quality_metrics = validate_document_quality.invoke(
+                    {"document_text": document_text, "document_metadata": document_metadata}
+                )
+                return quality_metrics.dict()
 
     async def _validate_terms_completeness_with_llm(
         self, contract_terms: Dict[str, Any], australian_state: str
     ) -> Dict[str, Any]:
-        """Validate contract terms completeness using LLM"""
+        """Validate contract terms completeness using LLM with validation template"""
         try:
-            prompt = f"""
-            Validate the completeness of contract terms for {australian_state}:
-            
-            Contract Terms:
-            {json.dumps(contract_terms, indent=2)}
-            
-            Evaluate the completeness of contract terms across these areas:
-            1. Essential terms (parties, property, price, settlement)
-            2. Financial terms (deposit, balance, adjustments)
-            3. Conditions and warranties (finance, building/pest, cooling-off)
-            4. Special conditions and clauses
-            5. State-specific requirements ({australian_state})
-            
-            Return a JSON response with this structure:
-            {{
-                "validation_score": 0.85,
-                "terms_validated": {{
-                    "parties": true/false,
-                    "property": true/false,
-                    "price": true/false,
-                    "settlement": true/false,
-                    "conditions": true/false
-                }},
-                "missing_mandatory_terms": [],
-                "incomplete_terms": [],
-                "validation_confidence": 0.85,
-                "state_specific_requirements": {{}},
-                "recommendations": []
-            }}
-            """
+            # Create enhanced context for terms completeness validation
+            validation_context = PromptContext(
+                context_type=ContextType.CONTRACT_ANALYSIS,
+                variables={
+                    "australian_state": australian_state,
+                    "contract_type": "purchase_agreement",
+                    "user_experience": "novice",  # Default
+                    "contract_terms": contract_terms,
+                },
+            )
+
+            # Use the terms_completeness_validation.md template
+            try:
+                rendered_prompt = await self.prompt_manager.render(
+                    template_name="validation/terms_completeness_validation",
+                    context=validation_context,
+                    service_name="contract_analysis_workflow",
+                )
+                logger.debug("Terms completeness validation prompt rendered successfully")
+            except (
+                PromptNotFoundError,
+                PromptValidationError,
+                PromptContextError,
+            ) as e:
+                if not self.enable_fallbacks:
+                    logger.error(f"Prompt manager failed and fallbacks disabled: {e}")
+                    raise e
+                    
+                logger.warning(f"Prompt manager failed, using fallback: {e}")
+                # Fallback to hardcoded prompt
+                rendered_prompt = self._create_terms_validation_fallback_prompt(
+                    contract_terms, australian_state
+                )
 
             system_message = "You are an expert Australian property lawyer validating contract terms completeness."
 
             llm_response = await self._generate_content_with_fallback(
-                prompt, system_message, use_gemini_fallback=True
+                rendered_prompt, system_message, use_gemini_fallback=True
             )
 
             try:
@@ -2850,6 +2869,10 @@ class ContractAnalysisWorkflow:
                 validation_result = json.loads(llm_response)
                 return validation_result
             except json.JSONDecodeError:
+                if not self.enable_fallbacks:
+                    logger.error("JSON parsing failed and fallbacks disabled")
+                    raise ValueError("Failed to parse LLM terms validation response")
+                
                 # Fallback to rule-based validation
                 validation_result = validate_contract_terms_completeness.invoke(
                     {"contract_terms": contract_terms, "state": australian_state}
@@ -2857,6 +2880,10 @@ class ContractAnalysisWorkflow:
                 return validation_result.dict()
 
         except Exception as e:
+            if not self.enable_fallbacks:
+                logger.error(f"LLM terms validation failed and fallbacks disabled: {e}")
+                raise e
+            
             logger.warning(f"LLM terms validation failed: {e}")
             # Fallback to rule-based validation
             validation_result = validate_contract_terms_completeness.invoke(
@@ -2867,44 +2894,47 @@ class ContractAnalysisWorkflow:
     async def _validate_final_output_with_llm(
         self, state: RealEstateAgentState
     ) -> Dict[str, Any]:
-        """Validate final output using LLM"""
+        """Validate final output using LLM with final output validation template"""
         try:
-            prompt = f"""
-            Validate the final output quality and completeness of this contract analysis:
-            
-            Risk Analysis:
-            {json.dumps(state.get("risk_analysis", {}), indent=2)}
-            
-            Recommendations:
-            {json.dumps(state.get("recommendations", []), indent=2)}
-            
-            Compliance Check:
-            {json.dumps(state.get("compliance_check", {}), indent=2)}
-            
-            Contract Terms:
-            {json.dumps(state.get("contract_terms", {}), indent=2)}
-            
-            Evaluate the final output quality across these dimensions:
-            1. Completeness (0-1): All required analysis components present
-            2. Quality (0-1): Analysis depth and accuracy
-            3. Consistency (0-1): Internal consistency of findings
-            4. Actionability (0-1): Practical value of recommendations
-            5. Compliance (0-1): Legal compliance coverage
-            
-            Return a JSON response with this structure:
-            {{
-                "validation_score": 0.85,
-                "validation_passed": true/false,
-                "issues_found": [],
-                "recommendations": [],
-                "metadata": {{}}
-            }}
-            """
+            # Create enhanced context for final output validation
+            validation_context = PromptContext(
+                context_type=ContextType.CONTRACT_ANALYSIS,
+                variables={
+                    "australian_state": state.get("australian_state", "NSW"),
+                    "contract_type": state.get("contract_type", "purchase_agreement"),
+                    "analysis_type": "comprehensive",
+                    "user_experience": state.get("user_experience", "novice"),
+                    "risk_assessment": state.get("risk_analysis", {}),
+                    "compliance_check": state.get("compliance_check", {}),
+                    "recommendations": state.get("recommendations", []),
+                },
+            )
 
+            # Use the final_output_validation.md template
+            try:
+                rendered_prompt = await self.prompt_manager.render(
+                    template_name="validation/final_output_validation",
+                    context=validation_context,
+                    service_name="contract_analysis_workflow",
+                )
+                logger.debug("Final output validation prompt rendered successfully")
+            except (
+                PromptNotFoundError,
+                PromptValidationError,
+                PromptContextError,
+            ) as e:
+                if not self.enable_fallbacks:
+                    logger.error(f"Prompt manager failed and fallbacks disabled: {e}")
+                    raise e
+                    
+                logger.warning(f"Prompt manager failed, using fallback: {e}")
+                # Fallback to hardcoded prompt
+                rendered_prompt = self._create_final_validation_fallback_prompt(state)
+
+            # Get LLM response using client architecture
             system_message = "You are an expert Australian property lawyer validating final analysis output."
-
             llm_response = await self._generate_content_with_fallback(
-                prompt, system_message, use_gemini_fallback=True
+                rendered_prompt, system_message, use_gemini_fallback=True
             )
 
             try:
@@ -2913,10 +2943,18 @@ class ContractAnalysisWorkflow:
                 validation_result = json.loads(llm_response)
                 return validation_result
             except json.JSONDecodeError:
+                if not self.enable_fallbacks:
+                    logger.error("JSON parsing failed and fallbacks disabled")
+                    raise ValueError("Failed to parse LLM final validation response")
+                
                 # Fallback to rule-based validation
                 return self._validate_final_output_rule_based(state)
 
         except Exception as e:
+            if not self.enable_fallbacks:
+                logger.error(f"LLM final validation failed and fallbacks disabled: {e}")
+                raise e
+                
             logger.warning(f"LLM final validation failed: {e}")
             # Fallback to rule-based validation
             return self._validate_final_output_rule_based(state)
@@ -2979,3 +3017,277 @@ class ContractAnalysisWorkflow:
                     "validation_timestamp": datetime.now(UTC).isoformat(),
                 },
             }
+
+    def _create_recommendations_fallback_prompt(
+        self, state: RealEstateAgentState
+    ) -> str:
+        """Create fallback recommendations prompt when template fails"""
+        return f"""
+        Generate actionable recommendations for this Australian property contract analysis:
+        
+        Contract Terms:
+        {json.dumps(state.get("contract_terms", {}), indent=2)}
+        
+        Risk Analysis:
+        {json.dumps(state.get("risk_analysis", {}), indent=2)}
+        
+        Compliance Check:
+        {json.dumps(state.get("compliance_check", {}), indent=2)}
+        
+        User Context:
+        - Experience: {state.get("user_experience", "novice")}
+        - State: {state.get("australian_state", "NSW")}
+        - Contract Type: {state.get("contract_type", "purchase_agreement")}
+        
+        Generate recommendations across these categories:
+        1. Legal recommendations (immediate actions, professional review needs)
+        2. Financial recommendations (cost management, optimization strategies)
+        3. Practical recommendations (timeline planning, due diligence steps)
+        4. Compliance recommendations (state law compliance, mandatory actions)
+        
+        Return a JSON response with this structure:
+        {{
+            "recommendations": [
+                {{
+                    "priority": "low/medium/high",
+                    "category": "legal/financial/practical/compliance",
+                    "recommendation": "string",
+                    "action_required": true/false,
+                    "australian_context": "string",
+                    "estimated_cost": 0,
+                    "timeline": "string",
+                    "legal_basis": "string",
+                    "consequences_if_ignored": "string"
+                }}
+            ],
+            "executive_summary": "string",
+            "immediate_actions": [],
+            "next_steps": []
+        }}
+        """
+
+    def _create_risk_assessment_fallback_prompt(
+        self, 
+        contract_terms: Dict[str, Any], 
+        compliance_check: Dict[str, Any], 
+        australian_state: str
+    ) -> str:
+        """Create fallback risk assessment prompt when template fails"""
+        return f"""
+        Assess the risks in this Australian property contract for {australian_state}:
+        
+        Contract Terms:
+        {json.dumps(contract_terms, indent=2)}
+        
+        Compliance Check:
+        {json.dumps(compliance_check, indent=2)}
+        
+        Evaluate risks across these dimensions:
+        1. Financial risks (price, financing, costs)
+        2. Legal risks (compliance, enforceability)
+        3. Property risks (condition, location, title)
+        4. Transaction risks (settlement, timing)
+        5. State-specific risks ({australian_state} regulations)
+        
+        Return a JSON response with this structure:
+        {{
+            "overall_risk_score": 5.5,
+            "risk_factors": [
+                {{
+                    "factor": "string",
+                    "severity": "low/medium/high/critical",
+                    "description": "string",
+                    "impact": "string",
+                    "australian_specific": true/false,
+                    "mitigation_suggestions": []
+                }}
+            ],
+            "risk_summary": "string",
+            "confidence_level": 0.85,
+            "critical_issues": [],
+            "state_specific_risks": []
+        }}
+        """
+
+    def _create_terms_validation_fallback_prompt(
+        self, 
+        contract_terms: Dict[str, Any], 
+        australian_state: str
+    ) -> str:
+        """Create fallback terms validation prompt when template fails"""
+        return f"""
+        Validate the completeness of contract terms for {australian_state}:
+        
+        Contract Terms:
+        {json.dumps(contract_terms, indent=2)}
+        
+        Evaluate the completeness of contract terms across these areas:
+        1. Essential terms (parties, property, price, settlement)
+        2. Financial terms (deposit, balance, adjustments)
+        3. Conditions and warranties (finance, building/pest, cooling-off)
+        4. Special conditions and clauses
+        5. State-specific requirements ({australian_state})
+        
+        Return a JSON response with this structure:
+        {{
+            "validation_score": 0.85,
+            "terms_validated": {{
+                "parties": true/false,
+                "property": true/false,
+                "price": true/false,
+                "settlement": true/false,
+                "conditions": true/false
+            }},
+            "missing_mandatory_terms": [],
+            "incomplete_terms": [],
+            "validation_confidence": 0.85,
+            "state_specific_requirements": {{}},
+            "recommendations": []
+        }}
+        """
+
+    def _create_final_validation_fallback_prompt(
+        self, 
+        state: RealEstateAgentState
+    ) -> str:
+        """Create fallback final validation prompt when template fails"""
+        australian_state = state.get("australian_state", "NSW")
+        risk_assessment = state.get("risk_analysis", {})
+        compliance_check = state.get("compliance_check", {})
+        recommendations = state.get("recommendations", [])
+        
+        return f"""
+        Conduct final validation of complete contract analysis for {australian_state}:
+        
+        Risk Assessment Results:
+        {json.dumps(risk_assessment, indent=2)}
+        
+        Compliance Check Results:
+        {json.dumps(compliance_check, indent=2)}
+        
+        Recommendations:
+        {json.dumps(recommendations, indent=2)}
+        
+        Validate the analysis across these dimensions:
+        1. Completeness - all essential analysis components present
+        2. Consistency - internal consistency across analysis components
+        3. Accuracy - legal and factual accuracy of analysis
+        4. Utility - practical value and actionability for the user
+        5. State compliance - adherence to {australian_state} legal requirements
+        
+        Return a JSON response with this structure:
+        {{
+            "validation_score": 0.85,
+            "validation_passed": true/false,
+            "component_validation": {{
+                "risk_assessment_quality": 0.85,
+                "compliance_analysis_quality": 0.85,
+                "recommendations_quality": 0.85,
+                "consistency_score": 0.85,
+                "completeness_score": 0.85
+            }},
+            "issues_found": [],
+            "consistency_checks": {{
+                "risk_recommendation_alignment": true/false,
+                "compliance_risk_correlation": true/false,
+                "financial_integration": true/false,
+                "timeline_coordination": true/false,
+                "state_law_consistency": true/false
+            }},
+            "delivery_assessment": {{
+                "ready_for_delivery": true/false,
+                "confidence_level": "high/medium/low",
+                "recommended_action": "deliver/improve/rework"
+            }},
+            "validation_summary": "string",
+            "improvement_recommendations": []
+        }}
+        """
+
+    def _create_compliance_fallback_prompt(
+        self, 
+        contract_terms: Dict[str, Any], 
+        australian_state: str
+    ) -> str:
+        """Create fallback compliance analysis prompt when template fails"""
+        return f"""
+        Analyze the compliance of this Australian property contract for {australian_state}:
+        
+        Contract Terms:
+        {json.dumps(contract_terms, indent=2)}
+        
+        Evaluate compliance across these areas:
+        1. Cooling-off period compliance
+        2. Stamp duty requirements  
+        3. Special conditions validity
+        4. State-specific requirements
+        5. Consumer protection compliance
+        
+        Return a JSON response with this structure:
+        {{
+            "state_compliance": true/false,
+            "cooling_off_validation": {{
+                "compliant": true/false,
+                "period_days": 5,
+                "warnings": []
+            }},
+            "stamp_duty_calculation": {{
+                "total_duty": 0,
+                "calculation_basis": "string",
+                "concessions_applied": []
+            }},
+            "special_conditions_analysis": {{
+                "conditions": [],
+                "validity": true/false
+            }},
+            "compliance_issues": [],
+            "warnings": [],
+            "compliance_confidence": 0.85
+        }}
+        """
+
+    def _create_document_quality_fallback_prompt(
+        self, 
+        document_text: str, 
+        document_metadata: Dict[str, Any]
+    ) -> str:
+        """Create fallback document quality validation prompt when template fails"""
+        return f"""
+        Assess the quality of this document for property contract analysis:
+        
+        Document Text (first 2000 chars):
+        {document_text[:2000]}...
+        
+        Document Metadata:
+        {json.dumps(document_metadata, indent=2)}
+        
+        Evaluate the document quality across these dimensions:
+        1. Text quality (0-1): Clarity, readability, completeness
+        2. Completeness (0-1): How complete is the document content  
+        3. Readability (0-1): How easy is it to read and understand
+        4. Key terms coverage (0-1): Coverage of important contract terms
+        5. Extraction confidence (0-1): Confidence in text extraction
+        
+        Return a JSON response with this structure:
+        {{
+            "text_quality_score": 0.85,
+            "completeness_score": 0.9,
+            "readability_score": 0.8,
+            "key_terms_coverage": 0.75,
+            "extraction_confidence": 0.9,
+            "overall_quality_score": 0.82,
+            "issues_identified": [
+                {{
+                    "issue": "specific quality issue",
+                    "severity": "critical|major|minor|warning",
+                    "description": "detailed explanation"
+                }}
+            ],
+            "improvement_suggestions": ["suggestion 1", "suggestion 2"],
+            "suitability_assessment": {{
+                "automated_analysis_suitable": true/false,
+                "manual_review_required": true/false,
+                "confidence_level": "high|medium|low"
+            }}
+        }}
+        """
