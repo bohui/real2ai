@@ -7,7 +7,6 @@ import {
   Settings,
   Upload,
   BarChart3,
-  Zap,
   HelpCircle,
   Building,
   TrendingUp,
@@ -90,9 +89,7 @@ const Sidebar: React.FC = () => {
     <div className="flex flex-col h-full bg-white border-r border-neutral-200">
       {/* Logo */}
       <div className="flex items-center gap-3 p-6 border-b border-neutral-200">
-        <div className="w-10 h-10 bg-primary-600 rounded-xl flex items-center justify-center">
-          <Zap className="w-6 h-6 text-white" />
-        </div>
+        <img src="/logo.svg" alt="Real2.AI logo" className="w-10 h-10" />
         <div>
           <h1 className="text-xl font-bold text-neutral-900">Real2.AI</h1>
           <p className="text-xs text-neutral-500">Property & Contract AI</p>

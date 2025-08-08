@@ -46,7 +46,7 @@ export const ORGANIZATION_STRUCTURED_DATA = {
   description:
     "Advanced AI-powered real estate contract analysis and property intelligence for Australian professionals.",
   url: "https://real2.ai",
-  logo: "https://real2.ai/images/logo.png",
+  logo: `${BASE_URL}/logo.svg`,
   foundingDate: "2024",
   founders: [{
     "@type": "Person",

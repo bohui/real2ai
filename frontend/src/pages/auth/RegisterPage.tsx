@@ -1,28 +1,34 @@
-import React from 'react'
-import { Link, Navigate } from 'react-router-dom'
-import { motion } from 'framer-motion'
-import { Zap } from 'lucide-react'
+import React from "react";
+import { Link, Navigate } from "react-router-dom";
+import { motion } from "framer-motion";
 
-import RegisterForm from '@/components/forms/RegisterForm'
-import { useAuthStore } from '@/store/authStore'
-import { usePageSEO } from '@/contexts/SEOContext'
+import RegisterForm from "@/components/forms/RegisterForm";
+import { useAuthStore } from "@/store/authStore";
+import { usePageSEO } from "@/contexts/SEOContext";
 
 const RegisterPage: React.FC = () => {
-  const { isAuthenticated } = useAuthStore()
+  const { isAuthenticated } = useAuthStore();
 
   // SEO for Register page
   usePageSEO({
-    title: 'Register - Real2AI',
-    description: 'Create your Real2AI account and start analyzing real estate contracts with AI technology. Join thousands of Australian property professionals.',
-    keywords: ['Real2AI register', 'sign up', 'create account', 'real estate AI'],
-    canonical: '/auth/register',
-    ogTitle: 'Join Real2AI - Start Your AI-Powered Real Estate Journey',
-    ogDescription: 'Create your account and access advanced real estate analysis tools trusted by Australian professionals.',
-  })
+    title: "Register - Real2AI",
+    description:
+      "Create your Real2AI account and start analyzing real estate contracts with AI technology. Join thousands of Australian property professionals.",
+    keywords: [
+      "Real2AI register",
+      "sign up",
+      "create account",
+      "real estate AI",
+    ],
+    canonical: "/auth/register",
+    ogTitle: "Join Real2AI - Start Your AI-Powered Real Estate Journey",
+    ogDescription:
+      "Create your account and access advanced real estate analysis tools trusted by Australian professionals.",
+  });
 
   // Redirect if already authenticated
   if (isAuthenticated) {
-    return <Navigate to="/app/dashboard" replace />
+    return <Navigate to="/app/dashboard" replace />;
   }
 
   return (
@@ -36,13 +42,13 @@ const RegisterPage: React.FC = () => {
         {/* Header */}
         <div className="text-center">
           <div className="flex justify-center">
-            <div className="w-16 h-16 bg-primary-600 rounded-2xl flex items-center justify-center mb-6">
-              <Zap className="w-8 h-8 text-white" />
-            </div>
+            <img
+              src="/logo.svg"
+              alt="Real2.AI logo"
+              className="w-16 h-16 mb-6"
+            />
           </div>
-          <h2 className="text-3xl font-bold text-neutral-900">
-            Join Real2.AI
-          </h2>
+          <h2 className="text-3xl font-bold text-neutral-900">Join Real2.AI</h2>
           <p className="mt-2 text-neutral-600">
             Create your account to start analyzing contracts
           </p>
@@ -54,7 +60,7 @@ const RegisterPage: React.FC = () => {
         {/* Footer */}
         <div className="text-center">
           <p className="text-sm text-neutral-600">
-            Already have an account?{' '}
+            Already have an account?{" "}
             <Link
               to="/auth/login"
               className="font-medium text-primary-600 hover:text-primary-500 transition-colors"
@@ -71,13 +77,16 @@ const RegisterPage: React.FC = () => {
           </h3>
           <div className="space-y-2">
             {[
-              'AI-powered contract analysis',
-              'Australian legal compliance checks',
-              'Risk assessment and recommendations',
-              'Secure document processing',
-              'Professional reporting'
+              "AI-powered contract analysis",
+              "Australian legal compliance checks",
+              "Risk assessment and recommendations",
+              "Secure document processing",
+              "Professional reporting",
             ].map((feature, index) => (
-              <div key={index} className="flex items-center text-sm text-neutral-600">
+              <div
+                key={index}
+                className="flex items-center text-sm text-neutral-600"
+              >
                 <div className="w-2 h-2 bg-primary-600 rounded-full mr-3" />
                 {feature}
               </div>
@@ -86,7 +95,7 @@ const RegisterPage: React.FC = () => {
         </div>
       </motion.div>
     </div>
-  )
-}
+  );
+};
 
-export default RegisterPage
+export default RegisterPage;

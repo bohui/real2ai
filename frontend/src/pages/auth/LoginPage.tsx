@@ -1,29 +1,35 @@
-import React from 'react'
-import { Link, Navigate } from 'react-router-dom'
-import { motion } from 'framer-motion'
-import { Zap } from 'lucide-react'
+import React from "react";
+import { Link, Navigate } from "react-router-dom";
+import { motion } from "framer-motion";
 
-import LoginForm from '@/components/forms/LoginForm'
-import { useAuthStore } from '@/store/authStore'
-import { usePageSEO } from '@/contexts/SEOContext'
+import LoginForm from "@/components/forms/LoginForm";
+import { useAuthStore } from "@/store/authStore";
+import { usePageSEO } from "@/contexts/SEOContext";
 
 const LoginPage: React.FC = () => {
-  const { isAuthenticated } = useAuthStore()
+  const { isAuthenticated } = useAuthStore();
 
   // SEO for Login page
   usePageSEO({
-    title: 'Login - Real2AI',
-    description: 'Sign in to your Real2AI account to access powerful AI-driven real estate analysis tools and property intelligence.',
-    keywords: ['Real2AI login', 'sign in', 'real estate platform', 'user authentication'],
-    canonical: '/auth/login',
+    title: "Login - Real2AI",
+    description:
+      "Sign in to your Real2AI account to access powerful AI-driven real estate analysis tools and property intelligence.",
+    keywords: [
+      "Real2AI login",
+      "sign in",
+      "real estate platform",
+      "user authentication",
+    ],
+    canonical: "/auth/login",
     noIndex: true,
-    ogTitle: 'Login to Real2AI - Access Your Real Estate AI Tools',
-    ogDescription: 'Sign in to analyze contracts, get property intelligence, and make informed real estate decisions with AI.'
-  })
+    ogTitle: "Login to Real2AI - Access Your Real Estate AI Tools",
+    ogDescription:
+      "Sign in to analyze contracts, get property intelligence, and make informed real estate decisions with AI.",
+  });
 
   // Redirect if already authenticated
   if (isAuthenticated) {
-    return <Navigate to="/app/dashboard" replace />
+    return <Navigate to="/app/dashboard" replace />;
   }
 
   return (
@@ -37,9 +43,11 @@ const LoginPage: React.FC = () => {
         {/* Header */}
         <div className="text-center">
           <div className="flex justify-center">
-            <div className="w-16 h-16 bg-primary-600 rounded-2xl flex items-center justify-center mb-6">
-              <Zap className="w-8 h-8 text-white" />
-            </div>
+            <img
+              src="/logo.svg"
+              alt="Real2.AI logo"
+              className="w-16 h-16 mb-6"
+            />
           </div>
           <h2 className="text-3xl font-bold text-neutral-900">
             Welcome back to Real2.AI
@@ -55,7 +63,7 @@ const LoginPage: React.FC = () => {
         {/* Footer */}
         <div className="text-center">
           <p className="text-sm text-neutral-600">
-            Don't have an account?{' '}
+            Don't have an account?{" "}
             <Link
               to="/auth/register"
               className="font-medium text-primary-600 hover:text-primary-500 transition-colors"
@@ -78,7 +86,7 @@ const LoginPage: React.FC = () => {
         </div>
       </motion.div>
     </div>
-  )
-}
+  );
+};
 
-export default LoginPage
+export default LoginPage;
