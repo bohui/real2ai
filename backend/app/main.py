@@ -12,6 +12,8 @@ import os
 import logging
 from typing import Dict, Optional, Any
 from asyncio import AbstractEventLoop
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.types import ASGIApp
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -38,7 +40,35 @@ from app.router.health import router as health_router
 from app.router.websockets import router as websockets_router
 from app.router.property_profile import router as property_profile_router
 from app.router.property_intelligence import router as property_intelligence_router
+from app.router.cache import router as cache_router
 from app.middleware.auth_middleware import setup_auth_middleware
+
+# Simple rate limiting middleware (IP + path windowed)
+import time
+from starlette.requests import Request
+from starlette.responses import Response
+
+
+class RateLimitMiddleware(BaseHTTPMiddleware):
+    def __init__(self, app: ASGIApp, requests_per_minute: int = 120):
+        super().__init__(app)
+        self.requests_per_minute = requests_per_minute
+        self._buckets: Dict[str, list[float]] = {}
+
+    async def dispatch(self, request: Request, call_next):
+        client_ip = request.client.host if request.client else "unknown"
+        key = f"{client_ip}:{request.url.path}"
+        now = time.time()
+        window_start = now - 60.0
+        bucket = self._buckets.setdefault(key, [])
+        # prune old
+        while bucket and bucket[0] < window_start:
+            bucket.pop(0)
+        if len(bucket) >= self.requests_per_minute:
+            return Response("Rate limit exceeded", status_code=429)
+        bucket.append(now)
+        return await call_next(request)
+
 
 # Initialize services
 settings = get_settings()
@@ -83,15 +113,15 @@ async def lifespan(app: FastAPI) -> Any:
     try:
         from app.core.recovery_orchestrator import recovery_orchestrator
         from app.services.recovery_monitor import recovery_monitor
-        
+
         # Run startup recovery sequence
         recovery_results = await recovery_orchestrator.startup_recovery_sequence()
         logger.info(f"Task recovery completed: {recovery_results.summary}")
-        
+
         # Start recovery monitoring
         await recovery_monitor.start_monitoring()
         logger.info("Recovery monitoring started")
-        
+
     except Exception as e:
         logger.error(f"Task recovery initialization failed: {e}")
         # Continue startup even if recovery fails
@@ -107,6 +137,7 @@ async def lifespan(app: FastAPI) -> Any:
     # Stop recovery monitoring
     try:
         from app.services.recovery_monitor import recovery_monitor
+
         await recovery_monitor.stop_monitoring()
         logger.info("Recovery monitoring stopped")
     except Exception as e:
@@ -169,6 +200,29 @@ app.add_middleware(
     max_age=3600,  # Cache preflight responses for 1 hour
 )
 
+
+# Add basic security headers middleware
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        # Only set headers if not already set by upstream
+        response.headers.setdefault(
+            "Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload"
+        )
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-XSS-Protection", "1; mode=block")
+        response.headers.setdefault(
+            "Referrer-Policy", "strict-origin-when-cross-origin"
+        )
+        return response
+
+
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(
+    RateLimitMiddleware, requests_per_minute=int(os.getenv("RATE_LIMIT_RPM", "120"))
+)
+
 # Add authentication middleware
 setup_auth_middleware(app, validate_token=False)
 
@@ -183,6 +237,7 @@ app.include_router(ocr_router)
 app.include_router(websockets_router)
 app.include_router(property_profile_router)
 app.include_router(property_intelligence_router)
+app.include_router(cache_router)
 
 
 # Import background tasks

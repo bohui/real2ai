@@ -252,9 +252,8 @@ async def create_document(document_data: DocumentCreateRequest):
 
 ### Migration Files
 
-1. **20240101000000_initial_schema.sql** - Initial schema with timestamp columns
-2. **20240101000002_functions_triggers.sql** - Basic trigger setup
-3. **20240101000005_timestamp_management.sql** - Enhanced timestamp management
+1. **20240101000000_initial_schema.sql** - Initial schema with timestamp columns and enhanced timestamp management
+2. **20240101000002_functions_triggers.sql** - Basic trigger setup and timestamp management functions
 
 ### Applying Migrations
 

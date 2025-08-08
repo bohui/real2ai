@@ -7,9 +7,11 @@ from typing import Dict, Any, Optional
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
 from datetime import datetime, UTC, timedelta
 
-from app.core.auth import get_current_user_ws
+from app.core.auth import get_current_user_ws, verify_ws_token, get_user_by_id_service
 from app.core.auth_context import AuthContext
-from app.services.websocket_service import WebSocketManager, WebSocketEvents
+from app.services.websocket_service import WebSocketEvents
+from app.services.websocket_singleton import websocket_manager
+from app.services.redis_pubsub import redis_pubsub_service
 from app.core.error_handler import handle_api_error, create_error_context, ErrorCategory
 from enum import Enum
 
@@ -24,7 +26,8 @@ class CacheStatus(str, Enum):
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/ws", tags=["websockets"])
 
-websocket_manager = WebSocketManager()
+# Use global singleton manager to ensure background tasks and router share sessions
+# See app/services/websocket_singleton.py
 
 
 async def check_document_cache_status(document_id: str, user_id: str) -> Dict[str, Any]:
@@ -245,7 +248,7 @@ def _generate_content_hash_from_document(document: Dict[str, Any]) -> str:
 async def document_analysis_websocket(
     websocket: WebSocket,
     document_id: str,
-    token: str = Query(..., description="Authentication token"),
+    token: str = Query(..., description="Short-lived server-signed WS token"),
 ):
     """
     ASGI-Compliant WebSocket endpoint for real-time document analysis updates.
@@ -259,6 +262,7 @@ async def document_analysis_websocket(
     """
 
     user = None
+    subscription_created = False
 
     try:
         # STEP 1: ALWAYS accept the WebSocket connection first (ASGI requirement)
@@ -266,7 +270,12 @@ async def document_analysis_websocket(
         logger.info(f"WebSocket connection accepted for document {document_id}")
 
         # STEP 2: Authenticate AFTER accepting (security check)
-        user = await get_current_user_ws(token)
+        # Prefer hardened short-lived token; fall back to legacy if needed
+        ws_user_id = verify_ws_token(token)
+        if ws_user_id:
+            user = await get_user_by_id_service(ws_user_id)
+        else:
+            user = await get_current_user_ws(token)
         if not user:
             logger.error(f"WebSocket authentication failed for document {document_id}")
 
@@ -294,8 +303,9 @@ async def document_analysis_websocket(
         )
 
         # STEP 2.5: Set authentication context for the WebSocket connection
+        # Do not store the WS token as Supabase token in context
         AuthContext.set_auth_context(
-            token=token,
+            token="",
             user_id=str(user.id),
             user_email=user.email,
             metadata={
@@ -326,6 +336,22 @@ async def document_analysis_websocket(
                 "connected_at": datetime.now(UTC).isoformat(),
             },
         )
+
+        # Bridge Redis pub/sub updates to this session if not already subscribed
+        if document_id not in getattr(redis_pubsub_service, "subscriptions", {}):
+            async def _forward_pubsub_message(message: Dict[str, Any]):
+                try:
+                    await websocket_manager.send_message(document_id, message)
+                except Exception as forward_error:
+                    logger.error(f"Failed to forward pub/sub message: {forward_error}")
+
+            try:
+                await redis_pubsub_service.initialize()
+                await redis_pubsub_service.subscribe_to_progress(document_id, _forward_pubsub_message)
+                subscription_created = True
+                logger.info(f"Redis subscription created for document session {document_id}")
+            except Exception as sub_error:
+                logger.warning(f"Could not subscribe to Redis channel for {document_id}: {sub_error}")
 
         # Send cache status and connection confirmation
         await websocket_manager.send_personal_message(
@@ -433,6 +459,11 @@ async def document_analysis_websocket(
         if user:  # Only cleanup if we had a successful authentication
             websocket_manager.disconnect(websocket, document_id)
             logger.info(f"WebSocket cleanup completed for document {document_id}")
+
+        # Note: We intentionally do not unsubscribe the Redis channel here to avoid
+        # tearing down the shared subscription while other sockets for the same
+        # document may still be connected. The subscription is maintained per
+        # session id by redis_pubsub_service.
 
         # Always clear authentication context for WebSocket connections
         AuthContext.clear_auth_context()
@@ -671,6 +702,28 @@ async def handle_retry_analysis_request(
                 },
             },
         )
+
+        # Get the content_hash for the contract to use in retry
+        user_client = await AuthContext.get_authenticated_client(require_auth=True)
+
+        # Get contract to find content_hash
+        contract_result = await user_client.database.select(
+            "contracts", columns="content_hash", filters={"id": contract_id}
+        )
+
+        if not contract_result.get("data"):
+            raise ValueError("Contract not found")
+
+        content_hash = contract_result["data"][0]["content_hash"]
+
+        # Use the new retry function to safely handle existing analysis records
+        retry_analysis_id = await user_client.database.execute_rpc(
+            "retry_contract_analysis",
+            {"p_content_hash": content_hash, "p_user_id": user_id},
+        )
+
+        if not retry_analysis_id:
+            raise ValueError("Failed to retry analysis via database function")
 
         # Actually dispatch the retry task
         task_result = await _dispatch_analysis_task(
@@ -1010,20 +1063,40 @@ async def _dispatch_analysis_task(
             contract_id = contract_result["data"]["id"]
             logger.info(f"Created new contract record: {contract_id}")
 
-        # Create analysis record
-        analysis_data = {
-            "content_hash": content_hash,
-            "agent_version": "1.0",
-            "status": "pending",
-        }
+        # Create analysis record using upsert to handle duplicates
+        try:
+            # Use the new upsert function to handle duplicate content_hash gracefully
+            analysis_id = await user_client.database.execute_rpc(
+                "upsert_contract_analysis",
+                {
+                    "p_content_hash": content_hash,
+                    "p_agent_version": "1.0",
+                    "p_status": "pending",
+                    "p_analysis_result": {},
+                    "p_error_message": None,
+                },
+            )
 
-        analysis_result = await user_client.database.insert(
-            "contract_analyses", analysis_data
-        )
-        if not analysis_result.get("success") or not analysis_result.get("data"):
-            raise ValueError("Failed to create analysis record")
+            if not analysis_id:
+                raise ValueError("Failed to create analysis record via upsert")
 
-        analysis_id = analysis_result["data"]["id"]
+        except Exception as e:
+            logger.error(f"Upsert failed for content_hash {content_hash}: {str(e)}")
+            # Fallback to direct upsert with conflict handling
+            analysis_data = {
+                "content_hash": content_hash,
+                "agent_version": "1.0",
+                "status": "pending",
+            }
+
+            analysis_result = await user_client.database.upsert(
+                "contract_analyses", analysis_data, conflict_columns=["content_hash"]
+            )
+
+            if not analysis_result:
+                raise ValueError("Failed to create analysis record via upsert fallback")
+
+            analysis_id = analysis_result["id"]
         logger.info(f"Created new analysis record: {analysis_id}")
 
         # Import and dispatch the comprehensive analysis task

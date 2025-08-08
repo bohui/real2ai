@@ -273,7 +273,8 @@ class ContractAnalysis(TimestampedBaseModel):
 
     # Metadata
     analysis_metadata: Dict[str, Any] = Field(default_factory=dict)
-    error_details: Dict[str, Any] = Field(default_factory=dict)
+    error_details: Optional[Dict[str, Any]] = None
+    error_message: Optional[str] = None
     analysis_timestamp: Optional[datetime] = None
 
 
@@ -318,10 +319,7 @@ class DocumentEntity(TimestampedBaseModel):
     """Document entities table for extracted entities"""
 
     id: UUID = Field(..., description="Entity UUID")
-    document_id: UUID = Field(..., description="Reference to documents.id")
-    content_hash: Optional[str] = Field(
-        None, description="SHA-256 hash of document content for caching"
-    )
+    content_hash: str = Field(..., description="SHA-256 hash of document content for caching")
     page_id: Optional[UUID] = Field(None, description="Reference to document_pages.id")
     page_number: int = Field(..., ge=1)
 
@@ -432,8 +430,7 @@ class PropertyData(TimestampedBaseModel):
     """Property data table for enhanced property analysis"""
 
     id: UUID = Field(..., description="Property data UUID")
-    contract_id: Optional[UUID] = Field(None, description="Reference to contracts.id")
-    user_id: UUID = Field(..., description="Reference to profiles.id")
+    property_hash: str = Field(..., description="Hash of normalized address for caching")
 
     # Property details
     address: str = Field(..., max_length=255)
@@ -456,6 +453,8 @@ class PropertyData(TimestampedBaseModel):
     # Analysis data
     market_analysis: Dict[str, Any] = Field(default_factory=dict)
     property_insights: Dict[str, Any] = Field(default_factory=dict)
+    analysis_result: Optional[Dict[str, Any]] = None
+    processing_time: Optional[float] = None
 
 
 class SubscriptionPlan(BaseModel):
@@ -796,6 +795,83 @@ class AnalysisProgressDetailed(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# Task Recovery System Models
+class TaskState(str, Enum):
+    QUEUED = "queued"
+    STARTED = "started"
+    PROCESSING = "processing"
+    CHECKPOINT = "checkpoint"
+    PAUSED = "paused"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+    RECOVERING = "recovering"
+    PARTIAL = "partial"
+    ORPHANED = "orphaned"
+
+
+class RecoveryMethod(str, Enum):
+    RESUME_CHECKPOINT = "resume_checkpoint"
+    RESTART_CLEAN = "restart_clean"
+    VALIDATE_ONLY = "validate_only"
+    MANUAL_INTERVENTION = "manual_intervention"
+
+
+class TaskRegistry(TimestampedBaseModel):
+    id: UUID
+    task_id: str
+    task_name: str
+    user_id: UUID
+    task_args: Dict[str, Any] = Field(default_factory=dict)
+    task_kwargs: Dict[str, Any] = Field(default_factory=dict)
+    context_key: Optional[str] = None
+    current_state: TaskState = TaskState.QUEUED
+    previous_state: Optional[TaskState] = None
+    state_history: List[Dict[str, Any]] = Field(default_factory=list)
+    progress_percent: int = Field(default=0, ge=0, le=100)
+    current_step: Optional[str] = None
+    checkpoint_data: Dict[str, Any] = Field(default_factory=dict)
+    last_heartbeat: Optional[datetime] = None
+    max_retries: int = 3
+    retry_count: int = 0
+    recovery_priority: int = 0
+    auto_recovery_enabled: bool = True
+    result_data: Optional[Dict[str, Any]] = None
+    error_details: Optional[Dict[str, Any]] = None
+    scheduled_at: Optional[datetime] = None
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    next_retry_at: Optional[datetime] = None
+
+
+class TaskCheckpoint(TimestampedBaseModel):
+    id: UUID
+    task_registry_id: UUID
+    checkpoint_name: str
+    progress_percent: int
+    step_description: Optional[str] = None
+    recoverable_data: Dict[str, Any] = Field(default_factory=dict)
+    database_state: Dict[str, Any] = Field(default_factory=dict)
+    file_state: Dict[str, Any] = Field(default_factory=dict)
+    checkpoint_hash: Optional[str] = None
+    is_valid: bool = True
+
+
+class RecoveryQueue(TimestampedBaseModel):
+    id: UUID
+    task_registry_id: UUID
+    recovery_method: RecoveryMethod = RecoveryMethod.RESUME_CHECKPOINT
+    recovery_priority: int = 0
+    scheduled_for: Optional[datetime] = None
+    processing_started: Optional[datetime] = None
+    processing_completed: Optional[datetime] = None
+    status: str = "pending"
+    attempts: int = 0
+    max_attempts: int = 3
+    recovery_result: Optional[Dict[str, Any]] = None
+    error_message: Optional[str] = None
 
 
 class UserContractHistory(BaseModel):

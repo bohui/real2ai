@@ -863,14 +863,6 @@ export interface ContractCacheCheckRequest {
   file_content?: string;
 }
 
-export interface ContractAnalysisWithCacheRequest {
-  content_hash: string;
-  filename?: string;
-  file_size?: number;
-  mime_type?: string;
-  property_address?: string;
-}
-
 export interface BulkAnalysisRequest {
   requests: Array<{
     document_id: string;

@@ -1,15 +1,15 @@
 -- Row Level Security policies for Real2.AI
 -- Ensures users can only access their own data
 
--- Enable RLS on user-specific tables only
+-- Enable RLS on user-specific and possession-gated tables
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE documents ENABLE ROW LEVEL SECURITY;
--- ALTER TABLE contracts ENABLE ROW LEVEL SECURITY; -- DISABLED for caching efficiency
--- ALTER TABLE contract_analyses ENABLE ROW LEVEL SECURITY; -- DISABLED for caching efficiency
+ALTER TABLE contracts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE contract_analyses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE usage_logs ENABLE ROW LEVEL SECURITY;
--- ALTER TABLE property_data ENABLE ROW LEVEL SECURITY; -- DISABLED for caching efficiency
+-- Keep property_data without RLS (shared cache), guarded via revokes/RPCs
 ALTER TABLE user_subscriptions ENABLE ROW LEVEL SECURITY;
--- ALTER TABLE analysis_progress ENABLE ROW LEVEL SECURITY; -- DISABLED for caching efficiency
+-- analysis_progress may remain without RLS if shared; restrict via RPC/possession flows
 
 -- Profiles policies
 CREATE POLICY "Users can view own profile" 
@@ -41,43 +41,43 @@ CREATE POLICY "Users can delete own documents"
     ON documents FOR DELETE 
     USING (auth.uid() = user_id);
 
--- Contracts policies - DISABLED for caching efficiency
--- RLS disabled on contracts table to enable cross-user cache sharing
--- Access control handled at application level
--- CREATE POLICY "Users can view own contracts" 
---     ON contracts FOR SELECT 
---     USING (auth.uid() = user_id);
-
--- CREATE POLICY "Users can insert own contracts" 
---     ON contracts FOR INSERT 
---     WITH CHECK (auth.uid() = user_id);
-
--- CREATE POLICY "Users can update own contracts" 
---     ON contracts FOR UPDATE 
---     USING (auth.uid() = user_id);
+-- Contracts policies (possession-gated SELECT by content_hash)
+DROP POLICY IF EXISTS "read_if_user_has_hash" ON contracts;
+CREATE POLICY "read_if_user_has_hash"
+    ON contracts FOR SELECT
+    USING (
+        EXISTS (
+            SELECT 1 FROM user_contract_views v
+            WHERE v.user_id = auth.uid()
+              AND v.content_hash = contracts.content_hash
+        )
+        OR EXISTS (
+            SELECT 1 FROM documents d
+            WHERE d.user_id = auth.uid()
+              AND d.content_hash = contracts.content_hash
+        )
+    );
 
 -- CREATE POLICY "Users can delete own contracts" 
 --     ON contracts FOR DELETE 
 --     USING (auth.uid() = user_id);
 
--- Contract analyses policies - DISABLED for caching efficiency
--- RLS disabled on contract_analyses table to enable cross-user cache sharing
--- Access control handled at application level
--- CREATE POLICY "Users can view own analyses" 
---     ON contract_analyses FOR SELECT 
---     USING (auth.uid() = user_id);
-
--- CREATE POLICY "Users can insert own analyses" 
---     ON contract_analyses FOR INSERT 
---     WITH CHECK (auth.uid() = user_id);
-
--- CREATE POLICY "Users can update own analyses" 
---     ON contract_analyses FOR UPDATE 
---     USING (auth.uid() = user_id);
-
--- CREATE POLICY "Service can update any analysis" 
---     ON contract_analyses FOR UPDATE 
---     USING (auth.jwt() ->> 'role' = 'service_role');
+-- Contract analyses policies (possession-gated SELECT by content_hash)
+DROP POLICY IF EXISTS "read_if_user_has_hash" ON contract_analyses;
+CREATE POLICY "read_if_user_has_hash"
+    ON contract_analyses FOR SELECT
+    USING (
+        EXISTS (
+            SELECT 1 FROM user_contract_views v
+            WHERE v.user_id = auth.uid()
+              AND v.content_hash = contract_analyses.content_hash
+        )
+        OR EXISTS (
+            SELECT 1 FROM documents d
+            WHERE d.user_id = auth.uid()
+              AND d.content_hash = contract_analyses.content_hash
+        )
+    );
 
 -- Usage logs policies
 CREATE POLICY "Users can view own usage logs" 
@@ -88,20 +88,7 @@ CREATE POLICY "Service can insert usage logs"
     ON usage_logs FOR INSERT 
     WITH CHECK (auth.jwt() ->> 'role' = 'service_role' OR auth.uid() = user_id);
 
--- Property data policies - DISABLED for caching efficiency
--- RLS disabled on property_data table to enable cross-user cache sharing
--- Access control handled at application level
--- CREATE POLICY "Users can view own property data" 
---     ON property_data FOR SELECT 
---     USING (auth.uid() = user_id);
-
--- CREATE POLICY "Users can insert own property data" 
---     ON property_data FOR INSERT 
---     WITH CHECK (auth.uid() = user_id);
-
--- CREATE POLICY "Users can update own property data" 
---     ON property_data FOR UPDATE 
---     USING (auth.uid() = user_id);
+-- Property data remains shared (no RLS), access controlled via RPCs and revokes below
 
 -- User subscriptions policies
 CREATE POLICY "Users can view own subscriptions" 
@@ -238,3 +225,37 @@ BEGIN
     RETURN current_credits >= required_credits;
 END;
 $$;
+
+-- ------------------------------------------------------------
+-- Revoke direct access to shared/derived tables for anon/authenticated
+-- ------------------------------------------------------------
+
+DO $$
+BEGIN
+  -- contract_analyses
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'contract_analyses'
+  ) THEN
+    EXECUTE 'REVOKE ALL ON TABLE public.contract_analyses FROM anon';
+    EXECUTE 'REVOKE ALL ON TABLE public.contract_analyses FROM authenticated';
+  END IF;
+
+  -- contracts
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'contracts'
+  ) THEN
+    EXECUTE 'REVOKE ALL ON TABLE public.contracts FROM anon';
+    EXECUTE 'REVOKE ALL ON TABLE public.contracts FROM authenticated';
+  END IF;
+
+  -- property_data (shared cache table)
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'property_data'
+  ) THEN
+    EXECUTE 'REVOKE ALL ON TABLE public.property_data FROM anon';
+    EXECUTE 'REVOKE ALL ON TABLE public.property_data FROM authenticated';
+  END IF;
+END $$;
+
+COMMENT ON POLICY "read_if_user_has_hash" ON public.contract_analyses IS 'Allow reading derived analysis only if the user has possession (document or view) for the same content hash';
+COMMENT ON POLICY "read_if_user_has_hash" ON public.contracts IS 'Allow reading contract rows only if the user has possession (document or view) for the same content hash';

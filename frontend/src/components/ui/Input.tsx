@@ -2,7 +2,8 @@ import React from "react";
 import { cn } from "@/utils";
 import { AlertCircle, Eye, EyeOff } from "lucide-react";
 
-interface InputProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'size'> {
+interface InputProps
+  extends Omit<React.InputHTMLAttributes<HTMLInputElement>, "size"> {
   label?: string;
   error?: string;
   helpText?: string;
@@ -36,7 +37,8 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
     const [showPassword, setShowPassword] = React.useState(false);
     const [currentType, setCurrentType] = React.useState(type);
 
-    const inputId = id || `input-${Date.now()}`;
+    const generatedId = React.useId();
+    const inputId = id ?? generatedId;
     const hasError = Boolean(error);
 
     React.useEffect(() => {

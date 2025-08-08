@@ -1,4 +1,4 @@
-import React from "react";
+import React, { Suspense } from "react";
 import {
   BrowserRouter as Router,
   Routes,
@@ -12,17 +12,17 @@ import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import Layout from "@/components/layout/Layout";
 import AuthLayout from "@/components/layout/AuthLayout";
 
-// Pages
-import LoginPage from "@/pages/auth/LoginPage";
-import RegisterPage from "@/pages/auth/RegisterPage";
-import DashboardPage from "@/pages/DashboardPage";
-import AnalysisPage from "@/pages/AnalysisPage";
-import HistoryPage from "@/pages/HistoryPage";
-import SettingsPage from "@/pages/SettingsPage";
-import ReportsPage from "@/pages/ReportsPage";
-import PropertyIntelligencePage from "@/pages/PropertyIntelligencePage";
-import MarketAnalysisPage from "@/pages/MarketAnalysisPage";
-import FinancialAnalysisPage from "@/pages/FinancialAnalysisPage";
+// Pages (lazy loaded)
+const LoginPage = React.lazy(() => import("@/pages/auth/LoginPage"));
+const RegisterPage = React.lazy(() => import("@/pages/auth/RegisterPage"));
+const DashboardPage = React.lazy(() => import("@/pages/DashboardPage"));
+const AnalysisPage = React.lazy(() => import("@/pages/AnalysisPage"));
+const HistoryPage = React.lazy(() => import("@/pages/HistoryPage"));
+const SettingsPage = React.lazy(() => import("@/pages/SettingsPage"));
+const ReportsPage = React.lazy(() => import("@/pages/ReportsPage"));
+const PropertyIntelligencePage = React.lazy(() => import("@/pages/PropertyIntelligencePage"));
+const MarketAnalysisPage = React.lazy(() => import("@/pages/MarketAnalysisPage"));
+const FinancialAnalysisPage = React.lazy(() => import("@/pages/FinancialAnalysisPage"));
 
 // Components
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
@@ -207,9 +207,14 @@ const App: React.FC = () => {
   // Show loading spinner while checking authentication
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-neutral-50 flex items-center justify-center">
+      <div
+        className="min-h-screen bg-neutral-50 flex items-center justify-center"
+        role="status"
+        aria-live="polite"
+        aria-busy="true"
+      >
         <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-primary-600 border-t-transparent rounded-full animate-spin" />
+          <div className="w-12 h-12 border-4 border-primary-600 border-t-transparent rounded-full animate-spin" aria-hidden="true" />
           <p className="text-neutral-600">Loading Real2.AI...</p>
         </div>
       </div>
@@ -222,6 +227,7 @@ const App: React.FC = () => {
         <SEOProvider>
           <RootSEO />
           <div className="App">
+            <Suspense fallback={<div className="p-8" role="status" aria-live="polite">Loading…</div>}>
             <Routes>
               {/* Auth routes */}
               <Route path="/auth" element={<AuthLayout />}>
@@ -283,6 +289,7 @@ const App: React.FC = () => {
                 }
               />
             </Routes>
+            </Suspense>
 
             {/* Global components */}
             <NotificationSystem />

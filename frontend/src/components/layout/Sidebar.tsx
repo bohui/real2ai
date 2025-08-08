@@ -1,90 +1,90 @@
-import React from 'react'
-import { Link, useLocation } from 'react-router-dom'
-import { 
-  LayoutDashboard, 
-  FileText, 
-  History, 
-  Settings, 
+import React from "react";
+import { Link, useLocation } from "react-router-dom";
+import {
+  LayoutDashboard,
+  FileText,
+  History,
+  Settings,
   Upload,
   BarChart3,
   Zap,
   HelpCircle,
   Building,
   TrendingUp,
-  Calculator
-} from 'lucide-react'
-import { motion } from 'framer-motion'
+  Calculator,
+} from "lucide-react";
+import { motion } from "framer-motion";
 
-import { useAnalysisStore } from '@/store/analysisStore'
-import { cn } from '@/utils'
+import { useAnalysisStore } from "@/store/analysisStore";
+import { cn } from "@/utils";
 
 const Sidebar: React.FC = () => {
-  const location = useLocation()
-  const { recentAnalyses, isAnalyzing } = useAnalysisStore()
+  const location = useLocation();
+  const { recentAnalyses, isAnalyzing } = useAnalysisStore();
 
   const navigation = [
     {
-      name: 'Dashboard',
-      href: '/app/dashboard',
+      name: "Dashboard",
+      href: "/app/dashboard",
       icon: LayoutDashboard,
-      current: location.pathname === '/app/dashboard'
+      current: location.pathname === "/app/dashboard",
     },
     {
-      name: 'New Analysis',
-      href: '/app/analysis',
+      name: "New Analysis",
+      href: "/app/analysis",
       icon: Upload,
-      current: location.pathname === '/app/analysis',
-      badge: isAnalyzing ? 'Active' : null
+      current: location.pathname === "/app/analysis",
+      badge: isAnalyzing ? "Active" : null,
     },
     {
-      name: 'Analysis History',
-      href: '/app/history',
+      name: "Analysis History",
+      href: "/app/history",
       icon: History,
-      current: location.pathname === '/app/history',
-      badge: recentAnalyses.length > 0 ? recentAnalyses.length : null
+      current: location.pathname === "/app/history",
+      badge: recentAnalyses.length > 0 ? recentAnalyses.length : null,
     },
     {
-      name: 'Reports',
-      href: '/app/reports',
+      name: "Reports",
+      href: "/app/reports",
       icon: BarChart3,
-      current: location.pathname === '/app/reports'
+      current: location.pathname === "/app/reports",
     },
     {
-      name: 'Property Intelligence',
-      href: '/app/property-intelligence',
+      name: "Property Intelligence",
+      href: "/app/property-intelligence",
       icon: Building,
-      current: location.pathname === '/app/property-intelligence',
-      badge: 'NEW'
+      current: location.pathname === "/app/property-intelligence",
+      badge: "NEW",
     },
     {
-      name: 'Market Analysis',
-      href: '/app/market-analysis',
+      name: "Market Analysis",
+      href: "/app/market-analysis",
       icon: TrendingUp,
-      current: location.pathname === '/app/market-analysis',
-      badge: 'NEW'
+      current: location.pathname === "/app/market-analysis",
+      badge: "NEW",
     },
     {
-      name: 'Financial Analysis',
-      href: '/app/financial-analysis',
+      name: "Financial Analysis",
+      href: "/app/financial-analysis",
       icon: Calculator,
-      current: location.pathname === '/app/financial-analysis',
-      badge: 'NEW'
+      current: location.pathname === "/app/financial-analysis",
+      badge: "NEW",
     },
     {
-      name: 'Settings',
-      href: '/app/settings',
+      name: "Settings",
+      href: "/app/settings",
       icon: Settings,
-      current: location.pathname === '/app/settings'
-    }
-  ]
+      current: location.pathname === "/app/settings",
+    },
+  ];
 
   const quickActions = [
     {
-      name: 'Help & Support',
-      href: '/help',
-      icon: HelpCircle
-    }
-  ]
+      name: "Help & Support",
+      href: "/help",
+      icon: HelpCircle,
+    },
+  ];
 
   return (
     <div className="flex flex-col h-full bg-white border-r border-neutral-200">
@@ -102,47 +102,52 @@ const Sidebar: React.FC = () => {
       {/* Navigation */}
       <nav className="flex-1 px-4 py-6 space-y-2">
         {navigation.map((item) => {
-          const IconComponent = item.icon
-          
+          const IconComponent = item.icon;
+
           return (
             <Link
               key={item.name}
               to={item.href}
               className={cn(
-                'group flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200',
+                "group flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200",
                 item.current
-                  ? 'bg-primary-50 text-primary-700 border border-primary-200'
-                  : 'text-neutral-600 hover:text-neutral-900 hover:bg-neutral-50'
+                  ? "bg-primary-50 text-primary-700 border border-primary-200"
+                  : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-50"
               )}
+              aria-current={item.current ? "page" : undefined}
             >
               <div className="flex items-center gap-3">
-                <IconComponent className={cn(
-                  'w-5 h-5',
-                  item.current ? 'text-primary-600' : 'text-neutral-400 group-hover:text-neutral-600'
-                )} />
+                <IconComponent
+                  className={cn(
+                    "w-5 h-5",
+                    item.current
+                      ? "text-primary-600"
+                      : "text-neutral-400 group-hover:text-neutral-600"
+                  )}
+                />
                 <span>{item.name}</span>
               </div>
-              
+
               {item.badge && (
                 <motion.span
                   initial={{ scale: 0 }}
                   animate={{ scale: 1 }}
                   className={cn(
-                    'inline-flex items-center px-2 py-1 rounded-full text-xs font-medium',
-                    item.name === 'New Analysis' && isAnalyzing
-                      ? 'bg-success-100 text-success-700'
-                      : item.badge === 'NEW'
-                      ? 'bg-accent-100 text-accent-700'
+                    "inline-flex items-center px-2 py-1 rounded-full text-xs font-medium",
+                    item.name === "New Analysis" && isAnalyzing
+                      ? "bg-success-100 text-success-700"
+                      : item.badge === "NEW"
+                      ? "bg-accent-100 text-accent-700"
                       : item.current
-                      ? 'bg-primary-100 text-primary-700'
-                      : 'bg-neutral-100 text-neutral-600'
+                      ? "bg-primary-100 text-primary-700"
+                      : "bg-neutral-100 text-neutral-600"
                   )}
                 >
                   {item.badge}
                 </motion.span>
               )}
             </Link>
-          )
+          );
         })}
       </nav>
 
@@ -155,10 +160,11 @@ const Sidebar: React.FC = () => {
           <div className="space-y-2">
             {recentAnalyses.slice(0, 3).map((analysis) => {
               // Safely get risk score from either executive_summary or risk_assessment
-              const riskScore = analysis.executive_summary?.overall_risk_score 
-                ?? analysis.risk_assessment?.overall_risk_score 
-                ?? 0;
-              
+              const riskScore =
+                analysis.executive_summary?.overall_risk_score ??
+                analysis.risk_assessment?.overall_risk_score ??
+                0;
+
               return (
                 <Link
                   key={analysis.contract_id}
@@ -172,15 +178,21 @@ const Sidebar: React.FC = () => {
                         Contract Analysis
                       </p>
                       <p className="text-xs text-neutral-500">
-                        {new Date(analysis.analysis_timestamp).toLocaleDateString()}
+                        {new Date(
+                          analysis.analysis_timestamp
+                        ).toLocaleDateString()}
                       </p>
                     </div>
-                    <div className={cn(
-                      'w-2 h-2 rounded-full',
-                      riskScore >= 7 ? 'bg-danger-500' :
-                      riskScore >= 5 ? 'bg-warning-500' :
-                      'bg-success-500'
-                    )} />
+                    <div
+                      className={cn(
+                        "w-2 h-2 rounded-full",
+                        riskScore >= 7
+                          ? "bg-danger-500"
+                          : riskScore >= 5
+                          ? "bg-warning-500"
+                          : "bg-success-500"
+                      )}
+                    />
                   </div>
                 </Link>
               );
@@ -193,8 +205,8 @@ const Sidebar: React.FC = () => {
       <div className="px-4 py-4 border-t border-neutral-200">
         <div className="space-y-2">
           {quickActions.map((item) => {
-            const IconComponent = item.icon
-            
+            const IconComponent = item.icon;
+
             return (
               <Link
                 key={item.name}
@@ -204,12 +216,12 @@ const Sidebar: React.FC = () => {
                 <IconComponent className="w-4 h-4 text-neutral-400 group-hover:text-neutral-600" />
                 <span>{item.name}</span>
               </Link>
-            )
+            );
           })}
         </div>
       </div>
     </div>
-  )
-}
+  );
+};
 
-export default Sidebar
+export default Sidebar;

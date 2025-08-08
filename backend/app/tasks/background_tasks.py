@@ -373,18 +373,16 @@ async def comprehensive_document_analysis(
 
             # Create contract analysis state
             contract_state = create_initial_state(
-                document_path=document["storage_path"],
-                contract_type=ContractType(
-                    contract_data.get("contract_type", "purchase_agreement")
-                ),
+                user_id=user_id,
                 australian_state=AustralianState(
                     contract_data.get("australian_state", "NSW")
                 ),
-                analysis_options=analysis_options,
+                user_type="buyer",  # Default user type
+                user_preferences=analysis_options,  # Pass analysis options as user preferences
             )
 
             # Execute contract analysis workflow
-            analysis_result = await contract_workflow.run_analysis(contract_state)
+            analysis_result = await contract_workflow.analyze_contract(contract_state)
 
             await update_analysis_progress(
                 user_id,
@@ -440,15 +438,14 @@ async def comprehensive_document_analysis(
             )
 
             # Send completion notification
+            analysis_summary = {
+                "analysis_id": analysis_id,
+                "risk_score": analysis_result.get("risk_score", 0.0),
+                "processing_time": analysis_update["processing_time"],
+            }
             publish_progress_sync(
                 contract_id,
-                WebSocketEvents.ANALYSIS_COMPLETE,
-                {
-                    "contract_id": contract_id,
-                    "analysis_id": analysis_id,
-                    "risk_score": analysis_result.get("risk_score", 0.0),
-                    "processing_time": analysis_update["processing_time"],
-                },
+                WebSocketEvents.analysis_completed(contract_id, analysis_summary),
             )
 
             logger.info(

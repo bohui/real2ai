@@ -419,6 +419,11 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
         className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="onboarding-title"
+        aria-describedby="onboarding-subtitle"
+        tabIndex={-1}
       >
         <div className="p-6 border-b border-neutral-200">
           <div className="flex items-center justify-between">
@@ -430,10 +435,15 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({
                 <currentStepData.icon className="w-6 h-6 text-primary-600" />
               </motion.div>
               <div>
-                <h2 className="text-xl font-bold text-neutral-900">
+                <h2
+                  id="onboarding-title"
+                  className="text-xl font-bold text-neutral-900"
+                >
                   {currentStepData.title}
                 </h2>
-                <p className="text-neutral-600">{currentStepData.subtitle}</p>
+                <p id="onboarding-subtitle" className="text-neutral-600">
+                  {currentStepData.subtitle}
+                </p>
               </div>
             </div>
             <button

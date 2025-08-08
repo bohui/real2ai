@@ -2,7 +2,7 @@
 
 import hashlib
 from typing import Dict, List, Optional, Union, TypedDict, Any
-from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, Body
+from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, Body, Query
 from fastapi.responses import JSONResponse, Response
 import logging
 from datetime import datetime
@@ -25,6 +25,8 @@ from app.schema.contract import (
 from app.models.supabase_models import Document, Contract, ContractAnalysis, Profile
 from app.clients.base.interfaces import DatabaseOperations, AuthOperations
 from app.clients.supabase.client import SupabaseClient
+
+logger = logging.getLogger(__name__)
 
 
 # Database Result Types
@@ -411,6 +413,95 @@ async def start_contract_analysis(
         raise handle_api_error(e, context, ErrorCategory.CONTRACT_ANALYSIS)
 
 
+@router.get("/history")
+async def get_contract_history(
+    limit: int = Query(50, ge=1, le=100, description="Number of records to return"),
+    offset: int = Query(0, ge=0, description="Number of records to skip"),
+    user: User = Depends(get_current_user),
+    cache_service: CacheService = Depends(get_cache_service),
+) -> Dict[str, Any]:
+    """
+    Get user's contract analysis history.
+
+    Returns:
+        Contract history with pagination support
+    """
+    context = create_error_context(
+        user_id=str(user.id),
+        operation="get_contract_history",
+        limit=limit,
+        offset=offset,
+    )
+
+    try:
+        history = await cache_service.get_user_contract_history(
+            user_id=str(user.id), limit=limit, offset=offset
+        )
+
+        return {
+            "status": "success",
+            "data": {
+                "history": history,
+                "total_count": len(history),
+                "has_more": len(history) == limit,
+            },
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting contract history: {str(e)}")
+        raise handle_api_error(e, context, ErrorCategory.DATABASE)
+
+
+@router.post("/check-cache")
+async def check_contract_cache(
+    request: Dict[str, Any] = Body(...),
+    user: User = Depends(get_current_user),
+    cache_service: CacheService = Depends(get_cache_service),
+) -> Dict[str, Any]:
+    """
+    Check if contract analysis exists in cache.
+
+    Body:
+        - file_content: Base64 encoded file content
+    """
+    context = create_error_context(
+        user_id=str(user.id), operation="check_contract_cache"
+    )
+
+    try:
+        # Either accept pre-computed content_hash or file_content to compute it
+        content_hash = request.get("content_hash")
+        file_content = request.get("file_content")
+
+        if not content_hash:
+            if not file_content:
+                raise HTTPException(
+                    status_code=400,
+                    detail="content_hash or file_content is required",
+                )
+            # Generate content hash from file content
+            import base64
+
+            content_bytes = base64.b64decode(file_content)
+            content_hash = cache_service.generate_content_hash(content_bytes)
+
+        # Check cache
+        cached_result = await cache_service.check_contract_cache(content_hash)
+
+        return {
+            "status": "success",
+            "data": {
+                "content_hash": content_hash,
+                "cache_hit": cached_result is not None,
+                "cached_analysis": cached_result,
+            },
+        }
+
+    except Exception as e:
+        logger.error(f"Error checking contract cache: {str(e)}")
+        raise handle_api_error(e, context, ErrorCategory.DATABASE)
+
+
 @router.post("/bulk-analyze")
 async def bulk_contract_analysis(
     background_tasks: BackgroundTasks,
@@ -623,23 +714,50 @@ async def _create_analysis_record_with_cache(
     user_id: str,
     content_hash: Optional[str] = None,
 ) -> str:
-    """Create analysis record with cache integration."""
-    analysis_data = {
-        "contract_id": contract_id,
-        "user_id": user_id,
-        "agent_version": "1.0",
-        "status": "pending",
-        "content_hash": content_hash,  # Same as content_hash for contracts
-    }
+    """Create analysis record with cache integration using upsert to handle duplicates."""
+    if not content_hash:
+        raise ValueError("content_hash is required for analysis record creation")
 
-    analysis_result = await db_client.database.insert(
-        "contract_analyses", analysis_data
-    )
+    try:
+        # Use the new upsert function to handle duplicate content_hash gracefully
+        result = await db_client.database.execute_rpc(
+            "upsert_contract_analysis",
+            {
+                "p_content_hash": content_hash,
+                "p_agent_version": "1.0",
+                "p_status": "pending",
+                "p_analysis_result": {},
+                "p_error_message": None,
+            },
+        )
 
-    if not analysis_result.get("success") or not analysis_result.get("data"):
-        raise ValueError("Failed to create analysis record")
+        if not result:
+            raise ValueError("Failed to create analysis record via upsert")
 
-    return analysis_result["data"]["id"]
+        return result
+
+    except Exception as e:
+        logger.error(f"Upsert failed for content_hash {content_hash}: {str(e)}")
+        # Fallback to direct insert with conflict handling
+        analysis_data = {
+            "content_hash": content_hash,
+            "agent_version": "1.0",
+            "status": "pending",
+        }
+
+        try:
+            analysis_result = await db_client.database.upsert(
+                "contract_analyses", analysis_data, conflict_columns=["content_hash"]
+            )
+
+            if not analysis_result:
+                raise ValueError("Failed to create analysis record via upsert fallback")
+
+            return analysis_result["id"]
+
+        except Exception as fallback_error:
+            logger.error(f"Fallback upsert also failed: {str(fallback_error)}")
+            raise ValueError("Failed to create analysis record")
 
 
 @retry_api_call(max_attempts=2)

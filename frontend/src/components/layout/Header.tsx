@@ -35,6 +35,7 @@ const Header: React.FC = () => {
               size="sm"
               onClick={toggleSidebar}
               className="lg:hidden"
+              aria-label="Toggle sidebar"
             >
               <Menu className="w-5 h-5" />
             </Button>
@@ -44,8 +45,9 @@ const Header: React.FC = () => {
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-neutral-400" />
                 <input
-                  type="text"
+                  type="search"
                   placeholder="Search contracts..."
+                  aria-label="Search contracts"
                   className="pl-10 pr-4 py-2 w-64 rounded-lg border border-neutral-200 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
                 />
               </div>
@@ -64,7 +66,13 @@ const Header: React.FC = () => {
 
             {/* Notifications */}
             <div className="relative">
-              <Button variant="ghost" size="sm">
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-label={`Notifications${
+                  unreadCount > 0 ? ` (${unreadCount} unread)` : ""
+                }`}
+              >
                 <Bell className="w-5 h-5" />
                 {unreadCount > 0 && (
                   <span className="absolute -top-1 -right-1 w-4 h-4 bg-danger-500 text-white text-xs rounded-full flex items-center justify-center">
@@ -75,13 +83,19 @@ const Header: React.FC = () => {
             </div>
 
             {/* Help */}
-            <Button variant="ghost" size="sm">
+            <Button variant="ghost" size="sm" aria-label="Help and support">
               <HelpCircle className="w-5 h-5" />
             </Button>
 
             {/* User menu */}
             <HeadlessMenu as="div" className="relative">
-              <HeadlessMenu.Button className="flex items-center gap-2 p-2 rounded-lg hover:bg-neutral-100 transition-colors">
+              <HeadlessMenu.Button
+                className="flex items-center gap-2 p-2 rounded-lg hover:bg-neutral-100 transition-colors"
+                aria-label={`User menu${
+                  user?.email ? ` for ${user.email}` : ""
+                }`}
+                aria-haspopup="menu"
+              >
                 <div className="w-8 h-8 bg-primary-600 rounded-full flex items-center justify-center text-white font-semibold text-sm">
                   {user?.email.charAt(0).toUpperCase()}
                 </div>

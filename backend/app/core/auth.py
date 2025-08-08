@@ -6,11 +6,13 @@ This replaces direct Supabase client instantiation with the new client factory s
 import logging
 from datetime import datetime, UTC
 from typing import Optional
+import jwt
 from pydantic import BaseModel
 from fastapi import HTTPException, status, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from app.clients.factory import get_supabase_client
+from app.core.config import get_settings
 from app.clients.base.interfaces import AuthOperations, DatabaseOperations
 from app.clients.base.exceptions import ClientError
 
@@ -324,3 +326,68 @@ def verify_token(token: str) -> TokenData:
 
     auth_service = get_auth_service()
     return asyncio.run(auth_service.verify_token(token))
+
+
+# ----------------------------
+# WebSocket token utilities
+# ----------------------------
+
+
+def _get_jwt_secret_and_alg() -> tuple[str, str]:
+    settings = get_settings()
+    secret = settings.jwt_secret_key
+    if not secret:
+        # Fall back to anon key to avoid hard failure in dev; strongly recommend setting JWT_SECRET_KEY
+        secret = settings.supabase_anon_key
+    alg = settings.jwt_algorithm or "HS256"
+    return secret, alg
+
+
+def generate_ws_token(user_id: str, expires_in_seconds: int = 120) -> str:
+    """Generate a short-lived server-signed token for WebSocket handshakes."""
+    secret, alg = _get_jwt_secret_and_alg()
+    payload = {
+        "sub": user_id,
+        "type": "ws",
+        "exp": int(datetime.now(UTC).timestamp()) + int(expires_in_seconds),
+        "iat": int(datetime.now(UTC).timestamp()),
+    }
+    return jwt.encode(payload, secret, algorithm=alg)
+
+
+def verify_ws_token(token: str) -> Optional[str]:
+    """Verify server-signed WS token and return user_id if valid."""
+    try:
+        secret, alg = _get_jwt_secret_and_alg()
+        payload = jwt.decode(token, secret, algorithms=[alg])
+        if payload.get("type") != "ws":
+            return None
+        return payload.get("sub")
+    except Exception:
+        return None
+
+
+async def get_user_by_id_service(user_id: str) -> Optional[User]:
+    """Fetch user profile using service-role client (bypasses RLS for identity resolution)."""
+    try:
+        client = await get_supabase_client(use_service_role=True)
+        result = await client.database.select(
+            "profiles", columns="*", filters={"id": user_id}
+        )
+        if result.get("data"):
+            profile = result["data"][0]
+            return User(
+                id=profile["id"],
+                email=profile["email"],
+                australian_state=profile["australian_state"],
+                user_type=profile["user_type"],
+                subscription_status=profile.get("subscription_status", "free"),
+                credits_remaining=profile.get("credits_remaining", 0),
+                preferences=profile.get("preferences", {}),
+                onboarding_completed=profile.get("onboarding_completed", False),
+                onboarding_completed_at=profile.get("onboarding_completed_at"),
+                onboarding_preferences=profile.get("onboarding_preferences", {}),
+            )
+        return None
+    except Exception:
+        return None

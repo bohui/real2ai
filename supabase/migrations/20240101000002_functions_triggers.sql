@@ -701,3 +701,80 @@ BEGIN
     RAISE NOTICE 'Summary: %/% tables have optimal timestamp management', optimal_tables, total_tables;
     RAISE NOTICE 'Run "SELECT * FROM timestamp_management_status;" to verify configuration';
 END $$;
+
+-- Function to handle upsert for contract_analyses (prevents duplicate key errors)
+CREATE OR REPLACE FUNCTION upsert_contract_analysis(
+    p_content_hash TEXT,
+    p_agent_version TEXT DEFAULT '1.0',
+    p_status analysis_status DEFAULT 'pending',
+    p_analysis_result JSONB DEFAULT '{}',
+    p_error_message TEXT DEFAULT NULL
+) RETURNS UUID AS $$
+DECLARE
+    v_analysis_id UUID;
+BEGIN
+    -- Try to insert new record
+    INSERT INTO contract_analyses (
+        content_hash,
+        agent_version,
+        status,
+        analysis_result,
+        error_message,
+        analysis_timestamp,
+        created_at,
+        updated_at
+    ) VALUES (
+        p_content_hash,
+        p_agent_version,
+        p_status,
+        p_analysis_result,
+        p_error_message,
+        NOW(),
+        NOW(),
+        NOW()
+    ) ON CONFLICT (content_hash) DO UPDATE SET
+        status = EXCLUDED.status,
+        analysis_result = EXCLUDED.analysis_result,
+        error_message = EXCLUDED.error_message,
+        updated_at = NOW()
+    RETURNING id INTO v_analysis_id;
+    
+    RETURN v_analysis_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Function to safely retry analysis
+CREATE OR REPLACE FUNCTION retry_contract_analysis(
+    p_content_hash TEXT,
+    p_user_id UUID
+) RETURNS UUID AS $$
+DECLARE
+    v_analysis_id UUID;
+    v_existing_status analysis_status;
+BEGIN
+    -- Check if analysis already exists
+    SELECT id, status INTO v_analysis_id, v_existing_status
+    FROM contract_analyses
+    WHERE content_hash = p_content_hash;
+    
+    -- If analysis exists and is in a terminal state, reset it
+    IF v_analysis_id IS NOT NULL AND v_existing_status IN ('failed', 'cancelled') THEN
+        UPDATE contract_analyses
+        SET 
+            status = 'pending',
+            error_message = NULL,
+            analysis_result = '{}',
+            updated_at = NOW()
+        WHERE id = v_analysis_id;
+    -- If analysis doesn't exist, create new one
+    ELSIF v_analysis_id IS NULL THEN
+        v_analysis_id := upsert_contract_analysis(p_content_hash);
+    END IF;
+    
+    RETURN v_analysis_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Add comments for documentation
+COMMENT ON FUNCTION upsert_contract_analysis IS 'Upsert function for contract analyses to handle duplicate content_hash';
+COMMENT ON FUNCTION retry_contract_analysis IS 'Safely retry analysis by checking existing status and resetting if needed';

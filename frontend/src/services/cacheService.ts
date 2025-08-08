@@ -11,7 +11,6 @@ import {
   CacheHistoryResponse,
   CacheOperationResponse,
   CacheStatsResponse,
-  ContractAnalysisWithCacheRequest,
   ContractCacheCheckRequest,
   PropertySearchWithCacheRequest,
 } from "@/types";
@@ -99,26 +98,14 @@ class CacheService {
       cached_analysis?: any;
     };
   }> {
-    return this.makeRequest("/api/cache/contract/check", {
+    // Route unified under contracts API
+    return this.makeRequest("/api/contracts/check-cache", {
       method: "POST",
       body: JSON.stringify(request),
     });
   }
 
-  /**
-   * Analyze contract with cache-first strategy
-   */
-  async analyzeContractWithCache(
-    request: ContractAnalysisWithCacheRequest,
-  ): Promise<CacheOperationResponse> {
-    return this.makeRequest<CacheOperationResponse>(
-      "/api/cache/contract/analyze-with-cache",
-      {
-        method: "POST",
-        body: JSON.stringify(request),
-      },
-    );
-  }
+  // Removed duplicate analyze-with-cache endpoint; use /api/contracts/analyze instead
 
   /**
    * Get user's contract analysis history
@@ -127,8 +114,9 @@ class CacheService {
     limit: number = 50,
     offset: number = 0,
   ): Promise<CacheHistoryResponse> {
+    // Route unified under contracts API
     return this.makeRequest(
-      `/api/cache/contract/history?limit=${limit}&offset=${offset}`,
+      `/api/contracts/history?limit=${limit}&offset=${offset}`,
     );
   }
 
@@ -324,9 +312,8 @@ class CacheService {
       );
 
       // Estimate token savings (assuming 1000 tokens per analysis)
-      const estimatedTokenSavings =
-        (totalContracts * avgContractAccess +
-          totalProperties * avgPropertyAccess) * 1000;
+      const estimatedTokenSavings = (totalContracts * avgContractAccess +
+        totalProperties * avgPropertyAccess) * 1000;
 
       return {
         cache_hit_rate: Math.round(estimatedCacheHitRate),
