@@ -1,21 +1,18 @@
-import React from 'react'
-import { Toaster, toast, Toast } from 'react-hot-toast'
+import React from "react";
+import { Toaster, useToasterStore } from "react-hot-toast";
 
 const NotificationSystem: React.FC = () => {
-  const [liveMessage, setLiveMessage] = React.useState<string>("")
+  const [liveMessage, setLiveMessage] = React.useState<string>("");
+  const { toasts } = useToasterStore();
 
   React.useEffect(() => {
-    const unsub = toast.onChange((event: { id: string; visible: boolean; toast: Toast }) => {
-      const { toast: t } = event
-      if (t?.message) {
-        // Announce toast message for screen readers
-        setLiveMessage(String(t.message))
-      }
-    })
-    return () => {
-      unsub()
+    // Announce the most recent visible toast message
+    const visible = toasts.filter((t) => t.visible);
+    const last = visible[visible.length - 1];
+    if (last && last.message) {
+      setLiveMessage(String(last.message));
     }
-  }, [])
+  }, [toasts]);
 
   return (
     <>
@@ -28,27 +25,27 @@ const NotificationSystem: React.FC = () => {
         toastOptions={{
           duration: 4000,
           style: {
-            background: '#363636',
-            color: '#fff',
+            background: "#363636",
+            color: "#fff",
           },
           success: {
             duration: 3000,
             iconTheme: {
-              primary: '#10b981',
-              secondary: '#fff',
+              primary: "#10b981",
+              secondary: "#fff",
             },
           },
           error: {
             duration: 5000,
             iconTheme: {
-              primary: '#ef4444',
-              secondary: '#fff',
+              primary: "#ef4444",
+              secondary: "#fff",
             },
           },
         }}
       />
     </>
-  )
-}
+  );
+};
 
-export default NotificationSystem 
+export default NotificationSystem;

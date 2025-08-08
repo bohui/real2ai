@@ -981,18 +981,16 @@ async def handle_cancellation_request(
                 {"status": "cancelled", "error_message": "Analysis cancelled by user"},
             )
 
-        # Find and update contract_analyses records that match the filters
-        analysis_records = await user_client.database.read(
-            "contract_analyses",
-            filters={"content_hash": content_hash, "status": "pending"},
-        )
-
-        # Update each matching analysis record
-        for record in analysis_records:
-            await user_client.database.update(
-                "contract_analyses",
-                record["id"],
-                {"status": "cancelled", "error_details": {"cancelled_by_user": True}},
+        # Update analysis records via safe RPC that scopes to user's context
+        try:
+            await user_client.database.execute_rpc(
+                "cancel_user_contract_analysis",
+                {"p_content_hash": content_hash, "p_user_id": user_id},
+            )
+        except Exception:
+            # Fallback: don't mutate shared rows directly; rely on progress state
+            logger.info(
+                "Skip direct update to shared contract_analyses rows during cancel"
             )
 
         # Try to cancel the Celery task if we can find it

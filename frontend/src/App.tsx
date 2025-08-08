@@ -37,6 +37,12 @@ import OnboardingWizard from "@/components/onboarding/OnboardingWizard";
 import SEOProvider from "@/contexts/SEOContext";
 import RootSEO from "@/components/seo/RootSEO";
 import SEOFloatingButton from "@/components/seo/SEOFloatingButton";
+import {
+  DashboardSkeleton,
+  AnalysisSkeleton,
+  IntelligenceSkeleton,
+  FinancialSkeleton,
+} from "@/components/ui/RouteSkeletons";
 
 // Hooks and stores
 import { useAuthStore } from "@/store/authStore";
@@ -263,25 +269,55 @@ const App: React.FC = () => {
                     </ProtectedRoute>
                   }
                 >
-                  <Route path="dashboard" element={<DashboardPage />} />
-                  <Route path="analysis" element={<AnalysisPage />} />
+                  <Route
+                    path="dashboard"
+                    element={
+                      <Suspense fallback={<DashboardSkeleton />}>
+                        <DashboardPage />
+                      </Suspense>
+                    }
+                  />
+                  <Route
+                    path="analysis"
+                    element={
+                      <Suspense fallback={<AnalysisSkeleton />}>
+                        <AnalysisPage />
+                      </Suspense>
+                    }
+                  />
                   <Route
                     path="analysis/:contractId"
-                    element={<AnalysisPage />}
+                    element={
+                      <Suspense fallback={<AnalysisSkeleton />}>
+                        <AnalysisPage />
+                      </Suspense>
+                    }
                   />
                   <Route path="history" element={<HistoryPage />} />
                   <Route path="reports" element={<ReportsPage />} />
                   <Route
                     path="property-intelligence"
-                    element={<PropertyIntelligencePage />}
+                    element={
+                      <Suspense fallback={<IntelligenceSkeleton />}>
+                        <PropertyIntelligencePage />
+                      </Suspense>
+                    }
                   />
                   <Route
                     path="market-analysis"
-                    element={<MarketAnalysisPage />}
+                    element={
+                      <Suspense fallback={<IntelligenceSkeleton />}>
+                        <MarketAnalysisPage />
+                      </Suspense>
+                    }
                   />
                   <Route
                     path="financial-analysis"
-                    element={<FinancialAnalysisPage />}
+                    element={
+                      <Suspense fallback={<FinancialSkeleton />}>
+                        <FinancialAnalysisPage />
+                      </Suspense>
+                    }
                   />
                   <Route path="settings" element={<SettingsPage />} />
                   <Route

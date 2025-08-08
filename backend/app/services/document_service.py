@@ -368,7 +368,7 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
             await self._update_document_status(
                 document_id, ProcessingStatus.PROCESSING.value
             )
-            
+
             # Set processing started timestamp
             await self._set_processing_started(document_id)
 
@@ -386,7 +386,9 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
             try:
                 # Save page data to database
                 content_hash = validation_result["file_info"]["content_hash"]
-                await self._save_document_pages(document_id, text_extraction_result, content_hash)
+                await self._save_document_pages(
+                    document_id, text_extraction_result, content_hash
+                )
 
                 # Aggregate diagram detection results from pages
                 diagram_processing_result = self._aggregate_diagram_detections(
@@ -411,11 +413,15 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
                     document_id, ProcessingStatus.BASIC_COMPLETE.value
                 )
 
-                self.logger.info(f"Successfully completed document processing for {document_id}")
+                self.logger.info(
+                    f"Successfully completed document processing for {document_id}"
+                )
 
             except Exception as db_error:
-                self.logger.error(f"Database persistence failed for document {document_id}: {str(db_error)}")
-                
+                self.logger.error(
+                    f"Database persistence failed for document {document_id}: {str(db_error)}"
+                )
+
                 # Attempt to rollback by marking document as failed with detailed error info
                 try:
                     await self._update_document_status(
@@ -426,12 +432,16 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
                             "details": str(db_error),
                             "stage": "database_persistence",
                             "timestamp": datetime.now(UTC).isoformat(),
-                            "text_extraction_successful": text_extraction_result.get("success", False),
+                            "text_extraction_successful": text_extraction_result.get(
+                                "success", False
+                            ),
                         },
                     )
                 except Exception as rollback_error:
-                    self.logger.error(f"Rollback failed for document {document_id}: {str(rollback_error)}")
-                
+                    self.logger.error(
+                        f"Rollback failed for document {document_id}: {str(rollback_error)}"
+                    )
+
                 # Re-raise the original database error
                 raise db_error
 
@@ -486,21 +496,21 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
     ) -> Dict[str, Any]:
         """
         Fast document upload - stores file and creates record only.
-        
+
         This method handles only the essential upload operations:
         1. File validation
         2. Upload to Supabase Storage
         3. Create document record with status "uploaded"
-        
+
         Processing is handled separately by background tasks.
         """
         upload_start = datetime.now(UTC)
         document_id = None
-        
+
         try:
             # Log user operation
             self.log_operation("upload_document_fast", "document", None)
-            
+
             # Step 1: Validate file (same as before)
             validation_result = await self._validate_uploaded_file(file)
             if not validation_result["valid"]:
@@ -508,7 +518,7 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
                     f"File validation failed: {validation_result['error']}",
                     upload_start,
                 )
-            
+
             # Step 2: Upload to Supabase storage and create document record (USER OPERATION)
             upload_result = await self._upload_and_create_document_record(
                 file,
@@ -517,38 +527,38 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
                 contract_type,
                 australian_state,
             )
-            
+
             if not upload_result["success"]:
-                return self._create_error_response(
-                    upload_result["error"], upload_start
-                )
-            
+                return self._create_error_response(upload_result["error"], upload_start)
+
             document_id = upload_result["document_id"]
-            
+
             # Log successful upload
             self.log_operation("create", "document", document_id)
-            
+
             # Step 3: Mark document as uploaded (not processing)
             await self._update_document_status(
                 document_id, ProcessingStatus.UPLOADED.value
             )
-            
+
             upload_time = (datetime.now(UTC) - upload_start).total_seconds()
-            
-            self.logger.info(f"Fast upload completed for document {document_id} in {upload_time:.2f}s")
-            
+
+            self.logger.info(
+                f"Fast upload completed for document {document_id} in {upload_time:.2f}s"
+            )
+
             return {
                 "success": True,
                 "document_id": document_id,
                 "storage_path": upload_result["storage_path"],
                 "processing_time": upload_time,
-                "status": "uploaded"
+                "status": "uploaded",
             }
-            
+
         except Exception as e:
             upload_time = (datetime.now(UTC) - upload_start).total_seconds()
             self.logger.error(f"Fast upload failed: {str(e)}", exc_info=True)
-            
+
             # Update document status if it exists (USER OPERATION)
             if document_id:
                 await self._update_document_status(
@@ -560,10 +570,8 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
                         "upload_time": upload_time,
                     },
                 )
-            
-            return self._create_error_response(
-                f"Upload failed: {str(e)}", upload_start
-            )
+
+            return self._create_error_response(f"Upload failed: {str(e)}", upload_start)
 
     async def _upload_and_create_document_record(
         self,
@@ -578,7 +586,7 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
             document_id = str(uuid.uuid4())
             file_extension = Path(file_info["original_filename"]).suffix.lower()
             storage_filename = f"{document_id}{file_extension}"
-            storage_path = f"documents/{user_id}/{storage_filename}"
+            storage_path = f"{user_id}/{storage_filename}"
 
             # Get user-authenticated client for this operation
             user_client = await self.get_user_client()
@@ -593,7 +601,12 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
             )
 
             if not upload_result.get("success"):
-                return {"success": False, "error": "Failed to upload file to storage"}
+                return {
+                    "success": False,
+                    "error": upload_result.get(
+                        "error", "Failed to upload file to storage"
+                    ),
+                }
 
             # Create document record in database (user context - RLS enforced)
             document_data = {
@@ -674,13 +687,13 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
         """Set processing started timestamp - USER OPERATION"""
         try:
             user_client = await self.get_user_client()
-            
+
             update_data = {
                 "processing_started_at": datetime.now(UTC),
             }
 
             await user_client.database.update("documents", document_id, update_data)
-            
+
         except Exception as e:
             self.logger.error(f"Failed to set processing started timestamp: {str(e)}")
 
@@ -761,16 +774,16 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
     async def get_file_content(self, storage_path: str) -> bytes:
         """
         Get file content from storage - can be used for system operations.
-        
+
         This method will use system client if no user authentication is available,
         making it suitable for background tasks like cleanup.
-        
+
         Args:
             storage_path: Path to file in storage
-            
+
         Returns:
             bytes: File content
-            
+
         Raises:
             Exception: If file not found or access denied
         """
@@ -782,19 +795,23 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
             else:
                 # Fall back to system client for background tasks
                 user_client = await self.get_system_client()
-                self.log_system_operation("read", "document_content", storage_path, None)
-            
+                self.log_system_operation(
+                    "read", "document_content", storage_path, None
+                )
+
             file_content = await user_client.download_file(
                 bucket=self.storage_bucket, path=storage_path
             )
-            
+
             if not file_content:
                 raise ValueError(f"File not found or empty: {storage_path}")
-            
+
             return file_content
-            
+
         except Exception as e:
-            self.logger.error(f"Failed to get file content for {storage_path}: {str(e)}")
+            self.logger.error(
+                f"Failed to get file content for {storage_path}: {str(e)}"
+            )
             raise
 
     # Health check implementation
@@ -1732,11 +1749,16 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
         }
 
     async def _save_document_pages(
-        self, document_id: str, text_extraction_result: Dict[str, Any], content_hash: str = None
+        self,
+        document_id: str,
+        text_extraction_result: Dict[str, Any],
+        content_hash: str = None,
     ) -> None:
         """Save page analysis data to document_pages table - USER OPERATION"""
         try:
-            if not text_extraction_result.get("success") or not text_extraction_result.get("pages"):
+            if not text_extraction_result.get(
+                "success"
+            ) or not text_extraction_result.get("pages"):
                 self.logger.info(f"No pages to save for document {document_id}")
                 return
 
@@ -1753,27 +1775,24 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
                     "document_id": document_id,
                     "content_hash": content_hash,
                     "page_number": page.get("page_number", 1),
-                    
                     # Content analysis
                     "text_content": page.get("text_content", ""),
                     "text_length": page.get("text_length", 0),
                     "word_count": page.get("word_count", 0),
-                    
                     # Content classification
                     "content_types": page_analysis.get("content_types", []),
                     "primary_content_type": page_analysis.get("primary_type", "empty"),
-                    
                     # Quality metrics
                     "extraction_confidence": page.get("confidence", 0.0),
-                    "content_quality_score": quality_indicators.get("structure_score", 0.0),
-                    
+                    "content_quality_score": quality_indicators.get(
+                        "structure_score", 0.0
+                    ),
                     # Layout analysis
                     "has_header": layout_features.get("has_header", False),
                     "has_footer": layout_features.get("has_footer", False),
                     "has_signatures": layout_features.get("has_signatures", False),
                     "has_diagrams": layout_features.get("has_diagrams", False),
                     "has_tables": layout_features.get("has_tables", False),
-                    
                     # Processing metadata
                     "processed_at": datetime.now(UTC),
                     "processing_method": page.get("extraction_method", "unknown"),
@@ -1794,7 +1813,9 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
     ) -> None:
         """Save diagram detection data to document_diagrams table - USER OPERATION"""
         try:
-            if not text_extraction_result.get("success") or not text_extraction_result.get("pages"):
+            if not text_extraction_result.get(
+                "success"
+            ) or not text_extraction_result.get("pages"):
                 return
 
             user_client = await self.get_user_client()
@@ -1803,34 +1824,35 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
             for page in text_extraction_result["pages"]:
                 page_analysis = page.get("content_analysis", {})
                 layout_features = page_analysis.get("layout_features", {})
-                
+
                 # Only save if diagrams were detected on this page
                 if layout_features.get("has_diagrams", False):
                     diagram_data = {
                         "id": str(uuid.uuid4()),
                         "document_id": document_id,
                         "page_number": page.get("page_number", 1),
-                        
                         # Classification - would need more sophisticated analysis to determine specific type
                         "diagram_type": "unknown",  # Default until we implement detailed classification
                         "classification_confidence": page.get("confidence", 0.0),
-                        
                         # Analysis status
                         "basic_analysis_completed": True,
                         "detailed_analysis_completed": False,
-                        
                         # Basic analysis results
                         "basic_analysis": {
                             "content_types": page_analysis.get("content_types", []),
                             "primary_type": page_analysis.get("primary_type"),
                             "detection_method": "text_analysis",
-                            "quality_indicators": page_analysis.get("quality_indicators", {}),
+                            "quality_indicators": page_analysis.get(
+                                "quality_indicators", {}
+                            ),
                         },
-                        
                         # Quality metrics
-                        "image_quality_score": page_analysis.get("quality_indicators", {}).get("structure_score", 0.0),
-                        "clarity_score": page_analysis.get("quality_indicators", {}).get("readability_score", 0.0),
-                        
+                        "image_quality_score": page_analysis.get(
+                            "quality_indicators", {}
+                        ).get("structure_score", 0.0),
+                        "clarity_score": page_analysis.get(
+                            "quality_indicators", {}
+                        ).get("readability_score", 0.0),
                         # Metadata
                         "detected_at": datetime.now(UTC),
                         "basic_analysis_at": datetime.now(UTC),
@@ -1840,7 +1862,9 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
                     diagrams_saved += 1
 
             if diagrams_saved > 0:
-                self.logger.info(f"Saved {diagrams_saved} diagrams for document {document_id}")
+                self.logger.info(
+                    f"Saved {diagrams_saved} diagrams for document {document_id}"
+                )
                 self.log_operation("create", "document_diagrams", document_id)
 
         except Exception as e:
@@ -1848,10 +1872,10 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
             raise
 
     async def _update_document_metrics(
-        self, 
-        document_id: str, 
+        self,
+        document_id: str,
         text_extraction_result: Dict[str, Any],
-        diagram_processing_result: Dict[str, Any]
+        diagram_processing_result: Dict[str, Any],
     ) -> None:
         """Update main document with aggregated metrics - USER OPERATION"""
         try:
@@ -1862,15 +1886,17 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
             total_pages = len(pages)
             total_word_count = sum(p.get("word_count", 0) for p in pages)
             total_text_length = sum(p.get("text_length", 0) for p in pages)
-            
+
             # Calculate average confidence
-            confidences = [p.get("confidence", 0.0) for p in pages if p.get("confidence", 0.0) > 0]
+            confidences = [
+                p.get("confidence", 0.0) for p in pages if p.get("confidence", 0.0) > 0
+            ]
             avg_confidence = sum(confidences) / len(confidences) if confidences else 0.0
-            
+
             # Diagram information
             total_diagrams = diagram_processing_result.get("total_diagrams", 0)
             has_diagrams = total_diagrams > 0
-            
+
             # Determine text extraction method
             extraction_methods = text_extraction_result.get("extraction_methods", [])
             primary_method = extraction_methods[0] if extraction_methods else "unknown"
@@ -1893,8 +1919,8 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
                         "total_diagrams": total_diagrams,
                         "extraction_methods": extraction_methods,
                         "avg_confidence": avg_confidence,
-                    }
-                }
+                    },
+                },
             }
 
             await user_client.database.update("documents", document_id, update_data)

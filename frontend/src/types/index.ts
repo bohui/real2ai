@@ -53,7 +53,8 @@ export interface UserLoginRequest {
 
 export interface AuthResponse {
   access_token: string;
-  refresh_token: string;
+  refresh_token?: string; // optional when backend tokens are used
+  token_type?: "backend" | "supabase"; // backend will set 'backend' when enabled
   user_profile: User;
 }
 

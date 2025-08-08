@@ -81,19 +81,35 @@ async def update_analysis_progress(
             conflict_columns=["content_hash", "user_id"],
         )
 
-        # Send WebSocket update
-        await websocket_manager.send_progress_update(
-            user_id,
-            {
-                "type": "analysis_progress",
-                "content_hash": content_hash,
-                "progress": progress_percent,
-                "current_step": current_step,
-                "step_description": step_description,
-                "estimated_completion_minutes": estimated_completion_minutes,
-                "error_message": error_message,
-            },
-        )
+        # Resolve a session id (document_id) for WS delivery and send progress
+        try:
+            # Find the latest document for this user/content_hash to route messages
+            doc_result = await user_client.database.select(
+                "documents",
+                columns="id",
+                filters={"user_id": user_id, "content_hash": content_hash},
+                order_by="created_at DESC",
+                limit=1,
+            )
+            if doc_result.get("data"):
+                session_id = doc_result["data"][0]["id"]
+                await websocket_manager.send_message(
+                    session_id,
+                    {
+                        "event_type": "analysis_progress",
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "data": {
+                            "content_hash": content_hash,
+                            "progress_percent": progress_percent,
+                            "current_step": current_step,
+                            "step_description": step_description,
+                            "estimated_completion_minutes": estimated_completion_minutes,
+                            "error_message": error_message,
+                        },
+                    },
+                )
+        except Exception as ws_error:
+            logger.warning(f"WS progress routing failed: {ws_error}")
 
         # Send Redis pub/sub update using content_hash as channel identifier
         publish_progress_sync(

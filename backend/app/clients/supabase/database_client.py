@@ -104,6 +104,25 @@ class SupabaseDatabaseClient(DatabaseOperations):
                 original_error=e,
             )
 
+    def _apply_auth_from_context(self) -> None:
+        """Apply per-request auth from AuthContext if available.
+
+        Ensures PostgREST requests carry the user's JWT (or revert to anon key).
+        Import is done lazily to avoid circular imports at module load time.
+        """
+        try:
+            from app.core.auth_context import AuthContext  # Lazy import
+
+            token = AuthContext.get_user_token()
+            if token:
+                self.supabase_client.postgrest.auth(token)
+            else:
+                # Revert to anon key if no user token present
+                self.supabase_client.postgrest.auth(self.config.anon_key)
+        except Exception as e:
+            # Do not fail DB ops if auth context is unavailable; just log
+            self.logger.debug(f"Auth context not applied: {e}")
+
     async def _test_database_connection(self) -> None:
         """Test database connection with a simple query."""
         try:
@@ -137,6 +156,7 @@ class SupabaseDatabaseClient(DatabaseOperations):
     async def create(self, table: str, data: Dict[str, Any]) -> Dict[str, Any]:
         """Create a new record in the specified table."""
         try:
+            self._apply_auth_from_context()
             # Serialize datetime objects to ISO format strings
             serialized_data = serialize_datetime_values(data)
             self.logger.debug(f"Creating record in table '{table}': {serialized_data}")
@@ -184,25 +204,91 @@ class SupabaseDatabaseClient(DatabaseOperations):
             )
 
     def _apply_filters(self, query, filters: Dict[str, Any]):
-        """Apply filters to query, skipping None values."""
+        """Apply filters to query, supporting basic operators and skipping None values.
+
+        Supported suffix operators (use double underscore):
+        - __eq (default)
+        - __neq
+        - __gt
+        - __gte
+        - __lt
+        - __lte
+        - __in (expects a list/tuple)
+        - __is (NULL checks)
+        """
         if not filters:
             return query
 
-        for key, value in filters.items():
-            if value is not None:
-                query = query.eq(key, value)
+        for raw_key, value in filters.items():
+            if value is None:
+                continue
+
+            if "__" in raw_key:
+                column, op = raw_key.rsplit("__", 1)
+            else:
+                column, op = raw_key, "eq"
+
+            op = op.lower()
+
+            if op == "eq":
+                query = query.eq(column, value)
+            elif op == "neq":
+                query = query.neq(column, value)
+            elif op == "gt":
+                query = query.gt(column, value)
+            elif op == "gte":
+                query = query.gte(column, value)
+            elif op == "lt":
+                query = query.lt(column, value)
+            elif op == "lte":
+                query = query.lte(column, value)
+            elif op == "in":
+                # Ensure value is an iterable of values
+                in_values = value if isinstance(value, (list, tuple)) else [value]
+                query = query.in_(column, in_values)
+            elif op == "is":
+                query = query.is_(column, value)
+            else:
+                # Fallback to eq if unknown operator
+                query = query.eq(column, value)
+
         return query
 
     @with_retry(max_retries=3, backoff_factor=1.0)
     async def read(
-        self, table: str, filters: Dict[str, Any], limit: Optional[int] = None
-    ) -> List[Dict[str, Any]]:
-        """Read records from the specified table with optional filters."""
+        self,
+        table: str,
+        filters: Optional[Dict[str, Any]] = None,
+        limit: Optional[int] = None,
+        count_only: bool = False,
+    ) -> List[Dict[str, Any]] | Dict[str, Any]:
+        """Read records from the specified table with optional filters.
+
+        If count_only=True, returns a dict: {"count": int} using exact count.
+        Otherwise returns a list of records.
+        """
         try:
-            self.logger.debug(f"Reading from table '{table}' with filters: {filters}")
+            self._apply_auth_from_context()
+            self.logger.debug(
+                f"Reading from table '{table}' with filters: {filters}, count_only={count_only}, limit={limit}"
+            )
+
+            # For count-only queries, request an exact count from PostgREST
+            if count_only:
+                query = self.supabase_client.table(table).select("id", count="exact")
+                query = self._apply_filters(query, filters or {})
+                # Limit isn't necessary for count, but harmless if provided
+                if limit:
+                    query = query.limit(limit)
+                result = query.execute()
+                count_value = getattr(result, "count", None)
+                if count_value is None:
+                    # Fallback: use length of data when count header not provided
+                    count_value = len(result.data or [])
+                return {"count": int(count_value)}
 
             query = self.supabase_client.table(table).select("*")
-            query = self._apply_filters(query, filters)
+            query = self._apply_filters(query, filters or {})
 
             # Apply limit if specified
             if limit:
@@ -250,6 +336,7 @@ class SupabaseDatabaseClient(DatabaseOperations):
     ) -> Dict[str, Any]:
         """Update a record in the specified table."""
         try:
+            self._apply_auth_from_context()
             # Serialize datetime objects to ISO format strings
             serialized_data = serialize_datetime_values(data)
             self.logger.debug(
@@ -309,6 +396,7 @@ class SupabaseDatabaseClient(DatabaseOperations):
     async def delete(self, table: str, record_id: str) -> bool:
         """Delete a record from the specified table."""
         try:
+            self._apply_auth_from_context()
             self.logger.debug(f"Deleting record {record_id} from table '{table}'")
 
             result = (
@@ -353,6 +441,7 @@ class SupabaseDatabaseClient(DatabaseOperations):
     ) -> Dict[str, Any]:
         """Insert or update a record based on conflict resolution."""
         try:
+            self._apply_auth_from_context()
             # Serialize datetime objects to ISO format strings
             serialized_data = serialize_datetime_values(data)
             self.logger.debug(f"Upserting record in table '{table}': {serialized_data}")
@@ -360,8 +449,10 @@ class SupabaseDatabaseClient(DatabaseOperations):
             # Add conflict resolution if specified
             if conflict_columns:
                 # Supabase upsert uses on_conflict parameter with column names
-                on_conflict = ','.join(conflict_columns)
-                query = self.supabase_client.table(table).upsert(serialized_data, on_conflict=on_conflict)
+                on_conflict = ",".join(conflict_columns)
+                query = self.supabase_client.table(table).upsert(
+                    serialized_data, on_conflict=on_conflict
+                )
             else:
                 query = self.supabase_client.table(table).upsert(serialized_data)
 
@@ -400,6 +491,7 @@ class SupabaseDatabaseClient(DatabaseOperations):
     ) -> Any:
         """Execute a remote procedure call or stored function."""
         try:
+            self._apply_auth_from_context()
             # Serialize datetime objects in parameters
             serialized_params = serialize_datetime_values(params) if params else None
             self.logger.debug(
@@ -496,6 +588,7 @@ class SupabaseDatabaseClient(DatabaseOperations):
     ) -> Dict[str, Any]:
         """Select records with optional filtering, ordering, and limiting - used by contract router."""
         try:
+            self._apply_auth_from_context()
             self.logger.debug(
                 f"Selecting from table '{table}' columns '{columns}' with filters: {filters}, order_by: {order_by}, limit: {limit}"
             )

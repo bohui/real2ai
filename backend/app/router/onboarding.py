@@ -18,34 +18,22 @@ router = APIRouter(prefix="/api/users/onboarding", tags=["onboarding"])
 
 
 @router.get("/status", response_model=OnboardingStatusResponse)
-async def get_onboarding_status(
-    user: User = Depends(get_current_user)
-):
+async def get_onboarding_status(user: User = Depends(get_current_user)):
     """Get user onboarding status"""
     try:
-        # Get authenticated client
-        db_client = await AuthContext.get_authenticated_client(require_auth=True)
+        logger.info(f"[Onboarding] Fetching status for user_id={user.id}")
         
-        profile_result = (
-            db_client.table("profiles")
-            .select(
-                "onboarding_completed",
-                "onboarding_completed_at",
-                "onboarding_preferences",
-            )
-            .eq("id", user.id)
-            .execute()
+        # Use the working user data directly since get_current_user already fetched the profile
+        response = OnboardingStatusResponse(
+            onboarding_completed=user.onboarding_completed,
+            onboarding_completed_at=user.onboarding_completed_at,
+            onboarding_preferences=user.onboarding_preferences,
         )
-
-        if not profile_result.data:
-            raise HTTPException(status_code=404, detail="User profile not found")
-
-        profile = profile_result.data[0]
-        return OnboardingStatusResponse(
-            onboarding_completed=profile.get("onboarding_completed", False),
-            onboarding_completed_at=profile.get("onboarding_completed_at"),
-            onboarding_preferences=profile.get("onboarding_preferences", {}),
+        logger.info(
+            f"[Onboarding] Status for user_id={user.id}: completed={response.onboarding_completed}, "
+            f"completed_at={response.onboarding_completed_at}"
         )
+        return response
 
     except HTTPException:
         # Re-raise HTTPExceptions (validation errors) without modification
@@ -62,21 +50,17 @@ async def complete_onboarding(
 ):
     """Complete user onboarding and save preferences"""
     try:
-        # Get authenticated client
-        db_client = await AuthContext.get_authenticated_client(require_auth=True)
+        logger.info(f"[Onboarding] Completing onboarding for user_id={user.id}")
         
         # Check if already completed
-        profile_result = (
-            db_client.table("profiles")
-            .select("onboarding_completed")
-            .eq("id", user.id)
-            .execute()
-        )
-
-        if profile_result.data and profile_result.data[0].get(
-            "onboarding_completed", False
-        ):
+        if user.onboarding_completed:
+            logger.info(
+                f"[Onboarding] Already completed for user_id={user.id}; skipping updates"
+            )
             return {"message": "Onboarding already completed", "skip_onboarding": True}
+
+        # Get authenticated client for database operations
+        db_client = await AuthContext.get_authenticated_client(require_auth=True)
 
         # Update profile with onboarding completion
         update_data = {
@@ -86,6 +70,9 @@ async def complete_onboarding(
                 exclude_unset=True
             ),
         }
+        logger.debug(
+            f"[Onboarding] Updating profile for user_id={user.id} with keys={list(update_data.keys())}"
+        )
 
         db_client.table("profiles").update(update_data).eq("id", user.id).execute()
 
@@ -105,6 +92,7 @@ async def complete_onboarding(
             }
         ).execute()
 
+        logger.info(f"[Onboarding] Onboarding completed for user_id={user.id}")
         return {
             "message": "Onboarding completed successfully",
             "skip_onboarding": False,
@@ -126,15 +114,21 @@ async def update_onboarding_preferences(
 ):
     """Update user onboarding preferences"""
     try:
-        # Get authenticated client
-        db_client = await AuthContext.get_authenticated_client(require_auth=True)
+        logger.info(f"[Onboarding] Updating preferences for user_id={user.id}")
         
+        # Get authenticated client for database operations
+        db_client = await AuthContext.get_authenticated_client(require_auth=True)
+
         update_data = {
             "onboarding_preferences": preferences.model_dump(exclude_unset=True),
         }
+        logger.debug(
+            f"[Onboarding] Preferences update payload for user_id={user.id}: {update_data['onboarding_preferences']}"
+        )
 
         db_client.table("profiles").update(update_data).eq("id", user.id).execute()
 
+        logger.info(f"[Onboarding] Preferences updated for user_id={user.id}")
         return {"message": "Onboarding preferences updated successfully"}
 
     except HTTPException:

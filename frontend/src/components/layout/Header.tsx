@@ -9,6 +9,9 @@ import {
   User,
   CreditCard,
   HelpCircle,
+  Sun,
+  Moon,
+  Monitor,
 } from "lucide-react";
 import { Menu as HeadlessMenu } from "@headlessui/react";
 
@@ -19,7 +22,8 @@ import { cn } from "@/utils";
 
 const Header: React.FC = () => {
   const { user, logout } = useAuthStore();
-  const { toggleSidebar, notifications } = useUIStore();
+  const { toggleSidebar, notifications, openSearch, theme, setTheme } =
+    useUIStore();
 
   const unreadCount = notifications.filter((n) => n.type === "info").length;
 
@@ -51,6 +55,17 @@ const Header: React.FC = () => {
                   className="pl-10 pr-4 py-2 w-64 rounded-lg border border-neutral-200 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
                 />
               </div>
+            </div>
+            {/* Mobile search trigger */}
+            <div className="md:hidden">
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-label="Open search"
+                onClick={openSearch}
+              >
+                <Search className="w-5 h-5" />
+              </Button>
             </div>
           </div>
 
@@ -115,7 +130,7 @@ const Header: React.FC = () => {
                     </div>
                   </HeadlessMenu.Button>
 
-                  <HeadlessMenu.Items className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-neutral-200 focus:outline-none z-50">
+                  <HeadlessMenu.Items className="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-neutral-200 focus:outline-none z-50">
                     <div className="p-3 border-b border-neutral-100">
                       <div className="text-sm font-medium text-neutral-900">
                         {user?.email}
@@ -123,6 +138,74 @@ const Header: React.FC = () => {
                       <div className="text-xs text-neutral-500 mt-1">
                         {user?.australian_state} • {user?.subscription_status}
                       </div>
+                    </div>
+
+                    {/* Theme selector */}
+                    <div
+                      className="py-1 border-b border-neutral-100"
+                      role="group"
+                      aria-label="Theme"
+                    >
+                      <div className="px-3 py-2 text-xs uppercase tracking-wide text-neutral-500">
+                        Theme
+                      </div>
+                      <HeadlessMenu.Item>
+                        {({ active }) => (
+                          <button
+                            type="button"
+                            onClick={() => setTheme("light")}
+                            aria-checked={theme === "light"}
+                            role="menuitemradio"
+                            className={cn(
+                              "w-full flex items-center gap-3 px-3 py-2 text-sm",
+                              active
+                                ? "bg-neutral-50 text-neutral-900"
+                                : "text-neutral-700"
+                            )}
+                          >
+                            <Sun className="w-4 h-4" />
+                            Light
+                          </button>
+                        )}
+                      </HeadlessMenu.Item>
+                      <HeadlessMenu.Item>
+                        {({ active }) => (
+                          <button
+                            type="button"
+                            onClick={() => setTheme("dark")}
+                            aria-checked={theme === "dark"}
+                            role="menuitemradio"
+                            className={cn(
+                              "w-full flex items-center gap-3 px-3 py-2 text-sm",
+                              active
+                                ? "bg-neutral-50 text-neutral-900"
+                                : "text-neutral-700"
+                            )}
+                          >
+                            <Moon className="w-4 h-4" />
+                            Dark
+                          </button>
+                        )}
+                      </HeadlessMenu.Item>
+                      <HeadlessMenu.Item>
+                        {({ active }) => (
+                          <button
+                            type="button"
+                            onClick={() => setTheme("system")}
+                            aria-checked={theme === "system"}
+                            role="menuitemradio"
+                            className={cn(
+                              "w-full flex items-center gap-3 px-3 py-2 text-sm",
+                              active
+                                ? "bg-neutral-50 text-neutral-900"
+                                : "text-neutral-700"
+                            )}
+                          >
+                            <Monitor className="w-4 h-4" />
+                            System
+                          </button>
+                        )}
+                      </HeadlessMenu.Item>
                     </div>
 
                     <div className="py-1">

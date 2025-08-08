@@ -61,7 +61,7 @@ export function SEOProvider({ children, baseConfig = {} }: SEOProviderProps) {
   // Store refs for stable functions
   const configRef = useRef(config);
   const locationRef = useRef(location);
-  
+
   // Update refs when values change
   useEffect(() => {
     configRef.current = config;
@@ -169,8 +169,8 @@ export function usePageSEO(
     useSEOContext();
 
   // Use refs to track previous values and only update when content actually changes
-  const prevStaticSEORef = useRef<string>();
-  const prevDynamicDataRef = useRef<string>();
+  const prevStaticSEORef = useRef<string | undefined>(undefined);
+  const prevDynamicDataRef = useRef<string | undefined>(undefined);
 
   // Update SEO with static data only when content actually changes
   useEffect(() => {

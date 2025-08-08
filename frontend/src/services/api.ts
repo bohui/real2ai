@@ -33,8 +33,8 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ||
 
 class ApiService {
   private client: AxiosInstance;
-  private token: string | null = null;
-  private refreshToken: string | null = null;
+  private token: string | null = null; // can be backend token or supabase token
+  private refreshToken: string | null = null; // only present for supabase token flows
   private isRefreshing = false;
   private failedQueue: Array<
     { resolve: (value?: any) => void; reject: (error?: any) => void }
@@ -138,11 +138,15 @@ class ApiService {
   }
 
   // Token management
-  setTokens(accessToken: string, refreshToken: string): void {
+  setTokens(accessToken: string, refreshToken?: string): void {
     this.token = accessToken;
-    this.refreshToken = refreshToken;
+    this.refreshToken = refreshToken || null;
     localStorage.setItem("auth_token", accessToken);
-    localStorage.setItem("refresh_token", refreshToken);
+    if (refreshToken) {
+      localStorage.setItem("refresh_token", refreshToken);
+    } else {
+      localStorage.removeItem("refresh_token");
+    }
   }
 
   setToken(token: string): void {
@@ -185,22 +189,23 @@ class ApiService {
   }
 
   private async refreshTokens(): Promise<
-    { access_token: string; refresh_token: string }
+    { access_token: string; refresh_token?: string }
   > {
-    if (!this.refreshToken) {
-      throw new Error("No refresh token available");
+    // If we have a Supabase refresh token, use the regular refresh endpoint
+    if (this.refreshToken) {
+      const response = await this.client.post("/api/auth/refresh", {}, {
+        headers: {
+          "X-Refresh-Token": this.refreshToken,
+        },
+      });
+
+      const { access_token, refresh_token } = response.data;
+      this.setTokens(access_token, refresh_token);
+      return { access_token, refresh_token };
     }
 
-    const response = await this.client.post("/api/auth/refresh", {}, {
-      headers: {
-        "X-Refresh-Token": this.refreshToken,
-      },
-    });
-
-    const { access_token, refresh_token } = response.data;
-    this.setTokens(access_token, refresh_token);
-
-    return { access_token, refresh_token };
+    // No refresh token (likely backend token flow) → require login again
+    throw new Error("Session expired. Please log in again.");
   }
 
   // Authentication endpoints
@@ -209,7 +214,8 @@ class ApiService {
       "/api/auth/register",
       data,
     );
-    if (response.data.access_token && response.data.refresh_token) {
+    if (response.data.access_token) {
+      // Support both backend token flow (no refresh token) and supabase flow
       this.setTokens(response.data.access_token, response.data.refresh_token);
     }
     return response.data;
@@ -220,7 +226,8 @@ class ApiService {
       "/api/auth/login",
       data,
     );
-    if (response.data.access_token && response.data.refresh_token) {
+    if (response.data.access_token) {
+      // Support both backend token flow (no refresh token) and supabase flow
       this.setTokens(response.data.access_token, response.data.refresh_token);
     }
     return response.data;
@@ -382,12 +389,11 @@ class ApiService {
         rawData.created_at || new Date().toISOString(),
       user_id: analysisResult.user_id || "",
       australian_state: analysisResult.australian_state || "NSW",
-      analysis_status:
-        (rawData.analysis_status as
-          | "pending"
-          | "processing"
-          | "completed"
-          | "failed") || "completed",
+      analysis_status: (rawData.analysis_status as
+        | "pending"
+        | "processing"
+        | "completed"
+        | "failed") || "completed",
       contract_terms: analysisResult.contract_terms || {},
       risk_assessment: {
         overall_risk_score:

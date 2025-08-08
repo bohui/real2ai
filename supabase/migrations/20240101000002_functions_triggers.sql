@@ -778,3 +778,26 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- Add comments for documentation
 COMMENT ON FUNCTION upsert_contract_analysis IS 'Upsert function for contract analyses to handle duplicate content_hash';
 COMMENT ON FUNCTION retry_contract_analysis IS 'Safely retry analysis by checking existing status and resetting if needed';
+
+-- Safely cancel user's analysis without mutating shared rows
+-- Scopes cancellation to user-owned progress; avoids direct writes to shared contract_analyses
+CREATE OR REPLACE FUNCTION cancel_user_contract_analysis(
+    p_content_hash TEXT,
+    p_user_id UUID
+)
+RETURNS VOID AS $$
+BEGIN
+    -- Cancel any in-progress user-scoped analysis progress rows
+    UPDATE analysis_progress
+    SET status = 'cancelled',
+        error_message = 'Analysis cancelled by user'
+    WHERE content_hash = p_content_hash
+      AND user_id = p_user_id
+      AND status = 'in_progress';
+
+    -- Do NOT mutate shared contract_analyses here to prevent cross-user impact
+    -- Optionally, we could insert an audit log if needed.
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+COMMENT ON FUNCTION cancel_user_contract_analysis(TEXT, UUID) IS 'Cancel user-scoped analysis progress; leaves shared contract_analyses untouched.';

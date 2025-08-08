@@ -194,6 +194,7 @@ app.add_middleware(
         "Keep-Alive",
         "X-Requested-With",
         "If-Modified-Since",
+        "X-Refresh-Token",
     ],
     expose_headers=["Content-Length", "Content-Type", "Authorization"],
     max_age=3600,  # Cache preflight responses for 1 hour
@@ -223,15 +224,15 @@ app.add_middleware(
 )
 
 # Add authentication middleware
-setup_auth_middleware(app, validate_token=False)
+setup_auth_middleware(app, validate_token=True)
 
 # Include routers
 app.include_router(health_router)
 app.include_router(auth_router)
 app.include_router(documents_router)
 app.include_router(contracts_router)
+app.include_router(onboarding_router)  # More specific route first
 app.include_router(users_router)
-app.include_router(onboarding_router)
 app.include_router(ocr_router)
 app.include_router(websockets_router)
 app.include_router(property_profile_router)

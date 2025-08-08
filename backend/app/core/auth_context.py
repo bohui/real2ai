@@ -128,7 +128,7 @@ class AuthContext:
         if token:
             # Set user token for RLS enforcement
             client.set_user_token(token)
-            logger.debug(f"Created authenticated client for user: {cls.get_user_id()}")
+            logger.info(f"Created authenticated client for user: {cls.get_user_id()}, token length: {len(token) if token else 0}")
         else:
             # No user token present; returning anon-key client (RLS enforced by default)
             logger.warning(

@@ -518,7 +518,8 @@ async def send_progress_update(
         return
     
     websocket_manager = get_websocket_manager()
-    session_id = state.get("websocket_session_id")
+    # Standardize on `document_id` as the WebSocket session key
+    session_id = state.get("websocket_session_id") or state.get("document_id")
     
     if websocket_manager and session_id:
         await websocket_manager.send_message(

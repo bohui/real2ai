@@ -7,6 +7,7 @@ from app.core.auth import get_current_user
 from app.core.auth import User
 from app.services.cache_service import get_cache_service, CacheService
 from app.core.error_handler import handle_api_error, create_error_context, ErrorCategory
+from app.services.redis_pubsub import redis_pubsub_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/cache", tags=["cache"])
@@ -115,7 +116,17 @@ async def get_cache_health(
     context = create_error_context(user_id=str(user.id), operation="get_cache_health")
 
     try:
-        # Compute simple real-time health data using the cache service stats
+        # Ping Redis
+        redis_ok = False
+        redis_error = None
+        try:
+            await redis_pubsub_service.initialize()
+            await redis_pubsub_service.redis_client.ping()  # type: ignore[attr-defined]
+            redis_ok = True
+        except Exception as re:
+            redis_error = str(re)
+
+        # Compute real-time stats (validates DB path)
         stats = await cache_service.get_cache_stats()
 
         contracts_total = stats.get("contract_analyses", {}).get("total", 0)
@@ -127,26 +138,41 @@ async def get_cache_health(
         consistency = {
             "contracts": {
                 "total_records": contracts_total,
-                "records_with_hashes": contracts_total,  # contract_analyses rows are anchored by hash
-                "consistency_percentage": 100 if contracts_total >= 0 else 0,
+                "records_with_hashes": contracts_total,
+                "consistency_percentage": 100,
             },
             "properties": {
                 "total_records": properties_total,
                 "records_with_hashes": properties_total,
-                "consistency_percentage": 100 if properties_total >= 0 else 0,
+                "consistency_percentage": 100,
             },
         }
 
         from datetime import datetime, timezone
+
         now_iso = datetime.now(timezone.utc).isoformat()
 
+        issues = [] if redis_ok else ["redis_unreachable"]
+        health_score = 100 - (0 if redis_ok else 20)
+
         response = {
-            "health_status": "healthy",
-            "health_score": 95,
-            "issues": [],
+            "health_status": (
+                "healthy"
+                if health_score >= 90
+                else ("warning" if health_score >= 70 else "critical")
+            ),
+            "health_score": health_score,
+            "issues": issues,
+            "services": {
+                "redis": {"ok": redis_ok, "error": redis_error},
+                "database": {"ok": True},
+            },
             "consistency": consistency,
             "stats": {
-                "contracts": {"total_cached": contracts_total, "average_access": contracts_avg},
+                "contracts": {
+                    "total_cached": contracts_total,
+                    "average_access": contracts_avg,
+                },
                 "properties": {
                     "total_cached": properties_total,
                     "average_access": properties_avg,

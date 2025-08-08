@@ -52,6 +52,7 @@ Successfully consolidated redundant migration files into a streamlined initial s
 - ✅ Enhanced property_data table for cross-user cache sharing
 - ✅ Improved contract_analyses for shared analysis caching
 - ✅ RLS disabled on shared resources for optimal cache performance
+ - ✅ New RPC: `cancel_user_contract_analysis(p_content_hash TEXT, p_user_id UUID)` to safely cancel user-scoped progress without mutating shared rows
 
 ### 7. Cleanup Results
 - **Before**: 9 migration files

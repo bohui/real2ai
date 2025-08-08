@@ -9,6 +9,9 @@ import {
   Eye,
   EyeOff,
   Key,
+  Sun,
+  Moon,
+  Monitor,
 } from "lucide-react";
 
 import Button from "@/components/ui/Button";
@@ -22,26 +25,27 @@ import type { AustralianState } from "@/types";
 
 const SettingsPage: React.FC = () => {
   const { user, updateProfile } = useAuthStore();
-  const { addNotification } = useUIStore();
+  const { addNotification, theme, setTheme } = useUIStore();
 
   // SEO for Settings page
   usePageSEO({
-    title: 'Settings - Real2AI',
-    description: 'Manage your Real2AI account settings, preferences, and subscription. Customize your AI-powered real estate analysis experience.',
+    title: "Settings - Real2AI",
+    description:
+      "Manage your Real2AI account settings, preferences, and subscription. Customize your AI-powered real estate analysis experience.",
     keywords: [
-      'account settings',
-      'Real2AI settings',
-      'user preferences',
-      'subscription management',
-      'profile settings'
+      "account settings",
+      "Real2AI settings",
+      "user preferences",
+      "subscription management",
+      "profile settings",
     ],
-    canonical: '/app/settings',
-    noIndex: true // Private settings page
+    canonical: "/app/settings",
+    noIndex: true, // Private settings page
   });
 
   // Form states
   const [activeTab, setActiveTab] = React.useState<
-    "profile" | "notifications" | "security" | "billing"
+    "profile" | "notifications" | "security" | "billing" | "appearance"
   >("profile");
   const [showCurrentPassword, setShowCurrentPassword] = React.useState(false);
   const [showNewPassword, setShowNewPassword] = React.useState(false);
@@ -88,7 +92,21 @@ const SettingsPage: React.FC = () => {
     { key: "notifications", label: "Notifications", icon: Bell },
     { key: "security", label: "Security", icon: Shield },
     { key: "billing", label: "Billing", icon: CreditCard },
+    { key: "appearance", label: "Appearance", icon: Sun },
   ] as const;
+
+  // Theme preview (resolve system to current preference)
+  const [prefersDark, setPrefersDark] = React.useState(
+    () => window.matchMedia("(prefers-color-scheme: dark)").matches
+  );
+  React.useEffect(() => {
+    const mql = window.matchMedia("(prefers-color-scheme: dark)");
+    const handler = (e: MediaQueryListEvent) => setPrefersDark(e.matches);
+    mql.addEventListener("change", handler);
+    return () => mql.removeEventListener("change", handler);
+  }, []);
+  const effectiveTheme =
+    theme === "system" ? (prefersDark ? "dark" : "light") : theme;
 
   // Handle profile update
   const handleProfileUpdate = async (e: React.FormEvent) => {
@@ -633,6 +651,117 @@ const SettingsPage: React.FC = () => {
                       <p className="text-neutral-500">
                         No billing history available
                       </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+
+            {activeTab === "appearance" && (
+              <div className="space-y-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Theme</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div
+                      className="grid grid-cols-1 md:grid-cols-3 gap-4"
+                      role="group"
+                      aria-label="Theme"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setTheme("light")}
+                        aria-pressed={theme === "light"}
+                        className={cn(
+                          "p-4 rounded-lg border",
+                          theme === "light"
+                            ? "border-primary-400 bg-primary-50"
+                            : "border-neutral-200 hover:bg-neutral-50"
+                        )}
+                      >
+                        <div className="flex items-center gap-3">
+                          <Sun className="w-5 h-5" />
+                          <div className="text-left">
+                            <div className="font-medium">Light</div>
+                            <div className="text-xs text-neutral-500">
+                              Bright backgrounds
+                            </div>
+                          </div>
+                        </div>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTheme("dark")}
+                        aria-pressed={theme === "dark"}
+                        className={cn(
+                          "p-4 rounded-lg border",
+                          theme === "dark"
+                            ? "border-primary-400 bg-primary-50"
+                            : "border-neutral-200 hover:bg-neutral-50"
+                        )}
+                      >
+                        <div className="flex items-center gap-3">
+                          <Moon className="w-5 h-5" />
+                          <div className="text-left">
+                            <div className="font-medium">Dark</div>
+                            <div className="text-xs text-neutral-500">
+                              Dimmed, high-contrast
+                            </div>
+                          </div>
+                        </div>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTheme("system")}
+                        aria-pressed={theme === "system"}
+                        className={cn(
+                          "p-4 rounded-lg border",
+                          theme === "system"
+                            ? "border-primary-400 bg-primary-50"
+                            : "border-neutral-200 hover:bg-neutral-50"
+                        )}
+                      >
+                        <div className="flex items-center gap-3">
+                          <Monitor className="w-5 h-5" />
+                          <div className="text-left">
+                            <div className="font-medium">System</div>
+                            <div className="text-xs text-neutral-500">
+                              Follow OS setting
+                            </div>
+                          </div>
+                        </div>
+                      </button>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Preview</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div
+                      className={cn(
+                        "rounded-lg p-6 border",
+                        effectiveTheme === "dark"
+                          ? "bg-neutral-900 text-neutral-100 border-neutral-700"
+                          : "bg-white text-neutral-900 border-neutral-200"
+                      )}
+                    >
+                      <div className="font-semibold mb-2">
+                        {effectiveTheme === "dark" ? "Dark Mode" : "Light Mode"}{" "}
+                        Preview
+                      </div>
+                      <p className="text-sm mb-4">
+                        This area previews basic UI colors and text contrast for
+                        the selected theme.
+                      </p>
+                      <div className="flex gap-3">
+                        <Button variant="primary">Primary</Button>
+                        <Button variant="outline">Outline</Button>
+                        <Button variant="ghost">Ghost</Button>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>

@@ -29,7 +29,8 @@ class CacheService {
     endpoint: string,
     options: RequestInit = {},
   ): Promise<T> {
-    const token = localStorage.getItem("access_token");
+    // Use unified auth token key set by ApiService
+    const token = localStorage.getItem("auth_token");
 
     const response = await fetch(`${this.baseUrl}${endpoint}`, {
       ...options,
@@ -298,31 +299,37 @@ class CacheService {
         this.getCacheHealth(),
       ]);
 
-      // Calculate cache efficiency metrics
-      const totalContracts = stats.data.contracts.total_cached;
-      const totalProperties = stats.data.properties.total_cached;
-      const avgContractAccess = stats.data.contracts.average_access;
-      const avgPropertyAccess = stats.data.properties.average_access;
+      // Extract stats with safety guards
+      const totalContracts = stats?.data?.contracts?.total_cached ?? 0;
+      const totalProperties = stats?.data?.properties?.total_cached ?? 0;
+      const avgContractAccess = stats?.data?.contracts?.average_access ?? 0;
+      const avgPropertyAccess = stats?.data?.properties?.average_access ?? 0;
 
-      // Estimate cache hit rate based on access patterns
+      // Safe ratio for hit rate estimation
+      const ratio = (x: number) => (x && x > 1 ? (x - 1) / x : 0);
       const estimatedCacheHitRate = Math.min(
-        ((avgContractAccess - 1) / avgContractAccess +
-          (avgPropertyAccess - 1) / avgPropertyAccess) / 2 * 100,
+        ((ratio(avgContractAccess) + ratio(avgPropertyAccess)) / 2) * 100,
         100,
       );
 
       // Estimate token savings (assuming 1000 tokens per analysis)
-      const estimatedTokenSavings = (totalContracts * avgContractAccess +
-        totalProperties * avgPropertyAccess) * 1000;
+      const estimatedTokenSavings = (totalContracts * (avgContractAccess || 0) +
+        totalProperties * (avgPropertyAccess || 0)) * 1000;
+
+      // Response time improvement can be adjusted based on health (keep constant for now)
+      const responseTimeImprovement = 95;
+
+      // Rough estimate of recent cache hits
+      const recentCacheHits = Math.round(
+        (totalContracts * (avgContractAccess || 0) +
+          totalProperties * (avgPropertyAccess || 0)) / 7,
+      );
 
       return {
         cache_hit_rate: Math.round(estimatedCacheHitRate),
         token_savings: estimatedTokenSavings,
-        response_time_improvement: 95, // Cache responses are ~95% faster
-        recent_cache_hits: Math.round(
-          (totalContracts * avgContractAccess +
-            totalProperties * avgPropertyAccess) / 7,
-        ), // Estimate daily cache hits
+        response_time_improvement: responseTimeImprovement,
+        recent_cache_hits: recentCacheHits,
       };
     } catch (error) {
       console.error("Error calculating cache efficiency metrics:", error);

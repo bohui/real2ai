@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 
 import Sidebar from "./Sidebar";
 import Header from "./Header";
+import SearchOverlay from "./SearchOverlay";
 import { useUIStore } from "@/store/uiStore";
 import { cn } from "@/utils";
 
@@ -47,6 +48,7 @@ const Layout: React.FC = () => {
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
         <Header />
+        <SearchOverlay />
 
         {/* Page content */}
         <main id="main-content" className="flex-1 overflow-auto" tabIndex={-1}>

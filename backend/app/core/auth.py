@@ -12,7 +12,9 @@ from fastapi import HTTPException, status, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from app.clients.factory import get_supabase_client
+from app.core.auth_context import AuthContext
 from app.core.config import get_settings
+from app.services.backend_token_service import BackendTokenService
 from app.clients.base.interfaces import AuthOperations, DatabaseOperations
 from app.clients.base.exceptions import ClientError
 
@@ -106,12 +108,26 @@ class AuthService:
             raise
 
     async def verify_token(self, token: str) -> TokenData:
-        """Verify and decode JWT token using decoupled client"""
+        """Verify and decode JWT token using decoupled client.
+
+        Supports both Supabase user tokens and backend-issued API tokens.
+        """
         if not self._initialized:
             await self.initialize()
 
         try:
-            # Use the decoupled auth client
+            # If this is a backend token, extract identity and bypass Supabase verify here
+            if BackendTokenService.is_backend_token(token):
+                identity = BackendTokenService.get_identity(token)
+                if not identity:
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
+                    )
+                user_id, email = identity
+                exp = datetime.now(UTC)
+                return TokenData(user_id=user_id, email=email, exp=exp)
+
+            # Otherwise, use Supabase auth to authenticate user token
             user_data = await self._auth_client.authenticate_user(token)
 
             if not user_data or "id" not in user_data or "email" not in user_data:
@@ -158,22 +174,36 @@ class AuthService:
             )
 
     async def get_current_user(self, token_data: TokenData) -> User:
-        """Get current authenticated user using decoupled database client"""
+        """Get current authenticated user using user-authenticated client for RLS."""
         if not self._initialized:
             await self.initialize()
 
         try:
             # Get user profile from database using decoupled client
-            result = await self._db_service.read(
+            profile_result = await self._db_service.read(
                 "profiles", {"id": token_data.user_id}, 1
             )
 
-            if not result:
+            logger.debug(f"Profile result type: {type(profile_result)}, has_data: {hasattr(profile_result, 'data')}")
+
+            # Handle both list and result object responses
+            if hasattr(profile_result, 'data'):
+                # Result object with .data attribute
+                profiles = profile_result.data
+                logger.debug(f"Using result.data, profiles count: {len(profiles) if profiles else 0}")
+            else:
+                # Direct list response
+                profiles = profile_result
+                logger.debug(f"Using direct result, profiles count: {len(profiles) if profiles else 0}")
+
+            if not profiles or len(profiles) == 0:
+                logger.warning(f"No profile found for user_id: {token_data.user_id}")
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
                 )
 
-            profile = result[0]
+            profile = profiles[0]
+            logger.info(f"Successfully loaded profile for user_id: {token_data.user_id}")
 
             return User(
                 id=profile["id"],
@@ -191,7 +221,6 @@ class AuthService:
         except ClientError as e:
             logger.error(f"Database error getting user: {str(e)}")
 
-            # Check if this is a JWT expiration error
             if is_jwt_expired_error(e):
                 logger.info(f"JWT expiration detected for user {token_data.user_id}")
                 raise HTTPException(
@@ -199,13 +228,11 @@ class AuthService:
                     detail="Token has expired. Please log in again.",
                 )
 
-            # For other database errors, return 500
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Could not retrieve user data",
             )
         except HTTPException:
-            # Re-raise HTTP exceptions as-is
             raise
         except Exception as e:
             logger.error(f"Unexpected authentication error: {str(e)}")
