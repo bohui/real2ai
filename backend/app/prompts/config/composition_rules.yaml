@@ -109,6 +109,43 @@ compositions:
       continue_on_non_critical_failure: true
       critical_steps: ["ocr_extraction", "structure_analysis"]
 
+  # OCR to Analysis composition
+  ocr_to_analysis:
+    description: "Streamlined OCR followed by structure analysis"
+    version: "1.0.0"
+    
+    system_prompts:
+      - name: "legal_specialist"
+        path: "system/domain/legal_specialist.md"
+        priority: 100
+        required: true
+      - name: "assistant_core"
+        path: "system/base/assistant_core.md"
+        priority: 80
+        required: true
+    
+    workflow_steps:
+      - step: "ocr_extraction"
+        description: "Extract text from document using OCR"
+        template: "ocr/whole_document_extraction"
+        output_variable: "extracted_text"
+        
+      - step: "structure_analysis"
+        description: "Analyze contract structure and sections"
+        template: "analysis/contract_structure_analysis"
+        input_variables: ["extracted_text"]
+        output_variable: "structure_result"
+        dependencies: ["ocr_extraction"]
+    
+    output_template: "reports/ocr_analysis_report"
+    estimated_duration_seconds: 20
+    max_tokens_total: 25000
+    
+    error_handling:
+      retry_failed_steps: true
+      max_retries: 2
+      critical_steps: ["ocr_extraction"]
+
   # Quick contract review for time-sensitive situations
   quick_contract_review:
     description: "Abbreviated contract analysis focusing on key risks"

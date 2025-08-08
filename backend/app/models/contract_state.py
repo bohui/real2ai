@@ -43,6 +43,7 @@ class RealEstateAgentState(TypedDict):
     error_state: Optional[str]
     confidence_scores: Dict[str, float]
     processing_time: Optional[float]
+    progress: Optional[Dict[str, Any]]
 
     # Output
     analysis_results: Dict[str, Any]
@@ -148,6 +149,7 @@ def create_initial_state(
         error_state=None,
         confidence_scores={},
         processing_time=None,
+        progress={"percentage": 0, "step": "initialized"},
         # Output
         analysis_results={},
         report_data=None,

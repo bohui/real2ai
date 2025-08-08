@@ -147,13 +147,16 @@ class PromptVersionError(PromptError):
                     f"Available versions: {', '.join(available_versions)}"
                 )
         
+        # Remove details from kwargs to avoid duplicate parameter
+        filtered_kwargs = {k: v for k, v in kwargs.items() if k not in ['details', 'recovery_suggestions']}
+        
         super().__init__(
             message=message,
             prompt_id=prompt_id,
             severity=PromptErrorSeverity.MEDIUM,
             details=details,
             recovery_suggestions=recovery_suggestions,
-            **kwargs
+            **filtered_kwargs
         )
 
 
@@ -278,13 +281,16 @@ class PromptServiceError(PromptError):
                 "Check service logs for detailed error information"
             ]
         
+        # Remove details from kwargs to avoid duplicate parameter
+        filtered_kwargs = {k: v for k, v in kwargs.items() if k not in ['details', 'recovery_suggestions']}
+        
         super().__init__(
             message=message,
             prompt_id=prompt_id,
             severity=PromptErrorSeverity.MEDIUM,
             details=details,
             recovery_suggestions=recovery_suggestions,
-            **kwargs
+            **filtered_kwargs
         )
 
 

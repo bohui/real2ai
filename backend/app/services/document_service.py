@@ -1085,7 +1085,7 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
                 ):
                     ocr_text = await self._extract_text_with_ocr(
                         page,
-                        page_num + DocumentServiceConstants.MIN_COMPLEX_SHAPE_ITEMS,
+                        page_num + 1,
                     )
                     if len(ocr_text.strip()) > len(text_content.strip()):
                         text_content = ocr_text
@@ -1101,7 +1101,7 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
                     try:
                         gemini_result = await self._extract_text_with_gemini(
                             page,
-                            page_num + DocumentServiceConstants.MIN_COMPLEX_SHAPE_ITEMS,
+                            page_num + 1,
                         )
                         if gemini_result and len(gemini_result.strip()) > len(
                             text_content.strip()
@@ -1111,15 +1111,14 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
                             confidence = DocumentServiceConstants.OCR_CONFIDENCE_MEDIUM
                     except Exception as gemini_error:
                         self.logger.warning(
-                            f"Gemini OCR failed for page {page_num + DocumentServiceConstants.MIN_COMPLEX_SHAPE_ITEMS}: {gemini_error}"
+                            f"Gemini OCR failed for page {page_num + 1}: {gemini_error}"
                         )
 
                 # Analyze page content
                 page_analysis = self._analyze_page_content(text_content, page)
 
                 page_data = {
-                    "page_number": page_num
-                    + DocumentServiceConstants.MIN_COMPLEX_SHAPE_ITEMS,
+                    "page_number": page_num + 1,
                     "text_content": text_content,
                     "text_length": len(text_content),
                     "word_count": (
@@ -1133,7 +1132,7 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
                 }
 
                 pages.append(page_data)
-                full_text += f"\n--- Page {page_num + DocumentServiceConstants.MIN_COMPLEX_SHAPE_ITEMS} ---\n{text_content}"
+                full_text += f"\n--- Page {page_num + 1} ---\n{text_content}"
 
                 if extraction_method not in extraction_methods:
                     extraction_methods.append(extraction_method)
