@@ -17,6 +17,7 @@ from app.core.prompts import PromptManager, get_prompt_manager
 from app.models.contract_state import create_initial_state, RealEstateAgentState
 from app.schema.enums import AustralianState, ProcessingStatus
 from app.services.websocket_service import WebSocketManager, WebSocketEvents
+from app.clients.supabase.client import SupabaseClient
 
 logger = logging.getLogger(__name__)
 
@@ -917,6 +918,89 @@ class ContractAnalysisService:
                 "error": str(e),
                 "timestamp": datetime.now(UTC).isoformat(),
             }
+
+
+# Database helpers colocated with analysis service to keep status logic centralized
+async def ensure_contract(
+    service_client: SupabaseClient,
+    *,
+    content_hash: str,
+    contract_type: str,
+    australian_state: str,
+) -> str:
+    """Create or fetch a contract row for a given content hash.
+
+    Uses service role client (shared resource). Operation is idempotent.
+    Returns the contract id.
+    """
+    contract_data = {
+        "content_hash": content_hash,
+        "contract_type": contract_type,
+        "australian_state": australian_state,
+    }
+
+    try:
+        upserted = await service_client.database.upsert(
+            "contracts", contract_data, conflict_columns=["content_hash"]
+        )
+        if not upserted or not upserted.get("id"):
+            raise ValueError("Upsert returned no record")
+        contract_id = upserted["id"]
+        logger.info(f"Upserted contract record: {contract_id}")
+        return contract_id
+    except Exception as upsert_error:
+        logger.warning(
+            f"Contract upsert failed ({upsert_error}); attempting to fetch existing by content_hash"
+        )
+        existing = await service_client.database.select(
+            "contracts", columns="id", filters={"content_hash": content_hash}, limit=1
+        )
+        if not existing.get("data"):
+            raise ValueError("Failed to create or fetch contract record")
+        contract_id = existing["data"][0]["id"]
+        logger.info(f"Found existing contract record: {contract_id}")
+        return contract_id
+
+
+async def upsert_contract_analysis(
+    user_client: SupabaseClient,
+    *,
+    content_hash: str,
+    agent_version: str = "1.0",
+) -> str:
+    """Create or update a contract_analyses row for the content hash.
+
+    Uses user client (RLS disabled on shared analysis table); prefers
+    RPC upsert and falls back to normal upsert on conflict.
+    Returns the analysis id.
+    """
+    try:
+        analysis_id = await user_client.database.execute_rpc(
+            "upsert_contract_analysis",
+            {
+                "p_content_hash": content_hash,
+                "p_agent_version": agent_version,
+                "p_status": "pending",
+                "p_analysis_result": {},
+                "p_error_message": None,
+            },
+        )
+        if not analysis_id:
+            raise ValueError("Failed to create analysis record via upsert")
+        return analysis_id
+    except Exception as e:
+        logger.error(f"Upsert RPC failed for content_hash {content_hash}: {str(e)}")
+        analysis_data = {
+            "content_hash": content_hash,
+            "agent_version": agent_version,
+            "status": "pending",
+        }
+        analysis_result = await user_client.database.upsert(
+            "contract_analyses", analysis_data, conflict_columns=["content_hash"]
+        )
+        if not analysis_result:
+            raise ValueError("Failed to create analysis record via upsert fallback")
+        return analysis_result["id"]
 
 
 # Service factory function

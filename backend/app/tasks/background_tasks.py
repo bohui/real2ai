@@ -368,8 +368,11 @@ async def comprehensive_document_analysis(
                 openai_api_base=settings.openai_api_base,
             )
 
-            # Update analysis status
-            await user_client.database.update(
+            # Update analysis status (use service role client to bypass RLS on shared table)
+            from app.clients.factory import get_service_supabase_client
+
+            service_client = await get_service_supabase_client()
+            await service_client.database.update(
                 "contract_analyses", analysis_id, {"status": "processing"}
             )
 
@@ -441,7 +444,8 @@ async def comprehensive_document_analysis(
                 "processing_completed_at": datetime.now(timezone.utc).isoformat(),
             }
 
-            await user_client.database.update(
+            # Persist results using service role client (shared table write)
+            await service_client.database.update(
                 "contract_analyses", analysis_id, analysis_update
             )
 
@@ -487,8 +491,10 @@ async def comprehensive_document_analysis(
             )
 
             # Update analysis record with error
-            user_client = await AuthContext.get_authenticated_client()
-            await user_client.database.update(
+            from app.clients.factory import get_service_supabase_client
+
+            service_client = await get_service_supabase_client()
+            await service_client.database.update(
                 "contract_analyses",
                 analysis_id,
                 {

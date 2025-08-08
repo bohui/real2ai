@@ -257,5 +257,23 @@ BEGIN
   END IF;
 END $$;
 
+-- After revokes, grant SELECT to authenticated so RLS policies can apply
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables 
+    WHERE table_schema = 'public' AND table_name = 'contracts'
+  ) THEN
+    EXECUTE 'GRANT SELECT ON TABLE public.contracts TO authenticated';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables 
+    WHERE table_schema = 'public' AND table_name = 'contract_analyses'
+  ) THEN
+    EXECUTE 'GRANT SELECT ON TABLE public.contract_analyses TO authenticated';
+  END IF;
+END $$;
+
 COMMENT ON POLICY "read_if_user_has_hash" ON public.contract_analyses IS 'Allow reading derived analysis only if the user has possession (document or view) for the same content hash';
 COMMENT ON POLICY "read_if_user_has_hash" ON public.contracts IS 'Allow reading contract rows only if the user has possession (document or view) for the same content hash';

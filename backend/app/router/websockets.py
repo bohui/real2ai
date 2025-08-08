@@ -1140,59 +1140,25 @@ async def _dispatch_analysis_task(
         # Generate content hash for caching
         content_hash = await _generate_document_content_hash(document)
 
-        # Create contract record if not provided
+        # Create or get contract record if not provided
         if not contract_id:
-            # Create new contract record using service role client (shared resource)
+            # Use service role client (shared resource) and delegate to central service
+            from app.services.contract_analysis_service import ensure_contract
+
             service_client = await get_service_supabase_client()
-            contract_data = {
-                "content_hash": content_hash,
-                "contract_type": document.get("contract_type", "purchase_agreement"),
-                "australian_state": document.get("australian_state", "NSW"),
-            }
-
-            contract_result = await service_client.database.insert(
-                "contracts", contract_data
-            )
-            if not contract_result.get("success") or not contract_result.get("data"):
-                raise ValueError("Failed to create contract record")
-
-            contract_id = contract_result["data"]["id"]
-            logger.info(f"Created new contract record: {contract_id}")
-
-        # Create analysis record using upsert to handle duplicates
-        try:
-            # Use the new upsert function to handle duplicate content_hash gracefully
-            analysis_id = await user_client.database.execute_rpc(
-                "upsert_contract_analysis",
-                {
-                    "p_content_hash": content_hash,
-                    "p_agent_version": "1.0",
-                    "p_status": "pending",
-                    "p_analysis_result": {},
-                    "p_error_message": None,
-                },
+            contract_id = await ensure_contract(
+                service_client,
+                content_hash=content_hash,
+                contract_type=document.get("contract_type", "purchase_agreement"),
+                australian_state=document.get("australian_state", "NSW"),
             )
 
-            if not analysis_id:
-                raise ValueError("Failed to create analysis record via upsert")
+        # Create analysis record using centralized service helper (handles RPC + fallback)
+        from app.services.contract_analysis_service import upsert_contract_analysis
 
-        except Exception as e:
-            logger.error(f"Upsert failed for content_hash {content_hash}: {str(e)}")
-            # Fallback to direct upsert with conflict handling
-            analysis_data = {
-                "content_hash": content_hash,
-                "agent_version": "1.0",
-                "status": "pending",
-            }
-
-            analysis_result = await user_client.database.upsert(
-                "contract_analyses", analysis_data, conflict_columns=["content_hash"]
-            )
-
-            if not analysis_result:
-                raise ValueError("Failed to create analysis record via upsert fallback")
-
-            analysis_id = analysis_result["id"]
+        analysis_id = await upsert_contract_analysis(
+            user_client, content_hash=content_hash, agent_version="1.0"
+        )
         logger.info(f"Created new analysis record: {analysis_id}")
 
         # Import and dispatch the comprehensive analysis task

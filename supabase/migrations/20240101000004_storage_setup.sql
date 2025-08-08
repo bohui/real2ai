@@ -38,7 +38,7 @@ VALUES (
     allowed_mime_types = EXCLUDED.allowed_mime_types;
 
 -- Enable RLS on storage.objects table
-ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
 
 -- Storage policies for documents bucket
 -- SECURE: Users can only access files in their own folder (user_id/filename)

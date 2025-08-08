@@ -325,7 +325,15 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
 
         case "analysis_progress":
           console.log("📈 Analysis progress received:", data.data);
-          get().updateProgress(data.data as AnalysisProgressUpdate);
+          // Transform the backend data structure to match frontend expectations
+          const progressData: AnalysisProgressUpdate = {
+            contract_id: data.data.contract_id || get().currentContractId || "",
+            current_step: data.data.current_step || "",
+            progress_percent: data.data.progress_percent || 0,
+            step_description: data.data.step_description || "",
+            estimated_time_remaining: data.data.estimated_completion_minutes || undefined,
+          };
+          get().updateProgress(progressData);
           break;
 
         case "analysis_completed":
@@ -520,7 +528,15 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
 
       switch (data.event_type) {
         case "analysis_progress":
-          get().updateProgress(data.data as AnalysisProgressUpdate);
+          // Transform the backend data structure to match frontend expectations
+          const progressData: AnalysisProgressUpdate = {
+            contract_id: data.data.contract_id || contractId,
+            current_step: data.data.current_step || "",
+            progress_percent: data.data.progress_percent || 0,
+            step_description: data.data.step_description || "",
+            estimated_time_remaining: data.data.estimated_completion_minutes || undefined,
+          };
+          get().updateProgress(progressData);
           break;
 
         case "analysis_completed":
@@ -750,7 +766,9 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
   },
 
   updateProgress: (progress: AnalysisProgressUpdate) => {
-    set({ analysisProgress: progress });
+    console.log("🔄 Updating analysis progress:", progress);
+    set({ analysisProgress: progress, isAnalyzing: true });
+    console.log("✅ Progress updated, isAnalyzing set to true");
   },
 
   setAnalysisResult: (result: ContractAnalysisResult) => {
