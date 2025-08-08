@@ -219,14 +219,14 @@ class SupabaseClient(BaseClient):
         """Get user by ID."""
         return await self.auth.get_user(user_id)
 
-    def set_user_token(self, token: str) -> None:
-        """Set user JWT token for RLS-enabled operations."""
+    def set_user_token(self, token: str, refresh_token: Optional[str] = None) -> None:
+        """Set user JWT token (and optional refresh token) for RLS-enabled operations."""
         try:
             # Set the auth header for all subsequent requests
             if self._supabase_client:
                 # For JWT token authentication, set auth for PostgREST
                 self._supabase_client.postgrest.auth(token)
-                
+
                 # For storage operations, we need to create a proper auth session
                 # The Supabase client handles storage auth through the session
                 try:
@@ -238,14 +238,11 @@ class SupabaseClient(BaseClient):
                     # If _set_auth doesn't exist, try the session approach
                     try:
                         import time
-                        self._supabase_client.auth.set_session({
-                            "access_token": token,
-                            "token_type": "bearer",
-                            "expires_in": 3600,
-                            "expires_at": int(time.time()) + 3600,
-                            "refresh_token": "",
-                            "user": None  # We don't have user details from JWT
-                        })
+
+                        # The set_session method expects positional arguments: (access_token, refresh_token)
+                        self._supabase_client.auth.set_session(
+                            token, refresh_token or ""
+                        )
                         self.logger.info("User session set for storage operations")
                     except Exception as session_error:
                         self.logger.warning(f"Session method failed: {session_error}")
@@ -255,7 +252,7 @@ class SupabaseClient(BaseClient):
                     self.logger.warning(f"Direct auth method failed: {auth_error}")
                     # Fallback: set headers directly
                     self._set_storage_headers_directly(token)
-                
+
                 self.logger.debug("User JWT token set for RLS operations")
             else:
                 raise ClientError("Supabase client not initialized", self.client_name)
@@ -267,39 +264,47 @@ class SupabaseClient(BaseClient):
         """Helper method to set storage headers directly."""
         try:
             # Use the suggested approach: client.storage.session.headers.update()
-            if hasattr(self._supabase_client.storage, 'session') and hasattr(self._supabase_client.storage.session, 'headers'):
+            if hasattr(self._supabase_client.storage, "session") and hasattr(
+                self._supabase_client.storage.session, "headers"
+            ):
                 self._supabase_client.storage.session.headers.update(
                     {"Authorization": f"Bearer {token}"}
                 )
-                self.logger.info("Set Authorization header via storage.session.headers.update()")
+                self.logger.info(
+                    "Set Authorization header via storage.session.headers.update()"
+                )
                 return
-                
+
             # Fallback approaches if the above doesn't work
-            if hasattr(self._supabase_client, '_storage'):
+            if hasattr(self._supabase_client, "_storage"):
                 storage_client = self._supabase_client._storage
             else:
                 storage_client = self._supabase_client.storage
-            
+
             # Try to set headers directly on the storage client
-            if hasattr(storage_client, '_headers'):
-                storage_client._headers['Authorization'] = f'Bearer {token}'
+            if hasattr(storage_client, "_headers"):
+                storage_client._headers["Authorization"] = f"Bearer {token}"
                 self.logger.info("Set Authorization header via _headers")
-            elif hasattr(storage_client, 'headers'):
-                storage_client.headers['Authorization'] = f'Bearer {token}'
+            elif hasattr(storage_client, "headers"):
+                storage_client.headers["Authorization"] = f"Bearer {token}"
                 self.logger.info("Set Authorization header via headers")
             else:
                 # Try to access the underlying HTTP client
-                if hasattr(storage_client, '_client') and hasattr(storage_client._client, 'headers'):
-                    storage_client._client.headers['Authorization'] = f'Bearer {token}'
+                if hasattr(storage_client, "_client") and hasattr(
+                    storage_client._client, "headers"
+                ):
+                    storage_client._client.headers["Authorization"] = f"Bearer {token}"
                     self.logger.info("Set Authorization header via _client.headers")
                 else:
-                    self.logger.warning("Could not find a way to set storage headers directly")
+                    self.logger.warning(
+                        "Could not find a way to set storage headers directly"
+                    )
         except Exception as e:
             self.logger.error(f"Failed to set storage headers directly: {e}")
 
-    def set_auth_token(self, token: str) -> None:
+    def set_auth_token(self, token: str, refresh_token: Optional[str] = None) -> None:
         """Alias for set_user_token for consistency with auth context."""
-        self.set_user_token(token)
+        self.set_user_token(token, refresh_token)
 
     def clear_auth_token(self) -> None:
         """Clear the auth token to revert to anon key."""
@@ -307,14 +312,14 @@ class SupabaseClient(BaseClient):
             if self._supabase_client:
                 # Clear auth by setting back to anon key for PostgREST
                 self._supabase_client.postgrest.auth(self.config.anon_key)
-                
+
                 # Clear the auth session to revert to anon access
                 try:
                     self._supabase_client.auth.sign_out()
                     self.logger.debug("User session cleared")
                 except Exception as session_error:
                     self.logger.warning(f"Session clear failed: {session_error}")
-                
+
                 self.logger.debug("Auth token cleared, using anon key")
         except Exception as e:
             self.logger.error(f"Failed to clear auth token: {e}")
@@ -326,30 +331,44 @@ class SupabaseClient(BaseClient):
     ) -> Dict[str, Any]:
         """Upload a file to Supabase storage."""
         try:
-            self.logger.info(f"Uploading file to bucket '{bucket}' at path '{path}' (size: {len(file)} bytes)")
-            
+            self.logger.info(
+                f"Uploading file to bucket '{bucket}' at path '{path}' (size: {len(file)} bytes)"
+            )
+
             # Debug: Check current auth state
             try:
                 current_session = self._supabase_client.auth.get_session()
                 self.logger.info(f"Current auth session: {current_session is not None}")
-                if current_session and hasattr(current_session, 'access_token'):
-                    self.logger.info(f"Access token present: {bool(current_session.access_token)}")
+                if current_session and hasattr(current_session, "access_token"):
+                    self.logger.info(
+                        f"Access token present: {bool(current_session.access_token)}"
+                    )
             except Exception as auth_debug_error:
                 self.logger.warning(f"Could not check auth session: {auth_debug_error}")
 
             # Get storage client
             storage = self.storage()
-            
+
             # Debug: Check storage client auth headers
             try:
-                if hasattr(storage, '_client') and hasattr(storage._client, 'headers'):
-                    auth_header = storage._client.headers.get('Authorization', 'No auth header')
-                    self.logger.info(f"Storage client auth header: {auth_header[:20]}..." if auth_header != 'No auth header' else auth_header)
+                if hasattr(storage, "_client") and hasattr(storage._client, "headers"):
+                    auth_header = storage._client.headers.get(
+                        "Authorization", "No auth header"
+                    )
+                    self.logger.info(
+                        f"Storage client auth header: {auth_header[:20]}..."
+                        if auth_header != "No auth header"
+                        else auth_header
+                    )
             except Exception as header_debug_error:
-                self.logger.warning(f"Could not check storage headers: {header_debug_error}")
+                self.logger.warning(
+                    f"Could not check storage headers: {header_debug_error}"
+                )
 
             # Upload file using Supabase storage API
-            self.logger.info(f"Attempting upload with storage.from_('{bucket}').upload('{path}', file)")
+            self.logger.info(
+                f"Attempting upload with storage.from_('{bucket}').upload('{path}', file)"
+            )
             result = storage.from_(bucket).upload(path, file)
 
             self.logger.info(f"File uploaded successfully to '{path}': {result}")

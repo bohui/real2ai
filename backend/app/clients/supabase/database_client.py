@@ -88,6 +88,30 @@ class SupabaseDatabaseClient(DatabaseOperations):
         self.client_name = "SupabaseDatabaseClient"
         self.logger = logging.getLogger(f"{__name__}.{self.client_name}")
         self._initialized = False
+        # Check if this is a service role client by examining the underlying client's key
+        self._is_service_role = self._detect_service_role()
+
+    def _detect_service_role(self) -> bool:
+        """Detect if this is a service role client by checking the underlying client's key."""
+        try:
+            # Check if the underlying client is using the service key
+            # The service role client is created with service_key instead of anon_key
+            if hasattr(self.supabase_client, "supabase_key"):
+                return self.supabase_client.supabase_key == self.config.service_key
+            # Alternative check: look for service key in the client's headers or auth
+            if hasattr(self.supabase_client, "postgrest") and hasattr(
+                self.supabase_client.postgrest, "headers"
+            ):
+                auth_header = self.supabase_client.postgrest.headers.get(
+                    "Authorization", ""
+                )
+                if (
+                    auth_header.startswith("Bearer ") and len(auth_header) > 100
+                ):  # Service keys are typically longer
+                    return True
+            return False
+        except Exception:
+            return False
 
     async def initialize(self) -> None:
         """Initialize database client."""
@@ -111,6 +135,13 @@ class SupabaseDatabaseClient(DatabaseOperations):
         Import is done lazily to avoid circular imports at module load time.
         """
         try:
+            # Skip auth context application for service role clients
+            if self._is_service_role:
+                self.logger.debug(
+                    "Service role client detected - skipping auth context application"
+                )
+                return
+
             from app.core.auth_context import AuthContext  # Lazy import
 
             token = AuthContext.get_user_token()

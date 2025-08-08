@@ -15,6 +15,7 @@ from app.services.redis_pubsub import redis_pubsub_service
 from app.core.error_handler import handle_api_error, create_error_context, ErrorCategory
 from app.clients.factory import get_service_supabase_client
 from enum import Enum
+from app.services.backend_token_service import BackendTokenService
 
 
 class CacheStatus(str, Enum):
@@ -67,9 +68,32 @@ async def check_document_cache_status(document_id: str, user_id: str) -> Dict[st
             f"Checking cache for document {document_id} with content_hash: {content_hash}"
         )
 
-        # Check existing contract with this content_hash using service role (shared resource)
-        service_client = await get_service_supabase_client()
-        contract_result = await service_client.database.select(
+        # Check if user has access to documents with this content_hash using user's authenticated client
+        user_documents_result = await user_client.database.select(
+            "documents",
+            columns="*",
+            filters={"content_hash": content_hash, "user_id": user_id},
+            order_by="created_at DESC",
+            limit=1,
+        )
+
+        if not user_documents_result.get("data"):
+            # CACHE MISS - User doesn't have access to any documents with this content_hash
+            logger.info(
+                f"Cache MISS: User doesn't have access to documents with content_hash {content_hash}"
+            )
+            return {
+                "cache_status": CacheStatus.MISS,
+                "document_id": document_id,
+                "content_hash": content_hash,
+                "contract_id": None,
+                "retry_available": False,
+                "message": "New document - analysis will start shortly",
+            }
+
+        # User has access to documents with this content_hash, now check for contracts
+        # Use user's authenticated client to check for contracts they have access to
+        contract_result = await user_client.database.select(
             "contracts",
             columns="*",
             filters={"content_hash": content_hash},
@@ -78,9 +102,9 @@ async def check_document_cache_status(document_id: str, user_id: str) -> Dict[st
         )
 
         if not contract_result.get("data"):
-            # CACHE MISS - First time seeing this document
+            # CACHE MISS - No contract found for this content_hash
             logger.info(
-                f"Cache MISS: No existing contract found for content_hash {content_hash}"
+                f"Cache MISS: No contract found for content_hash {content_hash}"
             )
             return {
                 "cache_status": CacheStatus.MISS,
@@ -94,8 +118,8 @@ async def check_document_cache_status(document_id: str, user_id: str) -> Dict[st
         contract = contract_result["data"][0]
         contract_id = contract["id"]
 
-        # Check analysis status using service role (shared resource)
-        analysis_result = await service_client.database.select(
+        # Check analysis status using user's authenticated client
+        analysis_result = await user_client.database.select(
             "contract_analyses",
             columns="*",
             filters={"content_hash": content_hash},
@@ -305,9 +329,36 @@ async def document_analysis_websocket(
         )
 
         # STEP 2.5: Set authentication context for the WebSocket connection
-        # Do not store the WS token as Supabase token in context
+        # Exchange backend token for Supabase access token if needed
+        auth_token = token
+        if BackendTokenService.is_backend_token(token):
+            logger.info(
+                f"Backend token detected for WebSocket, attempting exchange for user: {user.id}"
+            )
+            exchanged = await BackendTokenService.ensure_supabase_access_token(token)
+            if exchanged:
+                auth_token = exchanged
+                logger.info(
+                    f"Successfully exchanged backend token for Supabase token for WebSocket user: {user.id}"
+                )
+            else:
+                logger.warning(
+                    f"Failed to exchange backend token for Supabase token for WebSocket user: {user.id}"
+                )
+
+        # Store the actual token for authenticated operations
+        # Also carry refresh token if the backend token store has one
+        refresh_token: Optional[str] = None
+        try:
+            if BackendTokenService.is_backend_token(token):
+                mapping = BackendTokenService.get_mapping(token)
+                if mapping:
+                    refresh_token = mapping.get("supabase_refresh_token")
+        except Exception:
+            refresh_token = None
+
         AuthContext.set_auth_context(
-            token="",
+            token=auth_token,  # Use exchanged token if available
             user_id=str(user.id),
             user_email=user.email,
             metadata={
@@ -315,6 +366,7 @@ async def document_analysis_websocket(
                 "connection_type": "websocket",
                 "connected_at": datetime.now(UTC).isoformat(),
             },
+            refresh_token=refresh_token,
         )
         logger.debug(f"Auth context set for WebSocket user: {user.id}")
 
@@ -1090,14 +1142,15 @@ async def _dispatch_analysis_task(
 
         # Create contract record if not provided
         if not contract_id:
-            # Create new contract record
+            # Create new contract record using service role client (shared resource)
+            service_client = await get_service_supabase_client()
             contract_data = {
                 "content_hash": content_hash,
                 "contract_type": document.get("contract_type", "purchase_agreement"),
                 "australian_state": document.get("australian_state", "NSW"),
             }
 
-            contract_result = await user_client.database.insert(
+            contract_result = await service_client.database.insert(
                 "contracts", contract_data
             )
             if not contract_result.get("success") or not contract_result.get("data"):

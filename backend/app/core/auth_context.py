@@ -29,6 +29,7 @@ _user_email: ContextVar[Optional[str]] = ContextVar("user_email", default=None)
 _auth_metadata: ContextVar[Optional[Dict[str, Any]]] = ContextVar(
     "auth_metadata", default=None
 )
+_refresh_token: ContextVar[Optional[str]] = ContextVar("refresh_token", default=None)
 
 
 class AuthContext:
@@ -46,6 +47,7 @@ class AuthContext:
         user_id: Optional[str] = None,
         user_email: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
+        refresh_token: Optional[str] = None,
     ) -> None:
         """
         Set authentication context for the current request.
@@ -57,6 +59,7 @@ class AuthContext:
             metadata: Optional additional metadata
         """
         _user_token.set(token)
+        _refresh_token.set(refresh_token)
 
         if user_id:
             _user_id.set(user_id)
@@ -76,6 +79,7 @@ class AuthContext:
         _user_id.set(None)
         _user_email.set(None)
         _auth_metadata.set(None)
+        _refresh_token.set(None)
 
         logger.debug("Auth context cleared")
 
@@ -100,6 +104,11 @@ class AuthContext:
         return _auth_metadata.get()
 
     @classmethod
+    def get_refresh_token(cls) -> Optional[str]:
+        """Get current refresh token from context."""
+        return _refresh_token.get()
+
+    @classmethod
     async def get_authenticated_client(cls, require_auth: bool = True):
         """
         Get Supabase client with proper authentication.
@@ -114,6 +123,7 @@ class AuthContext:
             HTTPException: If authentication is required but no token is present
         """
         token = cls.get_user_token()
+        refresh_token = cls.get_refresh_token()
 
         if require_auth and not token:
             logger.warning("Authentication required but no token in context")
@@ -127,8 +137,10 @@ class AuthContext:
 
         if token:
             # Set user token for RLS enforcement
-            client.set_user_token(token)
-            logger.info(f"Created authenticated client for user: {cls.get_user_id()}, token length: {len(token) if token else 0}")
+            client.set_user_token(token, refresh_token)
+            logger.info(
+                f"Created authenticated client for user: {cls.get_user_id()}, token length: {len(token) if token else 0}"
+            )
         else:
             # No user token present; returning anon-key client (RLS enforced by default)
             logger.warning(
@@ -178,6 +190,7 @@ class AuthContext:
             "user_id": cls.get_user_id(),
             "user_email": cls.get_user_email(),
             "auth_metadata": cls.get_auth_metadata(),
+            "refresh_token": cls.get_refresh_token(),
             "created_at": datetime.now(UTC).isoformat(),
         }
 
@@ -194,6 +207,7 @@ class AuthContext:
             user_id=task_context.get("user_id"),
             user_email=task_context.get("user_email"),
             metadata=task_context.get("auth_metadata", {}),
+            refresh_token=task_context.get("refresh_token"),
         )
 
         logger.debug(

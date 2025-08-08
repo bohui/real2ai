@@ -184,17 +184,23 @@ class AuthService:
                 "profiles", {"id": token_data.user_id}, 1
             )
 
-            logger.debug(f"Profile result type: {type(profile_result)}, has_data: {hasattr(profile_result, 'data')}")
+            logger.debug(
+                f"Profile result type: {type(profile_result)}, has_data: {hasattr(profile_result, 'data')}"
+            )
 
             # Handle both list and result object responses
-            if hasattr(profile_result, 'data'):
+            if hasattr(profile_result, "data"):
                 # Result object with .data attribute
                 profiles = profile_result.data
-                logger.debug(f"Using result.data, profiles count: {len(profiles) if profiles else 0}")
+                logger.debug(
+                    f"Using result.data, profiles count: {len(profiles) if profiles else 0}"
+                )
             else:
                 # Direct list response
                 profiles = profile_result
-                logger.debug(f"Using direct result, profiles count: {len(profiles) if profiles else 0}")
+                logger.debug(
+                    f"Using direct result, profiles count: {len(profiles) if profiles else 0}"
+                )
 
             if not profiles or len(profiles) == 0:
                 logger.warning(f"No profile found for user_id: {token_data.user_id}")
@@ -203,7 +209,9 @@ class AuthService:
                 )
 
             profile = profiles[0]
-            logger.info(f"Successfully loaded profile for user_id: {token_data.user_id}")
+            logger.info(
+                f"Successfully loaded profile for user_id: {token_data.user_id}"
+            )
 
             return User(
                 id=profile["id"],
@@ -334,6 +342,23 @@ async def get_current_user_ws(token: str) -> Optional[User]:
         elif token.startswith("Bearer "):
             token = token.replace("Bearer ", "")
 
+        # If this is a backend API token, resolve identity and fetch profile via service-role
+        if BackendTokenService.is_backend_token(token):
+            identity = BackendTokenService.get_identity(token)
+            if not identity:
+                logger.error("Invalid backend token for WebSocket authentication")
+                return None
+            user_id, email = identity
+
+            # Bypass RLS to resolve the user profile
+            user = await get_user_by_id_service(user_id)
+            if not user:
+                logger.error("User not found for backend token during WebSocket auth")
+                return None
+
+            logger.info(f"WebSocket authenticated via backend token for user {user_id}")
+            return user
+
         auth_service = get_auth_service()
         if not auth_service._initialized:
             await auth_service.initialize()
@@ -397,12 +422,21 @@ def verify_ws_token(token: str) -> Optional[str]:
 async def get_user_by_id_service(user_id: str) -> Optional[User]:
     """Fetch user profile using service-role client (bypasses RLS for identity resolution)."""
     try:
+        # Get service role client
         client = await get_supabase_client(use_service_role=True)
-        result = await client.database.select(
-            "profiles", columns="*", filters={"id": user_id}
+
+        # Use the raw Supabase client directly to bypass auth context issues
+        # This bypasses the database client's auth context application entirely
+        result = (
+            client.supabase_client.table("profiles")
+            .select("*")
+            .eq("id", user_id)
+            .limit(1)
+            .execute()
         )
-        if result.get("data"):
-            profile = result["data"][0]
+
+        if result.data and len(result.data) > 0:
+            profile = result.data[0]
             return User(
                 id=profile["id"],
                 email=profile["email"],
@@ -416,5 +450,6 @@ async def get_user_by_id_service(user_id: str) -> Optional[User]:
                 onboarding_preferences=profile.get("onboarding_preferences", {}),
             )
         return None
-    except Exception:
+    except Exception as e:
+        logger.error(f"Error fetching user by ID {user_id}: {str(e)}")
         return None

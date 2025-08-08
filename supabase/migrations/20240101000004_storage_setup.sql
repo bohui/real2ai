@@ -1,5 +1,8 @@
--- Storage setup for Real2.AI documents
+-- Storage setup for Real2.AI documents  
 -- Creates storage buckets and policies for secure file management
+--
+-- SECURITY NOTE: Uses user-specific RLS policies to ensure users can only access their own files.
+-- Files are stored in user_id/filename paths and policies verify auth.uid() matches the folder.
 
 -- Create storage bucket for documents
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
@@ -34,7 +37,11 @@ VALUES (
     file_size_limit = EXCLUDED.file_size_limit,
     allowed_mime_types = EXCLUDED.allowed_mime_types;
 
+-- Enable RLS on storage.objects table
+ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
+
 -- Storage policies for documents bucket
+-- SECURE: Users can only access files in their own folder (user_id/filename)
 CREATE POLICY "Users can upload documents to their own folder"
 ON storage.objects FOR INSERT
 WITH CHECK (

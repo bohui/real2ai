@@ -191,7 +191,9 @@ const AnalysisPage: React.FC = () => {
           </h1>
           <p className="text-neutral-600 mt-1">
             {currentDocument
-              ? `Analyzing: ${currentDocument.filename}`
+              ? currentDocument.filename
+                ? `Analyzing: ${currentDocument.filename}`
+                : "Document uploaded — ready to analyze"
               : "Upload a contract document to get started"}
           </p>
         </div>
@@ -222,6 +224,8 @@ const AnalysisPage: React.FC = () => {
             </>
           )}
 
+          {/* Removed fallback analyze action from header; action is now shown above progress panel */}
+
           {(currentDocument || currentAnalysis) && (
             <Button
               variant="ghost"
@@ -247,50 +251,64 @@ const AnalysisPage: React.FC = () => {
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Left Column - Progress & Navigation */}
-          <div className="space-y-6">
-            {/* Cache Status & Action Panel */}
-            {cacheStatus && (
-              <Card className="border-l-4 border-l-primary-500">
-                <CardContent padding="md">
+          <div className="space-y-4">
+            {/* Cache Status & Action Panel - always visible */}
+            <Card className="border-l-4 border-l-primary-500 bg-gradient-to-br from-white to-primary-50/30">
+              <CardContent padding="sm">
+                <div className="flex flex-col gap-3">
                   <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="font-semibold text-sm text-neutral-700 mb-1">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-primary-500"></div>
+                      <h3 className="font-semibold text-sm text-neutral-800">
                         Document Status
                       </h3>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
                       {cacheStatus === "complete" && (
-                        <p className="text-sm text-success-600">
+                        <p className="text-sm text-success-600 font-medium">
                           ✅ Analysis complete - results ready!
                         </p>
                       )}
                       {cacheStatus === "in_progress" && (
-                        <p className="text-sm text-warning-600">
+                        <p className="text-sm text-warning-600 font-medium">
                           🔄 Analysis in progress - streaming updates...
                         </p>
                       )}
                       {cacheStatus === "failed" && (
-                        <p className="text-sm text-danger-600">
+                        <p className="text-sm text-danger-600 font-medium">
                           ❌ Previous analysis failed
                         </p>
                       )}
                       {cacheStatus === "miss" && (
-                        <p className="text-sm text-neutral-600">
+                        <p className="text-sm text-neutral-600 font-medium">
                           🆕 New document - ready to analyze
+                        </p>
+                      )}
+                      {(cacheStatus === null || !cacheStatus) && (
+                        <p className="text-sm text-neutral-600 font-medium">
+                          ⏳ Checking document status...
                         </p>
                       )}
                     </div>
 
                     {/* Action Buttons */}
-                    <div className="flex gap-2">
-                      {cacheStatus === "miss" && (
-                        <Button
-                          variant="primary"
-                          size="sm"
-                          onClick={handleStartAnalysis}
-                          disabled={isAnalyzing}
-                        >
-                          Start Analysis
-                        </Button>
-                      )}
+                    <div className="flex gap-2 ml-4">
+                      {currentDocument &&
+                        !currentAnalysis &&
+                        (cacheStatus === "miss" || cacheStatus === null) && (
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            onClick={handleStartAnalysis}
+                            disabled={isAnalyzing}
+                            className="whitespace-nowrap shadow-sm hover:shadow-md transition-shadow"
+                          >
+                            Start Analysis
+                          </Button>
+                        )}
                       {cacheStatus === "failed" &&
                         retryAvailable &&
                         !isAnalyzing && (
@@ -299,15 +317,16 @@ const AnalysisPage: React.FC = () => {
                             size="sm"
                             onClick={handleRetryAnalysis}
                             disabled={isAnalyzing}
+                            className="whitespace-nowrap shadow-sm hover:shadow-md transition-shadow"
                           >
                             Retry Analysis
                           </Button>
                         )}
                     </div>
                   </div>
-                </CardContent>
-              </Card>
-            )}
+                </div>
+              </CardContent>
+            </Card>
 
             <AnalysisProgress />
 
