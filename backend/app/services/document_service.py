@@ -644,6 +644,28 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
             if not created_record:
                 return {"success": False, "error": "Failed to create document record"}
 
+            # Create user_contract_views record for RLS policy access
+            if file_info.get("content_hash"):
+                try:
+                    user_contract_view_data = {
+                        "user_id": user_id,
+                        "content_hash": file_info["content_hash"],
+                        "property_address": None,  # Will be populated later if available
+                        "source": "upload",
+                    }
+
+                    await user_client.database.create(
+                        "user_contract_views", user_contract_view_data
+                    )
+                    self.logger.info(
+                        f"Created user_contract_views record for document {document_id}"
+                    )
+                except Exception as view_error:
+                    # Log the error but don't fail the upload - this is for RLS access
+                    self.logger.warning(
+                        f"Failed to create user_contract_views record: {str(view_error)}"
+                    )
+
             self.logger.info(f"Created document record: {document_id}")
             return {
                 "success": True,
