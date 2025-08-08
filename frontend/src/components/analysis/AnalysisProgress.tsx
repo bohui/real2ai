@@ -1,101 +1,153 @@
-import React from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { 
-  CheckCircle, 
-  Clock, 
+import React from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  CheckCircle,
+  Clock,
   AlertCircle,
   FileText,
   Search,
   Shield,
   TrendingUp,
   FileCheck,
-  Zap
-} from 'lucide-react'
+  Zap,
+} from "lucide-react";
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
-import { useAnalysisStore } from '@/store/analysisStore'
-import { cn, formatRelativeTime } from '@/utils'
-import { Button } from '@/components/ui/Button'
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
+import { useAnalysisStore } from "@/store/analysisStore";
+import { cn, formatRelativeTime } from "@/utils";
+import { Button } from "@/components/ui/Button";
 
 interface AnalysisProgressProps {
-  className?: string
+  className?: string;
 }
 
 const steps = [
   {
-    key: 'validating_input',
+    key: "validating_input",
     icon: CheckCircle,
-    title: 'Validating Document',
-    description: 'Checking file format and content quality'
+    title: "Validating Document",
+    description: "Checking file format and content quality",
   },
   {
-    key: 'processing_document',
+    key: "processing_document",
     icon: FileText,
-    title: 'Extracting Text',
-    description: 'Reading contract content using OCR technology'
+    title: "Extracting Text",
+    description: "Reading contract content using OCR technology",
   },
   {
-    key: 'extracting_terms',
+    key: "extracting_terms",
     icon: Search,
-    title: 'Identifying Terms',
-    description: 'Finding key contract clauses and conditions'
+    title: "Identifying Terms",
+    description: "Finding key contract clauses and conditions",
   },
   {
-    key: 'analyzing_compliance',
+    key: "analyzing_compliance",
     icon: Shield,
-    title: 'Checking Compliance',
-    description: 'Verifying Australian legal requirements'
+    title: "Checking Compliance",
+    description: "Verifying Australian legal requirements",
   },
   {
-    key: 'assessing_risks',
+    key: "assessing_risks",
     icon: AlertCircle,
-    title: 'Assessing Risks',
-    description: 'Evaluating potential issues and concerns'
+    title: "Assessing Risks",
+    description: "Evaluating potential issues and concerns",
   },
   {
-    key: 'generating_recommendations',
+    key: "generating_recommendations",
     icon: TrendingUp,
-    title: 'Creating Recommendations',
-    description: 'Generating actionable advice'
+    title: "Creating Recommendations",
+    description: "Generating actionable advice",
   },
   {
-    key: 'compiling_report',
+    key: "compiling_report",
     icon: FileCheck,
-    title: 'Finalizing Report',
-    description: 'Preparing comprehensive analysis'
-  }
-]
+    title: "Finalizing Report",
+    description: "Preparing comprehensive analysis",
+  },
+];
 
 const AnalysisProgress: React.FC<AnalysisProgressProps> = ({ className }) => {
-  const { 
-    isAnalyzing, 
-    analysisProgress, 
-    currentAnalysis, 
-    wsService, 
-    analysisError 
-  } = useAnalysisStore()
+  // Use specific selectors to ensure proper re-rendering
+  const isAnalyzing = useAnalysisStore((state) => state.isAnalyzing);
+  const analysisProgress = useAnalysisStore((state) => state.analysisProgress);
+  const currentAnalysis = useAnalysisStore((state) => state.currentAnalysis);
+  const wsService = useAnalysisStore((state) => state.wsService);
+  const analysisError = useAnalysisStore((state) => state.analysisError);
 
+  // Debug logging
+  console.log("🔍 AnalysisProgress component state:", {
+    isAnalyzing,
+    analysisProgress,
+    currentAnalysis: !!currentAnalysis,
+    wsService: !!wsService,
+    analysisError,
+    hasProgress: !!analysisProgress,
+    progressPercent: analysisProgress?.progress_percent,
+  });
+
+  // Show a default state when no analysis is in progress or completed
   if (!isAnalyzing && !currentAnalysis) {
-    return null
+    console.log(
+      "🚫 AnalysisProgress: Showing default state - no analysis in progress or completed"
+    );
+    return (
+      <Card
+        className={cn(
+          "w-full shadow-sm border-0 bg-gradient-to-br from-white to-neutral-50/50",
+          className
+        )}
+      >
+        <CardHeader className="pb-4">
+          <CardTitle className="flex items-center gap-3 text-lg">
+            <div className="w-8 h-8 bg-gradient-to-br from-primary-500 to-primary-600 rounded-lg flex items-center justify-center shadow-sm">
+              <Zap className="w-4 h-4 text-white" />
+            </div>
+            <div>
+              <span>Contract Analysis</span>
+            </div>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="text-center py-8">
+          <FileText className="w-12 h-12 text-neutral-400 mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-neutral-900 mb-2">
+            Ready for Analysis
+          </h3>
+          <p className="text-neutral-500">
+            Upload a document to begin contract analysis.
+          </p>
+        </CardContent>
+      </Card>
+    );
   }
 
-  const currentStepIndex = analysisProgress 
-    ? steps.findIndex(step => step.key === analysisProgress.current_step)
-    : -1
+  console.log("✅ AnalysisProgress: Rendering component");
 
-  const progress = analysisProgress?.progress_percent || 0
-  const isConnected = wsService?.isWebSocketConnected() || false
-  
+  const currentStepIndex = analysisProgress
+    ? steps.findIndex((step) => step.key === analysisProgress.current_step)
+    : -1;
+
+  const progress = analysisProgress?.progress_percent || 0;
+  const isConnected = wsService?.isWebSocketConnected() || false;
+
   const handleCancelAnalysis = () => {
     if (wsService && isAnalyzing) {
-      if (confirm('Are you sure you want to cancel this analysis? This action cannot be undone.')) {
+      if (
+        confirm(
+          "Are you sure you want to cancel this analysis? This action cannot be undone."
+        )
+      ) {
         wsService.cancelAnalysis();
       }
     }
-  }
+  };
 
   return (
-    <Card className={cn('w-full shadow-sm border-0 bg-gradient-to-br from-white to-neutral-50/50', className)}>
+    <Card
+      className={cn(
+        "w-full shadow-sm border-0 bg-gradient-to-br from-white to-neutral-50/50",
+        className
+      )}
+    >
       <CardHeader className="pb-4">
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-3 text-lg">
@@ -114,11 +166,12 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({ className }) => {
               {/* Connection Status Indicator */}
               {isAnalyzing && (
                 <div className="flex items-center gap-1 mt-1">
-                  <div className={cn(
-                    "w-2 h-2 rounded-full",
-                    isConnected ? "bg-green-500" : "bg-red-500"
-                  )} 
-                  title={isConnected ? "Connected" : "Disconnected"}
+                  <div
+                    className={cn(
+                      "w-2 h-2 rounded-full",
+                      isConnected ? "bg-green-500" : "bg-red-500"
+                    )}
+                    title={isConnected ? "Connected" : "Disconnected"}
                   />
                   <span className="text-xs text-neutral-500">
                     {isConnected ? "Connected" : "Disconnected"}
@@ -127,19 +180,17 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({ className }) => {
               )}
             </div>
           </CardTitle>
-          
+
           <div className="flex items-center gap-3">
             {analysisProgress && (
               <div className="text-right">
                 <div className="text-2xl font-bold text-primary-600">
                   {progress}%
                 </div>
-                <div className="text-xs text-neutral-500">
-                  Complete
-                </div>
+                <div className="text-xs text-neutral-500">Complete</div>
               </div>
             )}
-            
+
             {/* Cancel Button */}
             {isAnalyzing && (
               <Button
@@ -160,7 +211,9 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({ className }) => {
         {isAnalyzing && (
           <div className="space-y-2">
             <div className="flex items-center justify-between text-sm">
-              <span className="text-neutral-600 font-medium">Overall Progress</span>
+              <span className="text-neutral-600 font-medium">
+                Overall Progress
+              </span>
               <span className="font-bold text-primary-600">{progress}%</span>
             </div>
             <div className="w-full bg-neutral-200 rounded-full h-2 overflow-hidden">
@@ -168,7 +221,7 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({ className }) => {
                 className="bg-gradient-to-r from-primary-500 to-primary-600 h-2 rounded-full shadow-sm"
                 initial={{ width: 0 }}
                 animate={{ width: `${progress}%` }}
-                transition={{ duration: 0.5, ease: 'easeOut' }}
+                transition={{ duration: 0.5, ease: "easeOut" }}
               />
             </div>
           </div>
@@ -187,7 +240,7 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({ className }) => {
               </div>
               <div>
                 <p className="font-semibold text-primary-900">
-                  {analysisProgress.step_description || 'Processing...'}
+                  {analysisProgress.step_description || "Processing..."}
                 </p>
                 <p className="text-sm text-primary-700">
                   This may take a few moments
@@ -200,11 +253,12 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({ className }) => {
         {/* Step List */}
         <div className="space-y-3">
           {steps.map((step, index) => {
-            const isCompleted = currentStepIndex > index || (!isAnalyzing && currentAnalysis)
-            const isCurrent = currentStepIndex === index && isAnalyzing
-            const isPending = currentStepIndex < index && isAnalyzing
-            
-            const IconComponent = step.icon
+            const isCompleted =
+              currentStepIndex > index || (!isAnalyzing && currentAnalysis);
+            const isCurrent = currentStepIndex === index && isAnalyzing;
+            const isPending = currentStepIndex < index && isAnalyzing;
+
+            const IconComponent = step.icon;
 
             return (
               <motion.div
@@ -213,18 +267,24 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({ className }) => {
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: index * 0.1 }}
                 className={cn(
-                  'flex items-start gap-3 p-3 rounded-xl transition-all duration-200 shadow-sm',
-                  isCompleted && 'bg-gradient-to-r from-success-50 to-success-100/50 border border-success-200',
-                  isCurrent && 'bg-gradient-to-r from-primary-50 to-primary-100/50 border border-primary-200 shadow-md',
-                  isPending && 'bg-neutral-50 border border-neutral-200'
+                  "flex items-start gap-3 p-3 rounded-xl transition-all duration-200 shadow-sm",
+                  isCompleted &&
+                    "bg-gradient-to-r from-success-50 to-success-100/50 border border-success-200",
+                  isCurrent &&
+                    "bg-gradient-to-r from-primary-50 to-primary-100/50 border border-primary-200 shadow-md",
+                  isPending && "bg-neutral-50 border border-neutral-200"
                 )}
               >
-                <div className={cn(
-                  'flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200 shadow-sm',
-                  isCompleted && 'bg-gradient-to-br from-success-500 to-success-600 text-white',
-                  isCurrent && 'bg-gradient-to-br from-primary-500 to-primary-600 text-white',
-                  isPending && 'bg-neutral-300 text-neutral-600'
-                )}>
+                <div
+                  className={cn(
+                    "flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200 shadow-sm",
+                    isCompleted &&
+                      "bg-gradient-to-br from-success-500 to-success-600 text-white",
+                    isCurrent &&
+                      "bg-gradient-to-br from-primary-500 to-primary-600 text-white",
+                    isPending && "bg-neutral-300 text-neutral-600"
+                  )}
+                >
                   {isCompleted ? (
                     <CheckCircle className="w-4 h-4" />
                   ) : isCurrent ? (
@@ -235,20 +295,24 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({ className }) => {
                 </div>
 
                 <div className="flex-1 min-w-0">
-                  <h4 className={cn(
-                    'font-semibold transition-colors duration-200',
-                    isCompleted && 'text-success-900',
-                    isCurrent && 'text-primary-900',
-                    isPending && 'text-neutral-600'
-                  )}>
+                  <h4
+                    className={cn(
+                      "font-semibold transition-colors duration-200",
+                      isCompleted && "text-success-900",
+                      isCurrent && "text-primary-900",
+                      isPending && "text-neutral-600"
+                    )}
+                  >
                     {step.title}
                   </h4>
-                  <p className={cn(
-                    'text-sm mt-1 transition-colors duration-200',
-                    isCompleted && 'text-success-700',
-                    isCurrent && 'text-primary-700',
-                    isPending && 'text-neutral-500'
-                  )}>
+                  <p
+                    className={cn(
+                      "text-sm mt-1 transition-colors duration-200",
+                      isCompleted && "text-success-700",
+                      isCurrent && "text-primary-700",
+                      isPending && "text-neutral-500"
+                    )}
+                  >
                     {step.description}
                   </p>
                 </div>
@@ -266,7 +330,7 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({ className }) => {
                   )}
                 </AnimatePresence>
               </motion.div>
-            )
+            );
           })}
         </div>
 
@@ -284,7 +348,8 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({ className }) => {
               Analysis Complete!
             </h3>
             <p className="text-success-700 mb-4">
-              Your contract has been successfully analyzed. Review the results below.
+              Your contract has been successfully analyzed. Review the results
+              below.
             </p>
             <div className="text-sm text-success-600 font-medium">
               Completed {formatRelativeTime(currentAnalysis.analysis_timestamp)}
@@ -302,9 +367,10 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({ className }) => {
               Analysis Failed
             </h3>
             <p className="text-danger-700 mb-4">
-              {analysisError || "There was an issue analyzing your contract. Please try uploading again."}
+              {analysisError ||
+                "There was an issue analyzing your contract. Please try uploading again."}
             </p>
-            
+
             {/* Connection Status for Errors */}
             {!isConnected && isAnalyzing && (
               <div className="text-sm text-amber-700 bg-gradient-to-r from-amber-50 to-amber-100/50 p-3 rounded-lg border border-amber-200">
@@ -316,19 +382,17 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({ className }) => {
             )}
           </div>
         )}
-        
+
         {/* Real-time Status Info */}
         {isAnalyzing && analysisProgress && (
           <div className="text-xs text-neutral-500 text-center">
             Last updated: {new Date().toLocaleTimeString()}
-            {isConnected && (
-              <span className="ml-2 text-green-600">● Live</span>
-            )}
+            {isConnected && <span className="ml-2 text-green-600">● Live</span>}
           </div>
         )}
       </CardContent>
     </Card>
-  )
-}
+  );
+};
 
-export default AnalysisProgress
+export default AnalysisProgress;

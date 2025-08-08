@@ -264,7 +264,7 @@ const AnalysisPage: React.FC = () => {
                       </h3>
                     </div>
                   </div>
-                  
+
                   <div className="flex items-center justify-between">
                     <div className="flex-1">
                       {cacheStatus === "complete" && (
@@ -409,9 +409,10 @@ const AnalysisPage: React.FC = () => {
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                             <div className="text-center">
                               <div className="text-2xl font-bold text-primary-600">
-                                {currentAnalysis.executive_summary.overall_risk_score.toFixed(
-                                  1
-                                )}
+                                {Number(
+                                  currentAnalysis?.executive_summary
+                                    ?.overall_risk_score ?? 0
+                                ).toFixed(1)}
                               </div>
                               <div className="text-sm text-neutral-500">
                                 Risk Score
@@ -421,14 +422,16 @@ const AnalysisPage: React.FC = () => {
                               <div
                                 className={cn(
                                   "text-2xl font-bold",
-                                  currentAnalysis.executive_summary
-                                    .compliance_status === "compliant"
+                                  (currentAnalysis?.executive_summary
+                                    ?.compliance_status ?? "non-compliant") ===
+                                    "compliant"
                                     ? "text-success-600"
                                     : "text-danger-600"
                                 )}
                               >
-                                {currentAnalysis.executive_summary
-                                  .compliance_status === "compliant"
+                                {(currentAnalysis?.executive_summary
+                                  ?.compliance_status ?? "non-compliant") ===
+                                "compliant"
                                   ? "✓"
                                   : "✗"}
                               </div>
@@ -438,10 +441,8 @@ const AnalysisPage: React.FC = () => {
                             </div>
                             <div className="text-center">
                               <div className="text-2xl font-bold text-warning-600">
-                                {
-                                  currentAnalysis.executive_summary
-                                    .total_recommendations
-                                }
+                                {currentAnalysis?.executive_summary
+                                  ?.total_recommendations ?? 0}
                               </div>
                               <div className="text-sm text-neutral-500">
                                 Recommendations
@@ -450,8 +451,8 @@ const AnalysisPage: React.FC = () => {
                             <div className="text-center">
                               <div className="text-2xl font-bold text-neutral-600">
                                 {Math.round(
-                                  currentAnalysis.executive_summary
-                                    .confidence_level * 100
+                                  (currentAnalysis?.executive_summary
+                                    ?.confidence_level ?? 0) * 100
                                 )}
                                 %
                               </div>
@@ -464,46 +465,47 @@ const AnalysisPage: React.FC = () => {
                       </Card>
 
                       {/* Key Recommendations */}
-                      {currentAnalysis.recommendations.length > 0 && (
-                        <Card>
-                          <CardHeader>
-                            <CardTitle>Key Recommendations</CardTitle>
-                          </CardHeader>
-                          <CardContent>
-                            <div className="space-y-4">
-                              {currentAnalysis.recommendations
-                                .slice(0, 3)
-                                .map((rec, index) => (
-                                  <div
-                                    key={index}
-                                    className="flex items-start gap-3 p-3 bg-neutral-50 rounded-lg"
-                                  >
+                      {Array.isArray(currentAnalysis?.recommendations) &&
+                        currentAnalysis.recommendations.length > 0 && (
+                          <Card>
+                            <CardHeader>
+                              <CardTitle>Key Recommendations</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                              <div className="space-y-4">
+                                {(currentAnalysis?.recommendations ?? [])
+                                  .slice(0, 3)
+                                  .map((rec, index) => (
                                     <div
-                                      className={cn(
-                                        "w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold",
-                                        rec.priority === "critical"
-                                          ? "bg-danger-100 text-danger-700"
-                                          : rec.priority === "high"
-                                          ? "bg-warning-100 text-warning-700"
-                                          : "bg-primary-100 text-primary-700"
-                                      )}
+                                      key={index}
+                                      className="flex items-start gap-3 p-3 bg-neutral-50 rounded-lg"
                                     >
-                                      {index + 1}
+                                      <div
+                                        className={cn(
+                                          "w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold",
+                                          rec.priority === "critical"
+                                            ? "bg-danger-100 text-danger-700"
+                                            : rec.priority === "high"
+                                            ? "bg-warning-100 text-warning-700"
+                                            : "bg-primary-100 text-primary-700"
+                                        )}
+                                      >
+                                        {index + 1}
+                                      </div>
+                                      <div className="flex-1">
+                                        <p className="font-medium text-neutral-900">
+                                          {rec.recommendation}
+                                        </p>
+                                        <p className="text-sm text-neutral-600 mt-1">
+                                          {rec.australian_context}
+                                        </p>
+                                      </div>
                                     </div>
-                                    <div className="flex-1">
-                                      <p className="font-medium text-neutral-900">
-                                        {rec.recommendation}
-                                      </p>
-                                      <p className="text-sm text-neutral-600 mt-1">
-                                        {rec.australian_context}
-                                      </p>
-                                    </div>
-                                  </div>
-                                ))}
-                            </div>
-                          </CardContent>
-                        </Card>
-                      )}
+                                  ))}
+                              </div>
+                            </CardContent>
+                          </Card>
+                        )}
                     </div>
                   )}
 

@@ -282,6 +282,12 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
         data,
       );
 
+      // Validate event data structure
+      if (!data || typeof data !== "object") {
+        console.error("❌ Invalid WebSocket event data:", data);
+        return;
+      }
+
       switch (data.event_type) {
         case "cache_status":
           // Handle initial cache status response
@@ -331,9 +337,59 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
             current_step: data.data.current_step || "",
             progress_percent: data.data.progress_percent || 0,
             step_description: data.data.step_description || "",
-            estimated_time_remaining: data.data.estimated_completion_minutes || undefined,
+            estimated_time_remaining: data.data.estimated_completion_minutes ||
+              undefined,
           };
-          get().updateProgress(progressData);
+          console.log("🔄 Transformed progress data:", progressData);
+          // Update progress and ensure analyzing state is maintained
+          set(() => ({
+            analysisProgress: progressData,
+            isAnalyzing: true,
+            analysisError: null, // Clear any previous errors when we get progress updates
+          }));
+          console.log("✅ Progress updated and isAnalyzing set to true");
+
+          // If backend signals completion via progress event, fetch results now
+          if (
+            data.data?.status === "completed" ||
+            progressData.progress_percent >= 100 ||
+            progressData.current_step === "analysis_complete"
+          ) {
+            const cid = data.data?.contract_id || get().currentContractId;
+            if (cid) {
+              console.log(
+                "🧾 Progress indicates completion, fetching results for:",
+                cid,
+              );
+              apiService.getAnalysisResult(cid)
+                .then((result) => {
+                  console.log(
+                    "✅ Analysis result fetched (via progress complete):",
+                    result,
+                  );
+                  get().setAnalysisResult(result);
+                  get().addRecentAnalysis(result);
+                  set({ isAnalyzing: false, analysisError: null });
+                })
+                .catch((error) => {
+                  console.error(
+                    "❌ Failed to fetch analysis result (via progress complete):",
+                    error,
+                  );
+                  set({
+                    isAnalyzing: false,
+                    analysisError: `Failed to load analysis results: ${
+                      apiService.handleError(error)
+                    }`,
+                  });
+                });
+            } else {
+              console.warn(
+                "⚠️ Completed progress received but no contract_id available to fetch results.",
+              );
+              set({ isAnalyzing: false });
+            }
+          }
           break;
 
         case "analysis_completed":
@@ -534,9 +590,53 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
             current_step: data.data.current_step || "",
             progress_percent: data.data.progress_percent || 0,
             step_description: data.data.step_description || "",
-            estimated_time_remaining: data.data.estimated_completion_minutes || undefined,
+            estimated_time_remaining: data.data.estimated_completion_minutes ||
+              undefined,
           };
-          get().updateProgress(progressData);
+          console.log("🔄 Transformed progress data (contract):", progressData);
+          // Update progress and ensure analyzing state is maintained
+          set(() => ({
+            analysisProgress: progressData,
+            isAnalyzing: true,
+            analysisError: null, // Clear any previous errors when we get progress updates
+          }));
+          console.log(
+            "✅ Progress updated and isAnalyzing set to true (contract)",
+          );
+
+          // If backend signals completion via progress event, fetch results now
+          if (
+            data.data?.status === "completed" ||
+            progressData.progress_percent >= 100 ||
+            progressData.current_step === "analysis_complete"
+          ) {
+            console.log(
+              "🧾 Progress indicates completion (contract), fetching results for:",
+              contractId,
+            );
+            apiService.getAnalysisResult(contractId)
+              .then((result) => {
+                console.log(
+                  "✅ Analysis result fetched (via progress complete contract):",
+                  result,
+                );
+                get().setAnalysisResult(result);
+                get().addRecentAnalysis(result);
+                set({ isAnalyzing: false, analysisError: null });
+              })
+              .catch((error) => {
+                console.error(
+                  "❌ Failed to fetch analysis result (via progress complete contract):",
+                  error,
+                );
+                set({
+                  isAnalyzing: false,
+                  analysisError: `Failed to load analysis results: ${
+                    apiService.handleError(error)
+                  }`,
+                });
+              });
+          }
           break;
 
         case "analysis_completed":
@@ -690,8 +790,17 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
 
       case "miss":
         console.log("🆕 Cache MISS - New document, will start analysis");
-        // Frontend should trigger analysis start
-        set({ isAnalyzing: false, analysisError: null });
+        // Frontend should trigger analysis start automatically to reduce friction
+        set({ isAnalyzing: true, analysisError: null });
+        get()
+          .triggerAnalysisStart()
+          .catch((err) => {
+            console.error("Failed to auto-start analysis on cache miss:", err);
+            set({
+              isAnalyzing: false,
+              analysisError: apiService.handleError(err),
+            });
+          });
         break;
 
       default:
@@ -767,7 +876,12 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
 
   updateProgress: (progress: AnalysisProgressUpdate) => {
     console.log("🔄 Updating analysis progress:", progress);
-    set({ analysisProgress: progress, isAnalyzing: true });
+    // Ensure we're setting both the progress and maintaining the analyzing state
+    set(() => ({
+      analysisProgress: progress,
+      isAnalyzing: true,
+      analysisError: null, // Clear any previous errors when we get progress updates
+    }));
     console.log("✅ Progress updated, isAnalyzing set to true");
   },
 

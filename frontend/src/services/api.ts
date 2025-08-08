@@ -727,11 +727,11 @@ export class WebSocketService {
             console.log(`📨 Parsed WebSocket message:`, message);
 
             // Emit custom event for the store to handle
-            window.dispatchEvent(
-              new CustomEvent("analysis:update", {
-                detail: message,
-              }),
-            );
+            const customEvent = new CustomEvent("analysis:update", {
+              detail: message,
+            });
+            console.log("📡 Dispatching analysis:update event:", customEvent);
+            window.dispatchEvent(customEvent);
           } catch (error) {
             console.error(
               "❌ Failed to parse WebSocket message:",
