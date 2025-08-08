@@ -1,5 +1,8 @@
 """
 Performance benchmarks and load testing for Real2.AI backend.
+
+This module includes LangSmith trace integration for comprehensive performance monitoring
+and analytics as part of Phase 2 and 3 implementations.
 """
 import asyncio
 import time
@@ -14,6 +17,16 @@ from app.services.document_service import DocumentService
 from app.services.gemini_ocr_service import GeminiOCRService
 from app.core.cache_manager import CacheManager
 from app.schema.contract import ContractAnalysisRequest
+from app.core.langsmith_config import (
+    get_langsmith_config,
+    langsmith_trace,
+    langsmith_session,
+    log_trace_info,
+)
+from app.evaluation.langsmith_integration import (
+    LangSmithEvaluationIntegration,
+    LangSmithDatasetConfig,
+)
 
 
 @pytest.fixture
@@ -27,27 +40,84 @@ def mock_services():
     }
 
 
+@pytest.fixture
+def langsmith_integration():
+    """Create LangSmith integration for evaluation tests."""
+    return LangSmithEvaluationIntegration()
+
+
+@pytest.fixture
+def performance_dataset_config():
+    """Create dataset configuration for performance testing."""
+    return LangSmithDatasetConfig(
+        dataset_name=f"performance_tests_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+        description="Performance test traces for analysis",
+        trace_filters={"run_type": "chain", "tags": ["performance_test"]},
+        max_examples=100,
+        quality_threshold=0.8,
+    )
+
+
 class TestPerformanceBenchmarks:
     """Performance benchmarks for critical system components."""
 
     @pytest.mark.asyncio
+    @langsmith_trace(name="performance_test_contract_analysis_latency", run_type="chain")
     async def test_contract_analysis_latency(self, mock_services):
-        """Test contract analysis response time under various loads."""
-        service = mock_services['contract_service']
-        service.analyze_contract.return_value = {
-            'success': True,
-            'analysis_id': 'test-123',
-            'results': {'confidence': 0.85}
-        }
-        
-        # Test single request latency
-        start_time = time.perf_counter()
-        await service.analyze_contract(
-            document_data={'content': 'test'},
-            user_id='user-123',
-            australian_state='NSW',
-            session_id='session-123'
-        )
+        """Test contract analysis response time under various loads with LangSmith tracing."""
+        async with langsmith_session(
+            "contract_analysis_latency_benchmark",
+            test_type="performance",
+            service_under_test="contract_analysis",
+        ) as session:
+            
+            service = mock_services['contract_service']
+            service.analyze_contract.return_value = {
+                'success': True,
+                'analysis_id': 'test-123',
+                'results': {'confidence': 0.85}
+            }
+            
+            # Test single request latency with tracing
+            start_time = time.perf_counter()
+            
+            result = await service.analyze_contract(
+                document_data={'content': 'test'},
+                user_id='user-123',
+                australian_state='NSW',
+                session_id='session-123'
+            )
+            
+            end_time = time.perf_counter()
+            latency = end_time - start_time
+            
+            # Phase 2: Add cost tracking and performance monitoring
+            session.outputs = {
+                "latency_ms": latency * 1000,
+                "result": result,
+                "performance_threshold_met": latency < 5.0,  # 5 second threshold
+                "test_timestamp": datetime.now().isoformat(),
+                "cost_estimate": {
+                    "token_usage": 1000,  # Mock estimate
+                    "estimated_cost_usd": 0.002,
+                },
+                "resource_usage": {
+                    "memory_mb": 50,  # Mock estimate
+                    "cpu_usage_percent": 25,
+                }
+            }
+            
+            # Log trace info for monitoring dashboards (Phase 2)
+            log_trace_info(
+                f"Performance test completed in {latency:.3f}s",
+                {
+                    "test_name": "contract_analysis_latency",
+                    "latency_ms": latency * 1000,
+                    "threshold_met": latency < 5.0,
+                }
+            )
+            
+            assert latency < 30.0, f"Contract analysis took {latency:.3f}s, exceeding 30s threshold"
         latency = time.perf_counter() - start_time
         
         # Single request should complete under 5 seconds
