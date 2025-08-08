@@ -6,6 +6,7 @@ context for background tasks, enabling proper RLS enforcement in async operation
 """
 
 import json
+import os
 import time
 import logging
 from typing import Dict, Any, Optional
@@ -33,6 +34,10 @@ class SecureTaskContextStore:
 
     def __init__(self):
         self.settings = get_settings()
+        logger.info(f"Settings loaded: {type(self.settings)}")
+        logger.info(f"Environment TASK_ENCRYPTION_KEY exists: {'TASK_ENCRYPTION_KEY' in os.environ}")
+        if 'TASK_ENCRYPTION_KEY' in os.environ:
+            logger.info(f"TASK_ENCRYPTION_KEY from env: {os.environ['TASK_ENCRYPTION_KEY'][:10]}...")
         self.redis_client = None
         self.cipher = None
         self.default_ttl = timedelta(hours=1)  # Task context expiry
@@ -52,10 +57,13 @@ class SecureTaskContextStore:
             await self._test_redis_connection()
 
             # Initialize encryption cipher
-            encryption_key = getattr(self.settings, "TASK_ENCRYPTION_KEY", None)
+            encryption_key = getattr(self.settings, "task_encryption_key", None)
+            logger.info(f"Settings task_encryption_key: {encryption_key is not None}")
+            logger.info(f"Available settings attributes: {[attr for attr in dir(self.settings) if 'task' in attr.lower()]}")
+            
             if not encryption_key:
                 # Generate a key for development (NOT for production)
-                logger.warning("No TASK_ENCRYPTION_KEY found, generating temporary key")
+                logger.warning("No task_encryption_key found, generating temporary key")
                 encryption_key = Fernet.generate_key()
 
             if isinstance(encryption_key, str):
@@ -108,11 +116,12 @@ class SecureTaskContextStore:
 
             # Store with TTL
             context_key = f"task_auth:{task_id}"
+            ttl_seconds = int(self.default_ttl.total_seconds())
             self.redis_client.setex(
-                context_key, int(self.default_ttl.total_seconds()), encrypted_context
+                context_key, ttl_seconds, encrypted_context
             )
 
-            logger.debug(f"Stored task context for task: {task_id}")
+            logger.info(f"Stored task context for task: {task_id}, TTL: {ttl_seconds}s, Key: {context_key}")
             return context_key
 
         except Exception as e:
@@ -139,6 +148,10 @@ class SecureTaskContextStore:
             # Get encrypted context from Redis
             encrypted_context = self.redis_client.get(context_key)
             if not encrypted_context:
+                # Check if key exists but is empty vs completely missing
+                exists = self.redis_client.exists(context_key)
+                ttl = self.redis_client.ttl(context_key)
+                logger.error(f"Context retrieval failed - Key exists: {bool(exists)}, TTL: {ttl}, Key: {context_key}")
                 raise ValueError("Task context expired or not found")
 
             # Decrypt and parse
@@ -314,7 +327,17 @@ def user_aware_task(
             if asyncio.iscoroutinefunction(func):
 
                 @wraps(func)
-                def async_wrapper(context_key: str, *args, **kwargs):
+                def async_wrapper(self, *args, **kwargs):
+                    # Extract context_key from args (first argument after self)
+                    logger.info(f"Recovery async_wrapper called with args: {args}")
+                    logger.info(f"Recovery async_wrapper called with kwargs: {kwargs}")
+                    if not args:
+                        raise TypeError("Missing context_key argument")
+                    context_key = args[0]
+                    remaining_args = args[1:]
+                    logger.info(f"Extracted context_key: {context_key}")
+                    logger.info(f"Remaining args: {remaining_args}")
+                    
                     loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(loop)
                     try:
@@ -324,7 +347,7 @@ def user_aware_task(
                                 func,
                                 recovery_priority,
                                 checkpoint_frequency,
-                                *args,
+                                *remaining_args,
                                 **kwargs,
                             )
                         )
@@ -335,7 +358,13 @@ def user_aware_task(
             else:
 
                 @wraps(func)
-                def sync_wrapper(context_key: str, *args, **kwargs):
+                def sync_wrapper(self, *args, **kwargs):
+                    # Extract context_key from args (first argument after self)
+                    if not args:
+                        raise TypeError("Missing context_key argument")
+                    context_key = args[0]
+                    remaining_args = args[1:]
+                    
                     loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(loop)
                     try:
@@ -345,7 +374,7 @@ def user_aware_task(
                                 func,
                                 recovery_priority,
                                 checkpoint_frequency,
-                                *args,
+                                *remaining_args,
                                 **kwargs,
                             )
                         )
@@ -359,12 +388,18 @@ def user_aware_task(
             if asyncio.iscoroutinefunction(func):
                 # Handle async functions
                 @wraps(func)
-                def async_wrapper(context_key: str, *args, **kwargs):
+                def async_wrapper(self, *args, **kwargs):
+                    # Extract context_key from args (first argument after self)
+                    if not args:
+                        raise TypeError("Missing context_key argument")
+                    context_key = args[0]
+                    remaining_args = args[1:]
+                    
                     loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(loop)
                     try:
                         return loop.run_until_complete(
-                            _async_wrapper_async(context_key, func, *args, **kwargs)
+                            _async_wrapper_async(context_key, func, *remaining_args, **kwargs)
                         )
                     finally:
                         loop.close()
@@ -373,12 +408,18 @@ def user_aware_task(
             else:
                 # Handle sync functions
                 @wraps(func)
-                def sync_wrapper(context_key: str, *args, **kwargs):
+                def sync_wrapper(self, *args, **kwargs):
+                    # Extract context_key from args (first argument after self)
+                    if not args:
+                        raise TypeError("Missing context_key argument")
+                    context_key = args[0]
+                    remaining_args = args[1:]
+                    
                     loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(loop)
                     try:
                         return loop.run_until_complete(
-                            _async_wrapper_sync(context_key, func, *args, **kwargs)
+                            _async_wrapper_sync(context_key, func, *remaining_args, **kwargs)
                         )
                     finally:
                         loop.close()
@@ -517,6 +558,10 @@ class TaskContextManager:
         context_key = await self.create_task_context(task_id)
 
         # Launch task with context key as first parameter
+        # The task wrapper expects: context_key, *task_args
+        logger.info(f"Launching task with context_key: {context_key}")
+        logger.info(f"Task args: {args}")
+        logger.info(f"Task kwargs: {kwargs}")
         return celery_task.delay(context_key, *args, **kwargs)
 
 

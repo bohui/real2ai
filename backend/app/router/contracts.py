@@ -675,7 +675,21 @@ async def _start_background_analysis_with_cache(
             f"Starting comprehensive analysis task for contract {contract_id} with progress tracking"
         )
 
-        task = comprehensive_document_analysis.delay(**task_params)
+        # Use task manager to properly launch the task with context
+        from app.core.task_context import task_manager
+
+        await task_manager.initialize()
+        # Extract the task parameters that should be passed to the task
+        task_args = (
+            task_params["document_id"],
+            task_params["analysis_id"],
+            task_params["contract_id"],
+            task_params["user_id"],
+            task_params["analysis_options"],
+        )
+        task = await task_manager.launch_user_task(
+            comprehensive_document_analysis, task_params["analysis_id"], *task_args
+        )
 
         if not task or not task.id:
             raise ValueError("Failed to queue comprehensive analysis")
@@ -795,7 +809,7 @@ async def _get_analysis_status_with_validation(
 
     contract = contract_result.data[0]
     content_hash = contract["content_hash"]
-    
+
     # Verify the user has access to this contract via user_contract_views
     access_result = (
         db_client.table("user_contract_views")
@@ -804,7 +818,7 @@ async def _get_analysis_status_with_validation(
         .eq("user_id", user_id)
         .execute()
     )
-    
+
     if not access_result.data:
         raise ValueError("You don't have access to this contract")
 
@@ -908,23 +922,21 @@ async def get_analysis_progress(
 
         # First get the contract to get its content_hash
         contract_result = await db_client.database.select(
-            "contracts",
-            columns="id, content_hash",
-            filters={"id": contract_id}
+            "contracts", columns="id, content_hash", filters={"id": contract_id}
         )
-        
+
         if not contract_result.get("data"):
             raise ValueError("Contract not found")
-            
+
         content_hash = contract_result["data"][0]["content_hash"]
-        
+
         # Verify user access via user_contract_views
         access_result = await db_client.database.select(
             "user_contract_views",
             columns="id",
-            filters={"content_hash": content_hash, "user_id": str(user.id)}
+            filters={"content_hash": content_hash, "user_id": str(user.id)},
         )
-        
+
         if not access_result.get("data"):
             raise ValueError("You don't have access to this contract")
 
@@ -1008,18 +1020,15 @@ async def get_contract_analysis(
 
         # Get contract by ID to get its content_hash
         contract_result = (
-            db_client.table("contracts")
-            .select("*")
-            .eq("id", contract_id)
-            .execute()
+            db_client.table("contracts").select("*").eq("id", contract_id).execute()
         )
-        
+
         if not contract_result.data:
             raise HTTPException(status_code=404, detail="Contract not found")
-            
+
         contract = contract_result.data[0]
         content_hash = contract["content_hash"]
-        
+
         # Verify user has access to this content through their documents
         doc_result = (
             db_client.table("documents")
@@ -1028,10 +1037,10 @@ async def get_contract_analysis(
             .eq("user_id", user.id)
             .execute()
         )
-        
+
         if not doc_result.data:
             raise HTTPException(status_code=403, detail="Access denied")
-        
+
         # Get analysis results using content_hash
         result = (
             db_client.table("contract_analyses")

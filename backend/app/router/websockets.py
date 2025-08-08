@@ -1048,7 +1048,21 @@ async def _dispatch_analysis_task(
             f"Dispatching comprehensive analysis task for contract {contract_id} with progress tracking"
         )
 
-        task = comprehensive_document_analysis.delay(**task_params)
+        # Use task manager to properly launch the task with context
+        from app.core.task_context import task_manager
+
+        await task_manager.initialize()
+        # Extract the task parameters that should be passed to the task
+        task_args = (
+            task_params["document_id"],
+            task_params["analysis_id"],
+            task_params["contract_id"],
+            task_params["user_id"],
+            task_params["analysis_options"],
+        )
+        task = await task_manager.launch_user_task(
+            comprehensive_document_analysis, task_params["analysis_id"], *task_args
+        )
 
         if not task or not task.id:
             raise ValueError("Failed to queue comprehensive analysis task")

@@ -46,6 +46,9 @@ class Settings(BaseSettings):
 
     # Redis Cache
     redis_url: str = "redis://localhost:6379"
+    
+    # Task Context Encryption
+    task_encryption_key: Optional[str] = None
 
     # File Storage
     max_file_size: int = 52428800  # 50MB
