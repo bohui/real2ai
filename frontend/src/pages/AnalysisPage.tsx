@@ -81,6 +81,19 @@ const AnalysisPage: React.FC = () => {
     "overview" | "risks" | "compliance"
   >("overview");
 
+  // Handle analysis completion - ensure we show results when analysis is complete
+  React.useEffect(() => {
+    if (currentAnalysis && !isAnalyzing) {
+      console.log("✅ Analysis completed, showing results:", currentAnalysis);
+      // Analysis is complete and results are available
+      addNotification({
+        type: "success",
+        title: "Analysis Complete",
+        message: "Your contract analysis is ready! Review the results below.",
+      });
+    }
+  }, [currentAnalysis, isAnalyzing, addNotification]);
+
   // Handle document upload completion - now with smart cache handling
   const handleUploadComplete = async (_documentId: string) => {
     try {

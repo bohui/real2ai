@@ -14,7 +14,11 @@ celery_app = Celery(
     "real2ai",
     broker=settings.redis_url,
     backend=settings.redis_url,
-    include=["app.tasks.ocr_tasks", "app.tasks.background_tasks", "app.tasks.cleanup_tasks"],
+    include=[
+        "app.tasks.ocr_tasks",
+        "app.tasks.background_tasks",
+        "app.tasks.cleanup_tasks",
+    ],
 )
 
 # Configure Celery
@@ -30,6 +34,10 @@ celery_app.conf.update(
     worker_prefetch_multiplier=1,
     task_acks_late=True,
     worker_disable_rate_limits=False,
+    # Connection resilience
+    broker_connection_retry_on_startup=True,
+    broker_connection_max_retries=100,
+    result_backend_always_retry=True,
     task_routes={
         "app.tasks.ocr_tasks.process_document_ocr": {"queue": "ocr_queue"},
         "app.tasks.ocr_tasks.batch_process_documents": {"queue": "batch_queue"},
@@ -54,7 +62,7 @@ celery_app.conf.beat_schedule = {
         "schedule": 1800.0,  # Every 30 minutes
     },
     "cleanup-failed-analyses": {
-        "task": "app.tasks.cleanup_tasks.cleanup_failed_analyses", 
+        "task": "app.tasks.cleanup_tasks.cleanup_failed_analyses",
         "schedule": 86400.0,  # Every 24 hours
     },
     "verify-storage-consistency": {

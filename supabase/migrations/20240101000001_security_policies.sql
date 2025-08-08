@@ -46,6 +46,10 @@ DROP POLICY IF EXISTS "read_if_user_has_hash" ON contracts;
 CREATE POLICY "read_if_user_has_hash"
     ON contracts FOR SELECT
     USING (
+        -- Service role can access all contracts
+        auth.jwt() ->> 'role' = 'service_role'
+        OR
+        -- Users can access contracts they have access to through user_contract_views or documents
         EXISTS (
             SELECT 1 FROM user_contract_views v
             WHERE v.user_id = auth.uid()
@@ -67,6 +71,10 @@ DROP POLICY IF EXISTS "read_if_user_has_hash" ON contract_analyses;
 CREATE POLICY "read_if_user_has_hash"
     ON contract_analyses FOR SELECT
     USING (
+        -- Service role can access all contract analyses
+        auth.jwt() ->> 'role' = 'service_role'
+        OR
+        -- Users can access analyses they have access to through user_contract_views or documents
         EXISTS (
             SELECT 1 FROM user_contract_views v
             WHERE v.user_id = auth.uid()

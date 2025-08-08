@@ -914,7 +914,38 @@ async def _get_analysis_status_with_validation(
 ) -> AnalysisRecord:
     """Get analysis status with validation and retry logic"""
 
-    # First get the contract to get its content_hash
+    # First check if user has access to this contract through user_contract_views
+    access_result = (
+        db_client.table("user_contract_views")
+        .select("content_hash")
+        .eq("user_id", user_id)
+        .execute()
+    )
+
+    user_content_hashes = []
+    if access_result.data:
+        user_content_hashes = [view["content_hash"] for view in access_result.data if view.get("content_hash")]
+
+    # Also check documents table for additional access
+    doc_access_result = (
+        db_client.table("documents")
+        .select("content_hash")
+        .eq("user_id", user_id)
+        .execute()
+    )
+
+    if doc_access_result.data:
+        doc_content_hashes = [doc["content_hash"] for doc in doc_access_result.data if doc.get("content_hash")]
+        user_content_hashes.extend(doc_content_hashes)
+
+    if not user_content_hashes:
+        raise ValueError("You don't have access to any contracts")
+
+    # Remove duplicates
+    user_content_hashes = list(set(user_content_hashes))
+
+    # Now get the contract using the content_hash approach
+    # We need to check if the contract exists and if user has access to it
     contract_result = (
         db_client.table("contracts")
         .select("id, content_hash")
@@ -928,16 +959,8 @@ async def _get_analysis_status_with_validation(
     contract = contract_result.data[0]
     content_hash = contract["content_hash"]
 
-    # Verify the user has access to this contract via user_contract_views
-    access_result = (
-        db_client.table("user_contract_views")
-        .select("id")
-        .eq("content_hash", content_hash)
-        .eq("user_id", user_id)
-        .execute()
-    )
-
-    if not access_result.data:
+    # Verify the user has access to this specific content_hash
+    if content_hash not in user_content_hashes:
         raise ValueError("You don't have access to this contract")
 
     # Get analysis status using content_hash
@@ -1136,6 +1159,36 @@ async def get_contract_analysis(
         if not hasattr(db_client, "_client") or db_client._client is None:
             await db_client.initialize()
 
+        # First check if user has access to this contract through user_contract_views
+        access_result = (
+            db_client.table("user_contract_views")
+            .select("content_hash")
+            .eq("user_id", user.id)
+            .execute()
+        )
+
+        user_content_hashes = []
+        if access_result.data:
+            user_content_hashes = [view["content_hash"] for view in access_result.data if view.get("content_hash")]
+
+        # Also check documents table for additional access
+        doc_access_result = (
+            db_client.table("documents")
+            .select("content_hash")
+            .eq("user_id", user.id)
+            .execute()
+        )
+
+        if doc_access_result.data:
+            doc_content_hashes = [doc["content_hash"] for doc in doc_access_result.data if doc.get("content_hash")]
+            user_content_hashes.extend(doc_content_hashes)
+
+        if not user_content_hashes:
+            raise HTTPException(status_code=403, detail="You don't have access to any contracts")
+
+        # Remove duplicates
+        user_content_hashes = list(set(user_content_hashes))
+
         # Get contract by ID to get its content_hash
         contract_result = (
             db_client.table("contracts").select("*").eq("id", contract_id).execute()
@@ -1147,17 +1200,9 @@ async def get_contract_analysis(
         contract = contract_result.data[0]
         content_hash = contract["content_hash"]
 
-        # Verify user has access to this content through their documents
-        doc_result = (
-            db_client.table("documents")
-            .select("id")
-            .eq("content_hash", content_hash)
-            .eq("user_id", user.id)
-            .execute()
-        )
-
-        if not doc_result.data:
-            raise HTTPException(status_code=403, detail="Access denied")
+        # Verify the user has access to this specific content_hash
+        if content_hash not in user_content_hashes:
+            raise HTTPException(status_code=403, detail="You don't have access to this contract")
 
         # Get analysis results using content_hash
         result = (
@@ -1255,6 +1300,36 @@ async def delete_contract_analysis(
         if not hasattr(db_client, "_client") or db_client._client is None:
             await db_client.initialize()
 
+        # First check if user has access to this contract through user_contract_views
+        access_result = (
+            db_client.table("user_contract_views")
+            .select("content_hash")
+            .eq("user_id", user.id)
+            .execute()
+        )
+
+        user_content_hashes = []
+        if access_result.data:
+            user_content_hashes = [view["content_hash"] for view in access_result.data if view.get("content_hash")]
+
+        # Also check documents table for additional access
+        doc_access_result = (
+            db_client.table("documents")
+            .select("content_hash")
+            .eq("user_id", user.id)
+            .execute()
+        )
+
+        if doc_access_result.data:
+            doc_content_hashes = [doc["content_hash"] for doc in doc_access_result.data if doc.get("content_hash")]
+            user_content_hashes.extend(doc_content_hashes)
+
+        if not user_content_hashes:
+            raise HTTPException(status_code=403, detail="You don't have access to any contracts")
+
+        # Remove duplicates
+        user_content_hashes = list(set(user_content_hashes))
+
         # Get contract by ID to get its content_hash
         contract_result = (
             db_client.table("contracts").select("*").eq("id", contract_id).execute()
@@ -1266,17 +1341,9 @@ async def delete_contract_analysis(
         contract = contract_result.data[0]
         content_hash = contract["content_hash"]
 
-        # Verify user has access to this content through their documents
-        doc_result = (
-            db_client.table("documents")
-            .select("id")
-            .eq("content_hash", content_hash)
-            .eq("user_id", user.id)
-            .execute()
-        )
-
-        if not doc_result.data:
-            raise HTTPException(status_code=403, detail="Access denied")
+        # Verify the user has access to this specific content_hash
+        if content_hash not in user_content_hashes:
+            raise HTTPException(status_code=403, detail="You don't have access to this contract")
 
         # Delete user's view of this contract (contracts and analyses are shared resources)
         view_delete_result = (
@@ -1299,9 +1366,7 @@ async def delete_contract_analysis(
         return {
             "message": "Contract analysis deleted successfully",
             "contract_id": contract_id,
-            "analyses_deleted": (
-                len(analyses_result.data) if analyses_result.data else 0
-            ),
+            "analyses_deleted": 0,  # Contracts and analyses are shared resources, so we don't delete them
         }
 
     except HTTPException:

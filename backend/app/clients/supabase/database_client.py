@@ -672,8 +672,22 @@ class SupabaseDatabaseClient(DatabaseOperations):
                 client_name=self.client_name,
                 original_error=e,
             )
+        except ConnectionRefusedError as e:
+            self.logger.error(f"Connection refused error selecting from table '{table}': {e}")
+            raise ClientConnectionError(
+                f"Database connection refused. Please check if Supabase is running and accessible at {self.config.url}",
+                client_name=self.client_name,
+                original_error=e,
+            )
         except Exception as e:
             self.logger.error(f"Unexpected error selecting from table '{table}': {e}")
+            # Check if this is a connection-related error
+            if "Connection refused" in str(e) or "Errno 111" in str(e):
+                raise ClientConnectionError(
+                    f"Database connection failed. Please check if Supabase is running and accessible at {self.config.url}",
+                    client_name=self.client_name,
+                    original_error=e,
+                )
             raise ClientError(
                 f"Unexpected error selecting from table '{table}': {str(e)}",
                 client_name=self.client_name,

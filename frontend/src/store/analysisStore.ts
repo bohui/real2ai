@@ -901,7 +901,13 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
   },
 
   setAnalysisResult: (result: ContractAnalysisResult) => {
-    set({ currentAnalysis: result });
+    console.log("🎯 Setting analysis result:", result);
+    set({
+      currentAnalysis: result,
+      isAnalyzing: false, // Ensure analyzing state is set to false when results are available
+      analysisError: null, // Clear any errors when results are available
+    });
+    console.log("✅ Analysis result set successfully");
   },
 
   clearCurrentAnalysis: () => {

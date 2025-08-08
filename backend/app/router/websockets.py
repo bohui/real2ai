@@ -92,7 +92,37 @@ async def check_document_cache_status(document_id: str, user_id: str) -> Dict[st
             }
 
         # User has access to documents with this content_hash, now check for contracts
-        # Use user's authenticated client to check for contracts they have access to
+        # Since the user has access to documents with this content_hash, they should be able to access contracts
+        # But we need to ensure the RLS policy is satisfied by checking user_contract_views first
+        user_contract_view_result = await user_client.database.select(
+            "user_contract_views",
+            columns="*",
+            filters={"content_hash": content_hash, "user_id": user_id},
+            order_by="created_at DESC",
+            limit=1,
+        )
+
+        # If no user_contract_views entry exists, create one to ensure access
+        if not user_contract_view_result.get("data"):
+            # Create a user_contract_views entry to ensure access to contracts and analyses
+            try:
+                await user_client.database.create(
+                    "user_contract_views",
+                    {
+                        "user_id": user_id,
+                        "content_hash": content_hash,
+                        "property_address": document.get("property_address"),
+                        "source": "upload",
+                    },
+                )
+                logger.info(
+                    f"Created user_contract_views entry for user {user_id} and content_hash {content_hash}"
+                )
+            except Exception as e:
+                logger.warning(f"Failed to create user_contract_views entry: {e}")
+                # Continue anyway - the user should still have access through documents
+
+        # Now check for contracts - the RLS policy should allow access since user has documents with this content_hash
         contract_result = await user_client.database.select(
             "contracts",
             columns="*",
@@ -436,9 +466,13 @@ async def document_analysis_websocket(
 
                 async def _forward_from_hash(message: Dict[str, Any]):
                     try:
-                        logger.info(f"📨 Forwarding hash pub/sub message to document {document_id}: {message}")
+                        logger.info(
+                            f"📨 Forwarding hash pub/sub message to document {document_id}: {message}"
+                        )
                         await websocket_manager.send_message(document_id, message)
-                        logger.info(f"✅ Successfully forwarded hash message to WebSocket")
+                        logger.info(
+                            f"✅ Successfully forwarded hash message to WebSocket"
+                        )
                     except Exception as forward_error:
                         logger.error(
                             f"Failed to forward hash pub/sub message: {forward_error}"
@@ -447,7 +481,9 @@ async def document_analysis_websocket(
                 await redis_pubsub_service.subscribe_to_progress(
                     content_hash, _forward_from_hash
                 )
-                logger.info(f"🔗 Subscribed to content_hash channel: {content_hash} for document {document_id}")
+                logger.info(
+                    f"🔗 Subscribed to content_hash channel: {content_hash} for document {document_id}"
+                )
         except Exception as extra_sub_error:
             logger.warning(
                 f"Failed to subscribe to additional channels: {extra_sub_error}"
@@ -824,7 +860,7 @@ async def handle_retry_analysis_request(
             columns="status",
             filters={"content_hash": content_hash},
         )
-        
+
         if analysis_status_result.get("data"):
             current_status = analysis_status_result["data"][0]["status"]
             if current_status == "completed":
@@ -941,6 +977,37 @@ async def handle_status_request(
         if not content_hash:
             raise ValueError(f"Document {document_id} has no content hash")
 
+        # Check if user has access to this content_hash through user_contract_views
+        user_contract_view_result = await user_client.database.select(
+            "user_contract_views",
+            columns="*",
+            filters={"content_hash": content_hash, "user_id": user_id},
+            order_by="created_at DESC",
+            limit=1,
+        )
+
+        # If no user_contract_views entry exists, create one to ensure access
+        if not user_contract_view_result.get("data"):
+            # Create a user_contract_views entry to ensure access to contracts and analyses
+            try:
+                await user_client.database.create(
+                    "user_contract_views",
+                    {
+                        "user_id": user_id,
+                        "content_hash": content_hash,
+                        "property_address": doc_result["data"][0].get(
+                            "property_address"
+                        ),
+                        "source": "upload",
+                    },
+                )
+                logger.info(
+                    f"Created user_contract_views entry for user {user_id} and content_hash {content_hash}"
+                )
+            except Exception as e:
+                logger.warning(f"Failed to create user_contract_views entry: {e}")
+                # Continue anyway - the user should still have access through documents
+
         # Get detailed progress from analysis_progress table (user context - RLS enforced)
         progress_result = await user_client.database.select(
             "analysis_progress",
@@ -969,7 +1036,8 @@ async def handle_status_request(
                 },
             }
         else:
-            # Fallback to contract_analyses table (shared resource - no user filter)
+            # Fallback to contract_analyses table (shared resource - RLS enforced)
+            # Since the user has access to documents with this content_hash, they should be able to access analyses
             analysis_result = await user_client.database.select(
                 "contract_analyses",
                 columns="*",
