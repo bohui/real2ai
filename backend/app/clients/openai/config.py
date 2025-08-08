@@ -49,7 +49,8 @@ class OpenAISettings(BaseSettings):
 
     openai_api_key: str
     openai_api_base: Optional[str] = None
-    openai_model_name: str = "gpt-4"
+    # Default to a model known to work on OpenRouter; can be overridden via env
+    openai_model_name: str = DEFAULT_MODEL
     openai_organization: Optional[str] = None
 
     # Model parameters

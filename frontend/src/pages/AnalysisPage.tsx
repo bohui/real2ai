@@ -22,7 +22,6 @@ const AnalysisPage: React.FC = () => {
     isAnalyzing,
     analysisError,
     cacheStatus,
-    retryAvailable,
     triggerAnalysisStart,
     triggerAnalysisRetry,
     clearCurrentAnalysis,
@@ -298,6 +297,7 @@ const AnalysisPage: React.FC = () => {
                     <div className="flex gap-2 ml-4">
                       {currentDocument &&
                         !currentAnalysis &&
+                        cacheStatus !== "complete" &&
                         (cacheStatus === "miss" || cacheStatus === null) && (
                           <Button
                             variant="primary"
@@ -309,19 +309,17 @@ const AnalysisPage: React.FC = () => {
                             Start Analysis
                           </Button>
                         )}
-                      {cacheStatus === "failed" &&
-                        retryAvailable &&
-                        !isAnalyzing && (
-                          <Button
-                            variant="primary"
-                            size="sm"
-                            onClick={handleRetryAnalysis}
-                            disabled={isAnalyzing}
-                            className="whitespace-nowrap shadow-sm hover:shadow-md transition-shadow"
-                          >
-                            Retry Analysis
-                          </Button>
-                        )}
+                      {cacheStatus === "failed" && !isAnalyzing && (
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          onClick={handleRetryAnalysis}
+                          disabled={isAnalyzing}
+                          className="whitespace-nowrap shadow-sm hover:shadow-md transition-shadow"
+                        >
+                          Retry Analysis
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -572,6 +570,20 @@ const AnalysisPage: React.FC = () => {
                   >
                     Retry Analysis
                   </Button>
+                </CardContent>
+              </Card>
+            ) : cacheStatus === "complete" ? (
+              <Card>
+                <CardContent className="text-center py-12">
+                  <div className="w-12 h-12 mx-auto mb-4 flex items-center justify-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
+                  </div>
+                  <h3 className="text-lg font-semibold text-neutral-900 mb-2">
+                    Loading Results
+                  </h3>
+                  <p className="text-neutral-500">
+                    Analysis complete, preparing results...
+                  </p>
                 </CardContent>
               </Card>
             ) : (

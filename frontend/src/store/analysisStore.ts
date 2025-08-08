@@ -32,6 +32,7 @@ interface AnalysisState {
   currentContractId: string | null;
   cacheStatus: "complete" | "in_progress" | "failed" | "miss" | null;
   retryAvailable: boolean; // New field to track if retry is available
+  retryInFlight: boolean; // True after user clicks retry until we receive new progress
 
   // Recent analyses
   recentAnalyses: ContractAnalysisResult[];
@@ -53,7 +54,7 @@ interface AnalysisState {
   disconnectWebSocket: () => void;
   handleCacheStatus: (cacheData: any) => void;
   triggerAnalysisStart: () => Promise<void>;
-  triggerAnalysisRetry: () => Promise<void>;
+  triggerAnalysisRetry: (resumeFromStep?: string) => Promise<void>;
   updateProgress: (progress: AnalysisProgressUpdate) => void;
   setAnalysisResult: (result: ContractAnalysisResult) => void;
   clearCurrentAnalysis: () => void;
@@ -77,6 +78,7 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
   currentContractId: null,
   cacheStatus: null,
   retryAvailable: false,
+  retryInFlight: false,
   recentAnalyses: [],
 
   uploadDocument: async (file: File, contractType: string, state: string) => {
@@ -342,10 +344,13 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
           };
           console.log("🔄 Transformed progress data:", progressData);
           // Update progress and ensure analyzing state is maintained
-          set(() => ({
+          set((prev) => ({
             analysisProgress: progressData,
             isAnalyzing: true,
-            analysisError: null, // Clear any previous errors when we get progress updates
+            // Preserve error after a failure unless a user-initiated retry is in flight
+            analysisError: prev.retryInFlight ? null : prev.analysisError,
+            // First progress after retry clears the retry flag
+            retryInFlight: prev.retryInFlight ? false : prev.retryInFlight,
           }));
           console.log("✅ Progress updated and isAnalyzing set to true");
 
@@ -425,6 +430,7 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
             isAnalyzing: false,
             analysisError: data.data?.error_message || "Analysis failed",
             cacheStatus: "failed",
+            retryInFlight: false,
           });
           break;
 
@@ -595,10 +601,11 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
           };
           console.log("🔄 Transformed progress data (contract):", progressData);
           // Update progress and ensure analyzing state is maintained
-          set(() => ({
+          set((prev) => ({
             analysisProgress: progressData,
             isAnalyzing: true,
-            analysisError: null, // Clear any previous errors when we get progress updates
+            analysisError: prev.retryInFlight ? null : prev.analysisError,
+            retryInFlight: prev.retryInFlight ? false : prev.retryInFlight,
           }));
           console.log(
             "✅ Progress updated and isAnalyzing set to true (contract)",
@@ -688,6 +695,7 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
           set({
             isAnalyzing: false,
             analysisError: data.data?.error_message || "Analysis failed",
+            retryInFlight: false,
           });
           break;
 
@@ -770,7 +778,7 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
           get().setAnalysisResult(analysis_result as ContractAnalysisResult);
           get().addRecentAnalysis(analysis_result as ContractAnalysisResult);
         }
-        set({ isAnalyzing: false, analysisError: null });
+        set({ isAnalyzing: false, analysisError: null, retryInFlight: false });
         break;
 
       case "in_progress":
@@ -785,6 +793,7 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
           isAnalyzing: false,
           analysisError: error_message ||
             "Previous analysis failed - retry available",
+          retryInFlight: false,
         });
         break;
 
@@ -828,19 +837,24 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
     });
   },
 
-  triggerAnalysisRetry: async () => {
+  triggerAnalysisRetry: async (resumeFromStep?: string) => {
     const { wsService, currentDocumentId } = get();
 
     if (!wsService || !currentDocumentId) {
       throw new Error("WebSocket not connected or document ID missing");
     }
 
-    console.log("🔄 Triggering analysis retry via WebSocket...");
+    console.log("🔄 Triggering analysis retry via WebSocket...", {
+      resumeFromStep,
+    });
 
-    set({ isAnalyzing: true, analysisError: null });
+    set({ isAnalyzing: true, analysisError: null, retryInFlight: true });
 
-    // Send retry analysis message via WebSocket
-    wsService.retryAnalysis();
+    // Send retry analysis message via WebSocket with optional resume hint
+    wsService.retryAnalysis(
+      1,
+      resumeFromStep ? { resume_from_step: resumeFromStep } : undefined,
+    );
   },
 
   disconnectWebSocket: () => {
@@ -877,10 +891,11 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
   updateProgress: (progress: AnalysisProgressUpdate) => {
     console.log("🔄 Updating analysis progress:", progress);
     // Ensure we're setting both the progress and maintaining the analyzing state
-    set(() => ({
+    set((prev) => ({
       analysisProgress: progress,
       isAnalyzing: true,
-      analysisError: null, // Clear any previous errors when we get progress updates
+      analysisError: prev.retryInFlight ? null : prev.analysisError,
+      retryInFlight: prev.retryInFlight ? false : prev.retryInFlight,
     }));
     console.log("✅ Progress updated, isAnalyzing set to true");
   },
@@ -902,6 +917,7 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
       analysisError: null,
       cacheStatus: null,
       retryAvailable: false,
+      retryInFlight: false,
     });
   },
 

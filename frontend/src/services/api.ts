@@ -908,10 +908,14 @@ export class WebSocketService {
     });
   }
 
-  retryAnalysis(retryAttempt = 1): void {
+  retryAnalysis(
+    retryAttempt = 1,
+    analysisOptions?: Record<string, unknown>,
+  ): void {
     this.sendMessage({
       type: "retry_analysis",
       retry_attempt: retryAttempt,
+      ...(analysisOptions ? { analysis_options: analysisOptions } : {}),
     });
   }
 

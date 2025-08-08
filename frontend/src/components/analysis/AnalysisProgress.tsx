@@ -73,6 +73,9 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({ className }) => {
   const currentAnalysis = useAnalysisStore((state) => state.currentAnalysis);
   const wsService = useAnalysisStore((state) => state.wsService);
   const analysisError = useAnalysisStore((state) => state.analysisError);
+  const triggerAnalysisRetry = useAnalysisStore(
+    (state) => state.triggerAnalysisRetry
+  );
 
   // Debug logging
   console.log("🔍 AnalysisProgress component state:", {
@@ -85,8 +88,48 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({ className }) => {
     progressPercent: analysisProgress?.progress_percent,
   });
 
+  // Get cache status to handle completion loading state
+  const cacheStatus = useAnalysisStore((state) => state.cacheStatus);
+
   // Show a default state when no analysis is in progress or completed
   if (!isAnalyzing && !currentAnalysis) {
+    // If cache shows complete but no analysis yet, show loading state
+    if (cacheStatus === "complete") {
+      console.log(
+        "⏳ AnalysisProgress: Analysis complete but results loading..."
+      );
+      return (
+        <Card
+          className={cn(
+            "w-full shadow-sm border-0 bg-gradient-to-br from-white to-neutral-50/50",
+            className
+          )}
+        >
+          <CardHeader className="pb-4">
+            <CardTitle className="flex items-center gap-3 text-lg">
+              <div className="w-8 h-8 bg-gradient-to-br from-primary-500 to-primary-600 rounded-lg flex items-center justify-center shadow-sm">
+                <Zap className="w-4 h-4 text-white" />
+              </div>
+              <div>
+                <span>Contract Analysis</span>
+              </div>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="text-center py-8">
+            <div className="w-12 h-12 mx-auto mb-4 flex items-center justify-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
+            </div>
+            <h3 className="text-lg font-semibold text-neutral-900 mb-2">
+              Loading Results
+            </h3>
+            <p className="text-neutral-500">
+              Analysis complete, preparing results...
+            </p>
+          </CardContent>
+        </Card>
+      );
+    }
+
     console.log(
       "🚫 AnalysisProgress: Showing default state - no analysis in progress or completed"
     );
@@ -157,14 +200,14 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({ className }) => {
             <div>
               <div className="flex items-center gap-2">
                 <span>Contract Analysis</span>
-                {isAnalyzing && (
+                {isAnalyzing && !analysisError && (
                   <span className="text-sm font-normal text-neutral-500">
                     - In Progress
                   </span>
                 )}
               </div>
               {/* Connection Status Indicator */}
-              {isAnalyzing && (
+              {isAnalyzing && !analysisError && (
                 <div className="flex items-center gap-1 mt-1">
                   <div
                     className={cn(
@@ -192,7 +235,7 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({ className }) => {
             )}
 
             {/* Cancel Button */}
-            {isAnalyzing && (
+            {isAnalyzing && !analysisError && (
               <Button
                 variant="outline"
                 size="sm"
@@ -208,7 +251,7 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({ className }) => {
 
       <CardContent className="space-y-4 pt-0">
         {/* Overall Progress Bar */}
-        {isAnalyzing && (
+        {isAnalyzing && !analysisError && (
           <div className="space-y-2">
             <div className="flex items-center justify-between text-sm">
               <span className="text-neutral-600 font-medium">
@@ -257,6 +300,8 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({ className }) => {
               currentStepIndex > index || (!isAnalyzing && currentAnalysis);
             const isCurrent = currentStepIndex === index && isAnalyzing;
             const isPending = currentStepIndex < index && isAnalyzing;
+            const failureContext = !!analysisError && !isAnalyzing;
+            const isFailedStep = failureContext && currentStepIndex === index;
 
             const IconComponent = step.icon;
 
@@ -329,6 +374,21 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({ className }) => {
                     </motion.div>
                   )}
                 </AnimatePresence>
+
+                {/* Per-step retry action when failed */}
+                {isFailedStep && (
+                  <div className="flex-shrink-0 ml-3">
+                    <Button
+                      size="sm"
+                      variant="primary"
+                      onClick={() =>
+                        triggerAnalysisRetry(step.key).catch(console.error)
+                      }
+                    >
+                      Retry from here
+                    </Button>
+                  </div>
+                )}
               </motion.div>
             );
           })}
@@ -370,6 +430,15 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({ className }) => {
               {analysisError ||
                 "There was an issue analyzing your contract. Please try uploading again."}
             </p>
+
+            {/* Retry CTA */}
+            <Button
+              variant="primary"
+              onClick={() => triggerAnalysisRetry().catch(console.error)}
+              className="shadow-sm hover:shadow-md transition-shadow"
+            >
+              Retry Analysis
+            </Button>
 
             {/* Connection Status for Errors */}
             {!isConnected && isAnalyzing && (

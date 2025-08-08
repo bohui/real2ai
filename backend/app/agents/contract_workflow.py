@@ -34,6 +34,7 @@ from app.models.workflow_outputs import (
     DocumentQualityMetrics,
     WorkflowValidationOutput,
     ContractTermsValidationOutput,
+    ContractTermsOutput,
 )
 
 # Import categorized tools
@@ -71,11 +72,58 @@ from app.core.prompts.exceptions import (
     PromptContextError,
 )
 
+# Import LangSmith tracing
+from app.core.langsmith_config import (
+    langsmith_trace,
+    langsmith_session,
+    get_langsmith_config,
+    log_trace_info,
+)
+
 logger = logging.getLogger(__name__)
 
 
 class ContractAnalysisWorkflow:
-    """Enhanced LangGraph workflow with PromptManager and OutputParser integration"""
+    """Enhanced LangGraph workflow with PromptManager and OutputParser integration
+
+    Extraction Configuration Options:
+    - method: "llm_structured" (default) or "rule_based"
+    - fallback_to_rule_based: True (default) - fallback to rule-based if LLM fails
+    - use_fragments: True (default) - use fragment-based prompts
+    - confidence_threshold: 0.3 (default) - minimum confidence for extraction
+    - max_retries: 2 (default) - maximum retry attempts
+
+    Use LLM Configuration Options (all default to True):
+    - document_processing: Use LLM for document processing and text extraction
+    - contract_analysis: Use LLM for contract terms extraction
+    - compliance_analysis: Use LLM for compliance analysis
+    - risk_assessment: Use LLM for risk assessment
+    - recommendations: Use LLM for recommendations generation
+    - document_quality: Use LLM for document quality validation
+    - terms_validation: Use LLM for terms completeness validation
+    - final_validation: Use LLM for final output validation
+
+    Example:
+        workflow = ContractAnalysisWorkflow(
+            extraction_config={
+                "method": "llm_structured",
+                "fallback_to_rule_based": True,
+                "use_fragments": True,
+                "confidence_threshold": 0.3,
+                "max_retries": 2,
+            },
+            use_llm_config={
+                "document_processing": True,
+                "contract_analysis": True,
+                "compliance_analysis": True,
+                "risk_assessment": True,
+                "recommendations": True,
+                "document_quality": True,
+                "terms_validation": True,
+                "final_validation": True,
+            }
+        )
+    """
 
     def __init__(
         self,
@@ -85,6 +133,8 @@ class ContractAnalysisWorkflow:
         prompt_manager: Optional[PromptManager] = None,
         enable_validation: bool = True,
         enable_quality_checks: bool = True,
+        extraction_config: Optional[Dict[str, Any]] = None,
+        use_llm_config: Optional[Dict[str, bool]] = None,
     ):
         # Initialize clients (will be set up in initialize method)
         self.openai_client = None
@@ -100,6 +150,27 @@ class ContractAnalysisWorkflow:
 
         self.enable_validation = enable_validation
         self.enable_quality_checks = enable_quality_checks
+
+        # Initialize extraction configuration
+        self.extraction_config = extraction_config or {
+            "method": "llm_structured",  # "llm_structured" or "rule_based"
+            "fallback_to_rule_based": True,
+            "use_fragments": True,
+            "confidence_threshold": 0.3,
+            "max_retries": 2,
+        }
+
+        # Initialize use_llm configuration for each task
+        self.use_llm_config = use_llm_config or {
+            "document_processing": True,  # process_document
+            "contract_analysis": True,  # extract_contract_terms
+            "compliance_analysis": True,  # analyze_australian_compliance
+            "risk_assessment": True,  # assess_contract_risks
+            "recommendations": True,  # generate_recommendations
+            "document_quality": True,  # validate_document_quality_step
+            "terms_validation": True,  # validate_terms_completeness_step
+            "final_validation": True,  # validate_final_output_step
+        }
 
         # Initialize output parsers
         self.risk_parser = create_parser(RiskAnalysisOutput, strict_mode=False)
@@ -118,7 +189,7 @@ class ContractAnalysisWorkflow:
 
         self.workflow = self._create_workflow()
         logger.info(
-            "Enhanced ContractAnalysisWorkflow initialized with PromptManager integration"
+            f"Enhanced ContractAnalysisWorkflow initialized with extraction config: {self.extraction_config} and use_llm config: {self.use_llm_config}"
         )
 
     async def initialize(self):
@@ -232,6 +303,7 @@ class ContractAnalysisWorkflow:
 
         return workflow.compile()
 
+    @langsmith_trace(name="contract_analysis_workflow", run_type="chain")
     async def analyze_contract(
         self, initial_state: RealEstateAgentState
     ) -> RealEstateAgentState:
@@ -274,66 +346,103 @@ class ContractAnalysisWorkflow:
         except Exception as e:
             logger.warning(f"Failed to initialize prompt manager: {e}")
 
-        try:
-            # Run the enhanced workflow with progress tracking
-            final_state = await self.workflow.ainvoke(initial_state)
+        # Create LangSmith session for the entire workflow
+        session_metadata = {
+            "workflow_version": "enhanced_v1.0",
+            "australian_state": initial_state.get("australian_state"),
+            "user_type": initial_state.get("user_type", "buyer"),
+            "contract_type": initial_state.get("contract_type", "purchase_agreement"),
+            "validation_enabled": self.enable_validation,
+            "quality_checks_enabled": self.enable_quality_checks,
+            "total_steps": total_steps,
+            "extraction_config": self.extraction_config,
+            "use_llm_config": self.use_llm_config,
+        }
 
-            # Calculate processing time and update metrics
-            processing_time = time.time() - start_time
-            final_state["processing_time"] = processing_time
+        async with langsmith_session(
+            f"contract_analysis_{initial_state.get('session_id', 'unknown')}",
+            **session_metadata,
+        ) as session:
+            try:
+                # Run the enhanced workflow with progress tracking
+                final_state = await self.workflow.ainvoke(initial_state)
 
-            self._metrics["average_processing_time"] = (
-                self._metrics["average_processing_time"]
-                * (self._metrics["total_analyses"] - 1)
-                + processing_time
-            ) / self._metrics["total_analyses"]
+                # Calculate processing time and update metrics
+                processing_time = time.time() - start_time
+                final_state["processing_time"] = processing_time
 
-            # Calculate overall confidence with enhanced scoring
-            if "analysis_results" not in final_state:
-                final_state["analysis_results"] = {}
+                self._metrics["average_processing_time"] = (
+                    self._metrics["average_processing_time"]
+                    * (self._metrics["total_analyses"] - 1)
+                    + processing_time
+                ) / self._metrics["total_analyses"]
 
-            confidence_result = calculate_overall_confidence_score.invoke(
-                {
-                    "confidence_scores": final_state.get("confidence_scores", {}),
-                    "step_weights": None,  # Use default weights
+                # Calculate overall confidence with enhanced scoring
+                if "analysis_results" not in final_state:
+                    final_state["analysis_results"] = {}
+
+                confidence_result = calculate_overall_confidence_score.invoke(
+                    {
+                        "confidence_scores": final_state.get("confidence_scores", {}),
+                        "step_weights": None,  # Use default weights
+                    }
+                )
+
+                final_state["analysis_results"]["overall_confidence"] = (
+                    confidence_result["overall_confidence"]
+                )
+                final_state["analysis_results"]["confidence_breakdown"] = (
+                    confidence_result["confidence_breakdown"]
+                )
+                final_state["analysis_results"]["quality_assessment"] = (
+                    confidence_result["quality_assessment"]
+                )
+
+                # Mark progress complete
+                final_state["progress"]["percentage"] = 100
+                final_state["progress"]["current_step"] = total_steps
+
+                # Update session with final results
+                session.outputs = {
+                    "processing_time": processing_time,
+                    "overall_confidence": confidence_result["overall_confidence"],
+                    "total_steps_completed": total_steps,
+                    "analysis_status": "completed",
+                    "confidence_breakdown": confidence_result["confidence_breakdown"],
                 }
-            )
 
-            final_state["analysis_results"]["overall_confidence"] = confidence_result[
-                "overall_confidence"
-            ]
-            final_state["analysis_results"]["confidence_breakdown"] = confidence_result[
-                "confidence_breakdown"
-            ]
-            final_state["analysis_results"]["quality_assessment"] = confidence_result[
-                "quality_assessment"
-            ]
+                logger.info(
+                    f"Enhanced workflow completed successfully in {processing_time:.2f}s"
+                )
+                return final_state
 
-            # Mark progress complete
-            final_state["progress"]["percentage"] = 100
-            final_state["progress"]["current_step"] = total_steps
+            except Exception as e:
+                # Handle workflow-level errors
+                processing_time = time.time() - start_time
+                error_state = update_state_step(
+                    initial_state,
+                    "workflow_error",
+                    error=f"Enhanced workflow execution failed: {str(e)}",
+                )
+                error_state["processing_time"] = processing_time
+                error_state["progress"]["percentage"] = 0
 
-            logger.info(
-                f"Enhanced workflow completed successfully in {processing_time:.2f}s"
-            )
-            return final_state
+                # Update session with error information
+                session.error = str(e)
+                session.outputs = {
+                    "processing_time": processing_time,
+                    "analysis_status": "failed",
+                    "error_message": str(e),
+                }
 
-        except Exception as e:
-            # Handle workflow-level errors
-            processing_time = time.time() - start_time
-            error_state = update_state_step(
-                initial_state,
-                "workflow_error",
-                error=f"Enhanced workflow execution failed: {str(e)}",
-            )
-            error_state["processing_time"] = processing_time
-            error_state["progress"]["percentage"] = 0
-
-            logger.error(f"Enhanced workflow failed after {processing_time:.2f}s: {e}")
-            return error_state
+                logger.error(
+                    f"Enhanced workflow failed after {processing_time:.2f}s: {e}"
+                )
+                return error_state
 
     # Enhanced workflow steps
 
+    @langsmith_trace(name="validate_input", run_type="tool")
     def validate_input(self, state: RealEstateAgentState) -> RealEstateAgentState:
         """Enhanced input validation with prompt manager context"""
 
@@ -383,10 +492,10 @@ class ContractAnalysisWorkflow:
         logger.debug("Enhanced input validation completed successfully")
         return update_state_step(state, "input_validated")
 
-    def validate_document_quality_step(
+    async def validate_document_quality_step(
         self, state: RealEstateAgentState
     ) -> RealEstateAgentState:
-        """Validate document quality using enhanced tools"""
+        """Validate document quality using enhanced tools with configurable LLM usage"""
 
         if not self.enable_quality_checks:
             return state
@@ -401,25 +510,47 @@ class ContractAnalysisWorkflow:
             document_data = state["document_data"]
             document_text = document_data.get("content", "")
             document_metadata = document_data.get("metadata", {})
+            use_llm = self.use_llm_config.get("document_quality", True)
 
-            # Validate document quality
-            quality_metrics = validate_document_quality.invoke(
-                {"document_text": document_text, "document_metadata": document_metadata}
-            )
+            # Check if we should use LLM for document quality validation
+            if use_llm and (self.openai_client or self.gemini_client):
+                # Use LLM-based document quality validation
+                quality_metrics = await self._validate_document_quality_with_llm(
+                    document_text, document_metadata
+                )
+            else:
+                # Use rule-based document quality validation
+                quality_metrics = validate_document_quality.invoke(
+                    {
+                        "document_text": document_text,
+                        "document_metadata": document_metadata,
+                    }
+                )
+                quality_metrics = quality_metrics.dict()
 
             # Store quality metrics
-            state["document_quality_metrics"] = quality_metrics.dict()
-            state["confidence_scores"][
-                "document_quality"
-            ] = quality_metrics.text_quality_score
+            state["document_quality_metrics"] = quality_metrics
+            state["confidence_scores"]["document_quality"] = quality_metrics.get(
+                "text_quality_score", 0.5
+            )
 
             # Log quality issues
-            if quality_metrics.issues_identified:
+            if quality_metrics.get("issues_identified"):
                 logger.warning(
-                    f"Document quality issues: {quality_metrics.issues_identified}"
+                    f"Document quality issues: {quality_metrics['issues_identified']}"
                 )
 
-            return update_state_step(state, "document_quality_validated")
+            updated_data = {
+                "document_quality_metrics": quality_metrics,
+                "llm_used": use_llm and (self.openai_client or self.gemini_client),
+            }
+
+            logger.debug(
+                f"Document quality validation completed using {'LLM' if use_llm else 'rule-based'} method"
+            )
+            return update_state_step(
+                state, "document_quality_validated", data=updated_data
+            )
 
         except Exception as e:
             logger.error(f"Document quality validation failed: {e}")
@@ -431,80 +562,11 @@ class ContractAnalysisWorkflow:
                 error=f"Quality validation failed: {str(e)}",
             )
 
-    def process_document(self, state: RealEstateAgentState) -> RealEstateAgentState:
-        """Enhanced document processing with validation"""
-
-        # Update progress
-        state["progress"]["current_step"] += 1
-        state["progress"]["percentage"] = int(
-            (state["progress"]["current_step"] / state["progress"]["total_steps"]) * 100
-        )
-
-        try:
-            document_data = state["document_data"]
-
-            # Use actual extracted text if available
-            if document_data.get("content"):
-                extracted_text = document_data["content"]
-                extraction_method = "pre_processed"
-                extraction_confidence = 0.95
-            else:
-                # Fallback to simulation if no content available
-                extracted_text = self._simulate_document_extraction(document_data)
-                extraction_method = "simulation"
-                extraction_confidence = 0.7
-
-            # Enhanced text quality assessment
-            if self.enable_quality_checks:
-                text_quality = self._assess_text_quality(extracted_text)
-            else:
-                text_quality = {"score": 0.8, "issues": []}
-
-            # Validate extracted text quality
-            if not extracted_text or len(extracted_text.strip()) < 100:
-                return update_state_step(
-                    state,
-                    "document_processing_failed",
-                    error="Insufficient text content extracted from document",
-                )
-
-            # Update confidence scores
-            state["confidence_scores"]["document_processing"] = (
-                extraction_confidence * text_quality["score"]
-            )
-
-            # Update state with extracted text and enhanced metadata
-            updated_data = {
-                "document_metadata": {
-                    "extracted_text": extracted_text,
-                    "extraction_method": extraction_method,
-                    "extraction_confidence": extraction_confidence,
-                    "text_quality": text_quality,
-                    "character_count": len(extracted_text),
-                    "word_count": len(extracted_text.split()),
-                    "processing_timestamp": datetime.now(UTC).isoformat(),
-                    "enhanced_processing": True,
-                },
-                "parsing_status": ProcessingStatus.COMPLETED,
-            }
-
-            logger.debug(
-                f"Enhanced document processing completed: {len(extracted_text)} chars extracted"
-            )
-            return update_state_step(state, "document_processed", data=updated_data)
-
-        except Exception as e:
-            logger.error(f"Enhanced document processing failed: {e}")
-            return update_state_step(
-                state,
-                "document_processing_failed",
-                error=f"Enhanced document processing failed: {str(e)}",
-            )
-
-    def extract_contract_terms(
+    @langsmith_trace(name="extract_contract_terms", run_type="chain")
+    async def extract_contract_terms(
         self, state: RealEstateAgentState
     ) -> RealEstateAgentState:
-        """Enhanced contract terms extraction with validation"""
+        """Enhanced contract terms extraction using contract_structure.md with configurable methods"""
 
         # Update progress
         state["progress"]["current_step"] += 1
@@ -515,89 +577,399 @@ class ContractAnalysisWorkflow:
         try:
             document_text = state["document_metadata"]["extracted_text"]
             australian_state = state["australian_state"]
+            contract_type = state.get("contract_type", "purchase_agreement")
+            user_experience = state.get("user_experience", "novice")
+            user_type = state.get("user_type", "buyer")
 
-            # Identify contract template type first
-            template_identification = None
-            try:
-                template_identification = identify_contract_template_type.invoke(
-                    {"document_text": document_text, "state": australian_state}
-                )
-                logger.debug(
-                    f"Template identified: {template_identification.get('primary_template_type', 'unknown')}"
-                )
-            except Exception as template_error:
-                logger.warning(f"Template identification failed: {str(template_error)}")
-                template_identification = {
-                    "primary_template_type": "unknown",
-                    "validation_issues": [],
-                    "compliance_notes": [],
-                }
+            # Check if we should use LLM for contract analysis
+            use_llm = self.use_llm_config.get("contract_analysis", True)
 
-            # Use the Australian contract tools with enhanced error handling
-            try:
-                extraction_result = extract_australian_contract_terms.invoke(
-                    {"document_text": document_text, "state": australian_state}
+            if use_llm and (self.openai_client or self.gemini_client):
+                # Use LLM-based extraction with contract_structure.md template
+                extraction_result = await self._extract_terms_llm(
+                    document_text,
+                    australian_state,
+                    contract_type,
+                    user_experience,
+                    user_type,
                 )
-                # Add template information to extraction result
-                if template_identification:
-                    extraction_result["template_analysis"] = template_identification
-                logger.debug(
-                    f"Terms extracted using Australian tools with confidence: {extraction_result.get('overall_confidence', 0)}"
-                )
-            except Exception as tool_error:
-                logger.warning(f"Australian tools failed, using fallback: {tool_error}")
-                # Fallback extraction if tool fails
-                extraction_result = self._fallback_term_extraction(
+            else:
+                # Use rule-based extraction as fallback
+                extraction_result = self._extract_terms_rule_based(
                     document_text, australian_state
-                )
-                extraction_result["extraction_method"] = "fallback"
-                if template_identification:
-                    extraction_result["template_analysis"] = template_identification
-
-            # Enhanced validation of extraction quality
-            if extraction_result["overall_confidence"] < 0.3:
-                self._metrics["validation_failures"] += 1
-                return update_state_step(
-                    state,
-                    "term_extraction_failed",
-                    error="Low confidence in term extraction",
                 )
 
             # Store results in state with enhanced metadata
-            state["confidence_scores"]["term_extraction"] = extraction_result[
-                "overall_confidence"
-            ]
+            state["confidence_scores"]["term_extraction"] = extraction_result.get(
+                "overall_confidence", 0.5
+            )
 
             updated_data = {
-                "contract_terms": extraction_result["terms"],
+                "contract_terms": extraction_result.get("terms", {}),
                 "extraction_metadata": {
                     "confidence_scores": extraction_result.get("confidence_scores", {}),
                     "state_requirements": extraction_result.get(
                         "state_requirements", {}
                     ),
-                    "extraction_method": extraction_result.get(
-                        "extraction_method", "standard"
-                    ),
-                    "enhanced_extraction": True,
+                    "extraction_method": "llm_structured" if use_llm else "rule_based",
+                    "enhanced_extraction": use_llm,
                     "extraction_timestamp": datetime.now(UTC).isoformat(),
+                    "llm_used": use_llm and (self.openai_client or self.gemini_client),
                 },
             }
 
-            logger.debug("Enhanced contract terms extraction completed successfully")
+            logger.debug(
+                f"Contract terms extraction completed using {'LLM' if use_llm else 'rule-based'} method"
+            )
             return update_state_step(state, "terms_extracted", data=updated_data)
 
         except Exception as e:
-            logger.error(f"Enhanced term extraction failed: {e}")
+            logger.error(f"Contract terms extraction failed: {e}")
             return update_state_step(
                 state,
                 "term_extraction_failed",
-                error=f"Enhanced term extraction failed: {str(e)}",
+                error=f"Contract terms extraction failed: {str(e)}",
             )
 
-    def validate_terms_completeness_step(
+    def _get_extraction_method(self, state: RealEstateAgentState) -> str:
+        """Determine extraction method based on configuration and state"""
+        # Check extraction configuration first
+        if hasattr(self, "extraction_config") and self.extraction_config:
+            configured_method = self.extraction_config.get("method", "llm_structured")
+
+            # If configured for LLM but no clients available, fallback to rule-based
+            if configured_method == "llm_structured" and not (
+                self.openai_client or self.gemini_client
+            ):
+                logger.warning(
+                    "LLM extraction configured but no clients available, falling back to rule-based"
+                )
+                return "rule_based"
+
+            return configured_method
+
+        # Default to LLM if available, otherwise rule-based
+        if self.openai_client or self.gemini_client:
+            return "llm_structured"
+        else:
+            return "rule_based"
+
+    async def _extract_terms_llm(
+        self,
+        document_text: str,
+        australian_state: str,
+        contract_type: str,
+        user_experience: str,
+        user_type: str,
+    ) -> Dict[str, Any]:
+        """Extract contract terms using LLM with contract_structure.md template and fragments"""
+
+        try:
+            # Create enhanced context for contract structure analysis
+            extraction_context = PromptContext(
+                context_type=ContextType.CONTRACT_ANALYSIS,
+                variables={
+                    "extracted_text": document_text,
+                    "australian_state": australian_state,
+                    "contract_type": contract_type,
+                    "user_type": user_type,
+                    "user_experience_level": user_experience,
+                    "complexity": "standard",
+                    "analysis_depth": "comprehensive",
+                },
+            )
+
+            # Use the existing contract_structure.md template with fragments
+            try:
+                # Check if we should use fragments based on configuration
+                if self.extraction_config.get("use_fragments", True):
+                    # Use fragment-based orchestration
+                    rendered_prompt = await self.prompt_manager.render_composed(
+                        composition_name="contract_analysis_complete",
+                        context=extraction_context,
+                        service_name="contract_analysis_workflow",
+                    )
+                    logger.debug(
+                        "Contract structure analysis with fragments rendered successfully"
+                    )
+                else:
+                    # Use direct template rendering
+                    rendered_prompt = await self.prompt_manager.render(
+                        template_name="analysis/contract_structure",
+                        context=extraction_context,
+                        service_name="contract_analysis_workflow",
+                    )
+                    logger.debug(
+                        "Contract structure analysis prompt rendered successfully"
+                    )
+
+            except (
+                PromptNotFoundError,
+                PromptValidationError,
+                PromptContextError,
+            ) as e:
+                logger.warning(f"Prompt manager failed, using fallback: {e}")
+                # Fallback to manual prompt creation
+                rendered_prompt = self._create_contract_structure_prompt(
+                    document_text,
+                    australian_state,
+                    contract_type,
+                    user_experience,
+                    user_type,
+                )
+
+            # Get LLM response using new client architecture with fallback
+            try:
+                system_message = "You are an expert Australian property lawyer analyzing contract structure."
+                llm_response = await self._generate_content_with_fallback(
+                    rendered_prompt, system_message, use_gemini_fallback=True
+                )
+
+                # Parse JSON response
+                try:
+                    import json
+
+                    extraction_result = json.loads(llm_response)
+
+                    # Validate and structure the result
+                    structured_result = self._structure_extraction_result(
+                        extraction_result
+                    )
+                    structured_result["extraction_method"] = "llm_structured"
+                    structured_result["overall_confidence"] = (
+                        self._calculate_extraction_confidence(structured_result)
+                    )
+
+                    self._metrics["successful_parses"] += 1
+                    logger.debug(f"Contract structure analysis completed successfully")
+
+                    return structured_result
+
+                except json.JSONDecodeError as json_error:
+                    logger.warning(f"JSON parsing failed: {json_error}")
+                    # Fallback to rule-based extraction
+                    return self._extract_terms_rule_based(
+                        document_text, australian_state
+                    )
+
+            except Exception as llm_error:
+                logger.error(f"LLM contract structure analysis failed: {llm_error}")
+                # Fallback to rule-based extraction
+                return self._extract_terms_rule_based(document_text, australian_state)
+
+        except Exception as extraction_error:
+            logger.warning(f"LLM extraction failed, using fallback: {extraction_error}")
+            return self._extract_terms_rule_based(document_text, australian_state)
+
+    def _extract_terms_rule_based(
+        self, document_text: str, australian_state: str
+    ) -> Dict[str, Any]:
+        """Extract contract terms using rule-based methods"""
+        try:
+            # Use existing rule-based extraction tools
+            extraction_result = extract_australian_contract_terms.invoke(
+                {"document_text": document_text, "state": australian_state}
+            )
+
+            # Structure the result to match the expected format
+            structured_result = {
+                "terms": extraction_result.get("terms", {}),
+                "confidence_scores": extraction_result.get("confidence_scores", {}),
+                "state_requirements": extraction_result.get("state_requirements", {}),
+                "extraction_method": "rule_based",
+                "overall_confidence": extraction_result.get("overall_confidence", 0.3),
+                "missing_terms": [],
+                "extraction_notes": ["Extracted using rule-based patterns"],
+            }
+
+            return structured_result
+
+        except Exception as e:
+            logger.error(f"Rule-based extraction failed: {e}")
+            return {
+                "terms": {},
+                "confidence_scores": {},
+                "state_requirements": {},
+                "extraction_method": "rule_based",
+                "overall_confidence": 0.1,
+                "missing_terms": ["extraction_failed"],
+                "extraction_notes": [f"Extraction failed: {str(e)}"],
+            }
+
+    def _structure_extraction_result(
+        self, raw_result: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Structure the raw extraction result to match ContractTermsOutput format"""
+        try:
+            # Extract key terms from the structured analysis
+            terms = {}
+
+            # Financial terms
+            if "financial_terms" in raw_result:
+                financial = raw_result["financial_terms"]
+                terms["purchase_price"] = financial.get("purchase_price")
+                terms["deposit_amount"] = financial.get("deposit", {}).get("amount")
+                terms["settlement_date"] = raw_result.get("settlement_terms", {}).get(
+                    "settlement_date"
+                )
+
+            # Property details
+            if "property_details" in raw_result:
+                property_details = raw_result["property_details"]
+                terms["property_address"] = property_details.get("address")
+                terms["legal_description"] = property_details.get("legal_description")
+                terms["property_type"] = property_details.get("property_type")
+
+            # Party information
+            if "parties" in raw_result:
+                parties = raw_result["parties"]
+                terms["vendor_details"] = parties.get("vendor", {})
+                terms["purchaser_details"] = parties.get("purchaser", {})
+
+            # Special conditions
+            if "special_conditions" in raw_result:
+                special = raw_result["special_conditions"]
+                terms["special_conditions"] = special.get("conditions_list", [])
+
+            # Conditions and warranties
+            if "conditions_and_warranties" in raw_result:
+                conditions = raw_result["conditions_and_warranties"]
+                terms["finance_clause"] = conditions.get("finance_clause", {})
+                terms["building_pest_clause"] = conditions.get(
+                    "building_inspection", {}
+                )
+                terms["cooling_off_period"] = conditions.get(
+                    "cooling_off_period", {}
+                ).get("duration")
+
+            # Calculate confidence scores
+            confidence_scores = {}
+            for key, value in terms.items():
+                if value is not None:
+                    confidence_scores[key] = (
+                        0.8  # High confidence for structured extraction
+                    )
+                else:
+                    confidence_scores[key] = 0.0
+
+            return {
+                "terms": terms,
+                "confidence_scores": confidence_scores,
+                "state_requirements": raw_result.get("legal_and_compliance", {}),
+                "extraction_method": "llm_structured",
+                "overall_confidence": self._calculate_extraction_confidence(
+                    {"terms": terms, "confidence_scores": confidence_scores}
+                ),
+                "missing_terms": [k for k, v in terms.items() if v is None],
+                "extraction_notes": ["Extracted using LLM-based structured analysis"],
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to structure extraction result: {e}")
+            return {
+                "terms": {},
+                "confidence_scores": {},
+                "state_requirements": {},
+                "extraction_method": "llm_structured",
+                "overall_confidence": 0.3,
+                "missing_terms": ["structuring_failed"],
+                "extraction_notes": [f"Structuring failed: {str(e)}"],
+            }
+
+    def _calculate_extraction_confidence(self, result: Dict[str, Any]) -> float:
+        """Calculate overall confidence score for extraction"""
+        try:
+            confidence_scores = result.get("confidence_scores", {})
+            if not confidence_scores:
+                return 0.3
+
+            # Calculate average confidence
+            total_confidence = sum(confidence_scores.values())
+            avg_confidence = total_confidence / len(confidence_scores)
+
+            # Boost confidence if we have key terms
+            key_terms = ["purchase_price", "property_address", "settlement_date"]
+            key_terms_found = sum(
+                1 for term in key_terms if result.get("terms", {}).get(term)
+            )
+            key_terms_boost = min(0.2, key_terms_found * 0.05)
+
+            return min(1.0, avg_confidence + key_terms_boost)
+
+        except Exception:
+            return 0.3
+
+    def _create_contract_structure_prompt(
+        self,
+        document_text: str,
+        australian_state: str,
+        contract_type: str,
+        user_experience: str,
+        user_type: str,
+    ) -> str:
+        """Create fallback contract structure analysis prompt"""
+        return f"""
+        Analyze this Australian {contract_type} contract from {australian_state} for a {user_type} with {user_experience} experience.
+        
+        CONTRACT TEXT:
+        {document_text[:6000]}
+        
+        Extract structured information following this JSON schema:
+        {{
+            "document_metadata": {{
+                "contract_type": "{contract_type}",
+                "state_jurisdiction": "{australian_state}",
+                "document_date": "date if identifiable or null",
+                "document_quality": "assess text clarity: excellent/good/fair/poor"
+            }},
+            "parties": {{
+                "vendor": {{
+                    "name": "full legal name or entity name",
+                    "address": "registered address if provided"
+                }},
+                "purchaser": {{
+                    "name": "full legal name(s)",
+                    "address": "address if provided"
+                }}
+            }},
+            "property_details": {{
+                "address": "complete property address including postcode",
+                "legal_description": "lot/plan details or title reference",
+                "property_type": "house/unit/townhouse/land/commercial/industrial"
+            }},
+            "financial_terms": {{
+                "purchase_price": "numeric value only (remove $ and commas)",
+                "deposit": {{
+                    "amount": "numeric value only",
+                    "percentage": "calculated percentage of purchase price"
+                }}
+            }},
+            "settlement_terms": {{
+                "settlement_date": "specific settlement date if fixed"
+            }},
+            "conditions_and_warranties": {{
+                "cooling_off_period": {{
+                    "applicable": true/false,
+                    "duration": "number of business days"
+                }},
+                "finance_clause": {{
+                    "applicable": true/false,
+                    "approval_period": "days for finance approval"
+                }},
+                "building_inspection": {{
+                    "required": true/false,
+                    "period": "inspection period in days"
+                }}
+            }}
+        }}
+        
+        Return ONLY the JSON structure with extracted information. Use null for missing information.
+        """
+
+    async def validate_terms_completeness_step(
         self, state: RealEstateAgentState
     ) -> RealEstateAgentState:
-        """Validate completeness of extracted terms"""
+        """Validate contract terms completeness with configurable LLM usage"""
 
         if not self.enable_validation:
             return state
@@ -609,50 +981,56 @@ class ContractAnalysisWorkflow:
         )
 
         try:
-            contract_terms = state.get("contract_terms", {})
+            contract_terms = state["contract_terms"]
             australian_state = state["australian_state"]
+            use_llm = self.use_llm_config.get("terms_validation", True)
 
-            # Validate terms completeness
-            validation_result = validate_contract_terms_completeness.invoke(
-                {
-                    "contract_terms": contract_terms,
-                    "australian_state": australian_state,
-                    "contract_type": state.get("contract_type", "purchase_agreement"),
-                }
-            )
+            # Check if we should use LLM for terms validation
+            if use_llm and (self.openai_client or self.gemini_client):
+                # Use LLM-based terms validation
+                validation_result = await self._validate_terms_completeness_with_llm(
+                    contract_terms, australian_state
+                )
+            else:
+                # Use rule-based terms validation
+                validation_result = validate_contract_terms_completeness.invoke(
+                    {"contract_terms": contract_terms, "state": australian_state}
+                )
+                validation_result = validation_result.dict()
 
             # Store validation results
-            state["terms_validation"] = validation_result.dict()
-            state["confidence_scores"][
-                "terms_completeness"
-            ] = validation_result.validation_confidence
+            state["terms_validation"] = validation_result
+            state["confidence_scores"]["terms_validation"] = validation_result.get(
+                "validation_score", 0.5
+            )
 
-            # Log validation issues
-            if validation_result.missing_mandatory_terms:
-                logger.warning(
-                    f"Missing mandatory terms: {validation_result.missing_mandatory_terms}"
-                )
-            if validation_result.incomplete_terms:
-                logger.warning(
-                    f"Incomplete terms: {validation_result.incomplete_terms}"
-                )
+            updated_data = {
+                "terms_validation": validation_result,
+                "llm_used": use_llm and (self.openai_client or self.gemini_client),
+            }
 
-            return update_state_step(state, "terms_completeness_validated")
+            logger.debug(
+                f"Terms completeness validation completed using {'LLM' if use_llm else 'rule-based'} method"
+            )
+            return update_state_step(
+                state, "terms_validation_completed", data=updated_data
+            )
 
         except Exception as e:
             logger.error(f"Terms completeness validation failed: {e}")
             # Continue workflow with warning
-            state["confidence_scores"]["terms_completeness"] = 0.6
+            state["confidence_scores"]["terms_validation"] = 0.5
             return update_state_step(
                 state,
-                "terms_completeness_validation_warning",
+                "terms_validation_warning",
                 error=f"Terms validation failed: {str(e)}",
             )
 
-    def analyze_australian_compliance(
+    @langsmith_trace(name="analyze_australian_compliance", run_type="chain")
+    async def analyze_australian_compliance(
         self, state: RealEstateAgentState
     ) -> RealEstateAgentState:
-        """Enhanced Australian compliance analysis"""
+        """Enhanced Australian compliance analysis with configurable LLM usage"""
 
         # Update progress
         state["progress"]["current_step"] += 1
@@ -663,126 +1041,40 @@ class ContractAnalysisWorkflow:
         try:
             contract_terms = state["contract_terms"]
             australian_state = state["australian_state"]
+            use_llm = self.use_llm_config.get("compliance_analysis", True)
+
+            # Initialize compliance tracking
             compliance_confidence = 0.0
             compliance_components = 0
 
-            # Enhanced validation with step validation
-            if self.enable_validation:
-                try:
-                    step_validation = validate_workflow_step.invoke(
-                        {
-                            "step_name": "compliance_check",
-                            "step_data": {
-                                "contract_terms": contract_terms,
-                                "australian_state": australian_state,
-                            },
-                            "validation_criteria": {"min_score": 0.7},
-                        }
-                    )
-                    state["compliance_step_validation"] = step_validation.dict()
-                except Exception as e:
-                    logger.warning(f"Step validation failed: {e}")
-
-            # Validate cooling-off period with enhanced error handling
-            try:
-                cooling_off_result = validate_cooling_off_period.invoke(
-                    {"contract_terms": contract_terms, "state": australian_state}
+            # Check if we should use LLM for compliance analysis
+            if use_llm and (self.openai_client or self.gemini_client):
+                # Use LLM-based compliance analysis
+                compliance_check = await self._analyze_compliance_with_llm(
+                    contract_terms, australian_state
                 )
-                compliance_confidence += 0.9
-                compliance_components += 1
-                logger.debug(
-                    f"Cooling-off validation completed: {cooling_off_result.get('compliant', False)}"
+                compliance_confidence = compliance_check.get(
+                    "compliance_confidence", 0.7
                 )
-            except Exception as e:
-                logger.warning(f"Cooling-off validation failed: {e}")
-                cooling_off_result = {
-                    "compliant": False,
-                    "error": f"Cooling-off validation failed: {str(e)}",
-                    "warnings": ["Unable to validate cooling-off period"],
-                }
-
-            # Calculate stamp duty with enhanced error handling
-            stamp_duty_result = None
-            purchase_price = contract_terms.get("purchase_price", 0)
-            if purchase_price > 0:
-                try:
-                    stamp_duty_result = calculate_stamp_duty.invoke(
-                        {
-                            "purchase_price": purchase_price,
-                            "state": australian_state,
-                            "is_first_home": state["user_preferences"].get(
-                                "is_first_home_buyer", False
-                            ),
-                            "is_foreign_buyer": state["user_preferences"].get(
-                                "is_foreign_buyer", False
-                            ),
-                        }
-                    )
-                    compliance_confidence += 0.95
-                    compliance_components += 1
-                    logger.debug(
-                        f"Stamp duty calculated: ${stamp_duty_result.total_duty}"
-                    )
-                except Exception as e:
-                    logger.warning(f"Stamp duty calculation failed: {e}")
-                    stamp_duty_result = {
-                        "error": f"Stamp duty calculation failed: {str(e)}",
-                        "total_duty": 0,
-                        "state": australian_state,
-                    }
-
-            # Analyze special conditions with enhanced error handling
-            try:
-                special_conditions_result = analyze_special_conditions.invoke(
-                    {"contract_terms": contract_terms, "state": australian_state}
-                )
-                compliance_confidence += 0.8
-                compliance_components += 1
-                logger.debug(
-                    f"Special conditions analyzed: {len(special_conditions_result)} conditions"
-                )
-            except Exception as e:
-                logger.warning(f"Special conditions analysis failed: {e}")
-                special_conditions_result = {
-                    "error": f"Special conditions analysis failed: {str(e)}",
-                    "conditions": [],
-                }
-
-            # Calculate average compliance confidence
-            if compliance_components > 0:
-                compliance_confidence = compliance_confidence / compliance_components
             else:
-                compliance_confidence = 0.5  # Default if all failed
-
-            # Compile enhanced compliance check
-            compliance_check = {
-                "state_compliance": cooling_off_result.get("compliant", False),
-                "cooling_off_validation": cooling_off_result,
-                "stamp_duty_calculation": stamp_duty_result,
-                "special_conditions_analysis": special_conditions_result,
-                "compliance_issues": [],
-                "warnings": cooling_off_result.get("warnings", []),
-                "compliance_confidence": compliance_confidence,
-                "enhanced_analysis": True,
-                "analysis_timestamp": datetime.now(UTC).isoformat(),
-            }
-
-            # Add compliance issues with enhanced detection
-            if not cooling_off_result.get("compliant", False):
-                compliance_check["compliance_issues"].append(
-                    "Cooling-off period non-compliant"
+                # Use rule-based compliance analysis
+                compliance_check = self._analyze_compliance_rule_based(
+                    contract_terms, australian_state
                 )
-
-            if stamp_duty_result and stamp_duty_result.get("error"):
-                compliance_check["compliance_issues"].append(
-                    "Stamp duty calculation incomplete"
+                compliance_confidence = compliance_check.get(
+                    "compliance_confidence", 0.5
                 )
 
             state["confidence_scores"]["compliance_check"] = compliance_confidence
 
-            updated_data = {"compliance_check": compliance_check}
+            updated_data = {
+                "compliance_check": compliance_check,
+                "llm_used": use_llm and (self.openai_client or self.gemini_client),
+            }
 
-            logger.debug("Enhanced compliance analysis completed successfully")
+            logger.debug(
+                f"Enhanced compliance analysis completed using {'LLM' if use_llm else 'rule-based'} method"
+            )
             return update_state_step(state, "compliance_analyzed", data=updated_data)
 
         except Exception as e:
@@ -793,10 +1085,11 @@ class ContractAnalysisWorkflow:
                 error=f"Enhanced compliance analysis failed: {str(e)}",
             )
 
+    @langsmith_trace(name="assess_contract_risks", run_type="chain")
     async def assess_contract_risks(
         self, state: RealEstateAgentState
     ) -> RealEstateAgentState:
-        """Enhanced risk assessment using PromptManager and OutputParser"""
+        """Enhanced risk assessment using PromptManager and OutputParser with configurable LLM usage"""
 
         # Update progress
         state["progress"]["current_step"] += 1
@@ -807,97 +1100,33 @@ class ContractAnalysisWorkflow:
         try:
             contract_terms = state["contract_terms"]
             compliance_check = state["compliance_check"]
+            use_llm = self.use_llm_config.get("risk_assessment", True)
 
-            # Create enhanced context for risk assessment
-            risk_context = PromptContext(
-                context_type=ContextType.CONTRACT_ANALYSIS,
-                variables={
-                    **state.get("prompt_context", {}),
-                    "contract_terms": contract_terms,
-                    "compliance_check": compliance_check,
-                    "user_experience": state.get("user_experience", "novice"),
-                },
-            )
-
-            # Render prompt using PromptManager
-            try:
-                rendered_prompt = await self.prompt_manager.render_with_parser(
-                    template_name="contract_risk_assessment",
-                    context=risk_context,
-                    output_parser=self.risk_parser,
-                    service_name="contract_analysis_workflow",
-                )
-                logger.debug("Risk assessment prompt rendered successfully")
-            except (
-                PromptNotFoundError,
-                PromptValidationError,
-                PromptContextError,
-            ) as e:
-                logger.warning(f"Prompt manager failed, using fallback: {e}")
-                # Fallback to manual prompt creation
-                rendered_prompt = self._create_risk_assessment_prompt(
+            # Check if we should use LLM for risk assessment
+            if use_llm and (self.openai_client or self.gemini_client):
+                # Use LLM-based risk assessment
+                risk_analysis = await self._assess_risks_with_llm(
                     contract_terms, compliance_check, state["australian_state"]
                 )
-
-            # Get LLM response using new client architecture with fallback
-            try:
-                system_message = "You are an expert Australian property lawyer analyzing contract risks."
-                llm_response = await self._generate_content_with_fallback(
-                    rendered_prompt, system_message, use_gemini_fallback=True
-                )
-
-                # Parse response using structured parser
-                parsing_result = self.risk_parser.parse_with_retry(llm_response)
-
-                if parsing_result.success:
-                    risk_analysis = parsing_result.parsed_data.dict()
-                    risk_confidence = parsing_result.confidence_score
-                    self._metrics["successful_parses"] += 1
-                    logger.debug(
-                        f"Risk analysis parsed successfully with confidence: {risk_confidence}"
-                    )
-                else:
-                    # Enhanced fallback with parsing error details
-                    logger.warning(
-                        f"Risk parsing failed: {parsing_result.parsing_errors}"
-                    )
-                    risk_analysis = self._fallback_risk_analysis(
-                        contract_terms, compliance_check
-                    )
-                    risk_confidence = 0.6
-                    self._metrics["fallback_uses"] += 1
-
-            except Exception as llm_error:
-                logger.error(f"LLM risk assessment failed: {llm_error}")
-                # Fallback risk analysis
-                risk_analysis = self._fallback_risk_analysis(
+                risk_confidence = risk_analysis.get("confidence_level", 0.7)
+            else:
+                # Use rule-based risk assessment
+                risk_analysis = self._assess_risks_rule_based(
                     contract_terms, compliance_check
                 )
-                risk_confidence = 0.5
-                self._metrics["fallback_uses"] += 1
+                risk_confidence = risk_analysis.get("confidence_level", 0.5)
 
-            # Enhanced validation of risk analysis quality
-            if not risk_analysis or risk_analysis.get("overall_risk_score", 0) == 0:
-                risk_analysis = self._fallback_risk_analysis(
-                    contract_terms, compliance_check
-                )
-                risk_confidence = 0.4
-
-            # Store enhanced results
+            # Store results in state
             state["confidence_scores"]["risk_assessment"] = risk_confidence
 
             updated_data = {
-                "risk_assessment": {
-                    **risk_analysis,
-                    "enhanced_analysis": True,
-                    "parsing_method": (
-                        "structured" if parsing_result.success else "fallback"
-                    ),
-                    "analysis_timestamp": datetime.now(UTC).isoformat(),
-                }
+                "risk_analysis": risk_analysis,
+                "llm_used": use_llm and (self.openai_client or self.gemini_client),
             }
 
-            logger.debug("Enhanced risk assessment completed successfully")
+            logger.debug(
+                f"Enhanced risk assessment completed using {'LLM' if use_llm else 'rule-based'} method"
+            )
             return update_state_step(state, "risks_assessed", data=updated_data)
 
         except Exception as e:
@@ -908,10 +1137,11 @@ class ContractAnalysisWorkflow:
                 error=f"Enhanced risk assessment failed: {str(e)}",
             )
 
+    @langsmith_trace(name="generate_recommendations", run_type="chain")
     async def generate_recommendations(
         self, state: RealEstateAgentState
     ) -> RealEstateAgentState:
-        """Enhanced recommendations generation using PromptManager and OutputParser"""
+        """Enhanced recommendations generation with configurable LLM usage"""
 
         # Update progress
         state["progress"]["current_step"] += 1
@@ -920,94 +1150,27 @@ class ContractAnalysisWorkflow:
         )
 
         try:
-            # Create enhanced context for recommendations
-            recommendations_context = PromptContext(
-                context_type=ContextType.CONTRACT_ANALYSIS,
-                variables={
-                    **state.get("prompt_context", {}),
-                    "risk_assessment": state.get("risk_assessment", {}),
-                    "compliance_check": state.get("compliance_check", {}),
-                    "contract_terms": state.get("contract_terms", {}),
-                    "user_experience": state.get("user_experience", "novice"),
-                },
-            )
+            use_llm = self.use_llm_config.get("recommendations", True)
 
-            # Render prompt using PromptManager
-            try:
-                rendered_prompt = await self.prompt_manager.render_with_parser(
-                    template_name="contract_recommendations",
-                    context=recommendations_context,
-                    output_parser=self.recommendations_parser,
-                    service_name="contract_analysis_workflow",
-                )
-                logger.debug("Recommendations prompt rendered successfully")
-            except (
-                PromptNotFoundError,
-                PromptValidationError,
-                PromptContextError,
-            ) as e:
-                logger.warning(f"Prompt manager failed, using fallback: {e}")
-                # Fallback to manual prompt creation
-                rendered_prompt = self._create_recommendations_prompt(state)
+            # Check if we should use LLM for recommendations
+            if use_llm and (self.openai_client or self.gemini_client):
+                # Use LLM-based recommendations generation
+                recommendations = await self._generate_recommendations_with_llm(state)
+            else:
+                # Use rule-based recommendations generation
+                recommendations = self._generate_recommendations_rule_based(state)
 
-            # Get LLM response and parse using new client architecture with fallback
-            try:
-                system_message = "You are an expert Australian property advisor providing actionable recommendations."
-                llm_response = await self._generate_content_with_fallback(
-                    rendered_prompt, system_message, use_gemini_fallback=True
-                )
-
-                # Parse response using structured parser
-                parsing_result = self.recommendations_parser.parse_with_retry(
-                    llm_response
-                )
-
-                if parsing_result.success:
-                    recommendations_data = parsing_result.parsed_data.dict()
-                    recommendations = recommendations_data.get("recommendations", [])
-                    recommendations_confidence = parsing_result.confidence_score
-                    self._metrics["successful_parses"] += 1
-                    logger.debug(
-                        f"Recommendations parsed successfully: {len(recommendations)} recommendations"
-                    )
-                else:
-                    # Enhanced fallback with parsing error details
-                    logger.warning(
-                        f"Recommendations parsing failed: {parsing_result.parsing_errors}"
-                    )
-                    recommendations = self._fallback_recommendations(state)
-                    recommendations_confidence = 0.6
-                    self._metrics["fallback_uses"] += 1
-
-            except Exception as llm_error:
-                logger.error(f"LLM recommendations generation failed: {llm_error}")
-                # Fallback recommendations
-                recommendations = self._fallback_recommendations(state)
-                recommendations_confidence = 0.5
-                self._metrics["fallback_uses"] += 1
-
-            # Enhanced validation of recommendations quality
-            if not recommendations or len(recommendations) == 0:
-                recommendations = self._fallback_recommendations(state)
-                recommendations_confidence = 0.4
-
-            # Store enhanced results
-            state["confidence_scores"]["recommendations"] = recommendations_confidence
+            # Store results in state
+            state["confidence_scores"]["recommendations"] = 0.8 if use_llm else 0.6
 
             updated_data = {
-                "final_recommendations": recommendations,
-                "recommendations": recommendations,  # For backwards compatibility
-                "recommendations_metadata": {
-                    "enhanced_generation": True,
-                    "parsing_method": (
-                        "structured" if parsing_result.success else "fallback"
-                    ),
-                    "generation_timestamp": datetime.now(UTC).isoformat(),
-                    "total_recommendations": len(recommendations),
-                },
+                "recommendations": recommendations,
+                "llm_used": use_llm and (self.openai_client or self.gemini_client),
             }
 
-            logger.debug("Enhanced recommendations generation completed successfully")
+            logger.debug(
+                f"Enhanced recommendations generation completed using {'LLM' if use_llm else 'rule-based'} method"
+            )
             return update_state_step(
                 state, "recommendations_generated", data=updated_data
             )
@@ -1016,14 +1179,14 @@ class ContractAnalysisWorkflow:
             logger.error(f"Enhanced recommendations generation failed: {e}")
             return update_state_step(
                 state,
-                "recommendation_generation_failed",
-                error=f"Enhanced recommendation generation failed: {str(e)}",
+                "recommendations_generation_failed",
+                error=f"Enhanced recommendations generation failed: {str(e)}",
             )
 
-    def validate_final_output_step(
+    async def validate_final_output_step(
         self, state: RealEstateAgentState
     ) -> RealEstateAgentState:
-        """Validate final output quality and completeness"""
+        """Validate final output quality with configurable LLM usage"""
 
         if not self.enable_validation:
             return state
@@ -1035,47 +1198,45 @@ class ContractAnalysisWorkflow:
         )
 
         try:
-            # Validate final analysis completeness
-            validation_criteria = {"min_score": 0.7}
+            use_llm = self.use_llm_config.get("final_validation", True)
 
-            final_validation = validate_workflow_step.invoke(
-                {
-                    "step_name": "final_output",
-                    "step_data": {
-                        "risk_assessment": state.get("risk_assessment", {}),
-                        "recommendations": state.get("final_recommendations", []),
-                        "compliance_check": state.get("compliance_check", {}),
-                    },
-                    "validation_criteria": validation_criteria,
-                }
+            # Check if we should use LLM for final validation
+            if use_llm and (self.openai_client or self.gemini_client):
+                # Use LLM-based final validation
+                validation_result = await self._validate_final_output_with_llm(state)
+            else:
+                # Use rule-based final validation
+                validation_result = self._validate_final_output_rule_based(state)
+
+            # Store validation results
+            state["final_validation"] = validation_result
+            state["confidence_scores"]["final_validation"] = validation_result.get(
+                "validation_score", 0.5
             )
 
-            # Store final validation results
-            state["final_output_validation"] = final_validation.dict()
-            state["confidence_scores"][
-                "final_output"
-            ] = final_validation.validation_score
+            updated_data = {
+                "final_validation": validation_result,
+                "llm_used": use_llm and (self.openai_client or self.gemini_client),
+            }
 
-            # Log validation results
-            if not final_validation.validation_passed:
-                logger.warning(
-                    f"Final output validation failed: {final_validation.issues_found}"
-                )
-            else:
-                logger.debug("Final output validation passed successfully")
-
-            return update_state_step(state, "final_output_validated")
+            logger.debug(
+                f"Final output validation completed using {'LLM' if use_llm else 'rule-based'} method"
+            )
+            return update_state_step(
+                state, "final_validation_completed", data=updated_data
+            )
 
         except Exception as e:
             logger.error(f"Final output validation failed: {e}")
             # Continue workflow with warning
-            state["confidence_scores"]["final_output"] = 0.6
+            state["confidence_scores"]["final_validation"] = 0.5
             return update_state_step(
                 state,
-                "final_output_validation_warning",
+                "final_validation_warning",
                 error=f"Final validation failed: {str(e)}",
             )
 
+    @langsmith_trace(name="compile_analysis_report", run_type="chain")
     def compile_analysis_report(
         self, state: RealEstateAgentState
     ) -> RealEstateAgentState:
@@ -1459,7 +1620,7 @@ class ContractAnalysisWorkflow:
         Based on this contract analysis, provide specific actionable recommendations:
         
         ANALYSIS SUMMARY:
-        - Risk Assessment: {json.dumps(state.get("risk_assessment", {}), indent=2)}
+        - Risk Assessment: {json.dumps(state.get("risk_analysis", {}), indent=2)}
         - Compliance Issues: {json.dumps(state.get("compliance_check", {}), indent=2)}
         - Australian State: {state["australian_state"]}
         - User Type: {state["user_type"]}
@@ -1479,6 +1640,37 @@ class ContractAnalysisWorkflow:
             "executive_summary": "<summary of key recommendations>",
             "immediate_actions": ["<action1>", "<action2>"],
             "next_steps": ["<step1>", "<step2>"]
+        }}
+        """
+
+    def _create_contract_extraction_prompt(self, document_text: str, state: str) -> str:
+        """Enhanced fallback contract terms extraction prompt"""
+        logger.debug("Using fallback contract terms extraction prompt")
+        return f"""
+        Extract key contract terms from the following Australian property contract:
+        
+        CONTRACT TEXT:
+        {document_text}
+        
+        STATE: {state}
+        
+        Please provide a JSON response with the following structure:
+        {{
+            "terms": {{
+                "purchase_price": <number or null>,
+                "deposit_amount": <number or null>,
+                "property_address": "<string or null>",
+                "settlement_date": "<string or null>"
+            }},
+            "confidence_scores": {{
+                "purchase_price": <0-1>,
+                "deposit_amount": <0-1>,
+                "property_address": <0-1>,
+                "settlement_date": <0-1>
+            }},
+            "overall_confidence": <0-1>,
+            "extraction_method": "fallback",
+            "extraction_timestamp": "<ISO 8601 timestamp>"
         }}
         """
 
@@ -1849,7 +2041,7 @@ class ContractAnalysisWorkflow:
                 "estimated_cost": 500.0,
                 "timeline": "Before contract exchange or within cooling-off period",
                 "legal_basis": "Due diligence requirement for property transactions",
-                "consequences_if_ignored": "May miss critical legal issues, compliance requirements, or beneficial provisions",
+                "consequences_if_ignored": "May miss critical legal issues or compliance requirements",
             }
         )
 
@@ -1962,3 +2154,798 @@ class ContractAnalysisWorkflow:
                 / max(self._metrics["total_analyses"], 1),
             },
         }
+
+    async def _process_document_with_llm(self, document_data: Dict[str, Any]) -> str:
+        """Process document using LLM for enhanced text extraction"""
+        try:
+            # Create prompt for document processing
+            prompt = f"""
+            Process the following document data and extract all relevant text content:
+            
+            Document Type: {document_data.get('document_type', 'unknown')}
+            Document Name: {document_data.get('filename', 'unknown')}
+            Document Size: {document_data.get('size', 'unknown')}
+            
+            Please extract all text content from this document, focusing on:
+            - Contract terms and conditions
+            - Financial information
+            - Property details
+            - Legal clauses
+            - Dates and deadlines
+            - Party information
+            
+            Return only the extracted text content, no explanations or formatting.
+            """
+
+            system_message = "You are an expert document processor specializing in Australian property contracts."
+
+            # Use LLM to process document
+            llm_response = await self._generate_content_with_fallback(
+                prompt, system_message, use_gemini_fallback=True
+            )
+
+            return llm_response.strip()
+
+        except Exception as e:
+            logger.warning(f"LLM document processing failed: {e}")
+            # Fallback to simulation
+            return self._simulate_document_extraction(document_data)
+
+    async def _assess_text_quality_with_llm(self, text: str) -> Dict[str, Any]:
+        """Assess text quality using LLM"""
+        try:
+            prompt = f"""
+            Assess the quality of the following extracted text from a property contract:
+            
+            {text[:2000]}...
+            
+            Evaluate the text quality across these dimensions:
+            1. Completeness (0-1): How complete is the text extraction?
+            2. Readability (0-1): How readable and clear is the text?
+            3. Accuracy (0-1): How accurate is the extracted content?
+            4. Structure (0-1): How well-structured is the content?
+            
+            Return a JSON response with this structure:
+            {{
+                "score": 0.85,
+                "issues": ["list of quality issues found"],
+                "completeness": 0.9,
+                "readability": 0.8,
+                "accuracy": 0.85,
+                "structure": 0.8
+            }}
+            """
+
+            system_message = "You are an expert in document quality assessment."
+
+            llm_response = await self._generate_content_with_fallback(
+                prompt, system_message, use_gemini_fallback=True
+            )
+
+            try:
+                import json
+
+                quality_result = json.loads(llm_response)
+                return quality_result
+            except json.JSONDecodeError:
+                # Fallback to rule-based assessment
+                return self._assess_text_quality(text)
+
+        except Exception as e:
+            logger.warning(f"LLM text quality assessment failed: {e}")
+            # Fallback to rule-based assessment
+            return self._assess_text_quality(text)
+
+    @langsmith_trace(name="process_document", run_type="chain")
+    async def process_document(
+        self, state: RealEstateAgentState
+    ) -> RealEstateAgentState:
+        """Enhanced document processing with validation and configurable LLM usage"""
+
+        # Update progress
+        state["progress"]["current_step"] += 1
+        state["progress"]["percentage"] = int(
+            (state["progress"]["current_step"] / state["progress"]["total_steps"]) * 100
+        )
+
+        try:
+            document_data = state["document_data"]
+            use_llm = self.use_llm_config.get("document_processing", True)
+
+            # Use actual extracted text if available
+            if document_data.get("content"):
+                extracted_text = document_data["content"]
+                extraction_method = "pre_processed"
+                extraction_confidence = 0.95
+            else:
+                # Check if we should use LLM for document extraction
+                if use_llm and (self.openai_client or self.gemini_client):
+                    # Use LLM-based document processing
+                    extracted_text = await self._process_document_with_llm(
+                        document_data
+                    )
+                    extraction_method = "llm_enhanced"
+                    extraction_confidence = 0.85
+                else:
+                    # Fallback to simulation if no content available or LLM disabled
+                    extracted_text = self._simulate_document_extraction(document_data)
+                    extraction_method = "simulation"
+                    extraction_confidence = 0.7
+
+            # Enhanced text quality assessment
+            if self.enable_quality_checks:
+                if use_llm and (self.openai_client or self.gemini_client):
+                    text_quality = await self._assess_text_quality_with_llm(
+                        extracted_text
+                    )
+                else:
+                    text_quality = self._assess_text_quality(extracted_text)
+            else:
+                text_quality = {"score": 0.8, "issues": []}
+
+            # Validate extracted text quality
+            if not extracted_text or len(extracted_text.strip()) < 100:
+                return update_state_step(
+                    state,
+                    "document_processing_failed",
+                    error="Insufficient text content extracted from document",
+                )
+
+            # Update confidence scores
+            state["confidence_scores"]["document_processing"] = (
+                extraction_confidence * text_quality["score"]
+            )
+
+            # Update state with extracted text and enhanced metadata
+            updated_data = {
+                "document_metadata": {
+                    "extracted_text": extracted_text,
+                    "extraction_method": extraction_method,
+                    "extraction_confidence": extraction_confidence,
+                    "text_quality": text_quality,
+                    "character_count": len(extracted_text),
+                    "word_count": len(extracted_text.split()),
+                    "processing_timestamp": datetime.now(UTC).isoformat(),
+                    "enhanced_processing": True,
+                    "llm_used": use_llm and (self.openai_client or self.gemini_client),
+                },
+                "parsing_status": ProcessingStatus.COMPLETED,
+            }
+
+            logger.debug(
+                f"Enhanced document processing completed: {len(extracted_text)} chars extracted (LLM: {use_llm})"
+            )
+            return update_state_step(state, "document_processed", data=updated_data)
+
+        except Exception as e:
+            logger.error(f"Enhanced document processing failed: {e}")
+            return update_state_step(
+                state,
+                "document_processing_failed",
+                error=f"Enhanced document processing failed: {str(e)}",
+            )
+
+    async def _analyze_compliance_with_llm(
+        self, contract_terms: Dict[str, Any], australian_state: str
+    ) -> Dict[str, Any]:
+        """Analyze compliance using LLM"""
+        try:
+            prompt = f"""
+            Analyze the compliance of this Australian property contract for {australian_state}:
+            
+            Contract Terms:
+            {json.dumps(contract_terms, indent=2)}
+            
+            Evaluate compliance across these areas:
+            1. Cooling-off period compliance
+            2. Stamp duty requirements
+            3. Special conditions validity
+            4. State-specific requirements
+            5. Consumer protection compliance
+            
+            Return a JSON response with this structure:
+            {{
+                "state_compliance": true/false,
+                "cooling_off_validation": {{
+                    "compliant": true/false,
+                    "period_days": 5,
+                    "warnings": []
+                }},
+                "stamp_duty_calculation": {{
+                    "total_duty": 0,
+                    "calculation_basis": "string",
+                    "concessions_applied": []
+                }},
+                "special_conditions_analysis": {{
+                    "conditions": [],
+                    "validity": true/false
+                }},
+                "compliance_issues": [],
+                "warnings": [],
+                "compliance_confidence": 0.85
+            }}
+            """
+
+            system_message = "You are an expert Australian property lawyer specializing in compliance analysis."
+
+            llm_response = await self._generate_content_with_fallback(
+                prompt, system_message, use_gemini_fallback=True
+            )
+
+            try:
+                import json
+
+                compliance_result = json.loads(llm_response)
+                return compliance_result
+            except json.JSONDecodeError:
+                # Fallback to rule-based analysis
+                return self._analyze_compliance_rule_based(
+                    contract_terms, australian_state
+                )
+
+        except Exception as e:
+            logger.warning(f"LLM compliance analysis failed: {e}")
+            # Fallback to rule-based analysis
+            return self._analyze_compliance_rule_based(contract_terms, australian_state)
+
+    def _analyze_compliance_rule_based(
+        self, contract_terms: Dict[str, Any], australian_state: str
+    ) -> Dict[str, Any]:
+        """Analyze compliance using rule-based methods"""
+        try:
+            compliance_confidence = 0.0
+            compliance_components = 0
+
+            # Validate cooling-off period
+            try:
+                cooling_off_result = validate_cooling_off_period.invoke(
+                    {"contract_terms": contract_terms, "state": australian_state}
+                )
+                compliance_confidence += 0.9
+                compliance_components += 1
+            except Exception as e:
+                logger.warning(f"Cooling-off validation failed: {e}")
+                cooling_off_result = {
+                    "compliant": False,
+                    "error": f"Cooling-off validation failed: {str(e)}",
+                    "warnings": ["Unable to validate cooling-off period"],
+                }
+
+            # Calculate stamp duty
+            stamp_duty_result = None
+            purchase_price = contract_terms.get("purchase_price", 0)
+            if purchase_price > 0:
+                try:
+                    stamp_duty_result = calculate_stamp_duty.invoke(
+                        {
+                            "purchase_price": purchase_price,
+                            "state": australian_state,
+                            "is_first_home": False,
+                            "is_foreign_buyer": False,
+                        }
+                    )
+                    compliance_confidence += 0.95
+                    compliance_components += 1
+                except Exception as e:
+                    logger.warning(f"Stamp duty calculation failed: {e}")
+                    stamp_duty_result = {
+                        "error": f"Stamp duty calculation failed: {str(e)}",
+                        "total_duty": 0,
+                        "state": australian_state,
+                    }
+
+            # Analyze special conditions
+            try:
+                special_conditions_result = analyze_special_conditions.invoke(
+                    {"contract_terms": contract_terms, "state": australian_state}
+                )
+                compliance_confidence += 0.8
+                compliance_components += 1
+            except Exception as e:
+                logger.warning(f"Special conditions analysis failed: {e}")
+                special_conditions_result = {
+                    "error": f"Special conditions analysis failed: {str(e)}",
+                    "conditions": [],
+                }
+
+            # Calculate average compliance confidence
+            if compliance_components > 0:
+                compliance_confidence = compliance_confidence / compliance_components
+            else:
+                compliance_confidence = 0.5
+
+            # Compile compliance check
+            compliance_check = {
+                "state_compliance": cooling_off_result.get("compliant", False),
+                "cooling_off_validation": cooling_off_result,
+                "stamp_duty_calculation": stamp_duty_result,
+                "special_conditions_analysis": special_conditions_result,
+                "compliance_issues": [],
+                "warnings": cooling_off_result.get("warnings", []),
+                "compliance_confidence": compliance_confidence,
+                "enhanced_analysis": False,
+                "analysis_timestamp": datetime.now(UTC).isoformat(),
+            }
+
+            # Add compliance issues
+            if not cooling_off_result.get("compliant", False):
+                compliance_check["compliance_issues"].append(
+                    "Cooling-off period non-compliant"
+                )
+
+            if stamp_duty_result and stamp_duty_result.get("error"):
+                compliance_check["compliance_issues"].append(
+                    "Stamp duty calculation incomplete"
+                )
+
+            return compliance_check
+
+        except Exception as e:
+            logger.error(f"Rule-based compliance analysis failed: {e}")
+            return {
+                "state_compliance": False,
+                "compliance_issues": [f"Compliance analysis failed: {str(e)}"],
+                "compliance_confidence": 0.3,
+                "enhanced_analysis": False,
+                "analysis_timestamp": datetime.now(UTC).isoformat(),
+            }
+
+    async def _assess_risks_with_llm(
+        self,
+        contract_terms: Dict[str, Any],
+        compliance_check: Dict[str, Any],
+        australian_state: str,
+    ) -> Dict[str, Any]:
+        """Assess contract risks using LLM"""
+        try:
+            prompt = f"""
+            Assess the risks in this Australian property contract for {australian_state}:
+            
+            Contract Terms:
+            {json.dumps(contract_terms, indent=2)}
+            
+            Compliance Check:
+            {json.dumps(compliance_check, indent=2)}
+            
+            Evaluate risks across these dimensions:
+            1. Financial risks (price, financing, costs)
+            2. Legal risks (compliance, enforceability)
+            3. Property risks (condition, location, title)
+            4. Transaction risks (settlement, timing)
+            5. State-specific risks ({australian_state} regulations)
+            
+            Return a JSON response with this structure:
+            {{
+                "overall_risk_score": 5.5,
+                "risk_factors": [
+                    {{
+                        "factor": "string",
+                        "severity": "low/medium/high/critical",
+                        "description": "string",
+                        "impact": "string",
+                        "australian_specific": true/false,
+                        "mitigation_suggestions": []
+                    }}
+                ],
+                "risk_summary": "string",
+                "confidence_level": 0.85,
+                "critical_issues": [],
+                "state_specific_risks": []
+            }}
+            """
+
+            system_message = "You are an expert Australian property lawyer specializing in risk assessment."
+
+            llm_response = await self._generate_content_with_fallback(
+                prompt, system_message, use_gemini_fallback=True
+            )
+
+            try:
+                import json
+
+                risk_result = json.loads(llm_response)
+                return risk_result
+            except json.JSONDecodeError:
+                # Fallback to rule-based analysis
+                return self._assess_risks_rule_based(contract_terms, compliance_check)
+
+        except Exception as e:
+            logger.warning(f"LLM risk assessment failed: {e}")
+            # Fallback to rule-based analysis
+            return self._assess_risks_rule_based(contract_terms, compliance_check)
+
+    def _assess_risks_rule_based(
+        self, contract_terms: Dict[str, Any], compliance_check: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Assess contract risks using rule-based methods"""
+        try:
+            # Use existing fallback risk analysis
+            risk_analysis = self._fallback_risk_analysis(
+                contract_terms, compliance_check
+            )
+
+            # Ensure the structure matches the expected format
+            if isinstance(risk_analysis, dict):
+                return {
+                    "overall_risk_score": risk_analysis.get("overall_risk_score", 5.0),
+                    "risk_factors": risk_analysis.get("risk_factors", []),
+                    "risk_summary": risk_analysis.get(
+                        "risk_summary", "Risk assessment completed"
+                    ),
+                    "confidence_level": risk_analysis.get("confidence_level", 0.5),
+                    "critical_issues": risk_analysis.get("critical_issues", []),
+                    "state_specific_risks": risk_analysis.get(
+                        "state_specific_risks", []
+                    ),
+                }
+            else:
+                return {
+                    "overall_risk_score": 5.0,
+                    "risk_factors": [],
+                    "risk_summary": "Risk assessment completed using rule-based methods",
+                    "confidence_level": 0.5,
+                    "critical_issues": [],
+                    "state_specific_risks": [],
+                }
+
+        except Exception as e:
+            logger.error(f"Rule-based risk assessment failed: {e}")
+            return {
+                "overall_risk_score": 5.0,
+                "risk_factors": [],
+                "risk_summary": f"Risk assessment failed: {str(e)}",
+                "confidence_level": 0.3,
+                "critical_issues": [f"Risk assessment failed: {str(e)}"],
+                "state_specific_risks": [],
+            }
+
+    async def _generate_recommendations_with_llm(
+        self, state: RealEstateAgentState
+    ) -> List[Dict[str, Any]]:
+        """Generate recommendations using LLM"""
+        try:
+            prompt = f"""
+            Generate actionable recommendations for this Australian property contract analysis:
+            
+            Contract Terms:
+            {json.dumps(state.get("contract_terms", {}), indent=2)}
+            
+            Risk Analysis:
+            {json.dumps(state.get("risk_analysis", {}), indent=2)}
+            
+            Compliance Check:
+            {json.dumps(state.get("compliance_check", {}), indent=2)}
+            
+            User Context:
+            - Experience: {state.get("user_experience", "novice")}
+            - State: {state.get("australian_state", "NSW")}
+            - Contract Type: {state.get("contract_type", "purchase_agreement")}
+            
+            Generate recommendations across these categories:
+            1. Legal recommendations (immediate actions, professional review needs)
+            2. Financial recommendations (cost management, optimization strategies)
+            3. Practical recommendations (timeline planning, due diligence steps)
+            4. Compliance recommendations (state law compliance, mandatory actions)
+            
+            Return a JSON response with this structure:
+            {{
+                "recommendations": [
+                    {{
+                        "priority": "low/medium/high/critical",
+                        "category": "legal/financial/practical/compliance",
+                        "recommendation": "string",
+                        "action_required": true/false,
+                        "australian_context": "string",
+                        "estimated_cost": 0,
+                        "timeline": "string",
+                        "legal_basis": "string",
+                        "consequences_if_ignored": "string"
+                    }}
+                ],
+                "executive_summary": "string",
+                "immediate_actions": [],
+                "next_steps": []
+            }}
+            """
+
+            system_message = "You are an expert Australian property advisor providing actionable recommendations."
+
+            llm_response = await self._generate_content_with_fallback(
+                prompt, system_message, use_gemini_fallback=True
+            )
+
+            try:
+                import json
+
+                recommendations_result = json.loads(llm_response)
+                return recommendations_result.get("recommendations", [])
+            except json.JSONDecodeError:
+                # Fallback to rule-based recommendations
+                return self._generate_recommendations_rule_based(state)
+
+        except Exception as e:
+            logger.warning(f"LLM recommendations generation failed: {e}")
+            # Fallback to rule-based recommendations
+            return self._generate_recommendations_rule_based(state)
+
+    def _generate_recommendations_rule_based(
+        self, state: RealEstateAgentState
+    ) -> List[Dict[str, Any]]:
+        """Generate recommendations using rule-based methods"""
+        try:
+            # Use existing fallback recommendations
+            recommendations = self._fallback_recommendations(state)
+
+            # Ensure the structure matches the expected format
+            if isinstance(recommendations, list):
+                return recommendations
+            else:
+                return [
+                    {
+                        "priority": "medium",
+                        "category": "general",
+                        "recommendation": "Consider professional legal review of this contract",
+                        "action_required": True,
+                        "australian_context": "Standard recommendation for property contracts",
+                        "estimated_cost": 500,
+                        "timeline": "Before settlement",
+                        "legal_basis": "Due diligence requirement",
+                        "consequences_if_ignored": "May miss critical legal issues",
+                    }
+                ]
+
+        except Exception as e:
+            logger.error(f"Rule-based recommendations generation failed: {e}")
+            return [
+                {
+                    "priority": "high",
+                    "category": "general",
+                    "recommendation": f"Recommendations generation failed: {str(e)}",
+                    "action_required": True,
+                    "australian_context": "Error in recommendations generation",
+                    "estimated_cost": 0,
+                    "timeline": "Immediate",
+                    "legal_basis": "Error handling",
+                    "consequences_if_ignored": "No recommendations available",
+                }
+            ]
+
+    async def _validate_document_quality_with_llm(
+        self, document_text: str, document_metadata: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Validate document quality using LLM"""
+        try:
+            prompt = f"""
+            Assess the quality of this document for property contract analysis:
+            
+            Document Text (first 2000 chars):
+            {document_text[:2000]}...
+            
+            Document Metadata:
+            {json.dumps(document_metadata, indent=2)}
+            
+            Evaluate the document quality across these dimensions:
+            1. Text quality (0-1): Clarity, readability, completeness
+            2. Completeness (0-1): How complete is the document content
+            3. Readability (0-1): How easy is it to read and understand
+            4. Key terms coverage (0-1): Coverage of important contract terms
+            5. Extraction confidence (0-1): Confidence in text extraction
+            
+            Return a JSON response with this structure:
+            {{
+                "text_quality_score": 0.85,
+                "completeness_score": 0.9,
+                "readability_score": 0.8,
+                "key_terms_coverage": 0.75,
+                "extraction_confidence": 0.9,
+                "issues_identified": ["list of quality issues found"],
+                "improvement_suggestions": ["list of improvement suggestions"]
+            }}
+            """
+
+            system_message = "You are an expert in document quality assessment for property contracts."
+
+            llm_response = await self._generate_content_with_fallback(
+                prompt, system_message, use_gemini_fallback=True
+            )
+
+            try:
+                import json
+
+                quality_result = json.loads(llm_response)
+                return quality_result
+            except json.JSONDecodeError:
+                # Fallback to rule-based validation
+                quality_metrics = validate_document_quality.invoke(
+                    {
+                        "document_text": document_text,
+                        "document_metadata": document_metadata,
+                    }
+                )
+                return quality_metrics.dict()
+
+        except Exception as e:
+            logger.warning(f"LLM document quality validation failed: {e}")
+            # Fallback to rule-based validation
+            quality_metrics = validate_document_quality.invoke(
+                {"document_text": document_text, "document_metadata": document_metadata}
+            )
+            return quality_metrics.dict()
+
+    async def _validate_terms_completeness_with_llm(
+        self, contract_terms: Dict[str, Any], australian_state: str
+    ) -> Dict[str, Any]:
+        """Validate contract terms completeness using LLM"""
+        try:
+            prompt = f"""
+            Validate the completeness of contract terms for {australian_state}:
+            
+            Contract Terms:
+            {json.dumps(contract_terms, indent=2)}
+            
+            Evaluate the completeness of contract terms across these areas:
+            1. Essential terms (parties, property, price, settlement)
+            2. Financial terms (deposit, balance, adjustments)
+            3. Conditions and warranties (finance, building/pest, cooling-off)
+            4. Special conditions and clauses
+            5. State-specific requirements ({australian_state})
+            
+            Return a JSON response with this structure:
+            {{
+                "validation_score": 0.85,
+                "terms_validated": {{
+                    "parties": true/false,
+                    "property": true/false,
+                    "price": true/false,
+                    "settlement": true/false,
+                    "conditions": true/false
+                }},
+                "missing_mandatory_terms": [],
+                "incomplete_terms": [],
+                "validation_confidence": 0.85,
+                "state_specific_requirements": {{}},
+                "recommendations": []
+            }}
+            """
+
+            system_message = "You are an expert Australian property lawyer validating contract terms completeness."
+
+            llm_response = await self._generate_content_with_fallback(
+                prompt, system_message, use_gemini_fallback=True
+            )
+
+            try:
+                import json
+
+                validation_result = json.loads(llm_response)
+                return validation_result
+            except json.JSONDecodeError:
+                # Fallback to rule-based validation
+                validation_result = validate_contract_terms_completeness.invoke(
+                    {"contract_terms": contract_terms, "state": australian_state}
+                )
+                return validation_result.dict()
+
+        except Exception as e:
+            logger.warning(f"LLM terms validation failed: {e}")
+            # Fallback to rule-based validation
+            validation_result = validate_contract_terms_completeness.invoke(
+                {"contract_terms": contract_terms, "state": australian_state}
+            )
+            return validation_result.dict()
+
+    async def _validate_final_output_with_llm(
+        self, state: RealEstateAgentState
+    ) -> Dict[str, Any]:
+        """Validate final output using LLM"""
+        try:
+            prompt = f"""
+            Validate the final output quality and completeness of this contract analysis:
+            
+            Risk Analysis:
+            {json.dumps(state.get("risk_analysis", {}), indent=2)}
+            
+            Recommendations:
+            {json.dumps(state.get("recommendations", []), indent=2)}
+            
+            Compliance Check:
+            {json.dumps(state.get("compliance_check", {}), indent=2)}
+            
+            Contract Terms:
+            {json.dumps(state.get("contract_terms", {}), indent=2)}
+            
+            Evaluate the final output quality across these dimensions:
+            1. Completeness (0-1): All required analysis components present
+            2. Quality (0-1): Analysis depth and accuracy
+            3. Consistency (0-1): Internal consistency of findings
+            4. Actionability (0-1): Practical value of recommendations
+            5. Compliance (0-1): Legal compliance coverage
+            
+            Return a JSON response with this structure:
+            {{
+                "validation_score": 0.85,
+                "validation_passed": true/false,
+                "issues_found": [],
+                "recommendations": [],
+                "metadata": {{}}
+            }}
+            """
+
+            system_message = "You are an expert Australian property lawyer validating final analysis output."
+
+            llm_response = await self._generate_content_with_fallback(
+                prompt, system_message, use_gemini_fallback=True
+            )
+
+            try:
+                import json
+
+                validation_result = json.loads(llm_response)
+                return validation_result
+            except json.JSONDecodeError:
+                # Fallback to rule-based validation
+                return self._validate_final_output_rule_based(state)
+
+        except Exception as e:
+            logger.warning(f"LLM final validation failed: {e}")
+            # Fallback to rule-based validation
+            return self._validate_final_output_rule_based(state)
+
+    def _validate_final_output_rule_based(
+        self, state: RealEstateAgentState
+    ) -> Dict[str, Any]:
+        """Validate final output using rule-based methods"""
+        try:
+            # Check if all required components are present
+            required_components = [
+                "risk_analysis",
+                "recommendations",
+                "compliance_check",
+                "contract_terms",
+            ]
+            missing_components = [
+                comp for comp in required_components if not state.get(comp)
+            ]
+
+            # Calculate validation score based on presence and quality
+            validation_score = 0.5  # Base score
+
+            if not missing_components:
+                validation_score += 0.3  # All components present
+
+            if state.get("risk_analysis"):
+                validation_score += 0.1  # Risk analysis present
+
+            if (
+                state.get("recommendations")
+                and len(state.get("recommendations", [])) > 0
+            ):
+                validation_score += 0.1  # Recommendations present
+
+            validation_score = min(1.0, validation_score)
+
+            validation_result = {
+                "validation_score": validation_score,
+                "validation_passed": validation_score >= 0.7,
+                "issues_found": missing_components,
+                "recommendations": [],
+                "metadata": {
+                    "validation_method": "rule_based",
+                    "validation_timestamp": datetime.now(UTC).isoformat(),
+                },
+            }
+
+            return validation_result
+
+        except Exception as e:
+            logger.error(f"Rule-based final validation failed: {e}")
+            return {
+                "validation_score": 0.3,
+                "validation_passed": False,
+                "issues_found": [f"Validation failed: {str(e)}"],
+                "recommendations": [],
+                "metadata": {
+                    "validation_method": "rule_based",
+                    "validation_timestamp": datetime.now(UTC).isoformat(),
+                },
+            }

@@ -249,7 +249,20 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
                 "ensure_bucket_exists", {"bucket_name": self.storage_bucket}
             )
 
-            # Handle the JSON response properly
+            # Handle boolean return (function returns BOOLEAN in SQL)
+            if isinstance(result, bool):
+                if result:
+                    self.logger.info(f"Created storage bucket: {self.storage_bucket}")
+                else:
+                    self.logger.debug(
+                        f"Storage bucket already exists: {self.storage_bucket}"
+                    )
+                self.log_operation(
+                    "system_bucket_ensure", "storage_bucket", self.storage_bucket
+                )
+                return
+
+            # Handle structured/JSON-like responses
             if isinstance(result, dict):
                 result_data = result
             elif isinstance(result, str):
