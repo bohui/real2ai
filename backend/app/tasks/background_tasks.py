@@ -206,7 +206,9 @@ async def comprehensive_document_analysis(
             # Check if this is a retry operation and clear progress accordingly
             is_retry = analysis_options.get("is_retry", False)
             if is_retry:
-                logger.info(f"Retry detected for content_hash {content_hash}, clearing previous progress")
+                logger.info(
+                    f"Retry detected for content_hash {content_hash}, clearing previous progress"
+                )
                 # Clear any existing user progress records for this retry
                 try:
                     await user_client.database.delete(
@@ -214,7 +216,9 @@ async def comprehensive_document_analysis(
                         filters={"content_hash": content_hash, "user_id": user_id},
                     )
                 except Exception as cleanup_error:
-                    logger.warning(f"Failed to clear previous progress: {cleanup_error}")
+                    logger.warning(
+                        f"Failed to clear previous progress: {cleanup_error}"
+                    )
                     # Continue with retry even if cleanup fails
 
             # =============================================
@@ -382,7 +386,7 @@ async def comprehensive_document_analysis(
             settings = get_settings()
             contract_workflow = ContractAnalysisWorkflow(
                 openai_api_key=settings.openai_api_key,
-                model_name="gpt-4",
+                model_name=None,
                 openai_api_base=settings.openai_api_base,
             )
 
@@ -775,7 +779,7 @@ async def analyze_contract_background(
         settings = get_settings()
         contract_workflow = ContractAnalysisWorkflow(
             openai_api_key=settings.openai_api_key,
-            model_name="gpt-4",
+            model_name=None,
             openai_api_base=settings.openai_api_base,
         )
 

@@ -334,13 +334,38 @@ class EnhancedWorkflowConfig:
             validation_enabled=self.enable_validation,
             hot_reload_enabled=self.enable_hot_reload,
             preload_templates=True,
-            default_model="gpt-4",
+            default_model=self._resolve_default_model_for_prompts(),
             max_render_time_seconds=self.parsing_timeout_seconds,
             enable_metrics=self.enable_performance_metrics,
             enable_composition=True,
             enable_workflows=True,
             enable_service_integration=True,
         )
+
+    def _resolve_default_model_for_prompts(self) -> str:
+        """Resolve default model for PromptManager from environment/config without hardcoding."""
+        try:
+            # Prefer OpenAI model from environment
+            from app.clients.openai.config import (
+                OpenAISettings,
+                DEFAULT_MODEL as OPENAI_DEFAULT_MODEL,
+            )
+
+            model_name = OpenAISettings().openai_model_name
+            return model_name or OPENAI_DEFAULT_MODEL
+        except Exception:
+            try:
+                # Fall back to Gemini model from environment if available
+                from app.clients.gemini.config import GeminiSettings
+
+                return GeminiSettings().gemini_model_name
+            except Exception:
+                # Final fallback to OpenAI config default constant
+                from app.clients.openai.config import (
+                    DEFAULT_MODEL as OPENAI_DEFAULT_MODEL,
+                )
+
+                return OPENAI_DEFAULT_MODEL
 
     def get_quality_thresholds(self) -> Dict[str, float]:
         """Get quality threshold configuration"""

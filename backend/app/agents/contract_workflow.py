@@ -126,7 +126,7 @@ class ContractAnalysisWorkflow:
             },
             enable_fallbacks=False  # Development: fail fast on template issues
         )
-        
+
         # Production configuration (with fallbacks for reliability)
         prod_workflow = ContractAnalysisWorkflow(
             use_llm_config={
@@ -146,7 +146,7 @@ class ContractAnalysisWorkflow:
     def __init__(
         self,
         openai_api_key: str = None,
-        model_name: str = "gpt-4",
+        model_name: Optional[str] = None,
         openai_api_base: Optional[str] = None,
         prompt_manager: Optional[PromptManager] = None,
         enable_validation: bool = True,
@@ -158,7 +158,19 @@ class ContractAnalysisWorkflow:
         # Initialize clients (will be set up in initialize method)
         self.openai_client = None
         self.gemini_client = None
-        self.model_name = model_name
+        # Resolve model name from environment/config if not explicitly provided
+        if model_name is None:
+            try:
+                from app.clients.openai.config import OpenAISettings
+
+                self.model_name = OpenAISettings().openai_model_name
+            except Exception:
+                # Final fallback to config's DEFAULT_MODEL to avoid hardcoding
+                from app.clients.openai.config import DEFAULT_MODEL
+
+                self.model_name = DEFAULT_MODEL
+        else:
+            self.model_name = model_name
         self.openai_api_base = openai_api_base
 
         # Initialize prompt manager
@@ -2386,14 +2398,13 @@ class ContractAnalysisWorkflow:
                 contract_terms=contract_terms,
                 contract_type="property_contract",
                 analysis_type="compliance_check",
-                user_experience="intermediate"
+                user_experience="intermediate",
             )
 
             rendered_prompt = self.prompt_manager.render_template(
-                'analysis/compliance_check', 
-                context
+                "analysis/compliance_check", context
             )
-            
+
             llm_response = await self._generate_content_with_fallback(
                 rendered_prompt, use_gemini_fallback=True
             )
@@ -2411,23 +2422,31 @@ class ContractAnalysisWorkflow:
 
         except Exception as e:
             if not self.enable_fallbacks:
-                logger.error(f"LLM compliance analysis template failed and fallbacks disabled: {e}")
+                logger.error(
+                    f"LLM compliance analysis template failed and fallbacks disabled: {e}"
+                )
                 raise e
-                
+
             logger.warning(f"LLM compliance analysis template failed: {e}")
             # Try fallback prompt method
             try:
-                fallback_prompt = self._create_compliance_fallback_prompt(contract_terms, australian_state)
+                fallback_prompt = self._create_compliance_fallback_prompt(
+                    contract_terms, australian_state
+                )
                 llm_response = await self._generate_content_with_fallback(
                     fallback_prompt, use_gemini_fallback=True
                 )
-                
+
                 compliance_result = json.loads(llm_response)
                 return compliance_result
             except Exception as fallback_error:
-                logger.warning(f"LLM compliance analysis fallback failed: {fallback_error}")
+                logger.warning(
+                    f"LLM compliance analysis fallback failed: {fallback_error}"
+                )
                 # Final fallback to rule-based analysis
-                return self._analyze_compliance_rule_based(contract_terms, australian_state)
+                return self._analyze_compliance_rule_based(
+                    contract_terms, australian_state
+                )
 
     def _analyze_compliance_rule_based(
         self, contract_terms: Dict[str, Any], australian_state: str
@@ -2567,7 +2586,7 @@ class ContractAnalysisWorkflow:
                 if not self.enable_fallbacks:
                     logger.error(f"Prompt manager failed and fallbacks disabled: {e}")
                     raise e
-                    
+
                 logger.warning(f"Prompt manager failed, using fallback: {e}")
                 # Fallback to hardcoded prompt
                 rendered_prompt = self._create_risk_assessment_fallback_prompt(
@@ -2589,7 +2608,7 @@ class ContractAnalysisWorkflow:
                 if not self.enable_fallbacks:
                     logger.error("JSON parsing failed and fallbacks disabled")
                     raise ValueError("Failed to parse LLM risk assessment response")
-                
+
                 # Fallback to rule-based analysis
                 return self._assess_risks_rule_based(contract_terms, compliance_check)
 
@@ -2597,7 +2616,7 @@ class ContractAnalysisWorkflow:
             if not self.enable_fallbacks:
                 logger.error(f"LLM risk assessment failed and fallbacks disabled: {e}")
                 raise e
-            
+
             logger.warning(f"LLM risk assessment failed: {e}")
             # Fallback to rule-based analysis
             return self._assess_risks_rule_based(contract_terms, compliance_check)
@@ -2682,7 +2701,7 @@ class ContractAnalysisWorkflow:
                 if not self.enable_fallbacks:
                     logger.error(f"Prompt manager failed and fallbacks disabled: {e}")
                     raise e
-                
+
                 logger.warning(f"Prompt manager failed, using fallback: {e}")
                 # Fallback to hardcoded prompt (previous implementation)
                 rendered_prompt = self._create_recommendations_fallback_prompt(state)
@@ -2702,15 +2721,17 @@ class ContractAnalysisWorkflow:
                 if not self.enable_fallbacks:
                     logger.error("JSON parsing failed and fallbacks disabled")
                     raise ValueError("Failed to parse LLM recommendations response")
-                
+
                 # Fallback to rule-based recommendations
                 return self._generate_recommendations_rule_based(state)
 
         except Exception as e:
             if not self.enable_fallbacks:
-                logger.error(f"LLM recommendations generation failed and fallbacks disabled: {e}")
+                logger.error(
+                    f"LLM recommendations generation failed and fallbacks disabled: {e}"
+                )
                 raise e
-            
+
             logger.warning(f"LLM recommendations generation failed: {e}")
             # Fallback to rule-based recommendations
             return self._generate_recommendations_rule_based(state)
@@ -2768,14 +2789,13 @@ class ContractAnalysisWorkflow:
                 document_metadata=document_metadata,
                 document_type="property_contract",
                 australian_state=document_metadata.get("state", "NSW"),
-                extraction_method=document_metadata.get("extraction_method", "ocr")
+                extraction_method=document_metadata.get("extraction_method", "ocr"),
             )
 
             rendered_prompt = self.prompt_manager.render_template(
-                'validation/document_quality_validation', 
-                context
+                "validation/document_quality_validation", context
             )
-            
+
             llm_response = await self._generate_content_with_fallback(
                 rendered_prompt, use_gemini_fallback=True
             )
@@ -2797,24 +2817,33 @@ class ContractAnalysisWorkflow:
 
         except Exception as e:
             if not self.enable_fallbacks:
-                logger.error(f"LLM document quality validation template failed and fallbacks disabled: {e}")
+                logger.error(
+                    f"LLM document quality validation template failed and fallbacks disabled: {e}"
+                )
                 raise e
-                
+
             logger.warning(f"LLM document quality validation template failed: {e}")
             # Try fallback prompt method
             try:
-                fallback_prompt = self._create_document_quality_fallback_prompt(document_text, document_metadata)
+                fallback_prompt = self._create_document_quality_fallback_prompt(
+                    document_text, document_metadata
+                )
                 llm_response = await self._generate_content_with_fallback(
                     fallback_prompt, use_gemini_fallback=True
                 )
-                
+
                 quality_result = json.loads(llm_response)
                 return quality_result
             except Exception as fallback_error:
-                logger.warning(f"LLM document quality validation fallback failed: {fallback_error}")
+                logger.warning(
+                    f"LLM document quality validation fallback failed: {fallback_error}"
+                )
                 # Final fallback to rule-based validation
                 quality_metrics = validate_document_quality.invoke(
-                    {"document_text": document_text, "document_metadata": document_metadata}
+                    {
+                        "document_text": document_text,
+                        "document_metadata": document_metadata,
+                    }
                 )
                 return quality_metrics.dict()
 
@@ -2841,7 +2870,9 @@ class ContractAnalysisWorkflow:
                     context=validation_context,
                     service_name="contract_analysis_workflow",
                 )
-                logger.debug("Terms completeness validation prompt rendered successfully")
+                logger.debug(
+                    "Terms completeness validation prompt rendered successfully"
+                )
             except (
                 PromptNotFoundError,
                 PromptValidationError,
@@ -2850,7 +2881,7 @@ class ContractAnalysisWorkflow:
                 if not self.enable_fallbacks:
                     logger.error(f"Prompt manager failed and fallbacks disabled: {e}")
                     raise e
-                    
+
                 logger.warning(f"Prompt manager failed, using fallback: {e}")
                 # Fallback to hardcoded prompt
                 rendered_prompt = self._create_terms_validation_fallback_prompt(
@@ -2872,7 +2903,7 @@ class ContractAnalysisWorkflow:
                 if not self.enable_fallbacks:
                     logger.error("JSON parsing failed and fallbacks disabled")
                     raise ValueError("Failed to parse LLM terms validation response")
-                
+
                 # Fallback to rule-based validation
                 validation_result = validate_contract_terms_completeness.invoke(
                     {"contract_terms": contract_terms, "state": australian_state}
@@ -2883,7 +2914,7 @@ class ContractAnalysisWorkflow:
             if not self.enable_fallbacks:
                 logger.error(f"LLM terms validation failed and fallbacks disabled: {e}")
                 raise e
-            
+
             logger.warning(f"LLM terms validation failed: {e}")
             # Fallback to rule-based validation
             validation_result = validate_contract_terms_completeness.invoke(
@@ -2926,7 +2957,7 @@ class ContractAnalysisWorkflow:
                 if not self.enable_fallbacks:
                     logger.error(f"Prompt manager failed and fallbacks disabled: {e}")
                     raise e
-                    
+
                 logger.warning(f"Prompt manager failed, using fallback: {e}")
                 # Fallback to hardcoded prompt
                 rendered_prompt = self._create_final_validation_fallback_prompt(state)
@@ -2946,7 +2977,7 @@ class ContractAnalysisWorkflow:
                 if not self.enable_fallbacks:
                     logger.error("JSON parsing failed and fallbacks disabled")
                     raise ValueError("Failed to parse LLM final validation response")
-                
+
                 # Fallback to rule-based validation
                 return self._validate_final_output_rule_based(state)
 
@@ -2954,7 +2985,7 @@ class ContractAnalysisWorkflow:
             if not self.enable_fallbacks:
                 logger.error(f"LLM final validation failed and fallbacks disabled: {e}")
                 raise e
-                
+
             logger.warning(f"LLM final validation failed: {e}")
             # Fallback to rule-based validation
             return self._validate_final_output_rule_based(state)
@@ -3067,10 +3098,10 @@ class ContractAnalysisWorkflow:
         """
 
     def _create_risk_assessment_fallback_prompt(
-        self, 
-        contract_terms: Dict[str, Any], 
-        compliance_check: Dict[str, Any], 
-        australian_state: str
+        self,
+        contract_terms: Dict[str, Any],
+        compliance_check: Dict[str, Any],
+        australian_state: str,
     ) -> str:
         """Create fallback risk assessment prompt when template fails"""
         return f"""
@@ -3110,9 +3141,7 @@ class ContractAnalysisWorkflow:
         """
 
     def _create_terms_validation_fallback_prompt(
-        self, 
-        contract_terms: Dict[str, Any], 
-        australian_state: str
+        self, contract_terms: Dict[str, Any], australian_state: str
     ) -> str:
         """Create fallback terms validation prompt when template fails"""
         return f"""
@@ -3147,15 +3176,14 @@ class ContractAnalysisWorkflow:
         """
 
     def _create_final_validation_fallback_prompt(
-        self, 
-        state: RealEstateAgentState
+        self, state: RealEstateAgentState
     ) -> str:
         """Create fallback final validation prompt when template fails"""
         australian_state = state.get("australian_state", "NSW")
         risk_assessment = state.get("risk_analysis", {})
         compliance_check = state.get("compliance_check", {})
         recommendations = state.get("recommendations", [])
-        
+
         return f"""
         Conduct final validation of complete contract analysis for {australian_state}:
         
@@ -3205,9 +3233,7 @@ class ContractAnalysisWorkflow:
         """
 
     def _create_compliance_fallback_prompt(
-        self, 
-        contract_terms: Dict[str, Any], 
-        australian_state: str
+        self, contract_terms: Dict[str, Any], australian_state: str
     ) -> str:
         """Create fallback compliance analysis prompt when template fails"""
         return f"""
@@ -3247,9 +3273,7 @@ class ContractAnalysisWorkflow:
         """
 
     def _create_document_quality_fallback_prompt(
-        self, 
-        document_text: str, 
-        document_metadata: Dict[str, Any]
+        self, document_text: str, document_metadata: Dict[str, Any]
     ) -> str:
         """Create fallback document quality validation prompt when template fails"""
         return f"""

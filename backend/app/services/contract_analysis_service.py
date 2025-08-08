@@ -39,7 +39,7 @@ class ContractAnalysisService:
         self,
         websocket_manager: Optional[WebSocketManager] = None,
         openai_api_key: str = None,
-        model_name: str = "gpt-4",
+        model_name: Optional[str] = None,
         openai_api_base: Optional[str] = None,
         config: Optional[EnhancedWorkflowConfig] = None,
         prompt_manager: Optional[PromptManager] = None,
@@ -50,7 +50,18 @@ class ContractAnalysisService:
             enable_websocket_progress and websocket_manager is not None
         )
         self.openai_api_key = openai_api_key
-        self.model_name = model_name
+        # Resolve model name from environment/config if not explicitly provided
+        if model_name is None:
+            try:
+                from app.clients.openai.config import OpenAISettings
+
+                self.model_name = OpenAISettings().openai_model_name
+            except Exception:
+                from app.clients.openai.config import DEFAULT_MODEL
+
+                self.model_name = DEFAULT_MODEL
+        else:
+            self.model_name = model_name
         self.openai_api_base = openai_api_base
 
         # Initialize configuration
@@ -1007,7 +1018,7 @@ async def upsert_contract_analysis(
 def create_contract_analysis_service(
     websocket_manager: Optional[WebSocketManager] = None,
     openai_api_key: str = None,
-    model_name: str = "gpt-4",
+    model_name: Optional[str] = None,
     openai_api_base: Optional[str] = None,
     use_environment_config: bool = True,
     enable_websocket_progress: bool = True,

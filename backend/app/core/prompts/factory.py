@@ -42,7 +42,7 @@ class PromptManagerFactory:
             validation_enabled=True,
             hot_reload_enabled=False,
             preload_templates=True,
-            default_model="gemini-2.5-flash",
+            default_model=PromptManagerFactory._resolve_default_model(),
             max_render_time_seconds=30,
             enable_metrics=True,
             enable_composition=True,
@@ -79,7 +79,7 @@ class PromptManagerFactory:
             validation_enabled=True,
             hot_reload_enabled=True,  # Enable hot reload for development
             preload_templates=False,  # Don't preload for faster startup
-            default_model="gemini-2.5-flash",
+            default_model=PromptManagerFactory._resolve_default_model(),
             max_render_time_seconds=60,  # More generous timeout
             enable_metrics=True,
             enable_composition=True,
@@ -116,7 +116,7 @@ class PromptManagerFactory:
             validation_enabled=True,
             hot_reload_enabled=False,  # Disable hot reload for stability
             preload_templates=True,  # Preload for performance
-            default_model="gemini-2.5-flash",
+            default_model=PromptManagerFactory._resolve_default_model(),
             max_render_time_seconds=15,  # Strict timeout for production
             enable_metrics=True,
             enable_composition=True,
@@ -153,7 +153,7 @@ class PromptManagerFactory:
             validation_enabled=False,  # Disable validation for faster tests
             hot_reload_enabled=False,
             preload_templates=False,  # Don't preload for faster test startup
-            default_model="gemini-2.5-flash",
+            default_model=PromptManagerFactory._resolve_default_model(),
             max_render_time_seconds=5,  # Short timeout for tests
             enable_metrics=False,  # Disable metrics for cleaner tests
             enable_composition=True,
@@ -182,7 +182,7 @@ class PromptManagerFactory:
             validation_enabled=False,
             hot_reload_enabled=False,
             preload_templates=False,
-            default_model="gemini-2.5-flash",
+            default_model=PromptManagerFactory._resolve_default_model(),
             max_render_time_seconds=10,
             enable_metrics=False,
             enable_composition=False,  # Disable composition
@@ -303,6 +303,29 @@ class PromptManagerFactory:
         }
 
         return configs.get(environment, configs["development"])
+
+    @staticmethod
+    def _resolve_default_model() -> str:
+        """Resolve default model without hardcoding, using env-backed settings."""
+        try:
+            from app.clients.openai.config import (
+                OpenAISettings,
+                DEFAULT_MODEL as OPENAI_DEFAULT_MODEL,
+            )
+
+            model_name = OpenAISettings().openai_model_name
+            return model_name or OPENAI_DEFAULT_MODEL
+        except Exception:
+            try:
+                from app.clients.gemini.config import GeminiSettings
+
+                return GeminiSettings().gemini_model_name
+            except Exception:
+                from app.clients.openai.config import (
+                    DEFAULT_MODEL as OPENAI_DEFAULT_MODEL,
+                )
+
+                return OPENAI_DEFAULT_MODEL
 
 
 # Convenience functions for common use cases

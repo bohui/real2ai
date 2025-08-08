@@ -79,7 +79,7 @@ document_service = DocumentService()
 
 # Initialize LangGraph workflow (will be initialized in lifespan)
 contract_workflow = ContractAnalysisWorkflow(
-    model_name="gpt-4",
+    model_name=None,
 )
 
 
