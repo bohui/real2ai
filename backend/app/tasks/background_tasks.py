@@ -115,12 +115,16 @@ async def update_analysis_progress(
         publish_progress_sync(
             content_hash,
             {
-                "type": "analysis_progress",
-                "content_hash": content_hash,
-                "progress": progress_percent,
-                "current_step": current_step,
-                "step_description": step_description,
-                "estimated_completion_minutes": estimated_completion_minutes,
+                "event_type": "analysis_progress",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "data": {
+                    "content_hash": content_hash,
+                    "progress_percent": progress_percent,
+                    "current_step": current_step,
+                    "step_description": step_description,
+                    "estimated_completion_minutes": estimated_completion_minutes,
+                    "status": "processing" if progress_percent < 100 else "completed",
+                },
             },
         )
 

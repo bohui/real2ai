@@ -117,9 +117,11 @@ class RedisPubSubService:
                         try:
                             # Parse JSON message
                             data = json.loads(message["data"])
+                            logger.info(f"📦 Redis message received on {channel}: {data}")
                             
                             # Call callback with parsed data
                             await callback(data)
+                            logger.info(f"✅ Callback executed successfully for channel {channel}")
                         except json.JSONDecodeError:
                             logger.error(f"Invalid JSON in message: {message['data']}")
                         except Exception as e:
@@ -194,6 +196,7 @@ def publish_progress_sync(contract_id: str, message: Dict[str, Any]):
         
         subscribers = sync_redis.publish(channel, message_json)
         logger.info(f"[Sync] Published progress to {channel}, {subscribers} subscribers")
+        logger.debug(f"[Sync] Message content: {message_json}")
         
         sync_redis.close()
         return subscribers

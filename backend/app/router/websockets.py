@@ -436,7 +436,9 @@ async def document_analysis_websocket(
 
                 async def _forward_from_hash(message: Dict[str, Any]):
                     try:
+                        logger.info(f"📨 Forwarding hash pub/sub message to document {document_id}: {message}")
                         await websocket_manager.send_message(document_id, message)
+                        logger.info(f"✅ Successfully forwarded hash message to WebSocket")
                     except Exception as forward_error:
                         logger.error(
                             f"Failed to forward hash pub/sub message: {forward_error}"
@@ -445,6 +447,7 @@ async def document_analysis_websocket(
                 await redis_pubsub_service.subscribe_to_progress(
                     content_hash, _forward_from_hash
                 )
+                logger.info(f"🔗 Subscribed to content_hash channel: {content_hash} for document {document_id}")
         except Exception as extra_sub_error:
             logger.warning(
                 f"Failed to subscribe to additional channels: {extra_sub_error}"
