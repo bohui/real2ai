@@ -116,4 +116,47 @@ async def detailed_health_check() -> Dict[str, Any]:
         "details": langsmith_status
     }
     
+    # Check task recovery system
+    try:
+        from app.services.recovery_monitor import recovery_monitor
+        recovery_health = await recovery_monitor.get_recovery_health_status()
+        health_status["services"]["task_recovery"] = recovery_health
+        
+        if recovery_health.get("overall_health") in ["degraded", "critical"]:
+            health_status["status"] = "degraded"
+            
+    except Exception as e:
+        health_status["services"]["task_recovery"] = {
+            "status": "error",
+            "error": str(e)
+        }
+        health_status["status"] = "degraded"
+    
     return health_status
+
+
+@router.get("/health/recovery")
+async def recovery_health_check() -> Dict[str, Any]:
+    """Task recovery system health check"""
+    try:
+        from app.services.recovery_monitor import recovery_monitor
+        return await recovery_monitor.get_recovery_health_status()
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e),
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+
+
+@router.get("/health/recovery/metrics")
+async def recovery_metrics() -> Dict[str, Any]:
+    """Task recovery system detailed metrics"""
+    try:
+        from app.services.recovery_monitor import recovery_monitor
+        return await recovery_monitor.get_recovery_metrics()
+    except Exception as e:
+        return {
+            "error": str(e),
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }

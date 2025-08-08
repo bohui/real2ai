@@ -78,12 +78,39 @@ async def lifespan(app: FastAPI) -> Any:
     # Initialize contract workflow
     await contract_workflow.initialize()
 
+    # Initialize task recovery system
+    logger.info("Initializing task recovery system...")
+    try:
+        from app.core.recovery_orchestrator import recovery_orchestrator
+        from app.services.recovery_monitor import recovery_monitor
+        
+        # Run startup recovery sequence
+        recovery_results = await recovery_orchestrator.startup_recovery_sequence()
+        logger.info(f"Task recovery completed: {recovery_results.summary}")
+        
+        # Start recovery monitoring
+        await recovery_monitor.start_monitoring()
+        logger.info("Recovery monitoring started")
+        
+    except Exception as e:
+        logger.error(f"Task recovery initialization failed: {e}")
+        # Continue startup even if recovery fails
+        pass
+
     logger.info("Real2.AI API started successfully")
 
     yield
 
     # Shutdown
     logger.info("Shutting down Real2.AI API...")
+
+    # Stop recovery monitoring
+    try:
+        from app.services.recovery_monitor import recovery_monitor
+        await recovery_monitor.stop_monitoring()
+        logger.info("Recovery monitoring stopped")
+    except Exception as e:
+        logger.error(f"Failed to stop recovery monitoring: {e}")
 
     # Close database connections
     await db_client.close()

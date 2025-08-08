@@ -45,7 +45,7 @@ class SecureTaskContextStore:
 
         try:
             # Initialize Redis connection
-            redis_url = getattr(self.settings, "REDIS_URL", "redis://localhost:6379")
+            redis_url = getattr(self.settings, "redis_url", "redis://localhost:6379")
             self.redis_client = redis.Redis.from_url(redis_url, decode_responses=False)
 
             # Test Redis connection
@@ -283,52 +283,113 @@ async def task_auth_context(context_key: str):
         logger.debug("Cleaned up task auth context")
 
 
-def user_aware_task(func):
+def user_aware_task(
+    func=None, *, recovery_enabled=False, checkpoint_frequency=None, recovery_priority=0
+):
     """
     Decorator for background tasks that need user authentication context.
+    Enhanced with optional recovery capabilities.
 
     The decorated function will receive a context_key as its first parameter,
     which is used to restore user authentication context.
 
-    This decorator handles both sync and async functions by detecting the function type
-    and running async functions in an event loop.
+    Args:
+        recovery_enabled: Enable automatic task recovery on container restart
+        checkpoint_frequency: Create checkpoint every N percent progress (if recovery enabled)
+        recovery_priority: Recovery priority (0-10, higher = more important)
 
     Usage:
         @celery_app.task
-        @user_aware_task
-        async def process_document(document_id: str, user_id: str):
+        @user_aware_task(recovery_enabled=True, checkpoint_frequency=25, recovery_priority=1)
+        async def process_document(recovery_ctx, context_key: str, document_id: str, user_id: str):
             # AuthContext is automatically restored
+            # recovery_ctx provides checkpointing capabilities if recovery_enabled=True
             client = await AuthContext.get_authenticated_client()
             # Process document with user permissions
     """
-    if asyncio.iscoroutinefunction(func):
-        # Handle async functions
-        @wraps(func)
-        def async_wrapper(context_key: str, *args, **kwargs):
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                return loop.run_until_complete(
-                    _async_wrapper_async(context_key, func, *args, **kwargs)
-                )
-            finally:
-                loop.close()
 
-        return async_wrapper
+    def decorator(func):
+        if recovery_enabled:
+            # Create recovery-enabled wrapper that handles user context first
+            if asyncio.iscoroutinefunction(func):
+
+                @wraps(func)
+                def async_wrapper(context_key: str, *args, **kwargs):
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        return loop.run_until_complete(
+                            _recovery_enabled_async_wrapper(
+                                context_key,
+                                func,
+                                recovery_priority,
+                                checkpoint_frequency,
+                                *args,
+                                **kwargs,
+                            )
+                        )
+                    finally:
+                        loop.close()
+
+                return async_wrapper
+            else:
+
+                @wraps(func)
+                def sync_wrapper(context_key: str, *args, **kwargs):
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        return loop.run_until_complete(
+                            _recovery_enabled_sync_wrapper(
+                                context_key,
+                                func,
+                                recovery_priority,
+                                checkpoint_frequency,
+                                *args,
+                                **kwargs,
+                            )
+                        )
+                    finally:
+                        loop.close()
+
+                return sync_wrapper
+
+        else:
+            # Original user_aware_task behavior without recovery
+            if asyncio.iscoroutinefunction(func):
+                # Handle async functions
+                @wraps(func)
+                def async_wrapper(context_key: str, *args, **kwargs):
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        return loop.run_until_complete(
+                            _async_wrapper_async(context_key, func, *args, **kwargs)
+                        )
+                    finally:
+                        loop.close()
+
+                return async_wrapper
+            else:
+                # Handle sync functions
+                @wraps(func)
+                def sync_wrapper(context_key: str, *args, **kwargs):
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        return loop.run_until_complete(
+                            _async_wrapper_sync(context_key, func, *args, **kwargs)
+                        )
+                    finally:
+                        loop.close()
+
+                return sync_wrapper
+
+    # Handle both @user_aware_task and @user_aware_task(...) syntax
+    if func is None:
+        return decorator
     else:
-        # Handle sync functions
-        @wraps(func)
-        def sync_wrapper(context_key: str, *args, **kwargs):
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                return loop.run_until_complete(
-                    _async_wrapper_sync(context_key, func, *args, **kwargs)
-                )
-            finally:
-                loop.close()
-
-        return sync_wrapper
+        return decorator(func)
 
 
 async def _async_wrapper_async(context_key: str, func, *args, **kwargs):
@@ -341,6 +402,62 @@ async def _async_wrapper_sync(context_key: str, func, *args, **kwargs):
     """Internal async wrapper for sync functions."""
     async with task_auth_context(context_key):
         return func(*args, **kwargs)
+
+
+async def _recovery_enabled_async_wrapper(
+    context_key: str,
+    func,
+    recovery_priority: int,
+    checkpoint_frequency: int,
+    *args,
+    **kwargs,
+):
+    """Recovery-enabled wrapper for async functions."""
+    # First restore user context
+    async with task_auth_context(context_key):
+        # Now create recovery context with user_id available
+        from app.core.task_recovery import create_recovery_context
+
+        # Get user_id from restored context
+        user_id = AuthContext.get_user_id()
+
+        # Create recovery context
+        recovery_ctx = await create_recovery_context(
+            user_id=user_id,
+            recovery_priority=recovery_priority,
+            checkpoint_frequency=checkpoint_frequency,
+        )
+
+        # Execute function with recovery context as first parameter
+        return await func(recovery_ctx, *args, **kwargs)
+
+
+async def _recovery_enabled_sync_wrapper(
+    context_key: str,
+    func,
+    recovery_priority: int,
+    checkpoint_frequency: int,
+    *args,
+    **kwargs,
+):
+    """Recovery-enabled wrapper for sync functions."""
+    # First restore user context
+    async with task_auth_context(context_key):
+        # Now create recovery context with user_id available
+        from app.core.task_recovery import create_recovery_context
+
+        # Get user_id from restored context
+        user_id = AuthContext.get_user_id()
+
+        # Create recovery context
+        recovery_ctx = await create_recovery_context(
+            user_id=user_id,
+            recovery_priority=recovery_priority,
+            checkpoint_frequency=checkpoint_frequency,
+        )
+
+        # Execute function with recovery context as first parameter
+        return func(recovery_ctx, *args, **kwargs)
 
 
 class TaskContextManager:

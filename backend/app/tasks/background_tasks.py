@@ -121,9 +121,9 @@ async def update_analysis_progress(
     autoretry_for=(Exception,),
     retry_kwargs={"max_retries": 3, "countdown": 60},
 )
-@user_aware_task
+@user_aware_task(recovery_enabled=True, checkpoint_frequency=25, recovery_priority=2)
 async def comprehensive_document_analysis(
-    self,
+    recovery_ctx,
     document_id: str,
     analysis_id: str,
     contract_id: str,
@@ -1548,7 +1548,9 @@ async def batch_ocr_processing_background(
 
                         # Update document status
                         await user_client.update(
-                            "documents", {"id": doc_id}, {"status": "processing_ocr"}
+                            "documents",
+                            {"id": doc_id},
+                            {"processing_status": "processing_ocr"},
                         )
 
                         # Process with OCR
@@ -1565,7 +1567,7 @@ async def batch_ocr_processing_background(
                             "documents",
                             {"id": doc_id},
                             {
-                                "status": "processed",
+                                "processing_status": "processed",
                                 "processing_results": extraction_result,
                             },
                         )
@@ -1582,7 +1584,7 @@ async def batch_ocr_processing_background(
                             "documents",
                             {"id": doc_id},
                             {
-                                "status": "ocr_failed",
+                                "processing_status": "ocr_failed",
                                 "processing_results": {"error": str(e)},
                             },
                         )
@@ -1609,7 +1611,9 @@ async def batch_ocr_processing_background(
 
                     # Update document status
                     await user_client.update(
-                        "documents", {"id": doc_id}, {"status": "processing_ocr"}
+                        "documents",
+                        {"id": doc_id},
+                        {"processing_status": "processing_ocr"},
                     )
 
                     # Process with OCR
@@ -1624,7 +1628,7 @@ async def batch_ocr_processing_background(
                         "documents",
                         {"id": doc_id},
                         {
-                            "status": "processed",
+                            "processing_status": "processed",
                             "processing_results": extraction_result,
                         },
                     )
