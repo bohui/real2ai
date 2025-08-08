@@ -10,6 +10,7 @@ import time
 import logging
 from datetime import datetime, UTC
 from pathlib import Path
+import uuid
 
 # Import new client architecture
 from app.clients import get_openai_client, get_gemini_client
@@ -275,9 +276,7 @@ class ContractAnalysisWorkflow:
             "process_document",
             self.check_processing_success,
             {
-                "success": (
-                    "extract_terms" if not self.enable_validation else "extract_terms"
-                ),
+                "success": "extract_terms",
                 "retry": "retry_processing",
                 "error": "handle_error",
             },
@@ -312,6 +311,28 @@ class ContractAnalysisWorkflow:
         start_time = time.time()
         self._metrics["total_analyses"] += 1
 
+        # Ensure initial state is properly initialized
+        if not initial_state.get("session_id"):
+            initial_state["session_id"] = str(uuid.uuid4())
+
+        if not initial_state.get("agent_version"):
+            initial_state["agent_version"] = "1.0"
+
+        if "confidence_scores" not in initial_state:
+            initial_state["confidence_scores"] = {}
+
+        if "analysis_results" not in initial_state:
+            initial_state["analysis_results"] = {}
+
+        if "recommendations" not in initial_state:
+            initial_state["recommendations"] = []
+
+        if "final_recommendations" not in initial_state:
+            initial_state["final_recommendations"] = []
+
+        if "user_preferences" not in initial_state:
+            initial_state["user_preferences"] = {}
+
         # Initialize progress tracking
         total_steps = 7 + (3 if self.enable_validation else 0)
         step_names = [
@@ -340,157 +361,108 @@ class ContractAnalysisWorkflow:
         if not self.openai_client:
             await self.initialize()
 
-        # Initialize prompt manager if needed
         try:
-            await self.prompt_manager.initialize()
+            # Create and compile workflow
+            workflow = self._create_workflow()
+
+            # Execute workflow
+            final_state = await workflow.ainvoke(initial_state)
+
+            # Calculate processing time
+            processing_time = time.time() - start_time
+            final_state["processing_time"] = processing_time
+
+            # Update metrics
+            self._metrics["total_processing_time"] += processing_time
+            self._metrics["average_processing_time"] = (
+                self._metrics["total_processing_time"] / self._metrics["total_analyses"]
+            )
+
+            logger.info(
+                f"Contract analysis completed in {processing_time:.2f}s for session {final_state['session_id']}"
+            )
+
+            return final_state
+
         except Exception as e:
-            logger.warning(f"Failed to initialize prompt manager: {e}")
-
-        # Create LangSmith session for the entire workflow
-        session_metadata = {
-            "workflow_version": "enhanced_v1.0",
-            "australian_state": initial_state.get("australian_state"),
-            "user_type": initial_state.get("user_type", "buyer"),
-            "contract_type": initial_state.get("contract_type", "purchase_agreement"),
-            "validation_enabled": self.enable_validation,
-            "quality_checks_enabled": self.enable_quality_checks,
-            "total_steps": total_steps,
-            "extraction_config": self.extraction_config,
-            "use_llm_config": self.use_llm_config,
-        }
-
-        async with langsmith_session(
-            f"contract_analysis_{initial_state.get('session_id', 'unknown')}",
-            **session_metadata,
-        ) as session:
-            try:
-                # Run the enhanced workflow with progress tracking
-                final_state = await self.workflow.ainvoke(initial_state)
-
-                # Calculate processing time and update metrics
-                processing_time = time.time() - start_time
-                final_state["processing_time"] = processing_time
-
-                self._metrics["average_processing_time"] = (
-                    self._metrics["average_processing_time"]
-                    * (self._metrics["total_analyses"] - 1)
-                    + processing_time
-                ) / self._metrics["total_analyses"]
-
-                # Calculate overall confidence with enhanced scoring
-                if "analysis_results" not in final_state:
-                    final_state["analysis_results"] = {}
-
-                confidence_result = calculate_overall_confidence_score.invoke(
-                    {
-                        "confidence_scores": final_state.get("confidence_scores", {}),
-                        "step_weights": None,  # Use default weights
-                    }
-                )
-
-                final_state["analysis_results"]["overall_confidence"] = (
-                    confidence_result["overall_confidence"]
-                )
-                final_state["analysis_results"]["confidence_breakdown"] = (
-                    confidence_result["confidence_breakdown"]
-                )
-                final_state["analysis_results"]["quality_assessment"] = (
-                    confidence_result["quality_assessment"]
-                )
-
-                # Mark progress complete
-                final_state["progress"]["percentage"] = 100
-                final_state["progress"]["current_step"] = total_steps
-
-                # Update session with final results
-                session.outputs = {
-                    "processing_time": processing_time,
-                    "overall_confidence": confidence_result["overall_confidence"],
-                    "total_steps_completed": total_steps,
-                    "analysis_status": "completed",
-                    "confidence_breakdown": confidence_result["confidence_breakdown"],
-                }
-
-                logger.info(
-                    f"Enhanced workflow completed successfully in {processing_time:.2f}s"
-                )
-                return final_state
-
-            except Exception as e:
-                # Handle workflow-level errors
-                processing_time = time.time() - start_time
-                error_state = update_state_step(
-                    initial_state,
-                    "workflow_error",
-                    error=f"Enhanced workflow execution failed: {str(e)}",
-                )
-                error_state["processing_time"] = processing_time
-                error_state["progress"]["percentage"] = 0
-
-                # Update session with error information
-                session.error = str(e)
-                session.outputs = {
-                    "processing_time": processing_time,
-                    "analysis_status": "failed",
-                    "error_message": str(e),
-                }
-
-                logger.error(
-                    f"Enhanced workflow failed after {processing_time:.2f}s: {e}"
-                )
-                return error_state
+            logger.error(f"Contract analysis failed: {e}")
+            # Return error state
+            error_state = initial_state.copy()
+            error_state["error_state"] = str(e)
+            error_state["parsing_status"] = ProcessingStatus.FAILED
+            error_state["processing_time"] = time.time() - start_time
+            return error_state
 
     # Enhanced workflow steps
 
     @langsmith_trace(name="validate_input", run_type="tool")
     def validate_input(self, state: RealEstateAgentState) -> RealEstateAgentState:
-        """Enhanced input validation with prompt manager context"""
+        """Validate input state and ensure all required fields are present"""
 
-        # Update progress
-        state["progress"]["current_step"] = 1
-        state["progress"]["percentage"] = int(100 / state["progress"]["total_steps"])
-
-        # Existing validation logic
-        if not state.get("document_data"):
-            return update_state_step(
-                state, "validation_failed", error="No document provided"
-            )
-
-        if not state.get("australian_state"):
-            return update_state_step(
-                state, "validation_failed", error="Australian state not specified"
-            )
-
-        # Enhanced validation with prompt context validation
         try:
-            # Create context for validation
-            context_vars = {
-                "australian_state": state["australian_state"],
-                "user_type": state.get("user_type", "buyer"),
-                "contract_type": state.get("contract_type", "purchase_agreement"),
-            }
+            # Ensure required fields are present
+            if not state.get("user_id"):
+                raise ValueError("user_id is required")
 
-            # Store context for later use in prompt rendering
-            state["prompt_context"] = context_vars
+            if not state.get("australian_state"):
+                raise ValueError("australian_state is required")
+
+            if not state.get("session_id"):
+                state["session_id"] = str(uuid.uuid4())
+
+            if not state.get("agent_version"):
+                state["agent_version"] = "1.0"
+
+            # Initialize missing fields with defaults
+            if "confidence_scores" not in state:
+                state["confidence_scores"] = {}
+
+            if "progress" not in state:
+                state["progress"] = {
+                    "current_step": 0,
+                    "total_steps": 7 + (3 if self.enable_validation else 0),
+                    "percentage": 0,
+                }
+
+            if "analysis_results" not in state:
+                state["analysis_results"] = {}
+
+            if "recommendations" not in state:
+                state["recommendations"] = []
+
+            if "final_recommendations" not in state:
+                state["final_recommendations"] = []
+
+            if "user_preferences" not in state:
+                state["user_preferences"] = {}
+
+            # Validate document data if present
+            document_data = state.get("document_data")
+            if document_data is not None:
+                if not isinstance(document_data, dict):
+                    raise ValueError("document_data must be a dictionary")
+
+            # Update progress
+            if "progress" in state and state["progress"]:
+                state["progress"]["current_step"] += 1
+                state["progress"]["percentage"] = int(
+                    (
+                        state["progress"]["current_step"]
+                        / state["progress"]["total_steps"]
+                    )
+                    * 100
+                )
+
+            logger.debug(f"Input validation completed for user {state['user_id']}")
+            return update_state_step(state, "input_validated")
 
         except Exception as e:
-            logger.warning(f"Context validation failed: {e}")
-            # Continue with basic validation
-
-        # Validate document format
-        document_data = state["document_data"]
-        if not document_data.get("content") and not document_data.get("file_path"):
+            logger.error(f"Input validation failed: {e}")
             return update_state_step(
-                state, "validation_failed", error="Document content not accessible"
+                state,
+                "input_validation_failed",
+                error=f"Input validation failed: {str(e)}",
             )
-
-        # Add confidence score for validation
-        if "confidence_scores" not in state:
-            state["confidence_scores"] = {}
-        state["confidence_scores"]["input_validation"] = 0.95
-
-        logger.debug("Enhanced input validation completed successfully")
-        return update_state_step(state, "input_validated")
 
     async def validate_document_quality_step(
         self, state: RealEstateAgentState
@@ -501,13 +473,37 @@ class ContractAnalysisWorkflow:
             return state
 
         # Update progress
-        state["progress"]["current_step"] += 1
-        state["progress"]["percentage"] = int(
-            (state["progress"]["current_step"] / state["progress"]["total_steps"]) * 100
-        )
+        if "progress" in state and state["progress"]:
+            state["progress"]["current_step"] += 1
+            state["progress"]["percentage"] = int(
+                (state["progress"]["current_step"] / state["progress"]["total_steps"])
+                * 100
+            )
 
         try:
-            document_data = state["document_data"]
+            # Handle case where document_data might be None
+            document_data = state.get("document_data", {})
+            if not document_data:
+                logger.warning("No document data available for quality validation")
+                # Return state with default quality metrics
+                state["document_quality_metrics"] = {
+                    "text_quality_score": 0.5,
+                    "completeness_score": 0.5,
+                    "readability_score": 0.5,
+                    "key_terms_coverage": 0.5,
+                    "extraction_confidence": 0.5,
+                    "issues_identified": ["No document data available"],
+                    "improvement_suggestions": [
+                        "Verify document was properly uploaded"
+                    ],
+                }
+                state["confidence_scores"]["document_quality"] = 0.5
+                return update_state_step(
+                    state,
+                    "document_quality_validation_warning",
+                    error="No document data available for quality validation",
+                )
+
             document_text = document_data.get("content", "")
             document_metadata = document_data.get("metadata", {})
             use_llm = self.use_llm_config.get("document_quality", True)
@@ -569,14 +565,35 @@ class ContractAnalysisWorkflow:
         """Enhanced contract terms extraction using contract_structure.md with configurable methods"""
 
         # Update progress
-        state["progress"]["current_step"] += 1
-        state["progress"]["percentage"] = int(
-            (state["progress"]["current_step"] / state["progress"]["total_steps"]) * 100
-        )
+        if "progress" in state and state["progress"]:
+            state["progress"]["current_step"] += 1
+            state["progress"]["percentage"] = int(
+                (state["progress"]["current_step"] / state["progress"]["total_steps"])
+                * 100
+            )
 
         try:
-            document_text = state["document_metadata"]["extracted_text"]
-            australian_state = state["australian_state"]
+            # Handle case where document_metadata might be None
+            document_metadata = state.get("document_metadata", {})
+            if not document_metadata:
+                logger.warning("No document metadata available for term extraction")
+                # Try to get text from document_data as fallback
+                document_data = state.get("document_data", {})
+                document_text = (
+                    document_data.get("content", "") if document_data else ""
+                )
+            else:
+                document_text = document_metadata.get("extracted_text", "")
+
+            if not document_text:
+                logger.error("No document text available for term extraction")
+                return update_state_step(
+                    state,
+                    "term_extraction_failed",
+                    error="No document text available for term extraction",
+                )
+
+            australian_state = state.get("australian_state", "NSW")
             contract_type = state.get("contract_type", "purchase_agreement")
             user_experience = state.get("user_experience", "novice")
             user_type = state.get("user_type", "buyer")
@@ -2243,13 +2260,24 @@ class ContractAnalysisWorkflow:
         """Enhanced document processing with validation and configurable LLM usage"""
 
         # Update progress
-        state["progress"]["current_step"] += 1
-        state["progress"]["percentage"] = int(
-            (state["progress"]["current_step"] / state["progress"]["total_steps"]) * 100
-        )
+        if "progress" in state and state["progress"]:
+            state["progress"]["current_step"] += 1
+            state["progress"]["percentage"] = int(
+                (state["progress"]["current_step"] / state["progress"]["total_steps"])
+                * 100
+            )
 
         try:
-            document_data = state["document_data"]
+            # Handle case where document_data might be None
+            document_data = state.get("document_data", {})
+            if not document_data:
+                logger.warning("No document data available for processing")
+                return update_state_step(
+                    state,
+                    "document_processing_failed",
+                    error="No document data available for processing",
+                )
+
             use_llm = self.use_llm_config.get("document_processing", True)
 
             # Use actual extracted text if available
@@ -2292,6 +2320,8 @@ class ContractAnalysisWorkflow:
                 )
 
             # Update confidence scores
+            if "confidence_scores" not in state:
+                state["confidence_scores"] = {}
             state["confidence_scores"]["document_processing"] = (
                 extraction_confidence * text_quality["score"]
             )

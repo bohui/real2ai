@@ -165,7 +165,8 @@ def update_state_step(
 ) -> RealEstateAgentState:
     """Update state with new step and optional data"""
 
-    updated_state = state.copy()
+    # Create a new state object to avoid mutations
+    updated_state = dict(state)
     updated_state["current_step"] = step
 
     if error:
@@ -173,7 +174,20 @@ def update_state_step(
         updated_state["parsing_status"] = ProcessingStatus.FAILED
 
     if data:
-        updated_state.update(data)
+        # Only update fields that are not already set or are explicitly provided
+        for key, value in data.items():
+            if key not in updated_state or updated_state[key] is None:
+                updated_state[key] = value
+            elif isinstance(updated_state[key], dict) and isinstance(value, dict):
+                # Merge dictionaries instead of replacing
+                updated_state[key].update(value)
+            elif isinstance(updated_state[key], list) and isinstance(value, list):
+                # Extend lists instead of replacing
+                updated_state[key].extend(value)
+            else:
+                # Only update if the new value is not None
+                if value is not None:
+                    updated_state[key] = value
 
     return updated_state
 
