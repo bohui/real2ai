@@ -23,11 +23,23 @@ async def get_onboarding_status(user: User = Depends(get_current_user)):
     try:
         logger.info(f"[Onboarding] Fetching status for user_id={user.id}")
         
-        # Use the working user data directly since get_current_user already fetched the profile
+        # Get authenticated client for database operations to fetch current state
+        db_client = await AuthContext.get_authenticated_client(require_auth=True)
+        
+        # Query database for current onboarding status
+        result = db_client.table("profiles").select(
+            "onboarding_completed, onboarding_completed_at, onboarding_preferences"
+        ).eq("id", user.id).execute()
+        
+        if not result.data:
+            logger.error(f"[Onboarding] User profile not found for user_id={user.id}")
+            raise HTTPException(status_code=404, detail="User profile not found")
+        
+        profile_data = result.data[0]
         response = OnboardingStatusResponse(
-            onboarding_completed=user.onboarding_completed,
-            onboarding_completed_at=user.onboarding_completed_at,
-            onboarding_preferences=user.onboarding_preferences,
+            onboarding_completed=profile_data.get("onboarding_completed", False),
+            onboarding_completed_at=profile_data.get("onboarding_completed_at"),
+            onboarding_preferences=profile_data.get("onboarding_preferences", {}),
         )
         logger.info(
             f"[Onboarding] Status for user_id={user.id}: completed={response.onboarding_completed}, "
@@ -52,15 +64,17 @@ async def complete_onboarding(
     try:
         logger.info(f"[Onboarding] Completing onboarding for user_id={user.id}")
         
-        # Check if already completed
-        if user.onboarding_completed:
+        # Get authenticated client for database operations
+        db_client = await AuthContext.get_authenticated_client(require_auth=True)
+        
+        # Check current onboarding status from database
+        result = db_client.table("profiles").select("onboarding_completed").eq("id", user.id).execute()
+        
+        if result.data and result.data[0].get("onboarding_completed", False):
             logger.info(
                 f"[Onboarding] Already completed for user_id={user.id}; skipping updates"
             )
             return {"message": "Onboarding already completed", "skip_onboarding": True}
-
-        # Get authenticated client for database operations
-        db_client = await AuthContext.get_authenticated_client(require_auth=True)
 
         # Update profile with onboarding completion
         update_data = {
