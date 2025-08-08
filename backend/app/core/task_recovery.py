@@ -115,16 +115,18 @@ class TaskRegistry:
         
         client = await AuthContext.get_authenticated_client()
         
-        result = await client.execute_function(
+        result = await client.execute_rpc(
             "upsert_task_registry",
-            p_task_id=task_id,
-            p_task_name=task_name,
-            p_user_id=user_id,
-            p_task_args=json.dumps(task_args),
-            p_task_kwargs=json.dumps(task_kwargs or {}),
-            p_context_key=context_key,
-            p_recovery_priority=recovery_priority,
-            p_auto_recovery_enabled=auto_recovery_enabled
+            {
+                "p_task_id": task_id,
+                "p_task_name": task_name,
+                "p_user_id": user_id,
+                "p_task_args": json.dumps(task_args),
+                "p_task_kwargs": json.dumps(task_kwargs or {}),
+                "p_context_key": context_key,
+                "p_recovery_priority": recovery_priority,
+                "p_auto_recovery_enabled": auto_recovery_enabled
+            }
         )
         
         registry_id = result[0]['upsert_task_registry'] if result else None
@@ -148,15 +150,17 @@ class TaskRegistry:
         
         client = await AuthContext.get_authenticated_client()
         
-        result = await client.execute_function(
+        result = await client.execute_rpc(
             "update_task_registry_state",
-            p_task_id=task_id,
-            p_new_state=new_state.value,
-            p_progress_percent=progress_percent,
-            p_current_step=current_step,
-            p_checkpoint_data=json.dumps(checkpoint_data) if checkpoint_data else None,
-            p_error_details=json.dumps(error_details) if error_details else None,
-            p_result_data=json.dumps(result_data) if result_data else None
+            {
+                "p_task_id": task_id,
+                "p_new_state": new_state.value,
+                "p_progress_percent": progress_percent,
+                "p_current_step": current_step,
+                "p_checkpoint_data": json.dumps(checkpoint_data) if checkpoint_data else None,
+                "p_error_details": json.dumps(error_details) if error_details else None,
+                "p_result_data": json.dumps(result_data) if result_data else None
+            }
         )
         
         success = result[0]['update_task_registry_state'] if result else False
@@ -177,15 +181,17 @@ class TaskRegistry:
         
         client = await AuthContext.get_authenticated_client()
         
-        result = await client.execute_function(
+        result = await client.execute_rpc(
             "create_task_checkpoint",
-            p_task_id=task_id,
-            p_checkpoint_name=checkpoint.checkpoint_name,
-            p_progress_percent=checkpoint.progress_percent,
-            p_step_description=checkpoint.step_description,
-            p_recoverable_data=json.dumps(checkpoint.recoverable_data),
-            p_database_state=json.dumps(checkpoint.database_state or {}),
-            p_file_state=json.dumps(checkpoint.file_state or {})
+            {
+                "p_task_id": task_id,
+                "p_checkpoint_name": checkpoint.checkpoint_name,
+                "p_progress_percent": checkpoint.progress_percent,
+                "p_step_description": checkpoint.step_description,
+                "p_recoverable_data": json.dumps(checkpoint.recoverable_data),
+                "p_database_state": json.dumps(checkpoint.database_state or {}),
+                "p_file_state": json.dumps(checkpoint.file_state or {})
+            }
         )
         
         checkpoint_id = result[0]['create_task_checkpoint'] if result else None
@@ -200,7 +206,7 @@ class TaskRegistry:
         
         client = await AuthContext.get_authenticated_client()
         
-        result = await client.execute_function("get_latest_checkpoint", p_task_id=task_id)
+        result = await client.execute_rpc("get_latest_checkpoint", {"p_task_id": task_id})
         
         if not result:
             return None

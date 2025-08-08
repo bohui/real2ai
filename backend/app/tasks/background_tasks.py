@@ -76,7 +76,7 @@ async def update_analysis_progress(
 
         # Upsert progress record using content_hash + user_id unique constraint
         result = await user_client.database.upsert(
-            "analysis_progress", progress_data, on_conflict="content_hash,user_id"
+            "analysis_progress", progress_data, conflict_columns=["content_hash", "user_id"]
         )
 
         # Send WebSocket update
@@ -238,7 +238,7 @@ async def comprehensive_document_analysis(
             )
 
             # Save page data to database
-            await document_service._save_document_pages(document_id, extraction_result)
+            await document_service._save_document_pages(document_id, extraction_result, content_hash)
 
             await update_analysis_progress(
                 user_id,

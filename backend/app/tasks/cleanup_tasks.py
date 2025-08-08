@@ -30,7 +30,7 @@ def cleanup_orphaned_documents(self):
             potentially_orphaned = (
                 db_client.table("documents")
                 .select("*")
-                .in_("status", ["uploaded", "processing"])
+                .in_("processing_status", ["uploaded", "processing"])
                 .lt("created_at", cutoff_time.isoformat())
                 .execute()
             )
@@ -57,7 +57,7 @@ def cleanup_orphaned_documents(self):
 
                     db_client.table("documents").update(
                         {
-                            "status": "failed",
+                            "processing_status": "failed",
                             "processing_results": {
                                 "error": "File not found in storage - orphaned record",
                                 "storage_path": document["storage_path"],
@@ -163,7 +163,7 @@ def verify_storage_consistency(self):
             recent_docs = (
                 db_client.table("documents")
                 .select("*")
-                .eq("status", "processed")
+                .eq("processing_status", "processed")
                 .gt("created_at", cutoff_time.isoformat())
                 .execute()
             )

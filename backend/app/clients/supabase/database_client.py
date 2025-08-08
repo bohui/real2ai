@@ -357,13 +357,13 @@ class SupabaseDatabaseClient(DatabaseOperations):
             serialized_data = serialize_datetime_values(data)
             self.logger.debug(f"Upserting record in table '{table}': {serialized_data}")
 
-            query = self.supabase_client.table(table).upsert(serialized_data)
-
             # Add conflict resolution if specified
             if conflict_columns:
-                # Note: Supabase upsert uses on_conflict parameter
-                # This may need adjustment based on the actual Supabase Python client API
-                pass
+                # Supabase upsert uses on_conflict parameter with column names
+                on_conflict = ','.join(conflict_columns)
+                query = self.supabase_client.table(table).upsert(serialized_data, on_conflict=on_conflict)
+            else:
+                query = self.supabase_client.table(table).upsert(serialized_data)
 
             result = query.execute()
 

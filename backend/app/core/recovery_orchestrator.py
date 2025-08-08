@@ -110,9 +110,9 @@ class CheckpointResumeStrategy(RecoveryStrategy):
         try:
             # Get latest checkpoint
             client = await AuthContext.get_authenticated_client()
-            checkpoint_result = await client.execute_function(
+            checkpoint_result = await client.execute_rpc(
                 "get_latest_checkpoint", 
-                p_task_id=task.task_id
+                {"p_task_id": task.task_id}
             )
             
             if not checkpoint_result:
@@ -353,12 +353,14 @@ class ValidationOnlyStrategy(RecoveryStrategy):
         """Mark task as completed in registry"""
         client = await AuthContext.get_authenticated_client()
         
-        await client.execute_function(
+        await client.execute_rpc(
             "update_task_registry_state",
-            p_task_id=task.task_id,
-            p_new_state=TaskState.COMPLETED.value,
-            p_progress_percent=100,
-            p_result_data=json.dumps(result_data)
+            {
+                "p_task_id": task.task_id,
+                "p_new_state": TaskState.COMPLETED.value,
+                "p_progress_percent": 100,
+                "p_result_data": json.dumps(result_data)
+            }
         )
 
 
@@ -420,7 +422,7 @@ class RecoveryOrchestrator:
         """Discover tasks that need recovery"""
         try:
             client = await AuthContext.get_authenticated_client()
-            result = await client.execute_function("discover_recoverable_tasks")
+            result = await client.execute_rpc("discover_recoverable_tasks")
             
             recoverable_tasks = []
             for row in result:
@@ -453,9 +455,9 @@ class RecoveryOrchestrator:
             try:
                 # Validate task can be recovered
                 client = await AuthContext.get_authenticated_client()
-                validation = await client.execute_function(
+                validation = await client.execute_rpc(
                     "validate_task_recovery",
-                    task_registry_uuid=task.registry_id
+                    {"task_registry_uuid": task.registry_id}
                 )
                 
                 validation_data = validation[0] if validation else {'valid': False}
@@ -485,9 +487,9 @@ class RecoveryOrchestrator:
         # Check if we have valid checkpoints
         try:
             client = await AuthContext.get_authenticated_client()
-            checkpoint_result = await client.execute_function(
+            checkpoint_result = await client.execute_rpc(
                 "get_latest_checkpoint",
-                p_task_id=task.task_id
+                {"p_task_id": task.task_id}
             )
             
             if checkpoint_result and task.progress_percent >= 25:

@@ -427,7 +427,7 @@ async def get_ocr_status(
         processing_results = document.get("processing_results", {})
 
         # Determine processing status
-        status = document.get("status", "unknown")
+        status = document.get("processing_status", "unknown")
 
         if status in ["queued_for_ocr", "processing_ocr", "reprocessing_ocr"]:
             # Check if we have task ID for detailed status

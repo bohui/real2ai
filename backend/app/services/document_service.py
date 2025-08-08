@@ -385,7 +385,8 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
             # Step 5: Persist analysis results to database with transaction-like behavior
             try:
                 # Save page data to database
-                await self._save_document_pages(document_id, text_extraction_result)
+                content_hash = validation_result["file_info"]["content_hash"]
+                await self._save_document_pages(document_id, text_extraction_result, content_hash)
 
                 # Aggregate diagram detection results from pages
                 diagram_processing_result = self._aggregate_diagram_detections(
@@ -1731,7 +1732,7 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
         }
 
     async def _save_document_pages(
-        self, document_id: str, text_extraction_result: Dict[str, Any]
+        self, document_id: str, text_extraction_result: Dict[str, Any], content_hash: str = None
     ) -> None:
         """Save page analysis data to document_pages table - USER OPERATION"""
         try:
@@ -1750,6 +1751,7 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
                 page_data = {
                     "id": str(uuid.uuid4()),
                     "document_id": document_id,
+                    "content_hash": content_hash,
                     "page_number": page.get("page_number", 1),
                     
                     # Content analysis
