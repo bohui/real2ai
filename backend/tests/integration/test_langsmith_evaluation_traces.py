@@ -34,10 +34,9 @@ from app.evaluation.langsmith_integration import (
     LangSmithDatasetConfig,
     LangSmithEvaluationConfig,
 )
-from app.services.evaluation_service import EvaluationService
+from app.services.evaluation_service import EvaluationOrchestrator, EvaluationConfig, EvaluationStatus, MetricType
 from app.services.contract_analysis_service import ContractAnalysisService
-from app.schema.evaluation import EvaluationRequest, EvaluationConfig
-from app.schema.enums import EvaluationStatus, MetricType
+from app.schema.evaluation import EvaluationJobCreate as EvaluationRequest
 
 
 class TestPhase2AdvancedFeatures:
@@ -51,7 +50,7 @@ class TestPhase2AdvancedFeatures:
     @pytest.fixture
     def mock_evaluation_service(self):
         """Create mock evaluation service."""
-        return AsyncMock(spec=EvaluationService)
+        return AsyncMock(spec=EvaluationOrchestrator)
 
     @pytest.fixture
     def performance_dataset_config(self):

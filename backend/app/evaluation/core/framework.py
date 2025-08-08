@@ -25,7 +25,7 @@ from ..models.evaluation import (
 )
 from ..models.metrics import BaseMetric, MetricType
 from ..clients.evaluation_client import EvaluationClient
-from ..storage.evaluation_storage import EvaluationStorage
+from .evaluation_storage import EvaluationStorage
 from ..metrics.registry import MetricRegistry
 from ...core.langsmith_config import langsmith_trace, langsmith_session
 from ...clients.factory import get_client_factory

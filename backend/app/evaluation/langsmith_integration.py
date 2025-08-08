@@ -26,7 +26,7 @@ from ..models.evaluation import (
     EvaluationResult,
     EvaluationStatus,
 )
-from ..storage.evaluation_storage import EvaluationStorage
+from .core.evaluation_storage import EvaluationStorage
 
 logger = logging.getLogger(__name__)
 
