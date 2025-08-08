@@ -578,7 +578,7 @@ class SemanticAnalysisService(PromptEnabledService, UserAwareService):
 
     def _determine_risk_severity(self, element: Dict[str, Any]) -> str:
         """Determine risk severity from semantic element"""
-        confidence = element.get("confidence", "medium")
+        confidence = element.get("confidence", "low")  # Default to low for unknown elements
         risk_relevance = element.get("risk_relevance", "").lower()
 
         if confidence == "high" and "critical" in risk_relevance:

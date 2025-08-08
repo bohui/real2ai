@@ -364,6 +364,9 @@ def test_user():
         subscription_status="free",
         credits_remaining=5,
         preferences={"practice_area": "property"},
+        onboarding_completed=False,
+        onboarding_completed_at=None,
+        onboarding_preferences={},
     )
 
 

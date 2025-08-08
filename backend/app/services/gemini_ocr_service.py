@@ -728,6 +728,87 @@ Focus on accuracy and completeness. Extract all visible text content."""
                 status_code=400, detail="Empty file cannot be processed"
             )
 
+    def _calculate_confidence_score(self, extracted_text: str) -> float:
+        """Calculate confidence score based on text quality indicators"""
+        if not extracted_text or len(extracted_text.strip()) == 0:
+            return 0.0
+
+        # Initialize confidence
+        confidence = 1.0
+        
+        # Text length factor (very short text gets lower confidence)
+        if len(extracted_text) < 50:
+            confidence *= 0.7
+        elif len(extracted_text) < 10:
+            confidence *= 0.4
+        
+        # Count quality indicators
+        total_chars = len(extracted_text)
+        if total_chars == 0:
+            return 0.0
+            
+        # Count problematic patterns
+        import re
+        
+        # Numbers where letters should be (like "1" instead of "I")
+        substitution_errors = len(re.findall(r'\b\d[a-zA-Z]+|\b[a-zA-Z]*\d[a-zA-Z]*\b', extracted_text))
+        
+        # Excessive special characters
+        special_char_ratio = len(re.findall(r'[^\w\s.,!?:;()-]', extracted_text)) / total_chars
+        
+        # Very short "words" (likely OCR artifacts)
+        short_words = len([word for word in extracted_text.split() if len(word) == 1 and word.isalpha()])
+        
+        # Apply penalties
+        if substitution_errors > total_chars * 0.1:  # More than 10% substitution errors
+            confidence *= 0.6
+        if special_char_ratio > 0.15:  # More than 15% special characters
+            confidence *= 0.7
+        if short_words > len(extracted_text.split()) * 0.3:  # More than 30% single-char words
+            confidence *= 0.8
+            
+        # Bonus for good indicators
+        sentences = len(re.findall(r'[.!?]+', extracted_text))
+        words = len(extracted_text.split())
+        if sentences > 0 and words > 0:
+            avg_words_per_sentence = words / sentences
+            if 5 <= avg_words_per_sentence <= 25:  # Reasonable sentence length
+                confidence *= 1.1
+        
+        # Ensure confidence stays in valid range
+        return max(0.0, min(1.0, confidence))
+
+    def _extract_text_metrics(self, text: str) -> Dict[str, Any]:
+        """Extract metrics from text content"""
+        if not text:
+            return {
+                "character_count": 0,
+                "word_count": 0,
+                "line_count": 0,
+                "average_word_length": 0.0
+            }
+        
+        # Basic counts
+        character_count = len(text)
+        words = text.split()
+        word_count = len(words)
+        lines = text.splitlines()
+        line_count = len(lines)
+        
+        # Calculate average word length
+        if word_count > 0:
+            total_word_length = sum(len(word.strip('.,!?:;()')) for word in words)
+            average_word_length = total_word_length / word_count
+        else:
+            average_word_length = 0.0
+        
+        return {
+            "character_count": character_count,
+            "word_count": word_count,
+            "line_count": line_count,
+            "average_word_length": round(average_word_length, 2)
+        }
+
     # Comparison method to show the difference
     async def extract_image_semantics_legacy(
         self,

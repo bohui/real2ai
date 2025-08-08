@@ -30,13 +30,21 @@ class TestContractAnalysisServiceInitialization:
         with patch('app.services.contract_analysis_service.get_enhanced_workflow_config') as mock_config:
             mock_config.return_value = self._create_mock_config()
             
-            service = ContractAnalysisService()
-            
-            assert service is not None
-            assert service.websocket_manager is None
-            assert service.enable_websocket_progress is False
-            assert service.workflow is not None
-            assert service._service_metrics is not None
+            with patch('app.services.contract_analysis_service.validate_workflow_configuration') as mock_validate:
+                mock_validate.return_value = {
+                    "valid": True,
+                    "issues": [],
+                    "warnings": [],
+                    "config_summary": "basic config"
+                }
+                
+                service = ContractAnalysisService()
+                
+                assert service is not None
+                assert service.websocket_manager is None
+                assert service.enable_websocket_progress is False
+                assert service.workflow is not None
+                assert service._service_metrics is not None
     
     @pytest.mark.unit
     
@@ -45,13 +53,21 @@ class TestContractAnalysisServiceInitialization:
         with patch('app.services.contract_analysis_service.get_enhanced_workflow_config') as mock_config:
             mock_config.return_value = self._create_mock_config()
             
-            service = ContractAnalysisService(
-                websocket_manager=mock_websocket_manager,
-                enable_websocket_progress=True
-            )
-            
-            assert service.websocket_manager == mock_websocket_manager
-            assert service.enable_websocket_progress is True
+            with patch('app.services.contract_analysis_service.validate_workflow_configuration') as mock_validate:
+                mock_validate.return_value = {
+                    "valid": True,
+                    "issues": [],
+                    "warnings": [],
+                    "config_summary": "websocket config"
+                }
+                
+                service = ContractAnalysisService(
+                    websocket_manager=mock_websocket_manager,
+                    enable_websocket_progress=True
+                )
+                
+                assert service.websocket_manager == mock_websocket_manager
+                assert service.enable_websocket_progress is True
     
     @pytest.mark.unit
     
@@ -106,15 +122,23 @@ class TestContractAnalysisServiceInitialization:
         with patch('app.services.contract_analysis_service.get_enhanced_workflow_config') as mock_config:
             mock_config.return_value = self._create_mock_config()
             
-            service = create_contract_analysis_service(
-                websocket_manager=mock_websocket_manager,
-                openai_api_key="factory-test-key",
-                enable_websocket_progress=True
-            )
-            
-            assert isinstance(service, ContractAnalysisService)
-            assert service.websocket_manager == mock_websocket_manager
-            assert service.openai_api_key == "factory-test-key"
+            with patch('app.services.contract_analysis_service.validate_workflow_configuration') as mock_validate:
+                mock_validate.return_value = {
+                    "valid": True,
+                    "issues": [],
+                    "warnings": [],
+                    "config_summary": "factory config"
+                }
+                
+                service = create_contract_analysis_service(
+                    websocket_manager=mock_websocket_manager,
+                    openai_api_key="factory-test-key",
+                    enable_websocket_progress=True
+                )
+                
+                assert isinstance(service, ContractAnalysisService)
+                assert service.websocket_manager == mock_websocket_manager
+                assert service.openai_api_key == "factory-test-key"
     
     def _create_mock_config(self, **kwargs):
         """Create mock configuration for testing."""
@@ -401,7 +425,7 @@ class TestContractAnalysisServiceValidation:
     def test_validate_analysis_inputs_missing_document(self, service):
         """Test validation with missing document data."""
         validation_result = service._validate_analysis_inputs(
-            document_data={},
+            document_data={"metadata": "some_data"},  # Has data but no content/file_path
             user_id="user-123",
             australian_state="NSW",
             contract_type="purchase_agreement"
@@ -657,7 +681,8 @@ class TestContractAnalysisServiceHealthAndMetrics:
                 }
                 
                 service = ContractAnalysisService(
-                    websocket_manager=mock_websocket_manager
+                    websocket_manager=mock_websocket_manager,
+                    enable_websocket_progress=False  # Explicitly disable for this test
                 )
                 
                 # Mock workflow
