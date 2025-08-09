@@ -64,7 +64,7 @@ class TestFullAnalysisWorkflow:
         """Test the complete workflow from document upload to analysis results."""
         
         with patch('app.services.contract_analysis_service.ContractAnalysisService') as mock_service:
-            with patch('app.services.gemini_ocr_service.GeminiOCRService') as mock_ocr:
+            with patch('app.services.ai.gemini_ocr_service.GeminiOCRService') as mock_ocr:
                 with patch('app.services.document_service.DocumentService') as mock_doc_service:
                     # Configure mocks
                     await self._configure_workflow_mocks(mock_service, mock_ocr, mock_doc_service)
@@ -100,7 +100,7 @@ class TestFullAnalysisWorkflow:
         """Test workflow behavior when errors occur at different stages."""
         
         with patch('app.services.contract_analysis_service.ContractAnalysisService') as mock_service:
-            with patch('app.services.gemini_ocr_service.GeminiOCRService') as mock_ocr:
+            with patch('app.services.ai.gemini_ocr_service.GeminiOCRService') as mock_ocr:
                 # Configure OCR to fail
                 mock_ocr.return_value.process_document.side_effect = Exception("OCR processing failed")
                 
@@ -132,7 +132,7 @@ class TestFullAnalysisWorkflow:
         
         for contract_type in contract_types:
             with patch('app.services.contract_analysis_service.ContractAnalysisService') as mock_service:
-                with patch('app.services.gemini_ocr_service.GeminiOCRService') as mock_ocr:
+                with patch('app.services.ai.gemini_ocr_service.GeminiOCRService') as mock_ocr:
                     with patch('app.services.document_service.DocumentService') as mock_doc_service:
                         await self._configure_workflow_mocks(mock_service, mock_ocr, mock_doc_service)
                         
@@ -167,7 +167,7 @@ class TestFullAnalysisWorkflow:
         
         for state in australian_states:
             with patch('app.services.contract_analysis_service.ContractAnalysisService') as mock_service:
-                with patch('app.services.gemini_ocr_service.GeminiOCRService') as mock_ocr:
+                with patch('app.services.ai.gemini_ocr_service.GeminiOCRService') as mock_ocr:
                     with patch('app.services.document_service.DocumentService') as mock_doc_service:
                         await self._configure_workflow_mocks(mock_service, mock_ocr, mock_doc_service)
                         
@@ -195,7 +195,7 @@ class TestFullAnalysisWorkflow:
         """Test multiple concurrent analysis workflows."""
         
         with patch('app.services.contract_analysis_service.ContractAnalysisService') as mock_service:
-            with patch('app.services.gemini_ocr_service.GeminiOCRService') as mock_ocr:
+            with patch('app.services.ai.gemini_ocr_service.GeminiOCRService') as mock_ocr:
                 with patch('app.services.document_service.DocumentService') as mock_doc_service:
                     await self._configure_workflow_mocks(mock_service, mock_ocr, mock_doc_service)
                     
@@ -223,7 +223,7 @@ class TestFullAnalysisWorkflow:
         
         with patch('app.core.cache_manager.CacheManager') as mock_cache:
             with patch('app.services.contract_analysis_service.ContractAnalysisService') as mock_service:
-                with patch('app.services.gemini_ocr_service.GeminiOCRService') as mock_ocr:
+                with patch('app.services.ai.gemini_ocr_service.GeminiOCRService') as mock_ocr:
                     with patch('app.services.document_service.DocumentService') as mock_doc_service:
                         # Configure cache behavior
                         cache_instance = AsyncMock()

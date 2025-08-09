@@ -11,7 +11,7 @@ from pathlib import Path
 import tempfile
 import json
 
-from app.services.semantic_analysis_service import (
+from app.services.ai.semantic_analysis_service import (
     SemanticAnalysisService,
     SemanticAnalysisWorkflow,
 )
@@ -40,7 +40,7 @@ class TestSemanticAnalysisWorkflowInitialization:
         """Test successful workflow initialization."""
         workflow = SemanticAnalysisWorkflow()
         
-        with patch('app.services.semantic_analysis_service.GeminiOCRService') as mock_ocr:
+        with patch('app.services.ai.semantic_analysis_service.GeminiOCRService') as mock_ocr:
             mock_ocr_instance = AsyncMock()
             mock_ocr.return_value = mock_ocr_instance
             
@@ -55,7 +55,7 @@ class TestSemanticAnalysisWorkflowInitialization:
         """Test workflow initialization handles OCR service failure."""
         workflow = SemanticAnalysisWorkflow()
         
-        with patch('app.services.semantic_analysis_service.GeminiOCRService') as mock_ocr:
+        with patch('app.services.ai.semantic_analysis_service.GeminiOCRService') as mock_ocr:
             mock_ocr_instance = AsyncMock()
             mock_ocr_instance.initialize.side_effect = Exception("OCR init failed")
             mock_ocr.return_value = mock_ocr_instance

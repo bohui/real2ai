@@ -10,7 +10,7 @@ from typing import Dict, Any, Optional
 
 from fastapi import HTTPException
 
-from app.services.gemini_ocr_service import GeminiOCRService
+from app.services.ai.gemini_ocr_service import GeminiOCRService
 from app.models.contract_state import ProcessingStatus, AustralianState, ContractType
 from app.clients.base.exceptions import (
     ClientError,
@@ -38,7 +38,7 @@ def mock_user_client():
 @pytest.fixture
 def gemini_ocr_service(mock_user_client):
     """Create GeminiOCRService instance with mocked dependencies"""
-    with patch('app.services.gemini_ocr_service.get_gemini_client') as mock_get_client:
+    with patch('app.services.ai.gemini_ocr_service.get_gemini_client') as mock_get_client:
         mock_get_client.return_value = None  # Will be set in tests
         service = GeminiOCRService(user_client=mock_user_client)
         return service
@@ -414,7 +414,7 @@ class TestIntegrationScenarios:
     @pytest.mark.asyncio
     async def test_service_with_user_context(self, mock_user_client):
         """Test service operation with user context"""
-        with patch('app.services.gemini_ocr_service.get_gemini_client'):
+        with patch('app.services.ai.gemini_ocr_service.get_gemini_client'):
             service = GeminiOCRService(user_client=mock_user_client)
             
             # Should have user context
