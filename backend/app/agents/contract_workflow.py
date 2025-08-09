@@ -81,6 +81,7 @@ from app.core.langsmith_config import (
     get_langsmith_config,
     log_trace_info,
 )
+
 # DocumentService imported lazily to avoid circular imports
 
 logger = logging.getLogger(__name__)
@@ -263,6 +264,7 @@ class ContractAnalysisWorkflow:
         workflow.add_node("process_document", self.process_document)
         workflow.add_node("extract_terms", self.extract_contract_terms)
         workflow.add_node("analyze_compliance", self.analyze_australian_compliance)
+        workflow.add_node("analyze_contract_diagrams", self.analyze_contract_diagrams)
         workflow.add_node("assess_risks", self.assess_contract_risks)
         workflow.add_node("generate_recommendations", self.generate_recommendations)
         workflow.add_node("compile_report", self.compile_analysis_report)
@@ -291,7 +293,8 @@ class ContractAnalysisWorkflow:
             workflow.add_edge("process_document", "extract_terms")
             workflow.add_edge("extract_terms", "validate_terms_completeness")
             workflow.add_edge("validate_terms_completeness", "analyze_compliance")
-            workflow.add_edge("analyze_compliance", "assess_risks")
+            workflow.add_edge("analyze_compliance", "analyze_contract_diagrams")
+            workflow.add_edge("analyze_contract_diagrams", "assess_risks")
             workflow.add_edge("assess_risks", "generate_recommendations")
             workflow.add_edge("generate_recommendations", "validate_final_output")
             workflow.add_edge("validate_final_output", "compile_report")
@@ -300,7 +303,8 @@ class ContractAnalysisWorkflow:
             workflow.add_edge("validate_input", "process_document")
             workflow.add_edge("process_document", "extract_terms")
             workflow.add_edge("extract_terms", "analyze_compliance")
-            workflow.add_edge("analyze_compliance", "assess_risks")
+            workflow.add_edge("analyze_compliance", "analyze_contract_diagrams")
+            workflow.add_edge("analyze_contract_diagrams", "assess_risks")
             workflow.add_edge("assess_risks", "generate_recommendations")
             workflow.add_edge("generate_recommendations", "compile_report")
 
@@ -367,12 +371,13 @@ class ContractAnalysisWorkflow:
             initial_state["user_preferences"] = {}
 
         # Initialize progress tracking
-        total_steps = 7 + (3 if self.enable_validation else 0)
+        total_steps = 8 + (3 if self.enable_validation else 0)
         step_names = [
             "validate_input",
             "process_document",
             "extract_terms",
             "analyze_compliance",
+            "analyze_contract_diagrams",
             "assess_risks",
             "generate_recommendations",
             "compile_report",
@@ -1135,6 +1140,125 @@ class ContractAnalysisWorkflow:
                 state,
                 "compliance_analysis_failed",
                 error=f"Enhanced compliance analysis failed: {str(e)}",
+            )
+
+    @langsmith_trace(name="analyze_contract_diagrams", run_type="chain")
+    async def analyze_contract_diagrams(
+        self, state: RealEstateAgentState
+    ) -> RealEstateAgentState:
+        """Analyze contract-related diagrams using SemanticAnalysisService.
+
+        - Loads `document_diagrams` for the current `document_id`
+        - Builds storage paths from `extracted_image_path` when available
+        - Uses LLM-backed `SemanticAnalysisService.analyze_contract_diagrams`
+        - Stores consolidated results on the state for downstream risk assessment
+        """
+
+        # Update progress
+        state["progress"]["current_step"] += 1
+        state["progress"]["percentage"] = int(
+            (state["progress"]["current_step"] / state["progress"]["total_steps"]) * 100
+        )
+
+        try:
+            document_data: Dict[str, Any] = state.get("document_data", {})
+            document_id = document_data.get("document_id")
+            if not document_id:
+                logger.warning(
+                    "No document_id provided in state.document_data for diagram analysis"
+                )
+                return update_state_step(
+                    state,
+                    "diagram_analysis_skipped",
+                    error="Missing document_id in document_data for diagram analysis",
+                )
+
+            # Initialize dependent services
+            from app.services.document_service import DocumentService
+            from app.services.ai.semantic_analysis_service import (
+                SemanticAnalysisService,
+            )
+
+            doc_service = DocumentService(
+                use_llm_document_processing=self.use_llm_config.get(
+                    "document_processing", True
+                )
+            )
+            await doc_service.initialize()
+
+            sem_service = SemanticAnalysisService(document_service=doc_service)
+            await sem_service.initialize()
+
+            # Fetch diagrams for this document
+            user_client = await doc_service.get_user_client()
+            diagrams = await user_client.database.read(
+                "document_diagrams",
+                filters={"document_id": document_id},
+            )
+
+            if not diagrams:
+                logger.info(
+                    f"No diagrams found for document {document_id}; skipping diagram analysis"
+                )
+                return update_state_step(state, "diagram_analysis_skipped")
+
+            # Build storage paths list from extracted_image_path when present
+            storage_paths: List[str] = []
+            for d in diagrams:
+                path = d.get("extracted_image_path")
+                if path:
+                    storage_paths.append(path)
+
+            if not storage_paths:
+                logger.info(
+                    f"document_diagrams present for {document_id} but no extracted_image_path values; skipping"
+                )
+                return update_state_step(state, "diagram_analysis_skipped")
+
+            # Prepare contract context
+            contract_context: Dict[str, Any] = {
+                "australian_state": state.get("australian_state"),
+                "document_type": document_data.get("document_type") or "contract",
+                "user_type": state.get("user_type", "buyer"),
+            }
+
+            # Run consolidated diagram analysis
+            consolidated = await sem_service.analyze_contract_diagrams(
+                storage_paths=storage_paths,
+                contract_context=contract_context,
+                document_id=document_id,
+            )
+
+            # Confidence heuristic from overall assessment
+            overall = consolidated.get("overall_assessment", {})
+            confidence = overall.get("confidence_level", 0.7)
+            state["confidence_scores"]["diagram_analysis"] = confidence
+
+            updated_data = {
+                "diagram_analyses": consolidated.get("diagram_analyses", []),
+                "diagram_consolidated_risks": consolidated.get(
+                    "consolidated_risks", []
+                ),
+                "diagram_overall_assessment": consolidated.get(
+                    "overall_assessment", {}
+                ),
+                "diagram_recommendations": consolidated.get("recommendations", []),
+                "llm_used": True,
+            }
+
+            logger.debug(
+                f"Diagram analysis completed for document {document_id} with {len(storage_paths)} diagrams"
+            )
+            return update_state_step(
+                state, "diagram_analysis_completed", data=updated_data
+            )
+
+        except Exception as e:
+            logger.error(f"Diagram analysis failed: {e}")
+            return update_state_step(
+                state,
+                "diagram_analysis_failed",
+                error=f"Diagram analysis failed: {str(e)}",
             )
 
     @langsmith_trace(name="assess_contract_risks", run_type="chain")
@@ -2297,6 +2421,7 @@ class ContractAnalysisWorkflow:
 
             # Initialize document service with LLM flag from workflow config
             from app.services.document_service import DocumentService
+
             doc_service = DocumentService(
                 use_llm_document_processing=self.use_llm_config.get(
                     "document_processing", True
