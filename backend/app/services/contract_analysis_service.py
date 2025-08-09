@@ -604,86 +604,72 @@ class ContractAnalysisService:
 
             def validate_input(self, state):
                 # Send progress update
-                asyncio.create_task(
-                    self.parent_service._send_progress_update(
-                        self.session_id,
-                        self.contract_id,
-                        "validate_input",
-                        14,
-                        "Validating document and input parameters",
-                    )
+                self.parent_service._schedule_progress_update(
+                    self.session_id,
+                    self.contract_id,
+                    "validate_input",
+                    14,
+                    "Validating document and input parameters",
                 )
                 return super().validate_input(state)
 
             def process_document(self, state):
-                asyncio.create_task(
-                    self.parent_service._send_progress_update(
-                        self.session_id,
-                        self.contract_id,
-                        "process_document",
-                        28,
-                        "Processing document and extracting text content",
-                    )
+                self.parent_service._schedule_progress_update(
+                    self.session_id,
+                    self.contract_id,
+                    "process_document",
+                    28,
+                    "Processing document and extracting text content",
                 )
                 return super().process_document(state)
 
             def extract_contract_terms(self, state):
-                asyncio.create_task(
-                    self.parent_service._send_progress_update(
-                        self.session_id,
-                        self.contract_id,
-                        "extract_terms",
-                        42,
-                        "Extracting key contract terms using Australian tools",
-                    )
+                self.parent_service._schedule_progress_update(
+                    self.session_id,
+                    self.contract_id,
+                    "extract_terms",
+                    42,
+                    "Extracting key contract terms using Australian tools",
                 )
                 return super().extract_contract_terms(state)
 
             def analyze_australian_compliance(self, state):
-                asyncio.create_task(
-                    self.parent_service._send_progress_update(
-                        self.session_id,
-                        self.contract_id,
-                        "analyze_compliance",
-                        57,
-                        "Analyzing compliance with Australian property laws",
-                    )
+                self.parent_service._schedule_progress_update(
+                    self.session_id,
+                    self.contract_id,
+                    "analyze_compliance",
+                    57,
+                    "Analyzing compliance with Australian property laws",
                 )
                 return super().analyze_australian_compliance(state)
 
             def assess_contract_risks(self, state):
-                asyncio.create_task(
-                    self.parent_service._send_progress_update(
-                        self.session_id,
-                        self.contract_id,
-                        "assess_risks",
-                        71,
-                        "Assessing contract risks and potential issues",
-                    )
+                self.parent_service._schedule_progress_update(
+                    self.session_id,
+                    self.contract_id,
+                    "assess_risks",
+                    71,
+                    "Assessing contract risks and potential issues",
                 )
                 return super().assess_contract_risks(state)
 
             def generate_recommendations(self, state):
-                asyncio.create_task(
-                    self.parent_service._send_progress_update(
-                        self.session_id,
-                        self.contract_id,
-                        "generate_recommendations",
-                        85,
-                        "Generating actionable recommendations",
-                    )
+                self.parent_service._schedule_progress_update(
+                    self.session_id,
+                    self.contract_id,
+                    "generate_recommendations",
+                    85,
+                    "Generating actionable recommendations",
                 )
                 return super().generate_recommendations(state)
 
             def compile_analysis_report(self, state):
-                asyncio.create_task(
-                    self.parent_service._send_progress_update(
-                        self.session_id,
-                        self.contract_id,
-                        "compile_report",
-                        100,
-                        "Compiling final analysis report",
-                    )
+                self.parent_service._schedule_progress_update(
+                    self.session_id,
+                    self.contract_id,
+                    "compile_report",
+                    100,
+                    "Compiling final analysis report",
                 )
                 return super().compile_analysis_report(state)
 
@@ -721,6 +707,51 @@ class ContractAnalysisService:
             )
         except Exception as e:
             logger.error(f"Failed to send progress update: {str(e)}")
+
+    def _schedule_progress_update(
+        self,
+        session_id: str,
+        contract_id: str,
+        step: str,
+        progress_percent: int,
+        description: str,
+    ) -> None:
+        """Schedule a progress update regardless of event loop availability.
+
+        - If an asyncio event loop is running, schedule the coroutine normally.
+        - If no loop is running (e.g., inside a Celery worker sync context),
+          publish via Redis synchronously so the FastAPI process can fan out to WS.
+        """
+        # Update local tracking immediately
+        try:
+            if contract_id in self.active_analyses:
+                self.active_analyses[contract_id]["progress"] = progress_percent
+                self.active_analyses[contract_id]["current_step"] = step
+        except Exception:
+            pass
+
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(
+                self._send_progress_update(
+                    session_id, contract_id, step, progress_percent, description
+                )
+            )
+        except RuntimeError:
+            # No running loop: fall back to Redis pub/sub sync publish
+            try:
+                from app.services.redis_pubsub import publish_progress_sync
+
+                message = WebSocketEvents.analysis_progress(
+                    contract_id, step, progress_percent, description
+                )
+                publish_progress_sync(contract_id, message)
+            except Exception as fallback_error:
+                logger.warning(
+                    f"Progress update fallback (Redis) failed for {contract_id}: {fallback_error}"
+                )
+        except Exception as e:
+            logger.warning(f"Failed to schedule progress update for {contract_id}: {e}")
 
     async def get_analysis_status(self, contract_id: str) -> Optional[AnalysisStatus]:
         """Get current analysis status"""
