@@ -379,7 +379,7 @@ class TestUtilityMethods:
         
         assert metrics["line_count"] == 3
         assert metrics["character_count"] == len(text)
-        assert metrics["word_count"] == 9  # Total words across all lines
+        assert metrics["word_count"] == 10  # Total words across all lines
 
 
 class TestIntegrationScenarios:

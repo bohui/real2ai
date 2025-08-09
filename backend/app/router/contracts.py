@@ -196,7 +196,7 @@ async def get_user_document_service(
 ) -> DocumentService:
     """Get document service with user authentication context"""
     user_client = await AuthContext.get_authenticated_client(require_auth=True)
-    service = DocumentService(user_client=user_client)
+    service = DocumentService(user_client=user_client, use_llm_document_processing=True)
     await service.initialize()
     return service
 
@@ -924,7 +924,11 @@ async def _get_analysis_status_with_validation(
 
     user_content_hashes = []
     if access_result.data:
-        user_content_hashes = [view["content_hash"] for view in access_result.data if view.get("content_hash")]
+        user_content_hashes = [
+            view["content_hash"]
+            for view in access_result.data
+            if view.get("content_hash")
+        ]
 
     # Also check documents table for additional access
     doc_access_result = (
@@ -935,7 +939,11 @@ async def _get_analysis_status_with_validation(
     )
 
     if doc_access_result.data:
-        doc_content_hashes = [doc["content_hash"] for doc in doc_access_result.data if doc.get("content_hash")]
+        doc_content_hashes = [
+            doc["content_hash"]
+            for doc in doc_access_result.data
+            if doc.get("content_hash")
+        ]
         user_content_hashes.extend(doc_content_hashes)
 
     if not user_content_hashes:
@@ -1169,7 +1177,11 @@ async def get_contract_analysis(
 
         user_content_hashes = []
         if access_result.data:
-            user_content_hashes = [view["content_hash"] for view in access_result.data if view.get("content_hash")]
+            user_content_hashes = [
+                view["content_hash"]
+                for view in access_result.data
+                if view.get("content_hash")
+            ]
 
         # Also check documents table for additional access
         doc_access_result = (
@@ -1180,11 +1192,17 @@ async def get_contract_analysis(
         )
 
         if doc_access_result.data:
-            doc_content_hashes = [doc["content_hash"] for doc in doc_access_result.data if doc.get("content_hash")]
+            doc_content_hashes = [
+                doc["content_hash"]
+                for doc in doc_access_result.data
+                if doc.get("content_hash")
+            ]
             user_content_hashes.extend(doc_content_hashes)
 
         if not user_content_hashes:
-            raise HTTPException(status_code=403, detail="You don't have access to any contracts")
+            raise HTTPException(
+                status_code=403, detail="You don't have access to any contracts"
+            )
 
         # Remove duplicates
         user_content_hashes = list(set(user_content_hashes))
@@ -1202,7 +1220,9 @@ async def get_contract_analysis(
 
         # Verify the user has access to this specific content_hash
         if content_hash not in user_content_hashes:
-            raise HTTPException(status_code=403, detail="You don't have access to this contract")
+            raise HTTPException(
+                status_code=403, detail="You don't have access to this contract"
+            )
 
         # Get analysis results using content_hash
         result = (
@@ -1310,7 +1330,11 @@ async def delete_contract_analysis(
 
         user_content_hashes = []
         if access_result.data:
-            user_content_hashes = [view["content_hash"] for view in access_result.data if view.get("content_hash")]
+            user_content_hashes = [
+                view["content_hash"]
+                for view in access_result.data
+                if view.get("content_hash")
+            ]
 
         # Also check documents table for additional access
         doc_access_result = (
@@ -1321,11 +1345,17 @@ async def delete_contract_analysis(
         )
 
         if doc_access_result.data:
-            doc_content_hashes = [doc["content_hash"] for doc in doc_access_result.data if doc.get("content_hash")]
+            doc_content_hashes = [
+                doc["content_hash"]
+                for doc in doc_access_result.data
+                if doc.get("content_hash")
+            ]
             user_content_hashes.extend(doc_content_hashes)
 
         if not user_content_hashes:
-            raise HTTPException(status_code=403, detail="You don't have access to any contracts")
+            raise HTTPException(
+                status_code=403, detail="You don't have access to any contracts"
+            )
 
         # Remove duplicates
         user_content_hashes = list(set(user_content_hashes))
@@ -1343,7 +1373,9 @@ async def delete_contract_analysis(
 
         # Verify the user has access to this specific content_hash
         if content_hash not in user_content_hashes:
-            raise HTTPException(status_code=403, detail="You don't have access to this contract")
+            raise HTTPException(
+                status_code=403, detail="You don't have access to this contract"
+            )
 
         # Delete user's view of this contract (contracts and analyses are shared resources)
         view_delete_result = (

@@ -8,6 +8,7 @@ from langchain.schema import HumanMessage, SystemMessage
 import json
 import time
 import logging
+from typing import Dict, Any
 from datetime import datetime, UTC
 from pathlib import Path
 import uuid
@@ -80,6 +81,7 @@ from app.core.langsmith_config import (
     get_langsmith_config,
     log_trace_info,
 )
+from app.services.document_service import DocumentService
 
 logger = logging.getLogger(__name__)
 
@@ -1595,31 +1597,6 @@ class ContractAnalysisWorkflow:
 
     # Keep existing fallback methods but add enhanced logging
 
-    def _simulate_document_extraction(self, document_data: Dict[str, Any]) -> str:
-        """Enhanced document extraction simulation"""
-        logger.debug("Using simulated document extraction (fallback mode)")
-        return """
-        SALE OF LAND CONTRACT
-        
-        VENDOR: John Smith
-        PURCHASER: Jane Doe
-        
-        PROPERTY: 123 Collins Street, Melbourne VIC 3000
-        
-        PURCHASE PRICE: $850,000
-        DEPOSIT: $85,000 (10%)
-        SETTLEMENT DATE: 45 days from exchange
-        
-        COOLING OFF PERIOD: 3 business days
-        
-        SPECIAL CONDITIONS:
-        1. Subject to finance approval within 21 days
-        2. Subject to satisfactory building and pest inspection
-        3. Subject to strata search and review of strata documents
-        
-        This contract is governed by Victorian law.
-        """
-
     def _create_risk_assessment_prompt(
         self, contract_terms: Dict, compliance_check: Dict, state: str
     ) -> str:
@@ -2237,8 +2214,6 @@ class ContractAnalysisWorkflow:
 
         except Exception as e:
             logger.warning(f"LLM document processing failed: {e}")
-            # Fallback to simulation
-            return self._simulate_document_extraction(document_data)
 
     async def _assess_text_quality_with_llm(self, text: str) -> Dict[str, Any]:
         """Assess text quality using LLM"""
@@ -2289,7 +2264,12 @@ class ContractAnalysisWorkflow:
     async def process_document(
         self, state: RealEstateAgentState
     ) -> RealEstateAgentState:
-        """Enhanced document processing with validation and configurable LLM usage"""
+        """Document processing using DocumentService with persistence.
+
+        - If the document was already processed, fetch summary from DB
+        - Otherwise, process via DocumentService and persist
+        - Populate state with consistent metadata
+        """
 
         # Update progress
         if "progress" in state and state["progress"]:
@@ -2300,46 +2280,49 @@ class ContractAnalysisWorkflow:
             )
 
         try:
-            # Handle case where document_data might be None
-            document_data = state.get("document_data", {})
-            if not document_data:
-                logger.warning("No document data available for processing")
+            # Ensure document metadata exists
+            document_data: Dict[str, Any] = state.get("document_data", {})
+            document_id = document_data.get("document_id")
+            if not document_id:
+                logger.warning("No document_id provided in state.document_data")
                 return update_state_step(
                     state,
                     "document_processing_failed",
-                    error="No document data available for processing",
+                    error="Missing document_id in document_data",
                 )
 
             use_llm = self.use_llm_config.get("document_processing", True)
 
-            # Use actual extracted text if available
-            if document_data.get("content"):
-                extracted_text = document_data["content"]
-                extraction_method = "pre_processed"
-                extraction_confidence = 0.95
-            else:
-                # Check if we should use LLM for document extraction
-                if use_llm and (self.openai_client or self.gemini_client):
-                    # Use LLM-based document processing
-                    extracted_text = await self._process_document_with_llm(
-                        document_data
-                    )
-                    extraction_method = "llm_enhanced"
-                    extraction_confidence = 0.85
-                else:
-                    # Fallback to simulation if no content available or LLM disabled
-                    extracted_text = self._simulate_document_extraction(document_data)
-                    extraction_method = "simulation"
-                    extraction_confidence = 0.7
+            # Initialize document service with LLM flag from workflow config
+            doc_service = DocumentService(
+                use_llm_document_processing=self.use_llm_config.get(
+                    "document_processing", True
+                )
+            )
+            await doc_service.initialize()
 
-            # Enhanced text quality assessment
-            if self.enable_quality_checks:
-                if use_llm and (self.openai_client or self.gemini_client):
-                    text_quality = await self._assess_text_quality_with_llm(
-                        extracted_text
-                    )
-                else:
-                    text_quality = self._assess_text_quality(extracted_text)
+            # Fall back to processing and persisting
+            summary = await doc_service.process_document_by_id(document_id=document_id)
+
+            if not summary or not summary.get("success"):
+                error_msg = (
+                    summary.get("error")
+                    if isinstance(summary, dict)
+                    else "Processing failed"
+                )
+                return update_state_step(
+                    state,
+                    "document_processing_failed",
+                    error=error_msg,
+                )
+
+            extracted_text = summary.get("extracted_text", "")
+            extraction_method = summary.get("extraction_method", "unknown")
+            extraction_confidence = summary.get("extraction_confidence", 0.0)
+
+            # Text quality assessment (keep consistent behavior)
+            if self.enable_quality_checks and extracted_text:
+                text_quality = self._assess_text_quality(extracted_text)
             else:
                 text_quality = {"score": 0.8, "issues": []}
 
@@ -2367,9 +2350,11 @@ class ContractAnalysisWorkflow:
                     "text_quality": text_quality,
                     "character_count": len(extracted_text),
                     "word_count": len(extracted_text.split()),
-                    "processing_timestamp": datetime.now(UTC).isoformat(),
+                    "processing_timestamp": summary.get(
+                        "processing_timestamp", datetime.now(UTC).isoformat()
+                    ),
                     "enhanced_processing": True,
-                    "llm_used": use_llm and (self.openai_client or self.gemini_client),
+                    "llm_used": summary.get("llm_used", False),
                 },
                 "parsing_status": ProcessingStatus.COMPLETED,
             }

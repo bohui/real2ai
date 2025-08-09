@@ -14,6 +14,7 @@ Key changes:
 
 import asyncio
 import json
+import warnings
 import logging
 import os
 import re
@@ -162,16 +163,14 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
     def __init__(
         self,
         storage_base_path: str = "storage/documents",
-        enable_advanced_ocr: bool = True,
-        enable_gemini_ocr: bool = True,
+        use_llm_document_processing: bool = True,
         max_file_size_mb: int = DocumentServiceConstants.DEFAULT_MAX_FILE_SIZE_MB,
         user_client=None,  # For dependency injection
     ):
         super().__init__(user_client=user_client)
         self.settings = get_settings()
         self.storage_base_path = Path(storage_base_path)
-        self.enable_advanced_ocr = enable_advanced_ocr
-        self.enable_gemini_ocr = enable_gemini_ocr
+        self.use_llm_document_processing = use_llm_document_processing
         self.max_file_size_mb = max_file_size_mb
 
         # Diagram detection optimization thresholds
@@ -214,8 +213,8 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
                 f"Gemini client initialized: {self.gemini_client is not None}"
             )
 
-            # Initialize OCR services
-            if self.enable_gemini_ocr:
+            # Initialize OCR services when LLM processing is enabled
+            if self.use_llm_document_processing:
                 self.logger.info("Initializing Gemini OCR service...")
                 self.gemini_ocr_service = GeminiOCRService()
                 await self.gemini_ocr_service.initialize()
@@ -238,7 +237,6 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
             )
         except Exception as e:
             self.logger.error(f"Failed to initialize document service: {str(e)}")
-            self.enable_gemini_ocr = False  # Fallback mode
 
     async def _ensure_bucket_exists(self):
         """Ensure Supabase storage bucket exists - SYSTEM OPERATION"""
@@ -337,10 +335,20 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
         australian_state: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
-        Main document processing pipeline - USER OPERATION
+        DEPRECATED: Use `upload_document_fast` followed by
+        `process_document_by_id`/`process_existing_document`.
 
-        This is a user-scoped operation that processes documents with proper RLS enforcement.
+        This legacy method combines upload + processing in one step and is kept
+        for backward compatibility. It will be removed in a future release.
         """
+        warnings.warn(
+            (
+                "DocumentService.process_document is deprecated. "
+                "Use upload_document_fast + process_document_by_id instead."
+            ),
+            DeprecationWarning,
+            stacklevel=2,
+        )
         processing_start = datetime.now(UTC)
         document_id = None
         temp_file_path = None
@@ -717,6 +725,174 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
                 "extraction_method": "failed",
                 "confidence": 0.0,
             }
+
+    async def process_document_by_id(
+        self,
+        document_id: str,
+    ) -> Dict[str, Any]:
+        """Process an already-uploaded document by id.
+
+        - Loads document record to determine storage_path, file_type, and content_hash
+        - Delegates to comprehensive extraction and persistence helpers
+        - Returns a concise summary suitable for workflow state
+        """
+        # Fetch document record (user context - RLS enforced)
+        user_client = await self.get_user_client()
+        doc_result = await user_client.database.select(
+            "documents", columns="*", filters={"id": document_id}
+        )
+        if not doc_result.get("data"):
+            return {"success": False, "error": "Document not found or access denied"}
+
+        document = doc_result["data"][0]
+        storage_path = document.get("storage_path")
+        file_type = document.get("file_type")
+        content_hash = document.get("content_hash")
+
+        # If already processed, return summary without reprocessing
+        summary = await self.get_processed_document_summary(document_id=document_id)
+        if summary:
+            return summary
+
+        # Delegate to existing helpers to process and persist
+        return await self.process_existing_document(
+            document_id=document_id,
+            storage_path=storage_path,
+            file_type=file_type,
+            content_hash=content_hash,
+        )
+
+    async def process_existing_document(
+        self,
+        *,
+        document_id: str,
+        storage_path: str,
+        file_type: str,
+        content_hash: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Process an already-uploaded document by id and persist results.
+
+        - Uses service flag use_llm_document_processing to enable/disable OCR/LLM path
+        - Returns a concise summary suitable for workflow state
+        """
+
+        # Mark processing started
+        await self._set_processing_started(document_id)
+
+        # Extract text
+        text_extraction_result = await self._extract_text_with_comprehensive_analysis(
+            document_id=document_id,
+            storage_path=storage_path,
+            file_type=file_type,
+        )
+
+        if not text_extraction_result.get("success"):
+            await self._update_document_status(
+                document_id,
+                ProcessingStatus.FAILED.value,
+                error_details={
+                    "error": text_extraction_result.get("error", "Unknown error"),
+                    "timestamp": datetime.now(UTC).isoformat(),
+                },
+            )
+            return {
+                "success": False,
+                "error": text_extraction_result.get("error", "Extraction failed"),
+            }
+
+        # Persist page-level results
+        await self._save_document_pages(
+            document_id, text_extraction_result, content_hash
+        )
+
+        # Aggregate and persist diagram results
+        diagram_processing_result = self._aggregate_diagram_detections(
+            text_extraction_result
+        )
+        await self._save_document_diagrams(document_id, text_extraction_result)
+
+        # Update aggregate metrics on documents
+        await self._update_document_metrics(
+            document_id, text_extraction_result, diagram_processing_result
+        )
+
+        # Mark as completed (basic document processing complete)
+        await self._update_document_status(
+            document_id, ProcessingStatus.BASIC_COMPLETE.value
+        )
+
+        # Build a concise summary useful for the workflow
+        full_text: str = text_extraction_result.get("full_text", "")
+        extraction_methods = text_extraction_result.get("extraction_methods", [])
+        primary_method = extraction_methods[0] if extraction_methods else None
+
+        return {
+            "success": True,
+            "document_id": document_id,
+            "extracted_text": full_text,
+            "character_count": len(full_text),
+            "word_count": len(full_text.split()) if full_text else 0,
+            "extraction_method": primary_method,
+            "extraction_confidence": 0.0,
+            "processing_timestamp": datetime.now(UTC).isoformat(),
+            "llm_used": self.use_llm_document_processing,
+        }
+
+    async def get_processed_document_summary(
+        self, *, document_id: str
+    ) -> Optional[Dict[str, Any]]:
+        """Fetch a compact summary of already-processed document data from DB.
+
+        Returns None if the document is not yet processed.
+        """
+        try:
+            user_client = await self.get_user_client()
+            result = await user_client.database.select(
+                "documents", columns="*", filters={"id": document_id}
+            )
+            if not result.get("data"):
+                return None
+            doc = result["data"][0]
+            status = doc.get("processing_status") or doc.get("status")
+            if status not in {
+                ProcessingStatus.BASIC_COMPLETE.value,
+                ProcessingStatus.COMPLETE.value,
+                "basic_complete",
+                "processed",
+            }:
+                return None
+
+            processing_results = (doc.get("processing_results") or {}).get(
+                "text_extraction", {}
+            )
+
+            # Fall back to minimal fields if processing_results are not present
+            full_text = processing_results.get("full_text") or ""
+            extraction_methods = processing_results.get("extraction_methods") or []
+            primary_method = (
+                extraction_methods[0]
+                if extraction_methods
+                else doc.get("text_extraction_method")
+            )
+
+            return {
+                "success": True,
+                "document_id": document_id,
+                "extracted_text": full_text,
+                "character_count": len(full_text),
+                "word_count": len(full_text.split()) if full_text else 0,
+                "extraction_method": primary_method,
+                "extraction_confidence": doc.get("extraction_confidence", 0.0),
+                "processing_timestamp": (
+                    doc.get("processing_completed_at") or datetime.now(UTC).isoformat()
+                ),
+                "llm_used": self.use_llm_document_processing,
+            }
+        except Exception as e:
+            self.logger.warning(
+                f"Failed to build processed document summary for {document_id}: {e}"
+            )
+            return None
 
     async def _set_processing_started(self, document_id: str):
         """Set processing started timestamp - USER OPERATION"""
@@ -1127,9 +1303,9 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
                         extraction_method = "tesseract_ocr"
                         confidence = DocumentServiceConstants.OCR_CONFIDENCE_LOW
 
-                # Advanced OCR with Gemini for complex pages
+                # Advanced OCR with Gemini for complex pages when LLM is enabled
                 if (
-                    self.enable_gemini_ocr
+                    self.use_llm_document_processing
                     and self.gemini_ocr_service
                     and confidence < DocumentServiceConstants.OCR_CONFIDENCE_THRESHOLD
                 ):
@@ -1138,19 +1314,34 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
                             page,
                             page_num + 1,
                         )
-                        if gemini_result and len(gemini_result.strip()) > len(
-                            text_content.strip()
-                        ):
-                            text_content = gemini_result
-                            extraction_method = "gemini_ocr"
-                            confidence = DocumentServiceConstants.OCR_CONFIDENCE_MEDIUM
+                        llm_insights = None
+                        if gemini_result:
+                            # Prefer Gemini text if it improves length
+                            gemini_text = gemini_result.get("text") or ""
+                            if len(gemini_text.strip()) > len(text_content.strip()):
+                                text_content = gemini_text
+                                extraction_method = "gemini_ocr"
+                                confidence = (
+                                    gemini_result.get("confidence")
+                                    or DocumentServiceConstants.OCR_CONFIDENCE_MEDIUM
+                                )
+
+                            # Capture diagram hints/semantics for downstream analysis
+                            llm_insights = {
+                                "diagram_hint": gemini_result.get("diagram_hint"),
+                                "semantic_analysis": gemini_result.get(
+                                    "semantic_analysis"
+                                ),
+                            }
                     except Exception as gemini_error:
                         self.logger.warning(
                             f"Gemini OCR failed for page {page_num + 1}: {gemini_error}"
                         )
 
-                # Analyze page content
-                page_analysis = self._analyze_page_content(text_content, page)
+                # Analyze page content (use LLM insights if available)
+                page_analysis = self._analyze_page_content(
+                    text_content, page, llm_insights=locals().get("llm_insights")
+                )
 
                 page_data = {
                     "page_number": page_num + 1,
@@ -1165,6 +1356,12 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
                     "confidence": confidence,
                     "content_analysis": page_analysis,
                 }
+
+                # Attach LLM-derived diagram hints for later persistence
+                if locals().get("llm_insights") and locals()["llm_insights"].get(
+                    "diagram_hint"
+                ):
+                    page_data["diagram_hint"] = locals()["llm_insights"]["diagram_hint"]
 
                 pages.append(page_data)
                 full_text += f"\n--- Page {page_num + 1} ---\n{text_content}"
@@ -1218,9 +1415,16 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
 
     async def _extract_text_with_gemini(
         self, page: pymupdf.Page, page_number: int
-    ) -> Optional[str]:
-        """Extract text using Gemini Vision API"""
-        if not self.gemini_ocr_service:
+    ) -> Optional[Dict[str, Any]]:
+        """Extract text and diagram insights using Gemini.
+
+        Returns a dict with keys:
+        - text: extracted OCR text (str)
+        - confidence: float confidence estimate if available
+        - diagram_hint: { is_diagram: bool, diagram_type: str | None }
+        - semantic_analysis: optional structured semantics payload
+        """
+        if not (self.gemini_client and self.gemini_ocr_service):
             return None
 
         try:
@@ -1232,21 +1436,36 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
             pix = page.get_pixmap(matrix=matrix)
             img_data = pix.pil_tobytes(format="PNG")
 
-            # Use Gemini OCR service
-            ocr_result = await self.gemini_ocr_service.extract_text_from_image_data(
-                img_data, filename=f"page_{page_number}.png"
+            filename = f"page_{page_number}.png"
+
+            # Single combined lightweight call to OCR service
+            combined = await self.gemini_ocr_service.extract_text_diagram_insight(
+                file_content=img_data,
+                file_type="png",
+                filename=filename,
+                analysis_focus="diagram_detection",
             )
 
-            if ocr_result and hasattr(ocr_result, "extracted_text"):
-                return ocr_result.extracted_text.strip()
+            if not isinstance(combined, dict):
+                return None
+
+            return {
+                "text": combined.get("text", ""),
+                "confidence": combined.get("confidence", 0.0),
+                "diagram_hint": combined.get("diagram_hint"),
+            }
 
         except Exception as e:
-            self.logger.warning(f"Gemini OCR failed for page {page_number}: {e}")
-
-        return None
+            self.logger.warning(
+                f"Gemini OCR/semantics failed for page {page_number}: {e}"
+            )
+            return None
 
     def _analyze_page_content(
-        self, text_content: str, page: pymupdf.Page
+        self,
+        text_content: str,
+        page: pymupdf.Page,
+        llm_insights: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Analyze page content for classification and layout features"""
 
@@ -1298,10 +1517,16 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
             analysis["content_types"].append("signature")
             analysis["layout_features"]["has_signatures"] = True
 
-        # Diagram detection
-        if self._detect_diagrams_on_page(page, text_content):
+        # Diagram detection (prefer LLM hint if available)
+        if self._detect_diagrams_on_page(page, text_content, llm_insights=llm_insights):
             analysis["content_types"].append("diagram")
             analysis["layout_features"]["has_diagrams"] = True
+
+            # Carry through diagram type if provided by LLM semantics
+            if llm_insights and llm_insights.get("diagram_hint"):
+                diagram_type = llm_insights["diagram_hint"].get("diagram_type")
+                if diagram_type:
+                    analysis["diagram_type"] = diagram_type
 
         # Layout feature detection
         analysis["layout_features"]["has_header"] = self._detect_header_footer(
@@ -1370,8 +1595,19 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
             or alignment_ratio > DocumentServiceConstants.ALIGNMENT_RATIO_FOR_TABLE
         )
 
-    def _detect_diagrams_on_page(self, page: pymupdf.Page, text_content: str) -> bool:
+    def _detect_diagrams_on_page(
+        self,
+        page: pymupdf.Page,
+        text_content: str,
+        llm_insights: Optional[Dict[str, Any]] = None,
+    ) -> bool:
         """Optimized diagram detection with text length preconditions"""
+
+        # Prefer explicit LLM hint if available
+        if llm_insights and llm_insights.get("diagram_hint"):
+            hint = llm_insights["diagram_hint"]
+            if isinstance(hint, dict) and hint.get("is_diagram"):
+                return True
 
         # OPTIMIZATION 1: Text length precondition
         text_length = (
@@ -1861,12 +2097,22 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
 
                 # Only save if diagrams were detected on this page
                 if layout_features.get("has_diagrams", False):
+                    # Resolve diagram type using LLM hint if available
+                    diagram_hint = (
+                        page.get("diagram_hint", {}) if isinstance(page, dict) else {}
+                    )
+                    resolved_type = (
+                        diagram_hint.get("diagram_type")
+                        if isinstance(diagram_hint, dict)
+                        else None
+                    ) or "unknown"
+
                     diagram_data = {
                         "id": str(uuid.uuid4()),
                         "document_id": document_id,
                         "page_number": page.get("page_number", 1),
-                        # Classification - would need more sophisticated analysis to determine specific type
-                        "diagram_type": "unknown",  # Default until we implement detailed classification
+                        # Classification from LLM hint when available
+                        "diagram_type": resolved_type,
                         "classification_confidence": page.get("confidence", 0.0),
                         # Analysis status
                         "basic_analysis_completed": True,
@@ -1982,15 +2228,13 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
 # Factory function for backward compatibility
 def create_document_service(
     storage_path: str = "storage/documents",
-    enable_advanced_ocr: bool = True,
-    enable_gemini_ocr: bool = True,
+    use_llm_document_processing: bool = True,
     max_file_size_mb: int = DocumentServiceConstants.DEFAULT_MAX_FILE_SIZE_MB,
 ) -> DocumentService:
     """Create unified document service with specified configuration"""
 
     return DocumentService(
         storage_base_path=storage_path,
-        enable_advanced_ocr=enable_advanced_ocr,
-        enable_gemini_ocr=enable_gemini_ocr,
+        use_llm_document_processing=use_llm_document_processing,
         max_file_size_mb=max_file_size_mb,
     )

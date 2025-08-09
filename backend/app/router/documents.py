@@ -46,7 +46,7 @@ async def get_document_service(
     user_client = await AuthContext.get_authenticated_client(require_auth=True)
 
     # Initialize service with user client injection
-    service = DocumentService(user_client=user_client)
+    service = DocumentService(user_client=user_client, use_llm_document_processing=True)
     await service.initialize()
     logger.info("DocumentService initialized with user-aware authentication")
     return service
@@ -60,7 +60,9 @@ async def test_document_service(
     try:
         # Create a document service instance with user client injection
         user_client = await AuthContext.get_authenticated_client(require_auth=True)
-        service = DocumentService(user_client=user_client)
+        service = DocumentService(
+            user_client=user_client, use_llm_document_processing=True
+        )
         await service.initialize()
 
         # Test auth context

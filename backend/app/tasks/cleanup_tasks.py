@@ -17,7 +17,7 @@ def cleanup_orphaned_documents(self):
     """Cleanup orphaned document records where files don't exist in storage"""
 
     async def _async_cleanup():
-        document_service = DocumentService()
+        document_service = DocumentService(use_llm_document_processing=True)
         db_client = None
 
         try:
@@ -150,7 +150,7 @@ def verify_storage_consistency(self):
     """Verify consistency between database records and storage files"""
 
     async def _async_verify():
-        document_service = DocumentService()
+        document_service = DocumentService(use_llm_document_processing=True)
         db_client = None
 
         try:

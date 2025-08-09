@@ -8,7 +8,6 @@ from openai import OpenAI
 from openai import RateLimitError, APIError, AuthenticationError
 
 from ..base.client import BaseClient, with_retry
-from ..base.interfaces import AIOperations
 from ..base.exceptions import (
     ClientConnectionError,
     ClientAuthenticationError,
@@ -23,8 +22,8 @@ from .task_queue import OpenAILLMQueueManager
 logger = logging.getLogger(__name__)
 
 
-class OpenAIClient(BaseClient, AIOperations):
-    """OpenAI client wrapper providing AI operations."""
+class OpenAIClient(BaseClient):
+    """OpenAI client for connection and API management."""
 
     def __init__(self, config: OpenAIClientConfig):
         super().__init__(config, "OpenAIClient")
@@ -232,22 +231,17 @@ class OpenAIClient(BaseClient, AIOperations):
                 original_error=e,
             )
 
-    # AIOperations interface implementation
+    # Core API Methods - Connection Layer Only
 
     @with_retry(max_retries=3, backoff_factor=2.0)
-    @langsmith_trace(name="openai_generate_content", run_type="llm")
     async def generate_content(self, prompt: str, **kwargs) -> str:
-        """Generate content based on a prompt."""
+        """Call OpenAI API to generate content."""
         try:
-            log_trace_info(
-                "openai_generate_content",
-                prompt_length=len(prompt),
-                model=kwargs.get("model", self.config.model_name),
-            )
-            self.logger.debug(f"Generating content for prompt: {prompt[:100]}...")
-
-            # Use chat completions API
-            messages = [{"role": "user", "content": prompt}]
+            # Handle both single prompt and messages format
+            if "messages" in kwargs:
+                messages = kwargs["messages"]
+            else:
+                messages = [{"role": "user", "content": prompt}]
 
             # Prepare parameters
             params = {
@@ -267,11 +261,7 @@ class OpenAIClient(BaseClient, AIOperations):
             # Remove None values
             params = {k: v for k, v in params.items() if v is not None}
 
-            # Execute in thread pool to avoid blocking
-            import asyncio
-
-            # Execute via shared per-model task queue to limit concurrency and
-            # apply global pause/backoff on 429s
+            # Execute via task queue for rate limiting
             queue = OpenAILLMQueueManager.get_queue(params.get("model"))
             response = await queue.run_in_executor(
                 lambda: self.openai_client.chat.completions.create(**params)
@@ -282,12 +272,9 @@ class OpenAIClient(BaseClient, AIOperations):
                     "No content generated from OpenAI", client_name=self.client_name
                 )
 
-            content = response.choices[0].message.content
-            self.logger.debug(f"Successfully generated {len(content)} characters")
-            return content
+            return response.choices[0].message.content
 
         except (RateLimitError, APIError) as e:
-            self.logger.error(f"OpenAI API error: {e}")
             if isinstance(e, RateLimitError):
                 raise ClientRateLimitError(
                     f"OpenAI rate limit exceeded: {str(e)}",
@@ -307,209 +294,9 @@ class OpenAIClient(BaseClient, AIOperations):
                     original_error=e,
                 )
         except Exception as e:
-            self.logger.error(f"Content generation failed: {e}")
             raise ClientError(
                 f"Content generation failed: {str(e)}",
                 client_name=self.client_name,
                 original_error=e,
             )
 
-    @langsmith_trace(name="openai_analyze_document", run_type="tool")
-    async def analyze_document(
-        self, content: bytes, content_type: str, **kwargs
-    ) -> Dict[str, Any]:
-        """Analyze a document and extract information."""
-        try:
-            log_trace_info(
-                "openai_analyze_document",
-                content_type=content_type,
-                content_size=len(content),
-            )
-            self.logger.debug(f"Analyzing document of type: {content_type}")
-
-            # For OpenAI, we need to convert document to text first
-            # This is a simplified implementation - in practice, you'd use OCR or other methods
-            if content_type == "text/plain":
-                text_content = content.decode("utf-8")
-            else:
-                # For other formats, we'd need to extract text first
-                # This is where you'd integrate with OCR services
-                raise ClientError(
-                    f"Document type {content_type} not supported for direct analysis",
-                    client_name=self.client_name,
-                )
-
-            # Analyze the text content
-            analysis_prompt = f"""
-            Analyze the following document and provide a structured analysis:
-            
-            Document content:
-            {text_content[:4000]}...
-            
-            Please provide:
-            1. Document type
-            2. Key topics
-            3. Summary
-            4. Important entities (names, dates, amounts)
-            
-            Format your response as JSON.
-            """
-
-            analysis_result = await self.generate_content(analysis_prompt, **kwargs)
-
-            # Try to parse as JSON, fallback to text analysis
-            try:
-                import json
-
-                parsed_analysis = json.loads(analysis_result)
-            except json.JSONDecodeError:
-                parsed_analysis = {"analysis_text": analysis_result, "format": "text"}
-
-            result = {
-                "analysis": parsed_analysis,
-                "content_type": content_type,
-                "content_length": len(content),
-                "analysis_method": "openai_text_analysis",
-                "model_used": kwargs.get("model", self.config.model_name),
-            }
-
-            self.logger.debug("Document analysis completed successfully")
-            return result
-
-        except Exception as e:
-            self.logger.error(f"Document analysis failed: {e}")
-            raise ClientError(
-                f"Document analysis failed: {str(e)}",
-                client_name=self.client_name,
-                original_error=e,
-            )
-
-    @langsmith_trace(name="openai_extract_text", run_type="tool")
-    async def extract_text(
-        self, content: bytes, content_type: str, **kwargs
-    ) -> Dict[str, Any]:
-        """Extract text from a document."""
-        try:
-            log_trace_info(
-                "openai_extract_text",
-                content_type=content_type,
-                content_size=len(content),
-            )
-            self.logger.debug(f"Extracting text from document of type: {content_type}")
-
-            # OpenAI doesn't provide OCR services directly
-            # This would typically be handled by a separate OCR service
-            if content_type == "text/plain":
-                extracted_text = content.decode("utf-8")
-                confidence = 1.0
-                method = "direct_text_extraction"
-            else:
-                raise ClientError(
-                    f"Text extraction from {content_type} requires OCR service",
-                    client_name=self.client_name,
-                )
-
-            result = {
-                "extracted_text": extracted_text,
-                "extraction_method": method,
-                "extraction_confidence": confidence,
-                "character_count": len(extracted_text),
-                "word_count": len(extracted_text.split()),
-                "content_type": content_type,
-            }
-
-            self.logger.debug("Text extraction completed successfully")
-            return result
-
-        except Exception as e:
-            self.logger.error(f"Text extraction failed: {e}")
-            raise ClientError(
-                f"Text extraction failed: {str(e)}",
-                client_name=self.client_name,
-                original_error=e,
-            )
-
-    @langsmith_trace(name="openai_classify_content", run_type="llm")
-    async def classify_content(
-        self, content: str, categories: List[str], **kwargs
-    ) -> Dict[str, Any]:
-        """Classify content into predefined categories."""
-        try:
-            log_trace_info(
-                "openai_classify_content",
-                content_length=len(content),
-                categories_count=len(categories),
-            )
-            self.logger.debug(f"Classifying content into {len(categories)} categories")
-
-            # Create classification prompt
-            categories_text = ", ".join(categories)
-            classification_prompt = f"""
-            Classify the following content into one of these categories: {categories_text}
-            
-            Content:
-            {content[:2000]}...
-            
-            Respond with only the category name that best fits this content.
-            If you're unsure, provide your best guess along with a confidence score.
-            
-            Format: Category: [category_name], Confidence: [0.0-1.0]
-            """
-
-            classification_result = await self.generate_content(
-                classification_prompt, **kwargs
-            )
-
-            # Parse the result
-            classification = classification_result.strip()
-            confidence = 0.8  # Default confidence
-
-            # Try to extract confidence if provided
-            if "Confidence:" in classification:
-                parts = classification.split("Confidence:")
-                if len(parts) == 2:
-                    try:
-                        confidence = float(parts[1].strip())
-                        classification = parts[0].replace("Category:", "").strip()
-                    except ValueError:
-                        pass
-
-            # Clean up classification
-            classification = classification.replace("Category:", "").strip()
-
-            # Validate classification is in categories
-            if classification not in categories:
-                # Try to find partial match
-                classification_lower = classification.lower()
-                for category in categories:
-                    if (
-                        category.lower() in classification_lower
-                        or classification_lower in category.lower()
-                    ):
-                        classification = category
-                        break
-                else:
-                    # Use first category as fallback
-                    classification = categories[0]
-                    confidence = 0.5  # Lower confidence for fallback
-
-            result = {
-                "classification": classification,
-                "confidence": confidence,
-                "categories": categories,
-                "content_length": len(content),
-                "model_used": kwargs.get("model", self.config.model_name),
-            }
-
-            self.logger.debug(
-                f"Content classified as: {classification} (confidence: {confidence})"
-            )
-            return result
-
-        except Exception as e:
-            self.logger.error(f"Content classification failed: {e}")
-            raise ClientError(
-                f"Content classification failed: {str(e)}",
-                client_name=self.client_name,
-                original_error=e,
-            )

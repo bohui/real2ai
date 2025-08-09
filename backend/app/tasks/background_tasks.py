@@ -14,12 +14,8 @@ from app.core.celery import celery_app
 from app.core.task_context import user_aware_task, task_manager
 from app.core.auth_context import AuthContext
 from app.models.contract_state import (
-    RealEstateAgentState,
     AustralianState,
-    ContractType,
-    create_initial_state,
 )
-from app.agents.contract_workflow import ContractAnalysisWorkflow
 from app.services.document_service import DocumentService
 from app.services.websocket_service import WebSocketEvents
 from app.services.websocket_singleton import websocket_manager
@@ -182,7 +178,7 @@ async def comprehensive_document_analysis(
         ):
 
             # Initialize services
-            document_service = DocumentService()
+            document_service = DocumentService(use_llm_document_processing=True)
             await document_service.initialize()
             user_client = await document_service.get_user_client()
 
@@ -225,7 +221,7 @@ async def comprehensive_document_analysis(
             # PHASE 1: DOCUMENT PROCESSING (0-75%)
             # =============================================
 
-            # Step 1: Text Extraction (0-25%)
+            # Use service-level processing that persists and is idempotent
             await update_analysis_progress(
                 user_id,
                 content_hash,
@@ -235,17 +231,13 @@ async def comprehensive_document_analysis(
                 estimated_completion_minutes=3,
             )
 
-            # Extract text with comprehensive analysis
-            extraction_result = (
-                await document_service._extract_text_with_comprehensive_analysis(
-                    document_id=document_id,
-                    storage_path=document["storage_path"],
-                    file_type=document["file_type"],
+            summary = await document_service.process_document_by_id(document_id)
+            if not summary or not summary.get("success"):
+                error_msg = (
+                    summary.get("error")
+                    if isinstance(summary, dict)
+                    else "Processing failed"
                 )
-            )
-
-            if not extraction_result.get("success"):
-                error_msg = f"Text extraction failed: {extraction_result.get('error', 'Unknown error')}"
                 await update_analysis_progress(
                     user_id,
                     content_hash,
@@ -255,105 +247,6 @@ async def comprehensive_document_analysis(
                     error_message=error_msg,
                 )
                 raise Exception(error_msg)
-
-            await update_analysis_progress(
-                user_id,
-                content_hash,
-                progress_percent=PROGRESS_STAGES["document_processing"][
-                    "text_extraction"
-                ],
-                current_step="text_extraction",
-                step_description="Text extraction completed successfully",
-                estimated_completion_minutes=2,
-            )
-
-            # Step 2: Page Analysis (25-50%)
-            await update_analysis_progress(
-                user_id,
-                content_hash,
-                progress_percent=30,
-                current_step="page_analysis",
-                step_description="Analyzing document pages and content...",
-                estimated_completion_minutes=2,
-            )
-
-            # Save page data to database
-            await document_service._save_document_pages(
-                document_id, extraction_result, content_hash
-            )
-
-            await update_analysis_progress(
-                user_id,
-                content_hash,
-                progress_percent=PROGRESS_STAGES["document_processing"][
-                    "page_analysis"
-                ],
-                current_step="page_analysis",
-                step_description="Page analysis completed successfully",
-                estimated_completion_minutes=2,
-            )
-
-            # Step 3: Diagram Detection (50-60%)
-            await update_analysis_progress(
-                user_id,
-                content_hash,
-                progress_percent=55,
-                current_step="diagram_detection",
-                step_description="Detecting and analyzing diagrams...",
-                estimated_completion_minutes=1,
-            )
-
-            # Process diagrams
-            await document_service._save_document_diagrams(
-                document_id, extraction_result
-            )
-
-            await update_analysis_progress(
-                user_id,
-                content_hash,
-                progress_percent=PROGRESS_STAGES["document_processing"][
-                    "diagram_detection"
-                ],
-                current_step="diagram_detection",
-                step_description="Diagram detection completed",
-                estimated_completion_minutes=1,
-            )
-
-            # Step 4: Entity Extraction (60-70%)
-            await update_analysis_progress(
-                user_id,
-                content_hash,
-                progress_percent=65,
-                current_step="entity_extraction",
-                step_description="Extracting key entities and terms...",
-                estimated_completion_minutes=1,
-            )
-
-            # Update document metrics
-            diagram_result = document_service._aggregate_diagram_detections(
-                extraction_result
-            )
-            await document_service._update_document_metrics(
-                document_id, extraction_result, diagram_result
-            )
-
-            await update_analysis_progress(
-                user_id,
-                content_hash,
-                progress_percent=PROGRESS_STAGES["document_processing"][
-                    "entity_extraction"
-                ],
-                current_step="entity_extraction",
-                step_description="Entity extraction completed",
-                estimated_completion_minutes=1,
-            )
-
-            # Step 5: Document Processing Complete (70-75%)
-            await user_client.database.update(
-                "documents",
-                document_id,
-                {"processing_status": "basic_complete"},
-            )
 
             await update_analysis_progress(
                 user_id,
@@ -380,34 +273,6 @@ async def comprehensive_document_analysis(
                 estimated_completion_minutes=1,
             )
 
-            # Initialize contract workflow
-            from app.core.config import get_settings
-
-            settings = get_settings()
-            contract_workflow = ContractAnalysisWorkflow(
-                openai_api_key=settings.openai_api_key,
-                model_name=None,
-                openai_api_base=settings.openai_api_base,
-            )
-
-            # Update analysis status (use service role client to bypass RLS on shared table)
-            from app.clients.factory import get_service_supabase_client
-
-            service_client = await get_service_supabase_client()
-            await service_client.database.update(
-                "contract_analyses", analysis_id, {"status": "processing"}
-            )
-
-            # Step 7: Workflow Processing (80-90%)
-            await update_analysis_progress(
-                user_id,
-                content_hash,
-                progress_percent=85,
-                current_step="workflow_processing",
-                step_description="AI is analyzing your contract for risks and compliance...",
-                estimated_completion_minutes=1,
-            )
-
             # Get contract details
             contract_result = await user_client.database.select(
                 "contracts", columns="*", filters={"id": contract_id}
@@ -415,19 +280,69 @@ async def comprehensive_document_analysis(
             contract_data = (
                 contract_result["data"][0] if contract_result.get("data") else {}
             )
+            
+            # Get processed document with extracted content
+            doc_result = await user_client.database.select(
+                "documents", columns="*", filters={"id": document_id}
+            )
+            if not doc_result.get("data"):
+                raise ValueError(f"Document {document_id} not found after processing")
+            
+            processed_document = doc_result["data"][0]
+            processing_results = processed_document.get("processing_results", {})
+            extracted_text = processing_results.get("extracted_text", "")
+            
+            if not extracted_text:
+                raise ValueError(f"No extracted text available for document {document_id}")
+            
+            logger.info(f"Retrieved document content: {len(extracted_text)} characters")
 
-            # Create contract analysis state
-            contract_state = create_initial_state(
-                user_id=user_id,
-                australian_state=AustralianState(
-                    contract_data.get("australian_state", "NSW")
-                ),
-                user_type="buyer",  # Default user type
-                user_preferences=analysis_options,  # Pass analysis options as user preferences
+            # Prepare document_data structure for ContractAnalysisService
+            document_data = {
+                "document_id": document_id,
+                "filename": processed_document.get("filename", "unknown"),
+                "content": extracted_text,  # Critical: pass the extracted text
+                "content_hash": content_hash,
+                "file_type": processed_document.get("file_type", "pdf"),
+                "storage_path": processed_document.get("storage_path", ""),
+                "extraction_confidence": processing_results.get("extraction_confidence", 0.0),
+                "word_count": processing_results.get("word_count", 0),
+                "page_count": processing_results.get("page_count", 1),
+            }
+
+            # Initialize ContractAnalysisService with WebSocket progress tracking
+            from app.services.contract_analysis_service import ContractAnalysisService
+            from app.services.websocket_singleton import websocket_manager
+            
+            contract_service = ContractAnalysisService(
+                websocket_manager=websocket_manager,
+                enable_websocket_progress=True,  # Let service handle progress updates
             )
 
-            # Execute contract analysis workflow
-            analysis_result = await contract_workflow.analyze_contract(contract_state)
+            # Execute contract analysis using the service layer
+            logger.info(f"Starting contract analysis with document data")
+            australian_state_enum = AustralianState(contract_data.get("australian_state", "NSW"))
+            
+            analysis_response = await contract_service.start_analysis(
+                user_id=user_id,
+                session_id=content_hash,  # Use content_hash as session_id
+                document_data=document_data,
+                australian_state=australian_state_enum,
+                user_preferences=analysis_options,
+                user_type="buyer",  # Default user type
+            )
+            
+            # Extract analysis results from service response
+            if not analysis_response.get("success"):
+                error_msg = analysis_response.get("error", "Contract analysis failed")
+                logger.error(f"Contract analysis failed: {error_msg}")
+                raise ValueError(f"Contract analysis failed: {error_msg}")
+            
+            # Get analysis results from the service response
+            analysis_result = analysis_response.get("analysis_results", {})
+            final_state = analysis_response.get("final_state", {})
+            
+            logger.info(f"Contract analysis completed successfully")
 
             await update_analysis_progress(
                 user_id,
@@ -452,17 +367,15 @@ async def comprehensive_document_analysis(
                 estimated_completion_minutes=0,
             )
 
-            # Save analysis results
+            # Save analysis results using service role client for shared table access
+            from app.clients.factory import get_service_supabase_client
+            service_client = await get_service_supabase_client()
+            
             analysis_update = {
                 "status": "completed",
-                "analysis_result": analysis_result.get("analysis", {}),
-                "risk_score": analysis_result.get("risk_score", 0.0),
-                "processing_time": (
-                    datetime.now(timezone.utc)
-                    - datetime.fromisoformat(
-                        doc_result["data"][0]["created_at"].replace("Z", "+00:00")
-                    )
-                ).total_seconds(),
+                "analysis_result": analysis_result,  # Use service response analysis_results
+                "risk_score": analysis_result.get("risk_assessment", {}).get("overall_risk_score", 0.0),
+                "processing_time": analysis_response.get("processing_time_seconds", 0),
                 "processing_completed_at": datetime.now(timezone.utc).isoformat(),
             }
 
@@ -486,8 +399,10 @@ async def comprehensive_document_analysis(
             # Send completion notification
             analysis_summary = {
                 "analysis_id": analysis_id,
-                "risk_score": analysis_result.get("risk_score", 0.0),
-                "processing_time": analysis_update["processing_time"],
+                "risk_score": analysis_result.get("risk_assessment", {}).get("overall_risk_score", 0.0),
+                "processing_time": analysis_response.get("processing_time_seconds", 0),
+                "recommendations_count": len(analysis_result.get("recommendations", [])),
+                "compliance_status": analysis_result.get("compliance_check", {}).get("state_compliance", False),
             }
             publish_progress_sync(
                 contract_id,

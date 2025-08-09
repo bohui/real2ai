@@ -6,19 +6,73 @@ import logging
 from typing import Optional, Dict, Any
 
 # Service imports (refactored to use client architecture)
+from .gemini_service import GeminiService
+from .openai_service import OpenAIService
 from .gemini_ocr_service import GeminiOCRService
 from .document_service import DocumentService
-from .contract_analysis_service import ContractAnalysisService, create_contract_analysis_service
+
+__all__ = [
+    "GeminiService",
+    "OpenAIService",
+    "DocumentService",
+]
+from .contract_analysis_service import (
+    ContractAnalysisService,
+    create_contract_analysis_service,
+)
 
 logger = logging.getLogger(__name__)
 
 # Service Factory Functions
 
+# Service factory instance
+_service_instances = {}
+
+
+async def get_gemini_service(user_client=None) -> GeminiService:
+    """
+    Get initialized GeminiService instance.
+
+    Args:
+        user_client: Optional user client for dependency injection
+
+    Returns:
+        GeminiService instance
+    """
+    cache_key = f"gemini_{id(user_client) if user_client else 'default'}"
+
+    if cache_key not in _service_instances:
+        service = GeminiService(user_client=user_client)
+        await service.initialize()
+        _service_instances[cache_key] = service
+
+    return _service_instances[cache_key]
+
+
+async def get_openai_service(user_client=None) -> OpenAIService:
+    """
+    Get initialized OpenAIService instance.
+
+    Args:
+        user_client: Optional user client for dependency injection
+
+    Returns:
+        OpenAIService instance
+    """
+    cache_key = f"openai_{id(user_client) if user_client else 'default'}"
+
+    if cache_key not in _service_instances:
+        service = OpenAIService(user_client=user_client)
+        await service.initialize()
+        _service_instances[cache_key] = service
+
+    return _service_instances[cache_key]
+
 
 async def get_ocr_service() -> GeminiOCRService:
     """
     Get advanced OCR service instance with semantic analysis capabilities.
-    
+
     This returns GeminiOCRService which provides:
     - Advanced OCR with semantic understanding
     - PromptManager integration for better context awareness
@@ -40,7 +94,7 @@ async def get_document_service() -> DocumentService:
     Returns:
         Initialized document service instance
     """
-    service = DocumentService()
+    service = DocumentService(use_llm_document_processing=True)
     await service.initialize()
     return service
 
@@ -70,6 +124,20 @@ async def check_all_services_health() -> Dict[str, Dict[str, Any]]:
         Dict containing health status of all services
     """
     health_results = {}
+
+    # Gemini Service Health
+    try:
+        gemini_service = await get_gemini_service()
+        health_results["gemini_service"] = await gemini_service.health_check()
+    except Exception as e:
+        health_results["gemini_service"] = {"status": "error", "error": str(e)}
+
+    # OpenAI Service Health
+    try:
+        openai_service = await get_openai_service()
+        health_results["openai_service"] = await openai_service.health_check()
+    except Exception as e:
+        health_results["openai_service"] = {"status": "error", "error": str(e)}
 
     # OCR Service Health
     try:
@@ -103,10 +171,14 @@ async def check_all_services_health() -> Dict[str, Dict[str, Any]]:
 # Export commonly used services
 __all__ = [
     # Services
+    "GeminiService",
+    "OpenAIService",
     "GeminiOCRService",
     "DocumentService",
     "ContractAnalysisService",
     # Factory functions
+    "get_gemini_service",
+    "get_openai_service",
     "get_ocr_service",
     "get_document_service",
     "get_contract_analysis_service",

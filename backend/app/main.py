@@ -75,7 +75,7 @@ settings = get_settings()
 security = HTTPBearer()
 # db_client will be initialized in lifespan function
 db_client: Optional[SupabaseClient] = None
-document_service = DocumentService()
+document_service = DocumentService(use_llm_document_processing=True)
 
 # Initialize LangGraph workflow (will be initialized in lifespan)
 contract_workflow = ContractAnalysisWorkflow(

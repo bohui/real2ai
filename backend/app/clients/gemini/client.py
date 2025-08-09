@@ -18,7 +18,6 @@ from google.auth import default
 from google.auth.credentials import Credentials
 
 from ..base.client import BaseClient, with_retry
-from ..base.interfaces import AIOperations
 from ..base.exceptions import (
     ClientConnectionError,
     ClientAuthenticationError,
@@ -38,8 +37,8 @@ PROMPT_PREVIEW_LENGTH = 100
 CONTENT_PREVIEW_LENGTH = 2000
 
 
-class GeminiClient(BaseClient, AIOperations):
-    """Google Gemini client wrapper providing AI operations."""
+class GeminiClient(BaseClient):
+    """Google Gemini client for connection and API management."""
 
     def __init__(self, config: GeminiClientConfig):
         super().__init__(config, "GeminiClient")
@@ -357,22 +356,12 @@ class GeminiClient(BaseClient, AIOperations):
                 original_error=e,
             )
 
-    # AIOperations interface implementation
+    # Core API Methods - Connection Layer Only
 
     @with_retry(max_retries=3, backoff_factor=2.0)
-    @langsmith_trace(name="gemini_generate_content", run_type="llm")
     async def generate_content(self, prompt: str, **kwargs) -> str:
-        """Generate content based on a prompt."""
+        """Call Gemini API to generate content."""
         try:
-            log_trace_info(
-                "gemini_generate_content",
-                prompt_length=len(prompt),
-                model=self.config.model_name,
-            )
-            self.logger.debug(
-                f"Generating content for prompt: {prompt[:PROMPT_PREVIEW_LENGTH]}..."
-            )
-
             # Create content for the prompt
             content = genai.types.Content(parts=[genai.types.Part(text=prompt)])
 
@@ -402,11 +391,9 @@ class GeminiClient(BaseClient, AIOperations):
                 )
 
             response_text = response.candidates[0].content.parts[0].text
-            self.logger.debug(f"Successfully generated {len(response_text)} characters")
             return response_text
 
         except Exception as e:
-            self.logger.error(f"Content generation failed: {e}")
             if "QUOTA" in str(e).upper() or "LIMIT" in str(e).upper():
                 raise ClientQuotaExceededError(
                     f"Gemini quota exceeded: {str(e)}",
@@ -420,118 +407,76 @@ class GeminiClient(BaseClient, AIOperations):
                     original_error=e,
                 )
 
-    @langsmith_trace(name="gemini_analyze_document", run_type="tool")
     async def analyze_document(
         self, content: bytes, content_type: str, **kwargs
     ) -> Dict[str, Any]:
-        """Analyze a document and extract information."""
+        """Delegate document analysis to OCR client."""
         try:
-            log_trace_info(
-                "gemini_analyze_document",
-                content_type=content_type,
-                content_size=len(content),
-            )
-            self.logger.debug(f"Analyzing document of type: {content_type}")
-
             # Delegate to OCR client for document analysis
             result = await self.ocr.analyze_document(content, content_type, **kwargs)
-
-            self.logger.debug("Document analysis completed successfully")
             return result
 
         except Exception as e:
-            self.logger.error(f"Document analysis failed: {e}")
             raise ClientError(
                 f"Document analysis failed: {str(e)}",
                 client_name=self.client_name,
                 original_error=e,
             )
 
-    @langsmith_trace(name="gemini_extract_text", run_type="tool")
     async def extract_text(
         self, content: bytes, content_type: str, **kwargs
     ) -> Dict[str, Any]:
-        """Extract text from a document using OCR."""
+        """Delegate text extraction to OCR client."""
         try:
-            log_trace_info(
-                "gemini_extract_text",
-                content_type=content_type,
-                content_size=len(content),
-            )
-            self.logger.debug(f"Extracting text from document of type: {content_type}")
-
             # Delegate to OCR client
             result = await self.ocr.extract_text(content, content_type, **kwargs)
-
-            self.logger.debug("Text extraction completed successfully")
             return result
 
         except Exception as e:
-            self.logger.error(f"Text extraction failed: {e}")
             raise ClientError(
                 f"Text extraction failed: {str(e)}",
                 client_name=self.client_name,
                 original_error=e,
             )
 
-    @langsmith_trace(name="gemini_classify_content", run_type="llm")
-    async def classify_content(
-        self, content: str, categories: list, **kwargs
+    async def analyze_image_semantics(
+        self, content: bytes, content_type: str, analysis_context: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """Classify content into predefined categories."""
+        """Analyze image semantics using multimodal capabilities."""
         try:
-            log_trace_info(
-                "gemini_classify_content",
-                content_length=len(content),
-                categories_count=len(categories),
+            # Create multimodal content
+            parts = [
+                Part.from_text(analysis_context.get("prompt", "Analyze this image")),
+                Part.from_data(content, mime_type=content_type),
+            ]
+            content_obj = Content(parts=parts)
+
+            # Generate analysis
+            import asyncio
+            response = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: self.client.models.generate_content(
+                    model=self.config.model_name,
+                    contents=[content_obj],
+                    config=GenerateContentConfig(
+                        safety_settings=self._get_safety_settings()
+                    ),
+                ),
             )
-            self.logger.debug(f"Classifying content into {len(categories)} categories")
 
-            # Create classification prompt
-            categories_text = ", ".join(categories)
-            prompt = f"""
-            Classify the following content into one of these categories: {categories_text}
-            
-            Content:
-            {content[:CONTENT_PREVIEW_LENGTH]}...
-            
-            Respond with only the category name that best fits this content.
-            """
+            if not response.candidates or not response.candidates[0].content:
+                raise ClientError(
+                    "No analysis generated", client_name=self.client_name
+                )
 
-            classification = await self.generate_content(prompt)
-
-            # Clean up the response
-            classification = classification.strip()
-
-            # Validate that the classification is in the provided categories
-            if classification not in categories:
-                # Try to find partial match
-                classification_lower = classification.lower()
-                for category in categories:
-                    if (
-                        category.lower() in classification_lower
-                        or classification_lower in category.lower()
-                    ):
-                        classification = category
-                        break
-                else:
-                    # If no match found, use the first category as default
-                    classification = categories[0]
-
-            result = {
-                "classification": classification,
-                "confidence": 0.8,  # Default confidence for now
-                "categories": categories,
-                "content_length": len(content),
+            return {
+                "content": response.candidates[0].content.parts[0].text,
+                "analysis_type": "image_semantics",
             }
 
-            self.logger.debug(f"Content classified as: {classification}")
-            return result
-
         except Exception as e:
-            self.logger.error(f"Content classification failed: {e}")
             raise ClientError(
-                f"Content classification failed: {str(e)}",
+                f"Image analysis failed: {str(e)}",
                 client_name=self.client_name,
                 original_error=e,
             )

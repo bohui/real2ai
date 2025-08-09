@@ -11,16 +11,19 @@ from fastapi import HTTPException
 
 from app.core.config import get_settings
 from app.core.prompts.service_mixin import PromptEnabledService
+from app.core.langsmith_config import langsmith_trace
 from app.core.prompts.output_parser import create_parser, ParsingResult
 from app.services.base.user_aware_service import UserAwareService
 from app.models.contract_state import ProcessingStatus, AustralianState, ContractType
 from app.prompts.schema.image_semantics_schema import ImageSemantics, ImageType
-from app.clients import get_gemini_client
+from app.services.gemini_service import GeminiService
 from app.clients.base.exceptions import (
     ClientError,
     ClientConnectionError,
     ClientQuotaExceededError,
 )
+from google.genai.types import Content, Part, GenerateContentConfig
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -39,9 +42,9 @@ class GeminiOCRService(PromptEnabledService, UserAwareService):
     def __init__(self, user_client=None):
         PromptEnabledService.__init__(self)
         UserAwareService.__init__(self, user_client=user_client)
-        
+
         self.settings = get_settings()
-        self.gemini_client = None
+        self.gemini_service = None
         self.max_file_size = 50 * 1024 * 1024  # 50MB limit
         self.supported_formats = {
             "pdf",
@@ -57,15 +60,10 @@ class GeminiOCRService(PromptEnabledService, UserAwareService):
     async def initialize(self):
         """Initialize Gemini OCR service"""
         try:
-            self.gemini_client = await get_gemini_client()
-            if hasattr(self.gemini_client, "ocr") and self.gemini_client.ocr:
-                logger.info(
-                    "Gemini OCR service initialized with PromptManager integration"
-                )
-                return True
-            else:
-                logger.warning("GeminiClient does not have OCR capabilities")
-                return False
+            self.gemini_service = GeminiService(user_client=self._user_client)
+            await self.gemini_service.initialize()
+            logger.info("Gemini OCR service initialized with PromptManager integration")
+            return True
 
         except ClientConnectionError as e:
             logger.error(f"Failed to connect to Gemini service: {e}")
@@ -204,7 +202,7 @@ Focus on accuracy and completeness. Extract all visible text content."""
         Returns:
             Structured OCR extraction result with page references
         """
-        if not self.gemini_client:
+        if not self.gemini_service:
             raise HTTPException(
                 status_code=503, detail="Gemini OCR service not initialized"
             )
@@ -267,16 +265,18 @@ Focus on accuracy and completeness. Extract all visible text content."""
                 else:
                     content_type = f"image/{file_type.lower()}"
 
-                # Use the client's analyze method for structured output
-                ai_response = await self.gemini_client.analyze_image_semantics(
-                    content=file_content,
-                    content_type=content_type,
-                    analysis_context={
-                        "prompt": structured_prompt,
-                        "expects_structured_output": True,
-                        "output_format": "json",
-                        "schema_type": schema_class.__name__,
-                    },
+                # Use the service's analyze method for structured output
+                ai_response = (
+                    await self.gemini_service.gemini_client.analyze_image_semantics(
+                        content=file_content,
+                        content_type=content_type,
+                        analysis_context={
+                            "prompt": structured_prompt,
+                            "expects_structured_output": True,
+                            "output_format": "json",
+                            "schema_type": schema_class.__name__,
+                        },
+                    )
                 )
 
                 # Parse AI response using integrated parser
@@ -466,7 +466,7 @@ Focus on accuracy and completeness. Extract all visible text content."""
         3. Parses AI response with validation and error handling
         4. Returns structured, validated results
         """
-        if not self.gemini_client:
+        if not self.gemini_service:
             raise HTTPException(
                 status_code=503, detail="Gemini OCR service not initialized"
             )
@@ -503,20 +503,22 @@ Focus on accuracy and completeness. Extract all visible text content."""
 
             logger.debug(f"Generated structured prompt for {filename}")
 
-            # Get AI response using Gemini client
+            # Get AI response using Gemini service
             try:
-                ai_response = await self.gemini_client.analyze_image_semantics(
-                    content=file_content,
-                    content_type=(
-                        f"image/{file_type.lower()}"
-                        if file_type.lower() != "pdf"
-                        else "application/pdf"
-                    ),
-                    analysis_context={
-                        "prompt": analysis_prompt,
-                        "expects_structured_output": True,
-                        "output_format": "json",
-                    },
+                ai_response = (
+                    await self.gemini_service.gemini_client.analyze_image_semantics(
+                        content=file_content,
+                        content_type=(
+                            f"image/{file_type.lower()}"
+                            if file_type.lower() != "pdf"
+                            else "application/pdf"
+                        ),
+                        analysis_context={
+                            "prompt": analysis_prompt,
+                            "expects_structured_output": True,
+                            "output_format": "json",
+                        },
+                    )
                 )
 
                 # Parse AI response using integrated parser
@@ -587,6 +589,120 @@ Focus on accuracy and completeness. Extract all visible text content."""
                 "error": str(e),
                 "error_type": type(e).__name__,
                 "analysis_timestamp": datetime.now(UTC).isoformat(),
+            }
+
+    @langsmith_trace(name="gemini_text_diagram_insight", run_type="llm")
+    async def extract_text_diagram_insight(
+        self,
+        *,
+        file_content: bytes,
+        file_type: str,
+        filename: str,
+        analysis_focus: str = "diagram_detection",
+    ) -> Dict[str, Any]:
+        """Lightweight helper to get OCR text and diagram type (if applicable) via a single LLM call.
+
+        Returns a dict with keys:
+        - text: str
+        - confidence: float
+        - diagram_hint: { is_diagram: bool, diagram_type: str | None }
+        """
+        if not self.gemini_service:
+            raise HTTPException(
+                status_code=503, detail="Gemini OCR service not initialized"
+            )
+
+        try:
+            # Validate input quickly
+            self._validate_file(file_content, file_type)
+
+            # Use centralized schema for structured output
+            from app.prompts.schema.text_diagram_insight_schema import (
+                TextDiagramInsight,
+            )
+
+            parser = create_parser(TextDiagramInsight)
+
+            # Render prompt using PromptManager with format instructions
+            rendered_prompt = await self.render_with_parser(
+                template_name="ocr/text_diagram_insight",
+                context={
+                    "filename": filename,
+                    "file_type": file_type,
+                    "analysis_focus": analysis_focus,
+                },
+                output_parser=parser,
+                validate=True,
+                use_cache=True,
+            )
+
+            # Build multimodal content (prompt + image)
+            mime_type = (
+                "application/pdf"
+                if file_type.lower() == "pdf"
+                else f"image/{file_type.lower()}"
+            )
+            content = Content(
+                parts=[
+                    Part.from_text(rendered_prompt),
+                    Part.from_data(file_content, mime_type=mime_type),
+                ]
+            )
+
+            # Execute model call (single LLM call)
+            response = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: self.gemini_service.gemini_client.client.models.generate_content(
+                    model=self.gemini_service.gemini_client.config.model_name,
+                    contents=[content],
+                    config=GenerateContentConfig(),
+                ),
+            )
+
+            ai_text = (
+                response.candidates[0].content.parts[0].text
+                if response
+                and response.candidates
+                and response.candidates[0].content
+                and response.candidates[0].content.parts
+                else ""
+            )
+
+            # Parse structured output
+            parsing_result = await self.parse_ai_response(
+                template_name="ocr/text_diagram_insight",
+                ai_response=ai_text,
+                output_parser=parser,
+                use_retry=True,
+            )
+
+            if parsing_result.success and parsing_result.parsed_data:
+                model: TextDiagramInsight = parsing_result.parsed_data
+                return {
+                    "text": (model.text or "").strip(),
+                    "confidence": float(model.confidence or 0.0),
+                    "diagram_hint": {
+                        "is_diagram": bool(model.is_diagram),
+                        "diagram_type": model.diagram_type,
+                    },
+                }
+
+            # Fallback on parse failure
+            raw = parsing_result.raw_output or ""
+            return {
+                "text": raw if isinstance(raw, str) else "",
+                "confidence": 0.0,
+                "diagram_hint": {"is_diagram": False, "diagram_type": None},
+            }
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.warning(f"extract_text_diagram_insight failed for {filename}: {e}")
+            return {
+                "text": "",
+                "confidence": 0.0,
+                "diagram_hint": {"is_diagram": False, "diagram_type": None},
             }
 
     async def _handle_parsing_failure(
@@ -735,46 +851,58 @@ Focus on accuracy and completeness. Extract all visible text content."""
 
         # Initialize confidence
         confidence = 1.0
-        
+
         # Text length factor (very short text gets lower confidence)
         if len(extracted_text) < 50:
             confidence *= 0.7
         elif len(extracted_text) < 10:
             confidence *= 0.4
-        
+
         # Count quality indicators
         total_chars = len(extracted_text)
         if total_chars == 0:
             return 0.0
-            
+
         # Count problematic patterns
         import re
-        
+
         # Numbers where letters should be (like "1" instead of "I")
-        substitution_errors = len(re.findall(r'\b\d[a-zA-Z]+|\b[a-zA-Z]*\d[a-zA-Z]*\b', extracted_text))
-        
+        substitution_errors = len(
+            re.findall(r"\b\d[a-zA-Z]+|\b[a-zA-Z]*\d[a-zA-Z]*\b", extracted_text)
+        )
+
         # Excessive special characters
-        special_char_ratio = len(re.findall(r'[^\w\s.,!?:;()-]', extracted_text)) / total_chars
-        
+        special_char_ratio = (
+            len(re.findall(r"[^\w\s.,!?:;()-]", extracted_text)) / total_chars
+        )
+
         # Very short "words" (likely OCR artifacts)
-        short_words = len([word for word in extracted_text.split() if len(word) == 1 and word.isalpha()])
-        
+        short_words = len(
+            [
+                word
+                for word in extracted_text.split()
+                if len(word) == 1 and word.isalpha()
+            ]
+        )
+
         # Apply penalties
         if substitution_errors > total_chars * 0.1:  # More than 10% substitution errors
             confidence *= 0.6
         if special_char_ratio > 0.15:  # More than 15% special characters
             confidence *= 0.7
-        if short_words > len(extracted_text.split()) * 0.3:  # More than 30% single-char words
+        if (
+            short_words > len(extracted_text.split()) * 0.3
+        ):  # More than 30% single-char words
             confidence *= 0.8
-            
+
         # Bonus for good indicators
-        sentences = len(re.findall(r'[.!?]+', extracted_text))
+        sentences = len(re.findall(r"[.!?]+", extracted_text))
         words = len(extracted_text.split())
         if sentences > 0 and words > 0:
             avg_words_per_sentence = words / sentences
             if 5 <= avg_words_per_sentence <= 25:  # Reasonable sentence length
                 confidence *= 1.1
-        
+
         # Ensure confidence stays in valid range
         return max(0.0, min(1.0, confidence))
 
@@ -785,28 +913,28 @@ Focus on accuracy and completeness. Extract all visible text content."""
                 "character_count": 0,
                 "word_count": 0,
                 "line_count": 0,
-                "average_word_length": 0.0
+                "average_word_length": 0.0,
             }
-        
+
         # Basic counts
         character_count = len(text)
         words = text.split()
         word_count = len(words)
         lines = text.splitlines()
         line_count = len(lines)
-        
+
         # Calculate average word length
         if word_count > 0:
-            total_word_length = sum(len(word.strip('.,!?:;()')) for word in words)
+            total_word_length = sum(len(word.strip(".,!?:;()")) for word in words)
             average_word_length = total_word_length / word_count
         else:
             average_word_length = 0.0
-        
+
         return {
             "character_count": character_count,
             "word_count": word_count,
             "line_count": line_count,
-            "average_word_length": round(average_word_length, 2)
+            "average_word_length": round(average_word_length, 2),
         }
 
     # Comparison method to show the difference
