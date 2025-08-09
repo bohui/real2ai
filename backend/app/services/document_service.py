@@ -882,21 +882,7 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
             full_text=full_text,
             character_count=len(full_text),
             total_word_count=len(full_text.split()) if full_text else 0,
-            total_pages=(
-                getattr(text_extraction_result, "total_pages", None)
-                if hasattr(text_extraction_result, "total_pages")
-                else None
-            )
-            or (
-                len(text_extraction_result.pages)
-                if hasattr(text_extraction_result, "pages")
-                and text_extraction_result.pages is not None
-                else (
-                    len(text_extraction_result.get("pages", []))
-                    if isinstance(text_extraction_result, dict)
-                    else 0
-                )
-            ),
+            total_pages=text_extraction_result.total_pages or len(text_extraction_result.pages),
             extraction_method=primary_method,
             extraction_confidence=0.0,
             processing_timestamp=datetime.now(UTC).isoformat(),
@@ -1955,12 +1941,10 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
         return QualityIndicatorsSchema(**indicators)
 
     def _aggregate_diagram_detections(
-        self, text_extraction_result: Dict[str, Any]
+        self, text_extraction_result: TextExtractionResult
     ) -> Dict[str, Any]:
         """Aggregate diagram detection results from page-level analysis"""
-        if not text_extraction_result.get("success") or not text_extraction_result.get(
-            "pages"
-        ):
+        if not text_extraction_result.success or not text_extraction_result.pages:
             return {
                 "total_diagrams": DocumentServiceConstants.DEFAULT_PAGE_NUMBER,
                 "diagram_pages": [],
@@ -1982,27 +1966,23 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
             "mixed_content": DocumentServiceConstants.DEFAULT_PAGE_NUMBER,
         }
 
-        for page in text_extraction_result["pages"]:
-            page_analysis = page.get("content_analysis", {})
-            layout_features = page_analysis.get("layout_features", {})
+        for page in text_extraction_result.pages:
+            page_analysis = page.content_analysis
+            layout_features = page_analysis.layout_features
 
-            if layout_features.get("has_diagrams", False):
-                page_num = page.get(
-                    "page_number", DocumentServiceConstants.DEFAULT_PAGE_NUMBER
-                )
+            if layout_features.has_diagrams:
+                page_num = page.page_number
                 diagram_pages.append(
                     {
                         "page_number": page_num,
-                        "content_types": page_analysis.get("content_types", []),
-                        "primary_type": page_analysis.get("primary_type", "unknown"),
-                        "confidence": page.get(
-                            "confidence", DocumentServiceConstants.DEFAULT_CONFIDENCE
-                        ),
+                        "content_types": page_analysis.content_types,
+                        "primary_type": page_analysis.primary_type,
+                        "confidence": page.confidence,
                     }
                 )
 
                 # Count diagram types based on content analysis
-                primary_type = page_analysis.get("primary_type", "unknown")
+                primary_type = page_analysis.primary_type
                 if primary_type == "diagram":
                     diagram_types["diagram"] = (
                         diagram_types.get(
@@ -2055,12 +2035,10 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
         }
 
     def _create_page_processing_summary(
-        self, text_extraction_result: Dict[str, Any]
+        self, text_extraction_result: TextExtractionResult
     ) -> Dict[str, Any]:
         """Create summary of page processing results"""
-        if not text_extraction_result.get("success") or not text_extraction_result.get(
-            "pages"
-        ):
+        if not text_extraction_result.success or not text_extraction_result.pages:
             return {
                 "pages": [],
                 "total_pages_processed": DocumentServiceConstants.DEFAULT_PAGE_NUMBER,
@@ -2068,13 +2046,13 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
                 "average_confidence": DocumentServiceConstants.DEFAULT_CONFIDENCE,
             }
 
-        pages = text_extraction_result["pages"]
+        pages = text_extraction_result.pages
         content_type_distribution = {}
         total_confidence = DocumentServiceConstants.DEFAULT_CONFIDENCE
 
         for page in pages:
-            page_analysis = page.get("content_analysis", {})
-            primary_type = page_analysis.get("primary_type", "unknown")
+            page_analysis = page.content_analysis
+            primary_type = page_analysis.primary_type
 
             content_type_distribution[primary_type] = (
                 content_type_distribution.get(
@@ -2082,9 +2060,7 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
                 )
                 + DocumentServiceConstants.MIN_COMPLEX_SHAPE_ITEMS
             )
-            total_confidence += page.get(
-                "confidence", DocumentServiceConstants.DEFAULT_CONFIDENCE
-            )
+            total_confidence += page.confidence
 
         average_confidence = (
             total_confidence / len(pages)
@@ -2122,51 +2098,47 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
     async def _save_document_pages(
         self,
         document_id: str,
-        text_extraction_result: Dict[str, Any],
+        text_extraction_result: TextExtractionResult,
         content_hash: str = None,
     ) -> None:
         """Save page analysis data to document_pages table - USER OPERATION"""
         try:
-            if not text_extraction_result.get(
-                "success"
-            ) or not text_extraction_result.get("pages"):
+            if not text_extraction_result.success or not text_extraction_result.pages:
                 self.logger.info(f"No pages to save for document {document_id}")
                 return
 
             user_client = await self.get_user_client()
-            pages = text_extraction_result["pages"]
+            pages = text_extraction_result.pages
 
             for page in pages:
-                page_analysis = page.get("content_analysis", {})
-                layout_features = page_analysis.get("layout_features", {})
-                quality_indicators = page_analysis.get("quality_indicators", {})
+                page_analysis = page.content_analysis
+                layout_features = page_analysis.layout_features
+                quality_indicators = page_analysis.quality_indicators
 
                 page_data = {
                     "id": str(uuid.uuid4()),
                     "document_id": document_id,
                     "content_hash": content_hash,
-                    "page_number": page.get("page_number", 1),
+                    "page_number": page.page_number,
                     # Content analysis
-                    "text_content": page.get("text_content", ""),
-                    "text_length": page.get("text_length", 0),
-                    "word_count": page.get("word_count", 0),
+                    "text_content": page.text_content,
+                    "text_length": page.text_length,
+                    "word_count": page.word_count,
                     # Content classification
-                    "content_types": page_analysis.get("content_types", []),
-                    "primary_content_type": page_analysis.get("primary_type", "empty"),
+                    "content_types": page_analysis.content_types,
+                    "primary_content_type": page_analysis.primary_type,
                     # Quality metrics
-                    "extraction_confidence": page.get("confidence", 0.0),
-                    "content_quality_score": quality_indicators.get(
-                        "structure_score", 0.0
-                    ),
+                    "extraction_confidence": page.confidence,
+                    "content_quality_score": quality_indicators.structure_score,
                     # Layout analysis
-                    "has_header": layout_features.get("has_header", False),
-                    "has_footer": layout_features.get("has_footer", False),
-                    "has_signatures": layout_features.get("has_signatures", False),
-                    "has_diagrams": layout_features.get("has_diagrams", False),
-                    "has_tables": layout_features.get("has_tables", False),
+                    "has_header": layout_features.has_header,
+                    "has_footer": layout_features.has_footer,
+                    "has_signatures": layout_features.has_signatures,
+                    "has_diagrams": layout_features.has_diagrams,
+                    "has_tables": layout_features.has_tables,
                     # Processing metadata
                     "processed_at": datetime.now(UTC),
-                    "processing_method": page.get("extraction_method", "unknown"),
+                    "processing_method": page.extraction_method or "unknown",
                 }
 
                 # Save page record
@@ -2180,41 +2152,32 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
             raise
 
     async def _save_document_diagrams(
-        self, document_id: str, text_extraction_result: Dict[str, Any]
+        self, document_id: str, text_extraction_result: TextExtractionResult
     ) -> None:
         """Save diagram detection data to document_diagrams table - USER OPERATION"""
         try:
-            if not text_extraction_result.get(
-                "success"
-            ) or not text_extraction_result.get("pages"):
+            if not text_extraction_result.success or not text_extraction_result.pages:
                 return
 
             user_client = await self.get_user_client()
             diagrams_saved = 0
 
-            for page in text_extraction_result["pages"]:
-                page_analysis = page.get("content_analysis", {})
-                layout_features = page_analysis.get("layout_features", {})
+            for page in text_extraction_result.pages:
+                page_analysis = page.content_analysis
+                layout_features = page_analysis.layout_features
 
                 # Only save if diagrams were detected on this page
-                if layout_features.get("has_diagrams", False):
-                    # Resolve diagram type using LLM hint if available
-                    diagram_hint = (
-                        page.get("diagram_hint", {}) if isinstance(page, dict) else {}
-                    )
-                    resolved_type = (
-                        diagram_hint.get("diagram_type")
-                        if isinstance(diagram_hint, dict)
-                        else None
-                    ) or "unknown"
+                if layout_features.has_diagrams:
+                    # Use diagram type from content analysis
+                    resolved_type = page_analysis.diagram_type or "unknown"
 
                     diagram_data = {
                         "id": str(uuid.uuid4()),
                         "document_id": document_id,
-                        "page_number": page.get("page_number", 1),
-                        # Classification from LLM hint when available
+                        "page_number": page.page_number,
+                        # Classification from content analysis
                         "diagram_type": resolved_type,
-                        "classification_confidence": page.get("confidence", 0.0),
+                        "classification_confidence": page.confidence,
                         # Analysis status
                         "basic_analysis_completed": True,
                         "detailed_analysis_completed": False,
@@ -2255,7 +2218,7 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
     async def _update_document_metrics(
         self,
         document_id: str,
-        text_extraction_result: Dict[str, Any],
+        text_extraction_result: TextExtractionResult,
         diagram_processing_result: Dict[str, Any],
     ) -> None:
         """Update main document with aggregated metrics - USER OPERATION"""
@@ -2263,15 +2226,13 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
             user_client = await self.get_user_client()
 
             # Calculate aggregated metrics
-            pages = text_extraction_result.get("pages", [])
+            pages = text_extraction_result.pages
             total_pages = len(pages)
-            total_word_count = sum(p.get("word_count", 0) for p in pages)
-            total_text_length = sum(p.get("text_length", 0) for p in pages)
+            total_word_count = sum(p.word_count for p in pages)
+            total_text_length = sum(p.text_length for p in pages)
 
             # Calculate average confidence
-            confidences = [
-                p.get("confidence", 0.0) for p in pages if p.get("confidence", 0.0) > 0
-            ]
+            confidences = [p.confidence for p in pages if p.confidence > 0]
             avg_confidence = sum(confidences) / len(confidences) if confidences else 0.0
 
             # Diagram information
@@ -2279,11 +2240,11 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
             has_diagrams = total_diagrams > 0
 
             # Determine text extraction method
-            extraction_methods = text_extraction_result.get("extraction_methods", [])
+            extraction_methods = text_extraction_result.extraction_methods or []
             primary_method = extraction_methods[0] if extraction_methods else "unknown"
 
             update_data = {
-                "full_text": text_extraction_result.get("full_text", ""),
+                "full_text": text_extraction_result.full_text,
                 "total_pages": total_pages,
                 "total_word_count": total_word_count,
                 "total_text_length": total_text_length,

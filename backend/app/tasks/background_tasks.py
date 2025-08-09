@@ -235,6 +235,9 @@ async def comprehensive_document_analysis(
                 step_description="Extracting text from document...",
                 estimated_completion_minutes=3,
             )
+            
+            # Refresh TTL at start of long-running task
+            await recovery_ctx.refresh_context_ttl()
 
             summary = await document_service.process_document_by_id(document_id)
             if not summary or not summary.get("success"):

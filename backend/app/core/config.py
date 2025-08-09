@@ -5,7 +5,7 @@ Configuration management for Real2.AI
 import os
 from pathlib import Path
 from typing import List, Optional, Dict, Any
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import validator
 from dataclasses import dataclass
 from app.models.contract_state import AustralianState
@@ -13,6 +13,13 @@ from app.models.contract_state import AustralianState
 
 class Settings(BaseSettings):
     """Application settings"""
+
+    # Pydantic v2 settings configuration
+    model_config = SettingsConfigDict(
+        env_file=(".env", ".env.local", "env.local"),
+        case_sensitive=False,
+        extra="ignore",
+    )
 
     # Environment
     environment: str = "development"
@@ -135,10 +142,7 @@ class Settings(BaseSettings):
         """Get enhanced workflow configuration"""
         return EnhancedWorkflowConfig.from_settings(self)
 
-    class Config:
-        env_file = [".env", ".env.local", "env.local"]
-        case_sensitive = False
-        extra = "ignore"  # Ignore extra fields like old JWT settings
+    # Note: Pydantic v2 uses model_config; the old inner Config is deprecated
 
 
 _settings: Optional[Settings] = None

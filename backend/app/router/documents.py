@@ -148,26 +148,26 @@ async def upload_document(
             raise
 
         # Check if upload was successful
-        if not upload_result.get("success"):
+        if not upload_result.success:
             logger.error(
-                f"Document upload failed: {upload_result.get('error', 'Unknown error')}"
+                f"Document upload failed: {upload_result.error or 'Unknown error'}"
             )
             raise HTTPException(
                 status_code=500,
-                detail=f"Document upload failed: {upload_result.get('error', 'Unknown error')}",
+                detail=f"Document upload failed: {upload_result.error or 'Unknown error'}",
             )
 
         logger.info("Fast document upload completed successfully")
 
         response = DocumentUploadResponse(
-            document_id=upload_result["document_id"],
+            document_id=upload_result.document_id,
             filename=file.filename,
             file_size=file.size,
             upload_status="uploaded",  # Status is now "uploaded" not "processed"
-            processing_time=upload_result.get("processing_time", 0.0),
+            processing_time=upload_result.processing_time,
         )
         logger.info(
-            f"Document uploaded successfully - document_id: {upload_result['document_id']}"
+            f"Document uploaded successfully - document_id: {upload_result.document_id}"
         )
         return response
 

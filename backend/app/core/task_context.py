@@ -40,7 +40,7 @@ class SecureTaskContextStore:
             logger.info(f"TASK_ENCRYPTION_KEY from env: {os.environ['TASK_ENCRYPTION_KEY'][:10]}...")
         self.redis_client = None
         self.cipher = None
-        self.default_ttl = timedelta(hours=1)  # Task context expiry
+        self.default_ttl = timedelta(hours=4)  # Extended TTL for long-running tasks
         self._initialized = False
 
     async def initialize(self):
@@ -188,14 +188,14 @@ class SecureTaskContextStore:
             return False
 
     async def extend_context_ttl(
-        self, context_key: str, additional_seconds: int = 3600
+        self, context_key: str, additional_seconds: int = 14400
     ) -> bool:
         """
         Extend TTL for long-running tasks.
 
         Args:
             context_key: Key to extend TTL for
-            additional_seconds: Additional seconds to extend
+            additional_seconds: Additional seconds to extend (default 4 hours)
 
         Returns:
             True if extension successful
@@ -206,10 +206,33 @@ class SecureTaskContextStore:
         try:
             result = self.redis_client.expire(context_key, additional_seconds)
             if result:
-                logger.debug(f"Extended TTL for context: {context_key}")
+                logger.info(f"Extended TTL for context: {context_key} to {additional_seconds}s")
             return bool(result)
         except Exception as e:
             logger.warning(f"Failed to extend TTL for {context_key}: {e}")
+            return False
+
+    async def refresh_context_ttl(self, context_key: str) -> bool:
+        """
+        Refresh TTL to the default duration for active tasks.
+
+        Args:
+            context_key: Key to refresh TTL for
+
+        Returns:
+            True if refresh successful
+        """
+        if not self._initialized:
+            await self.initialize()
+
+        try:
+            ttl_seconds = int(self.default_ttl.total_seconds())
+            result = self.redis_client.expire(context_key, ttl_seconds)
+            if result:
+                logger.info(f"Refreshed TTL for context: {context_key} to {ttl_seconds}s")
+            return bool(result)
+        except Exception as e:
+            logger.warning(f"Failed to refresh TTL for {context_key}: {e}")
             return False
 
     async def health_check(self) -> Dict[str, Any]:
@@ -267,9 +290,13 @@ async def get_task_store() -> SecureTaskContextStore:
 
 
 @asynccontextmanager
-async def task_auth_context(context_key: str):
+async def task_auth_context(context_key: str, extend_ttl: bool = True):
     """
     Context manager for background task authentication.
+
+    Args:
+        context_key: Task context key for authentication
+        extend_ttl: Whether to extend TTL at start for long-running tasks
 
     Usage:
         async with task_auth_context(context_key):
@@ -280,6 +307,10 @@ async def task_auth_context(context_key: str):
     task_store = await get_task_store()
 
     try:
+        # Extend TTL for long-running tasks before retrieval
+        if extend_ttl:
+            await task_store.extend_context_ttl(context_key)
+        
         # Restore auth context
         auth_context = await task_store.retrieve_context(context_key)
         AuthContext.restore_task_context(auth_context)
@@ -462,11 +493,12 @@ async def _recovery_enabled_async_wrapper(
         # Get user_id from restored context
         user_id = AuthContext.get_user_id()
 
-        # Create recovery context
+        # Create recovery context with context_key for TTL refresh
         recovery_ctx = await create_recovery_context(
             user_id=user_id,
             recovery_priority=recovery_priority,
             checkpoint_frequency=checkpoint_frequency,
+            context_key=context_key,
         )
 
         # Execute function with recovery context as first parameter
@@ -490,11 +522,12 @@ async def _recovery_enabled_sync_wrapper(
         # Get user_id from restored context
         user_id = AuthContext.get_user_id()
 
-        # Create recovery context
+        # Create recovery context with context_key for TTL refresh
         recovery_ctx = await create_recovery_context(
             user_id=user_id,
             recovery_priority=recovery_priority,
             checkpoint_frequency=checkpoint_frequency,
+            context_key=context_key,
         )
 
         # Execute function with recovery context as first parameter
@@ -542,6 +575,21 @@ class TaskContextManager:
         )
         return context_key
 
+    async def refresh_task_ttl(self, context_key: str) -> bool:
+        """
+        Refresh TTL for an active task - can be called during task execution.
+
+        Args:
+            context_key: Context key to refresh
+
+        Returns:
+            True if refresh successful
+        """
+        if not self.store:
+            await self.initialize()
+        
+        return await self.store.refresh_context_ttl(context_key)
+
     async def launch_user_task(self, celery_task, task_id: str, *args, **kwargs):
         """
         Launch a user-aware Celery task with auth context.
@@ -567,3 +615,27 @@ class TaskContextManager:
 
 # Global context manager instance
 task_manager = TaskContextManager()
+
+
+async def refresh_current_task_ttl(context_key: str) -> bool:
+    """
+    Utility function for tasks to refresh their context TTL during execution.
+    This prevents context expiration for long-running tasks.
+    
+    Args:
+        context_key: The task context key
+        
+    Returns:
+        True if TTL refresh was successful
+    """
+    try:
+        task_store = await get_task_store()
+        result = await task_store.refresh_context_ttl(context_key)
+        if result:
+            logger.info(f"Successfully refreshed TTL for task context: {context_key}")
+        else:
+            logger.warning(f"Failed to refresh TTL for task context: {context_key}")
+        return result
+    except Exception as e:
+        logger.error(f"Error refreshing TTL for task context {context_key}: {e}")
+        return False
