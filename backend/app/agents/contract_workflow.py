@@ -724,7 +724,7 @@ class ContractAnalysisWorkflow:
         try:
             # Create enhanced context for contract structure analysis
             extraction_context = PromptContext(
-                context_type=ContextType.CONTRACT_ANALYSIS,
+                context_type=ContextType.ANALYSIS,
                 variables={
                     "extracted_text": document_text,
                     "australian_state": australian_state,
@@ -2509,7 +2509,7 @@ class ContractAnalysisWorkflow:
         try:
             # Use PromptManager with compliance_check template
             context = PromptContext(
-                context_type=ContextType.COMPLIANCE,
+                context_type=ContextType.ANALYSIS,
                 variables={
                     "australian_state": australian_state,
                     "contract_terms": contract_terms,
