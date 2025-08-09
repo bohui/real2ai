@@ -953,8 +953,9 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
             status = doc.get("processing_status") or doc.get("status")
             if status not in {
                 ProcessingStatus.BASIC_COMPLETE.value,
-                ProcessingStatus.COMPLETE.value,
+                ProcessingStatus.ANALYSIS_COMPLETE.value,
                 "basic_complete",
+                "analysis_complete",
                 "processed",
             }:
                 return None

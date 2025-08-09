@@ -690,8 +690,8 @@ class ContractAnalysisService:
         # Create progress-tracking workflow
         progress_workflow = ProgressTrackingWorkflow(
             self,
-            openai_api_key=self.workflow.llm.openai_api_key,
-            model_name=self.workflow.llm.model_name,
+            openai_api_key=self.openai_api_key,
+            model_name=self.model_name,
         )
 
         # Execute the workflow
