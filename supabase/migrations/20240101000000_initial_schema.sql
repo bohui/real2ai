@@ -60,6 +60,7 @@ CREATE TABLE documents (
     text_extraction_method VARCHAR(100),
     
     -- Document content metrics
+    full_text TEXT,
     total_pages INTEGER DEFAULT 0,
     total_text_length INTEGER DEFAULT 0,
     total_word_count INTEGER DEFAULT 0,

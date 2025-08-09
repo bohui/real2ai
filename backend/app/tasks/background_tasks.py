@@ -13,14 +13,19 @@ from datetime import datetime, timezone
 from app.core.celery import celery_app
 from app.core.task_context import user_aware_task, task_manager
 from app.core.auth_context import AuthContext
+from app.core.langsmith_config import langsmith_session, log_trace_info
+from app.core.config import get_settings
+from app.clients.factory import get_service_supabase_client
+from app.agents.contract_workflow import ContractAnalysisWorkflow
 from app.models.contract_state import (
     AustralianState,
+    create_initial_state,
 )
+from app.services.contract_analysis_service import ContractAnalysisService
 from app.services.document_service import DocumentService
 from app.services.websocket_service import WebSocketEvents
 from app.services.websocket_singleton import websocket_manager
 from app.services.redis_pubsub import publish_progress_sync
-from app.core.langsmith_config import langsmith_session, log_trace_info
 
 logger = logging.getLogger(__name__)
 
@@ -273,47 +278,72 @@ async def comprehensive_document_analysis(
                 estimated_completion_minutes=1,
             )
 
-            # Get contract details
-            contract_result = await user_client.database.select(
-                "contracts", columns="*", filters={"id": contract_id}
-            )
-            contract_data = (
-                contract_result["data"][0] if contract_result.get("data") else {}
-            )
-            
-            # Get processed document with extracted content
-            doc_result = await user_client.database.select(
-                "documents", columns="*", filters={"id": document_id}
-            )
-            if not doc_result.get("data"):
-                raise ValueError(f"Document {document_id} not found after processing")
-            
-            processed_document = doc_result["data"][0]
-            processing_results = processed_document.get("processing_results", {})
-            extracted_text = processing_results.get("extracted_text", "")
-            
+            # # Get processed document with extracted content
+            # doc_result = await user_client.database.select(
+            #     "documents", columns="*", filters={"id": document_id}
+            # )
+            # if not doc_result.get("data"):
+            #     raise ValueError(f"Document {document_id} not found after processing")
+
+            # processed_document = doc_result["data"][0]
+
+            # Support multiple shapes for stored results
+            extracted_text = summary.get("full_text") or summary.get("extracted_text")
+
+            # Fall back to the in-memory summary produced earlier
+            # if (not extracted_text) and summary and summary.get("success"):
+            #     extracted_text = summary.get("extracted_text")
+
+            # As a last resort, fetch a processed summary via service helper
+            # if not extracted_text:
+            #     processed_summary = (
+            #         await document_service.get_processed_document_summary(
+            #             document_id=document_id
+            #         )
+            #     )
+            #     if processed_summary and processed_summary.get("success"):
+            #         extracted_text = processed_summary.get(
+            #             "full_text"
+            #         ) or processed_summary.get("extracted_text")
+
             if not extracted_text:
-                raise ValueError(f"No extracted text available for document {document_id}")
-            
+                raise ValueError(
+                    f"No extracted text available for document {document_id}"
+                )
+
             logger.info(f"Retrieved document content: {len(extracted_text)} characters")
 
             # Prepare document_data structure for ContractAnalysisService
+            # Derive metrics with compatibility across result shapes
+            extraction_confidence = (
+                summary.get("extraction_confidence")
+                or (summary.get("text_extraction") or {}).get("overall_confidence", 0.0)
+                or summary.get("extraction_confidence", 0.0)
+            )
+            word_count = (
+                summary.get("total_word_count")
+                or summary.get("word_count")
+                or (summary.get("text_extraction") or {}).get("total_word_count")
+                or (len(extracted_text.split()) if extracted_text else 0)
+            )
+            page_count = summary.get("total_pages") or summary.get("page_count", 1)
+
             document_data = {
                 "document_id": document_id,
-                "filename": processed_document.get("filename", "unknown"),
+                "filename": summary.get(
+                    "original_filename", summary.get("filename", "unknown")
+                ),
                 "content": extracted_text,  # Critical: pass the extracted text
                 "content_hash": content_hash,
-                "file_type": processed_document.get("file_type", "pdf"),
-                "storage_path": processed_document.get("storage_path", ""),
-                "extraction_confidence": processing_results.get("extraction_confidence", 0.0),
-                "word_count": processing_results.get("word_count", 0),
-                "page_count": processing_results.get("page_count", 1),
+                "file_type": summary.get("file_type", "pdf"),
+                "storage_path": summary.get("storage_path", ""),
+                "extraction_confidence": extraction_confidence,
+                "word_count": word_count,
+                "page_count": page_count,
             }
 
             # Initialize ContractAnalysisService with WebSocket progress tracking
-            from app.services.contract_analysis_service import ContractAnalysisService
-            from app.services.websocket_singleton import websocket_manager
-            
+
             contract_service = ContractAnalysisService(
                 websocket_manager=websocket_manager,
                 enable_websocket_progress=True,  # Let service handle progress updates
@@ -321,27 +351,37 @@ async def comprehensive_document_analysis(
 
             # Execute contract analysis using the service layer
             logger.info(f"Starting contract analysis with document data")
-            australian_state_enum = AustralianState(contract_data.get("australian_state", "NSW"))
-            
+
+            # # Get contract details
+            # contract_result = await user_client.database.select(
+            #     "contracts", columns="*", filters={"id": contract_id}
+            # )
+            # contract_data = (
+            #     contract_result["data"][0] if contract_result.get("data") else {}
+            # )
+            # australian_state_enum = AustralianState(
+            #     contract_data.get("australian_state", "NSW")
+            # )
+
             analysis_response = await contract_service.start_analysis(
                 user_id=user_id,
                 session_id=content_hash,  # Use content_hash as session_id
                 document_data=document_data,
-                australian_state=australian_state_enum,
+                australian_state=summary.get("australian_state"),
                 user_preferences=analysis_options,
                 user_type="buyer",  # Default user type
             )
-            
+
             # Extract analysis results from service response
             if not analysis_response.get("success"):
                 error_msg = analysis_response.get("error", "Contract analysis failed")
                 logger.error(f"Contract analysis failed: {error_msg}")
                 raise ValueError(f"Contract analysis failed: {error_msg}")
-            
+
             # Get analysis results from the service response
             analysis_result = analysis_response.get("analysis_results", {})
             final_state = analysis_response.get("final_state", {})
-            
+
             logger.info(f"Contract analysis completed successfully")
 
             await update_analysis_progress(
@@ -368,13 +408,14 @@ async def comprehensive_document_analysis(
             )
 
             # Save analysis results using service role client for shared table access
-            from app.clients.factory import get_service_supabase_client
             service_client = await get_service_supabase_client()
-            
+
             analysis_update = {
                 "status": "completed",
                 "analysis_result": analysis_result,  # Use service response analysis_results
-                "risk_score": analysis_result.get("risk_assessment", {}).get("overall_risk_score", 0.0),
+                "risk_score": analysis_result.get("risk_assessment", {}).get(
+                    "overall_risk_score", 0.0
+                ),
                 "processing_time": analysis_response.get("processing_time_seconds", 0),
                 "processing_completed_at": datetime.now(timezone.utc).isoformat(),
             }
@@ -399,10 +440,16 @@ async def comprehensive_document_analysis(
             # Send completion notification
             analysis_summary = {
                 "analysis_id": analysis_id,
-                "risk_score": analysis_result.get("risk_assessment", {}).get("overall_risk_score", 0.0),
+                "risk_score": analysis_result.get("risk_assessment", {}).get(
+                    "overall_risk_score", 0.0
+                ),
                 "processing_time": analysis_response.get("processing_time_seconds", 0),
-                "recommendations_count": len(analysis_result.get("recommendations", [])),
-                "compliance_status": analysis_result.get("compliance_check", {}).get("state_compliance", False),
+                "recommendations_count": len(
+                    analysis_result.get("recommendations", [])
+                ),
+                "compliance_status": analysis_result.get("compliance_check", {}).get(
+                    "state_compliance", False
+                ),
             }
             publish_progress_sync(
                 contract_id,
@@ -428,8 +475,6 @@ async def comprehensive_document_analysis(
             )
 
             # Update analysis record with error
-            from app.clients.factory import get_service_supabase_client
-
             service_client = await get_service_supabase_client()
             await service_client.database.update(
                 "contract_analyses",
@@ -689,8 +734,6 @@ async def analyze_contract_background(
         logger.info(
             f"Starting contract analysis for user {user_id}, contract {contract_id}"
         )
-        from app.core.config import get_settings
-
         settings = get_settings()
         contract_workflow = ContractAnalysisWorkflow(
             openai_api_key=settings.openai_api_key,

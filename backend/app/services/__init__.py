@@ -5,6 +5,11 @@ Application services
 import logging
 from typing import Optional, Dict, Any
 
+from .contract_analysis_service import (
+    ContractAnalysisService,
+    create_contract_analysis_service,
+)
+
 # Service imports (refactored to use client architecture)
 from .gemini_service import GeminiService
 from .openai_service import OpenAIService
@@ -13,7 +18,7 @@ from .document_service import DocumentService
 
 __all__ = [
     "GeminiService",
-    "OpenAIService", 
+    "OpenAIService",
     "DocumentService",
 ]
 

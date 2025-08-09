@@ -62,6 +62,22 @@ from app.clients.base.exceptions import (
     ClientConnectionError,
     ClientQuotaExceededError,
 )
+from app.schema.document import (
+    FastUploadResult,
+    UploadRecordResult,
+    FileValidationResult,
+    UploadedFileInfo,
+    TextExtractionResult,
+    PageExtraction,
+    ProcessedDocumentSummary,
+    ProcessingErrorResponse,
+    DocumentDetails,
+    SystemStatsResponse,
+    ServiceHealthStatus,
+    ContentAnalysis as ContentAnalysisSchema,
+    QualityIndicators as QualityIndicatorsSchema,
+    PageProcessingSummary,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -326,186 +342,186 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
                 )
             # Don't raise - service can function without bucket verification
 
-    @langsmith_trace(name="process_document")
-    async def process_document(
-        self,
-        file: UploadFile,
-        user_id: str,
-        contract_type: Optional[str] = None,
-        australian_state: Optional[str] = None,
-    ) -> Dict[str, Any]:
-        """
-        DEPRECATED: Use `upload_document_fast` followed by
-        `process_document_by_id`/`process_existing_document`.
+    # @langsmith_trace(name="process_document")
+    # async def process_document(
+    #     self,
+    #     file: UploadFile,
+    #     user_id: str,
+    #     contract_type: Optional[str] = None,
+    #     australian_state: Optional[str] = None,
+    # ) -> Dict[str, Any]:
+    #     """
+    #     DEPRECATED: Use `upload_document_fast` followed by
+    #     `process_document_by_id`/`process_existing_document`.
 
-        This legacy method combines upload + processing in one step and is kept
-        for backward compatibility. It will be removed in a future release.
-        """
-        warnings.warn(
-            (
-                "DocumentService.process_document is deprecated. "
-                "Use upload_document_fast + process_document_by_id instead."
-            ),
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        processing_start = datetime.now(UTC)
-        document_id = None
-        temp_file_path = None
+    #     This legacy method combines upload + processing in one step and is kept
+    #     for backward compatibility. It will be removed in a future release.
+    #     """
+    #     warnings.warn(
+    #         (
+    #             "DocumentService.process_document is deprecated. "
+    #             "Use upload_document_fast + process_document_by_id instead."
+    #         ),
+    #         DeprecationWarning,
+    #         stacklevel=2,
+    #     )
+    #     processing_start = datetime.now(UTC)
+    #     document_id = None
+    #     temp_file_path = None
 
-        try:
-            # Log user operation
-            self.log_operation("process_document", "document", None)
+    #     try:
+    #         # Log user operation
+    #         self.log_operation("process_document", "document", None)
 
-            # Step 1: Validate file
-            validation_result = await self._validate_uploaded_file(file)
-            if not validation_result["valid"]:
-                return self._create_error_response(
-                    f"File validation failed: {validation_result['error']}",
-                    processing_start,
-                )
+    #         # Step 1: Validate file
+    #         validation_result = await self._validate_uploaded_file(file)
+    #         if not validation_result["valid"]:
+    #             return self._create_error_response(
+    #                 f"File validation failed: {validation_result['error']}",
+    #                 processing_start,
+    #             )
 
-            # Step 2: Upload to Supabase storage and create document record (USER OPERATION)
-            upload_result = await self._upload_and_create_document_record(
-                file,
-                user_id,
-                validation_result["file_info"],
-                contract_type,
-                australian_state,
-            )
+    #         # Step 2: Upload to Supabase storage and create document record (USER OPERATION)
+    #         upload_result = await self._upload_and_create_document_record(
+    #             file,
+    #             user_id,
+    #             validation_result["file_info"],
+    #             contract_type,
+    #             australian_state,
+    #         )
 
-            if not upload_result["success"]:
-                return self._create_error_response(
-                    upload_result["error"], processing_start
-                )
+    #         if not upload_result["success"]:
+    #             return self._create_error_response(
+    #                 upload_result["error"], processing_start
+    #             )
 
-            document_id = upload_result["document_id"]
-            storage_path = upload_result["storage_path"]
+    #         document_id = upload_result["document_id"]
+    #         storage_path = upload_result["storage_path"]
 
-            # Log successful upload
-            self.log_operation("create", "document", document_id)
+    #         # Log successful upload
+    #         self.log_operation("create", "document", document_id)
 
-            # Step 3: Update processing status and start timestamp (USER OPERATION)
-            await self._update_document_status(
-                document_id, ProcessingStatus.PROCESSING.value
-            )
+    #         # Step 3: Update processing status and start timestamp (USER OPERATION)
+    #         await self._update_document_status(
+    #             document_id, ProcessingStatus.PROCESSING.value
+    #         )
 
-            # Set processing started timestamp
-            await self._set_processing_started(document_id)
+    #         # Set processing started timestamp
+    #         await self._set_processing_started(document_id)
 
-            # All subsequent operations are user-scoped and use RLS
-            # Step 4: Extract text with comprehensive analysis
-            text_extraction_result = (
-                await self._extract_text_with_comprehensive_analysis(
-                    document_id,
-                    storage_path,
-                    validation_result["file_info"]["file_type"],
-                )
-            )
+    #         # All subsequent operations are user-scoped and use RLS
+    #         # Step 4: Extract text with comprehensive analysis
+    #         text_extraction_result = (
+    #             await self._extract_text_with_comprehensive_analysis(
+    #                 document_id,
+    #                 storage_path,
+    #                 validation_result["file_info"]["file_type"],
+    #             )
+    #         )
 
-            # Step 5: Persist analysis results to database with transaction-like behavior
-            try:
-                # Save page data to database
-                content_hash = validation_result["file_info"]["content_hash"]
-                await self._save_document_pages(
-                    document_id, text_extraction_result, content_hash
-                )
+    #         # Step 5: Persist analysis results to database with transaction-like behavior
+    #         try:
+    #             # Save page data to database
+    #             content_hash = validation_result["file_info"]["content_hash"]
+    #             await self._save_document_pages(
+    #                 document_id, text_extraction_result, content_hash
+    #             )
 
-                # Aggregate diagram detection results from pages
-                diagram_processing_result = self._aggregate_diagram_detections(
-                    text_extraction_result
-                )
+    #             # Aggregate diagram detection results from pages
+    #             diagram_processing_result = self._aggregate_diagram_detections(
+    #                 text_extraction_result
+    #             )
 
-                # Save diagram data to database
-                await self._save_document_diagrams(document_id, text_extraction_result)
+    #             # Save diagram data to database
+    #             await self._save_document_diagrams(document_id, text_extraction_result)
 
-                # Update main document with aggregated metrics
-                await self._update_document_metrics(
-                    document_id, text_extraction_result, diagram_processing_result
-                )
+    #             # Update main document with aggregated metrics
+    #             await self._update_document_metrics(
+    #                 document_id, text_extraction_result, diagram_processing_result
+    #             )
 
-                # Create page processing summary
-                page_processing_result = self._create_page_processing_summary(
-                    text_extraction_result
-                )
+    #             # Create page processing summary
+    #             page_processing_result = self._create_page_processing_summary(
+    #                 text_extraction_result
+    #             )
 
-                # Mark document as completed
-                await self._update_document_status(
-                    document_id, ProcessingStatus.BASIC_COMPLETE.value
-                )
+    #             # Mark document as completed
+    #             await self._update_document_status(
+    #                 document_id, ProcessingStatus.BASIC_COMPLETE.value
+    #             )
 
-                self.logger.info(
-                    f"Successfully completed document processing for {document_id}"
-                )
+    #             self.logger.info(
+    #                 f"Successfully completed document processing for {document_id}"
+    #             )
 
-            except Exception as db_error:
-                self.logger.error(
-                    f"Database persistence failed for document {document_id}: {str(db_error)}"
-                )
+    #         except Exception as db_error:
+    #             self.logger.error(
+    #                 f"Database persistence failed for document {document_id}: {str(db_error)}"
+    #             )
 
-                # Attempt to rollback by marking document as failed with detailed error info
-                try:
-                    await self._update_document_status(
-                        document_id,
-                        ProcessingStatus.FAILED.value,
-                        error_details={
-                            "error": "Database persistence failed",
-                            "details": str(db_error),
-                            "stage": "database_persistence",
-                            "timestamp": datetime.now(UTC).isoformat(),
-                            "text_extraction_successful": text_extraction_result.get(
-                                "success", False
-                            ),
-                        },
-                    )
-                except Exception as rollback_error:
-                    self.logger.error(
-                        f"Rollback failed for document {document_id}: {str(rollback_error)}"
-                    )
+    #             # Attempt to rollback by marking document as failed with detailed error info
+    #             try:
+    #                 await self._update_document_status(
+    #                     document_id,
+    #                     ProcessingStatus.FAILED.value,
+    #                     error_details={
+    #                         "error": "Database persistence failed",
+    #                         "details": str(db_error),
+    #                         "stage": "database_persistence",
+    #                         "timestamp": datetime.now(UTC).isoformat(),
+    #                         "text_extraction_successful": text_extraction_result.get(
+    #                             "success", False
+    #                         ),
+    #                     },
+    #                 )
+    #             except Exception as rollback_error:
+    #                 self.logger.error(
+    #                     f"Rollback failed for document {document_id}: {str(rollback_error)}"
+    #                 )
 
-                # Re-raise the original database error
-                raise db_error
+    #             # Re-raise the original database error
+    #             raise db_error
 
-            processing_time = (datetime.now(UTC) - processing_start).total_seconds()
+    #         processing_time = (datetime.now(UTC) - processing_start).total_seconds()
 
-            return self._create_success_response(
-                document_id,
-                processing_time,
-                text_extraction_result,
-                page_processing_result,
-                {},  # entity_extraction_result
-                diagram_processing_result,
-                {},  # document_analysis_result
-                {},  # semantic_result
-            )
+    #         return self._create_success_response(
+    #             document_id,
+    #             processing_time,
+    #             text_extraction_result,
+    #             page_processing_result,
+    #             {},  # entity_extraction_result
+    #             diagram_processing_result,
+    #             {},  # document_analysis_result
+    #             {},  # semantic_result
+    #         )
 
-        except Exception as e:
-            processing_time = (datetime.now(UTC) - processing_start).total_seconds()
-            self.logger.error(f"Document processing failed: {str(e)}", exc_info=True)
+    #     except Exception as e:
+    #         processing_time = (datetime.now(UTC) - processing_start).total_seconds()
+    #         self.logger.error(f"Document processing failed: {str(e)}", exc_info=True)
 
-            # Update document status if it exists (USER OPERATION)
-            if document_id:
-                await self._update_document_status(
-                    document_id,
-                    ProcessingStatus.FAILED.value,
-                    error_details={
-                        "error": str(e),
-                        "timestamp": datetime.now(UTC).isoformat(),
-                        "processing_time": processing_time,
-                    },
-                )
+    #         # Update document status if it exists (USER OPERATION)
+    #         if document_id:
+    #             await self._update_document_status(
+    #                 document_id,
+    #                 ProcessingStatus.FAILED.value,
+    #                 error_details={
+    #                     "error": str(e),
+    #                     "timestamp": datetime.now(UTC).isoformat(),
+    #                     "processing_time": processing_time,
+    #                 },
+    #             )
 
-            return self._create_error_response(
-                f"Processing failed: {str(e)}", processing_start
-            )
+    #         return self._create_error_response(
+    #             f"Processing failed: {str(e)}", processing_start
+    #         )
 
-        finally:
-            # Cleanup temporary files
-            if temp_file_path and os.path.exists(temp_file_path):
-                try:
-                    os.unlink(temp_file_path)
-                except Exception as cleanup_error:
-                    self.logger.warning(f"Failed to cleanup temp file: {cleanup_error}")
+    #     finally:
+    #         # Cleanup temporary files
+    #         if temp_file_path and os.path.exists(temp_file_path):
+    #             try:
+    #                 os.unlink(temp_file_path)
+    #             except Exception as cleanup_error:
+    #                 self.logger.warning(f"Failed to cleanup temp file: {cleanup_error}")
 
     @langsmith_trace(name="upload_document_fast")
     async def upload_document_fast(
@@ -514,7 +530,7 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
         user_id: str,
         contract_type: Optional[str] = None,
         australian_state: Optional[str] = None,
-    ) -> Dict[str, Any]:
+    ) -> FastUploadResult:
         """
         Fast document upload - stores file and creates record only.
 
@@ -534,25 +550,42 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
 
             # Step 1: Validate file (same as before)
             validation_result = await self._validate_uploaded_file(file)
-            if not validation_result["valid"]:
-                return self._create_error_response(
-                    f"File validation failed: {validation_result['error']}",
-                    upload_start,
+            if not validation_result.valid:
+                upload_time = (datetime.now(UTC) - upload_start).total_seconds()
+                return FastUploadResult(
+                    success=False,
+                    document_id=None,
+                    storage_path=None,
+                    processing_time=upload_time,
+                    status="failed",
+                    error=f"File validation failed: {validation_result.error}",
                 )
 
             # Step 2: Upload to Supabase storage and create document record (USER OPERATION)
             upload_result = await self._upload_and_create_document_record(
                 file,
                 user_id,
-                validation_result["file_info"],
+                (
+                    validation_result.file_info.model_dump()
+                    if validation_result.file_info
+                    else {}
+                ),
                 contract_type,
                 australian_state,
             )
 
-            if not upload_result["success"]:
-                return self._create_error_response(upload_result["error"], upload_start)
+            if not upload_result.success:
+                upload_time = (datetime.now(UTC) - upload_start).total_seconds()
+                return FastUploadResult(
+                    success=False,
+                    document_id=None,
+                    storage_path=None,
+                    processing_time=upload_time,
+                    status="failed",
+                    error=upload_result.error or "Upload failed",
+                )
 
-            document_id = upload_result["document_id"]
+            document_id = upload_result.document_id
 
             # Log successful upload
             self.log_operation("create", "document", document_id)
@@ -568,13 +601,13 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
                 f"Fast upload completed for document {document_id} in {upload_time:.2f}s"
             )
 
-            return {
-                "success": True,
-                "document_id": document_id,
-                "storage_path": upload_result["storage_path"],
-                "processing_time": upload_time,
-                "status": "uploaded",
-            }
+            return FastUploadResult(
+                success=True,
+                document_id=document_id,
+                storage_path=upload_result.storage_path,
+                processing_time=upload_time,
+                status="uploaded",
+            )
 
         except Exception as e:
             upload_time = (datetime.now(UTC) - upload_start).total_seconds()
@@ -592,7 +625,15 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
                     },
                 )
 
-            return self._create_error_response(f"Upload failed: {str(e)}", upload_start)
+            upload_time = (datetime.now(UTC) - upload_start).total_seconds()
+            return FastUploadResult(
+                success=False,
+                document_id=None,
+                storage_path=None,
+                processing_time=upload_time,
+                status="failed",
+                error=f"Upload failed: {str(e)}",
+            )
 
     async def _upload_and_create_document_record(
         self,
@@ -601,7 +642,7 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
         file_info: Dict[str, Any],
         contract_type: Optional[str] = None,
         australian_state: Optional[str] = None,
-    ) -> Dict[str, Any]:
+    ) -> UploadRecordResult:
         """Upload file to Supabase storage and create document record - USER OPERATION"""
         try:
             document_id = str(uuid.uuid4())
@@ -622,12 +663,12 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
             )
 
             if not upload_result.get("success"):
-                return {
-                    "success": False,
-                    "error": upload_result.get(
+                return UploadRecordResult(
+                    success=False,
+                    error=upload_result.get(
                         "error", "Failed to upload file to storage"
                     ),
-                }
+                )
 
             # Create document record in database (user context - RLS enforced)
             document_data = {
@@ -650,7 +691,9 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
             )
 
             if not created_record:
-                return {"success": False, "error": "Failed to create document record"}
+                return UploadRecordResult(
+                    success=False, error="Failed to create document record"
+                )
 
             # Create user_contract_views record for RLS policy access
             if file_info.get("content_hash"):
@@ -675,19 +718,19 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
                     )
 
             self.logger.info(f"Created document record: {document_id}")
-            return {
-                "success": True,
-                "document_id": document_id,
-                "storage_path": storage_path,
-            }
+            return UploadRecordResult(
+                success=True,
+                document_id=document_id,
+                storage_path=storage_path,
+            )
 
         except Exception as e:
             self.logger.error(f"Upload and record creation failed: {str(e)}")
-            return {"success": False, "error": f"Upload failed: {str(e)}"}
+            return UploadRecordResult(success=False, error=f"Upload failed: {str(e)}")
 
     async def _extract_text_with_comprehensive_analysis(
         self, document_id: str, storage_path: str, file_type: str
-    ) -> Dict[str, Any]:
+    ) -> TextExtractionResult:
         """Extract text using multiple methods - USER OPERATION"""
 
         try:
@@ -717,19 +760,19 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
 
         except Exception as e:
             self.logger.error(f"Text extraction failed: {str(e)}")
-            return {
-                "success": False,
-                "error": str(e),
-                "full_text": "",
-                "pages": [],
-                "extraction_method": "failed",
-                "confidence": 0.0,
-            }
+            return TextExtractionResult(
+                success=False,
+                error=str(e),
+                full_text="",
+                pages=[],
+                extraction_method="failed",
+                confidence=0.0,
+            )
 
     async def process_document_by_id(
         self,
         document_id: str,
-    ) -> Dict[str, Any]:
+    ) -> ProcessedDocumentSummary | ProcessingErrorResponse:
         """Process an already-uploaded document by id.
 
         - Loads document record to determine storage_path, file_type, and content_hash
@@ -742,7 +785,12 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
             "documents", columns="*", filters={"id": document_id}
         )
         if not doc_result.get("data"):
-            return {"success": False, "error": "Document not found or access denied"}
+            return ProcessingErrorResponse(
+                success=False,
+                error="Document not found or access denied",
+                processing_time=0.0,
+                processing_timestamp=datetime.now(UTC).isoformat(),
+            )
 
         document = doc_result["data"][0]
         storage_path = document.get("storage_path")
@@ -769,7 +817,7 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
         storage_path: str,
         file_type: str,
         content_hash: Optional[str] = None,
-    ) -> Dict[str, Any]:
+    ) -> ProcessedDocumentSummary | ProcessingErrorResponse:
         """Process an already-uploaded document by id and persist results.
 
         - Uses service flag use_llm_document_processing to enable/disable OCR/LLM path
@@ -786,19 +834,21 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
             file_type=file_type,
         )
 
-        if not text_extraction_result.get("success"):
+        if not text_extraction_result.success:
             await self._update_document_status(
                 document_id,
                 ProcessingStatus.FAILED.value,
                 error_details={
-                    "error": text_extraction_result.get("error", "Unknown error"),
+                    "error": text_extraction_result.error or "Unknown error",
                     "timestamp": datetime.now(UTC).isoformat(),
                 },
             )
-            return {
-                "success": False,
-                "error": text_extraction_result.get("error", "Extraction failed"),
-            }
+            return ProcessingErrorResponse(
+                success=False,
+                error=text_extraction_result.error or "Extraction failed",
+                processing_time=0.0,
+                processing_timestamp=datetime.now(UTC).isoformat(),
+            )
 
         # Persist page-level results
         await self._save_document_pages(
@@ -822,25 +872,40 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
         )
 
         # Build a concise summary useful for the workflow
-        full_text: str = text_extraction_result.get("full_text", "")
-        extraction_methods = text_extraction_result.get("extraction_methods", [])
+        full_text: str = text_extraction_result.full_text or ""
+        extraction_methods = text_extraction_result.extraction_methods or []
         primary_method = extraction_methods[0] if extraction_methods else None
 
-        return {
-            "success": True,
-            "document_id": document_id,
-            "extracted_text": full_text,
-            "character_count": len(full_text),
-            "word_count": len(full_text.split()) if full_text else 0,
-            "extraction_method": primary_method,
-            "extraction_confidence": 0.0,
-            "processing_timestamp": datetime.now(UTC).isoformat(),
-            "llm_used": self.use_llm_document_processing,
-        }
+        return ProcessedDocumentSummary(
+            success=True,
+            document_id=document_id,
+            full_text=full_text,
+            character_count=len(full_text),
+            total_word_count=len(full_text.split()) if full_text else 0,
+            total_pages=(
+                getattr(text_extraction_result, "total_pages", None)
+                if hasattr(text_extraction_result, "total_pages")
+                else None
+            )
+            or (
+                len(text_extraction_result.pages)
+                if hasattr(text_extraction_result, "pages")
+                and text_extraction_result.pages is not None
+                else (
+                    len(text_extraction_result.get("pages", []))
+                    if isinstance(text_extraction_result, dict)
+                    else 0
+                )
+            ),
+            extraction_method=primary_method,
+            extraction_confidence=0.0,
+            processing_timestamp=datetime.now(UTC).isoformat(),
+            llm_used=self.use_llm_document_processing,
+        )
 
     async def get_processed_document_summary(
         self, *, document_id: str
-    ) -> Optional[Dict[str, Any]]:
+    ) -> Optional[ProcessedDocumentSummary]:
         """Fetch a compact summary of already-processed document data from DB.
 
         Returns None if the document is not yet processed.
@@ -862,32 +927,23 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
             }:
                 return None
 
-            processing_results = (doc.get("processing_results") or {}).get(
-                "text_extraction", {}
-            )
-
             # Fall back to minimal fields if processing_results are not present
-            full_text = processing_results.get("full_text") or ""
-            extraction_methods = processing_results.get("extraction_methods") or []
-            primary_method = (
-                extraction_methods[0]
-                if extraction_methods
-                else doc.get("text_extraction_method")
-            )
+            full_text = doc.get("full_text") or ""
 
-            return {
-                "success": True,
-                "document_id": document_id,
-                "extracted_text": full_text,
-                "character_count": len(full_text),
-                "word_count": len(full_text.split()) if full_text else 0,
-                "extraction_method": primary_method,
-                "extraction_confidence": doc.get("extraction_confidence", 0.0),
-                "processing_timestamp": (
+            return ProcessedDocumentSummary(
+                success=True,
+                document_id=document_id,
+                full_text=full_text,
+                character_count=len(full_text),
+                total_word_count=doc.get("total_word_count", 0),
+                total_pages=doc.get("total_pages", 0),
+                extraction_method=doc.get("text_extraction_method"),
+                extraction_confidence=doc.get("extraction_confidence", 0.0),
+                processing_timestamp=str(
                     doc.get("processing_completed_at") or datetime.now(UTC).isoformat()
                 ),
-                "llm_used": self.use_llm_document_processing,
-            }
+                llm_used=self.use_llm_document_processing,
+            )
         except Exception as e:
             self.logger.warning(
                 f"Failed to build processed document summary for {document_id}: {e}"
@@ -933,7 +989,7 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
 
     async def get_user_documents(
         self, user_id: str, limit: int = DocumentServiceConstants.DEFAULT_LIMIT
-    ) -> List[Dict[str, Any]]:
+    ) -> List[DocumentDetails]:
         """Get user's documents - USER OPERATION with explicit user context"""
         try:
             user_client = await self.get_user_client()
@@ -954,14 +1010,33 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
             result = await user_client.database.read(
                 "documents", filters={}, limit=limit
             )
-
-            return result
+            documents: List[DocumentDetails] = []
+            for rec in result:
+                try:
+                    documents.append(
+                        DocumentDetails(
+                            id=str(rec.get("id")),
+                            user_id=str(rec.get("user_id")),
+                            filename=rec.get("original_filename")
+                            or rec.get("filename", "unknown"),
+                            file_type=rec.get("file_type", "unknown"),
+                            file_size=int(rec.get("file_size", 0)),
+                            status=rec.get("processing_status")
+                            or rec.get("status", "unknown"),
+                            storage_path=rec.get("storage_path", ""),
+                            created_at=rec.get("created_at"),
+                            processing_results=rec.get("processing_results"),
+                        )
+                    )
+                except Exception:
+                    continue
+            return documents
 
         except Exception as e:
             self.logger.error(f"Failed to get user documents: {str(e)}")
             raise
 
-    async def get_system_stats(self) -> Dict[str, Any]:
+    async def get_system_stats(self) -> SystemStatsResponse:
         """Get system-wide document statistics - SYSTEM OPERATION"""
         try:
             # This is a legitimate system operation for admin dashboards
@@ -975,8 +1050,7 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
             result = await system_client.database.execute_rpc(
                 "get_document_statistics", {}
             )
-
-            return result.get("data", {})
+            return SystemStatsResponse(data=result.get("data", {}))
 
         except Exception as e:
             self.logger.error(f"Failed to get system stats: {str(e)}")
@@ -1026,7 +1100,7 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
             raise
 
     # Health check implementation
-    async def health_check(self) -> Dict[str, Any]:
+    async def health_check(self) -> ServiceHealthStatus:
         """Health check for DocumentService"""
         base_health = await super().health_check()
 
@@ -1075,10 +1149,16 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
             }
 
         # Check other dependencies...
-        return health_status
+        return ServiceHealthStatus(
+            service=health_status.get("service", self.__class__.__name__),
+            status=str(health_status.get("status", "healthy")),
+            authenticated=bool(health_status.get("authenticated", False)),
+            dependencies=health_status.get("dependencies", {}),
+            capabilities=health_status.get("capabilities", []),
+        )
 
     # Utility methods remain largely the same but now operate in proper context
-    async def _validate_uploaded_file(self, file: UploadFile) -> Dict[str, Any]:
+    async def _validate_uploaded_file(self, file: UploadFile) -> FileValidationResult:
         """Enhanced file validation with security checks"""
         try:
             # Read file content
@@ -1091,10 +1171,10 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
                 file_size
                 > self.max_file_size_mb * DocumentServiceConstants.BYTES_PER_MB
             ):
-                return {
-                    "valid": False,
-                    "error": f"File too large. Maximum size: {self.max_file_size_mb}MB",
-                }
+                return FileValidationResult(
+                    valid=False,
+                    error=f"File too large. Maximum size: {self.max_file_size_mb}MB",
+                )
 
             # Type validation
             file_type = self._detect_file_type(
@@ -1113,31 +1193,35 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
             ]
 
             if file_type not in supported_types:
-                return {
-                    "valid": False,
-                    "error": f"Unsupported file type: {file_type}. Supported: {', '.join(supported_types)}",
-                }
+                return FileValidationResult(
+                    valid=False,
+                    error=f"Unsupported file type: {file_type}. Supported: {', '.join(supported_types)}",
+                )
 
             # Security validation
             if self._has_security_concerns(
                 file.filename,
                 file_content[: DocumentServiceConstants.FILE_HEADER_READ_SIZE],
             ):
-                return {"valid": False, "error": "File failed security validation"}
+                return FileValidationResult(
+                    valid=False, error="File failed security validation"
+                )
 
-            return {
-                "valid": True,
-                "file_info": {
-                    "original_filename": file.filename,
-                    "file_type": file_type,
-                    "file_size": file_size,
-                    "content_hash": self._calculate_hash(file_content),
-                    "mime_type": mimetypes.guess_type(file.filename)[0]
+            return FileValidationResult(
+                valid=True,
+                file_info=UploadedFileInfo(
+                    original_filename=file.filename,
+                    file_type=file_type,
+                    file_size=file_size,
+                    content_hash=self._calculate_hash(file_content),
+                    mime_type=mimetypes.guess_type(file.filename)[0]
                     or "application/octet-stream",
-                },
-            }
+                ),
+            )
         except Exception as e:
-            return {"valid": False, "error": f"File validation error: {str(e)}"}
+            return FileValidationResult(
+                valid=False, error=f"File validation error: {str(e)}"
+            )
 
     def _detect_file_type(self, filename: str, file_header: bytes) -> str:
         """Detect file type from filename and magic bytes"""
@@ -1211,7 +1295,7 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
         diagram_result: Dict[str, Any] = None,
         analysis_result: Dict[str, Any] = None,
         semantic_result: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+    ) -> TextExtractionResult:
         """Create comprehensive success response"""
 
         # Provide default values for optional results
@@ -1252,7 +1336,7 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
 
     def _create_error_response(
         self, error_message: str, processing_start: datetime
-    ) -> Dict[str, Any]:
+    ) -> TextExtractionResult:
         """Create standardized error response"""
         processing_time = (datetime.now(UTC) - processing_start).total_seconds()
         return {
@@ -1272,7 +1356,7 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
     # Complete PDF processing implementation
     async def _extract_pdf_text_comprehensive(
         self, file_content: bytes
-    ) -> Dict[str, Any]:
+    ) -> TextExtractionResult:
         """Comprehensive PDF text extraction with pymupdf and OCR fallback"""
 
         try:
@@ -1371,23 +1455,38 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
 
             pdf_document.close()
 
-            return {
-                "success": True,
-                "full_text": full_text,
-                "pages": pages,
-                "total_pages": len(pages),
-                "extraction_methods": extraction_methods,
-                "total_word_count": sum(p["word_count"] for p in pages),
-                "overall_confidence": (
+            return TextExtractionResult(
+                success=True,
+                full_text=full_text,
+                pages=[
+                    PageExtraction(
+                        page_number=p.get("page_number", 0),
+                        text_content=p.get("text_content", ""),
+                        text_length=p.get("text_length", 0),
+                        word_count=p.get("word_count", 0),
+                        extraction_method=p.get("extraction_method"),
+                        confidence=p.get("confidence", 0.0),
+                        content_analysis=ContentAnalysisSchema(
+                            **p.get("content_analysis", {})
+                        ),
+                    )
+                    for p in pages
+                ],
+                total_pages=len(pages),
+                extraction_methods=extraction_methods,
+                total_word_count=sum(p["word_count"] for p in pages),
+                overall_confidence=(
                     sum(p["confidence"] for p in pages) / len(pages)
                     if pages
                     else DocumentServiceConstants.DEFAULT_CONFIDENCE
                 ),
-            }
+            )
 
         except Exception as e:
             self.logger.error(f"PDF text extraction failed: {str(e)}")
-            return {"success": False, "error": str(e), "full_text": "", "pages": []}
+            return TextExtractionResult(
+                success=False, error=str(e), full_text="", pages=[]
+            )
 
     async def _extract_text_with_ocr(self, page: pymupdf.Page, page_number: int) -> str:
         """Extract text using Tesseract OCR with optimized settings"""
@@ -1466,7 +1565,7 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
         text_content: str,
         page: pymupdf.Page,
         llm_insights: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+    ) -> TextExtractionResult:
         """Analyze page content for classification and layout features"""
 
         analysis = {
@@ -1800,7 +1899,9 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
         else:
             return ContentType.TEXT.value
 
-    def _calculate_quality_indicators(self, text_content: str) -> Dict[str, float]:
+    def _calculate_quality_indicators(
+        self, text_content: str
+    ) -> QualityIndicatorsSchema:
         """Calculate various quality metrics for text content"""
 
         indicators = {
@@ -1851,7 +1952,7 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
             # Clamp to [0.0, 1.0] range
             indicators["readability_score"] = min(1.0, max(0.0, readability_raw))
 
-        return indicators
+        return QualityIndicatorsSchema(**indicators)
 
     def _aggregate_diagram_detections(
         self, text_extraction_result: Dict[str, Any]
@@ -2182,6 +2283,7 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
             primary_method = extraction_methods[0] if extraction_methods else "unknown"
 
             update_data = {
+                "full_text": text_extraction_result.get("full_text", ""),
                 "total_pages": total_pages,
                 "total_word_count": total_word_count,
                 "total_text_length": total_text_length,
@@ -2194,12 +2296,6 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
                 "processing_results": {
                     "text_extraction": text_extraction_result,
                     "diagram_processing": diagram_processing_result,
-                    "processing_summary": {
-                        "total_pages": total_pages,
-                        "total_diagrams": total_diagrams,
-                        "extraction_methods": extraction_methods,
-                        "avg_confidence": avg_confidence,
-                    },
                 },
             }
 
@@ -2214,15 +2310,19 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
     # Placeholder implementations
     async def _extract_docx_text_comprehensive(
         self, file_content: bytes
-    ) -> Dict[str, Any]:
+    ) -> TextExtractionResult:
         """Extract text from DOCX files - placeholder for future implementation"""
-        return {"success": False, "error": "DOCX extraction not yet implemented"}
+        return TextExtractionResult(
+            success=False, error="DOCX extraction not yet implemented"
+        )
 
     async def _extract_image_text_comprehensive(
         self, file_content: bytes
-    ) -> Dict[str, Any]:
+    ) -> TextExtractionResult:
         """Extract text from image files - placeholder for future implementation"""
-        return {"success": False, "error": "Image text extraction not yet implemented"}
+        return TextExtractionResult(
+            success=False, error="Image text extraction not yet implemented"
+        )
 
 
 # Factory function for backward compatibility

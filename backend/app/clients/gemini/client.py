@@ -360,7 +360,16 @@ class GeminiClient(BaseClient):
 
     @with_retry(max_retries=3, backoff_factor=2.0)
     async def generate_content(self, prompt: str, **kwargs) -> str:
-        """Call Gemini API to generate content."""
+        """Call Gemini API to generate content.
+
+        Accepted kwargs include:
+        - temperature: Optional[float]
+        - top_p: Optional[float]
+        - max_tokens: Optional[int]
+        - system_prompt: Optional[str] - if provided, will be passed as
+          system_instruction to guide the model.
+        - model: Optional[str] - override configured model name.
+        """
         try:
             # Create content for the prompt
             content = genai.types.Content(parts=[genai.types.Part(text=prompt)])
@@ -371,6 +380,7 @@ class GeminiClient(BaseClient):
                 temperature=kwargs.get("temperature", 0.1),
                 top_p=kwargs.get("top_p", 1.0),
                 max_output_tokens=kwargs.get("max_tokens"),
+                system_instruction=kwargs.get("system_prompt"),
             )
 
             # Execute in thread pool to avoid blocking
@@ -379,7 +389,7 @@ class GeminiClient(BaseClient):
             response = await asyncio.get_event_loop().run_in_executor(
                 None,
                 lambda: self.client.models.generate_content(
-                    model=self.config.model_name,
+                    model=kwargs.get("model", self.config.model_name),
                     contents=[content],
                     config=generation_config,
                 ),
@@ -453,6 +463,7 @@ class GeminiClient(BaseClient):
 
             # Generate analysis
             import asyncio
+
             response = await asyncio.get_event_loop().run_in_executor(
                 None,
                 lambda: self.client.models.generate_content(
@@ -465,9 +476,7 @@ class GeminiClient(BaseClient):
             )
 
             if not response.candidates or not response.candidates[0].content:
-                raise ClientError(
-                    "No analysis generated", client_name=self.client_name
-                )
+                raise ClientError("No analysis generated", client_name=self.client_name)
 
             return {
                 "content": response.candidates[0].content.parts[0].text,

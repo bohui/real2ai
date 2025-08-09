@@ -81,7 +81,7 @@ from app.core.langsmith_config import (
     get_langsmith_config,
     log_trace_info,
 )
-from app.services.document_service import DocumentService
+# DocumentService imported lazily to avoid circular imports
 
 logger = logging.getLogger(__name__)
 
@@ -616,7 +616,9 @@ class ContractAnalysisWorkflow:
                     document_data.get("content", "") if document_data else ""
                 )
             else:
-                document_text = document_metadata.get("extracted_text", "")
+                document_text = document_metadata.get(
+                    "full_text"
+                ) or document_metadata.get("extracted_text", "")
 
             if not document_text:
                 logger.error("No document text available for term extraction")
@@ -2294,6 +2296,7 @@ class ContractAnalysisWorkflow:
             use_llm = self.use_llm_config.get("document_processing", True)
 
             # Initialize document service with LLM flag from workflow config
+            from app.services.document_service import DocumentService
             doc_service = DocumentService(
                 use_llm_document_processing=self.use_llm_config.get(
                     "document_processing", True
@@ -2316,7 +2319,9 @@ class ContractAnalysisWorkflow:
                     error=error_msg,
                 )
 
-            extracted_text = summary.get("extracted_text", "")
+            extracted_text = summary.get("full_text") or summary.get(
+                "extracted_text", ""
+            )
             extraction_method = summary.get("extraction_method", "unknown")
             extraction_confidence = summary.get("extraction_confidence", 0.0)
 
@@ -2344,12 +2349,12 @@ class ContractAnalysisWorkflow:
             # Update state with extracted text and enhanced metadata
             updated_data = {
                 "document_metadata": {
-                    "extracted_text": extracted_text,
+                    "full_text": extracted_text,
                     "extraction_method": extraction_method,
                     "extraction_confidence": extraction_confidence,
                     "text_quality": text_quality,
                     "character_count": len(extracted_text),
-                    "word_count": len(extracted_text.split()),
+                    "total_word_count": len(extracted_text.split()),
                     "processing_timestamp": summary.get(
                         "processing_timestamp", datetime.now(UTC).isoformat()
                     ),

@@ -27,6 +27,17 @@ from .contract import (
     PropertyFinancialSummary,
     WebSocketProgressUpdate,
     ContractAnalysisFromOCR,
+    AnalysisQualityMetrics,
+    WorkflowMetadata,
+    EnhancementFeaturesStatus,
+    ContractAnalysisServiceResponse,
+    StartAnalysisResponse,
+    AnalysisStatus,
+    AnalysesSummary,
+    ServiceHealthResponse,
+    ServiceMetricsResponse,
+    ReloadConfigurationResponse,
+    OperationResponse,
 )
 
 # Document schemas
@@ -34,6 +45,7 @@ from .document import (
     DocumentUploadResponse,
     DocumentDetails,
     DocumentProcessingStatus,
+    DocumentProcessingUpdate,
     ReportGenerationRequest,
     ReportResponse,
 )
@@ -143,10 +155,22 @@ __all__ = [
     "PropertyFinancialSummary",
     "WebSocketProgressUpdate",
     "ContractAnalysisFromOCR",
+    "AnalysisQualityMetrics",
+    "WorkflowMetadata",
+    "EnhancementFeaturesStatus",
+    "ContractAnalysisServiceResponse",
+    "StartAnalysisResponse",
+    "AnalysisStatus",
+    "AnalysesSummary",
+    "ServiceHealthResponse",
+    "ServiceMetricsResponse",
+    "ReloadConfigurationResponse",
+    "OperationResponse",
     # Document
     "DocumentUploadResponse",
     "DocumentDetails",
     "DocumentProcessingStatus",
+    "DocumentProcessingUpdate",
     "ReportGenerationRequest",
     "ReportResponse",
     # OCR

@@ -16,6 +16,19 @@ from app.core.config import (
 from app.core.prompts import PromptManager, get_prompt_manager
 from app.models.contract_state import create_initial_state, RealEstateAgentState
 from app.schema.enums import AustralianState, ProcessingStatus
+from app.schema import (
+    ContractAnalysisServiceResponse,
+    AnalysisQualityMetrics,
+    WorkflowMetadata,
+    EnhancementFeaturesStatus,
+    StartAnalysisResponse,
+    AnalysesSummary,
+    ServiceHealthResponse,
+    ServiceMetricsResponse,
+    ReloadConfigurationResponse,
+    AnalysisStatus,
+    OperationResponse,
+)
 from app.services.websocket_service import WebSocketManager, WebSocketEvents
 from app.clients.supabase.client import SupabaseClient
 
@@ -130,7 +143,7 @@ class ContractAnalysisService:
         user_experience: str = "novice",
         user_type: str = "buyer",
         enable_websocket_progress: Optional[bool] = None,
-    ) -> Dict[str, Any]:
+    ) -> ContractAnalysisServiceResponse:
         """
         Unified contract analysis method with optional WebSocket progress tracking
 
@@ -333,7 +346,7 @@ class ContractAnalysisService:
         australian_state: AustralianState,
         user_preferences: Optional[Dict[str, Any]] = None,
         user_type: str = "buyer",
-    ) -> Dict[str, Any]:
+    ) -> StartAnalysisResponse:
         """
         Start contract analysis with real-time progress tracking (backward compatibility method)
 
@@ -360,20 +373,20 @@ class ContractAnalysisService:
 
         # Transform response to match original format
         if result["success"]:
-            return {
-                "success": True,
-                "contract_id": result["session_id"],
-                "session_id": result["session_id"],
-                "final_state": result.get("analysis_results", {}),
-                "analysis_results": result.get("analysis_results", {}),
-                "processing_time": result["processing_time_seconds"],
-            }
+            return StartAnalysisResponse(
+                success=True,
+                contract_id=result["session_id"],
+                session_id=result["session_id"],
+                final_state=result.get("analysis_results", {}),
+                analysis_results=result.get("analysis_results", {}),
+                processing_time=result["processing_time_seconds"],
+            )
         else:
-            return {
-                "success": False,
-                "error": result["error"],
-                "session_id": session_id,
-            }
+            return StartAnalysisResponse(
+                success=False,
+                error=result["error"],
+                session_id=session_id,
+            )
 
     def _validate_analysis_inputs(
         self,
@@ -454,89 +467,96 @@ class ContractAnalysisService:
 
     def _create_analysis_response(
         self, final_state: RealEstateAgentState, processing_time: float
-    ) -> Dict[str, Any]:
+    ) -> ContractAnalysisServiceResponse:
         """Create enhanced analysis response"""
 
         analysis_results = final_state.get("analysis_results", {})
 
         # Create comprehensive response
-        response = {
-            "success": final_state.get("parsing_status") == ProcessingStatus.COMPLETED
-            or not final_state.get("error_state"),
-            "session_id": final_state.get("session_id"),
-            "analysis_timestamp": datetime.now(UTC).isoformat(),
-            "processing_time_seconds": processing_time,
-            "workflow_version": "unified_v1.0",
-            # Core analysis results
-            "analysis_results": analysis_results,
-            "report_data": final_state.get("report_data", {}),
-            # Enhanced metadata
-            "quality_metrics": {
-                "overall_confidence": analysis_results.get("overall_confidence", 0),
-                "confidence_breakdown": analysis_results.get(
-                    "confidence_breakdown", {}
-                ),
-                "quality_assessment": analysis_results.get("confidence_assessment", ""),
-                "processing_quality": analysis_results.get("quality_metrics", {}),
-                "document_quality": final_state.get("document_quality_metrics", {}),
-                "validation_results": final_state.get("quality_metrics", {}).get(
+        response = ContractAnalysisServiceResponse(
+            success=(
+                final_state.get("parsing_status") == ProcessingStatus.COMPLETED
+                or not final_state.get("error_state")
+            ),
+            session_id=final_state.get("session_id"),
+            analysis_timestamp=datetime.now(UTC),
+            processing_time_seconds=processing_time,
+            workflow_version="unified_v1.0",
+            analysis_results=analysis_results,
+            report_data=final_state.get("report_data", {}),
+            quality_metrics=AnalysisQualityMetrics(
+                overall_confidence=analysis_results.get("overall_confidence", 0.0),
+                confidence_breakdown=analysis_results.get("confidence_breakdown", {}),
+                quality_assessment=analysis_results.get("confidence_assessment", ""),
+                processing_quality=analysis_results.get("quality_metrics", {}),
+                document_quality=final_state.get("document_quality_metrics", {}),
+                validation_results=final_state.get("quality_metrics", {}).get(
                     "validation_results", {}
                 ),
-            },
-            # Workflow execution details
-            "workflow_metadata": {
-                "steps_completed": final_state.get("progress", {}).get(
-                    "current_step", 0
-                ),
-                "total_steps": final_state.get("progress", {}).get("total_steps", 0),
-                "progress_percentage": final_state.get("progress", {}).get(
+            ),
+            workflow_metadata=WorkflowMetadata(
+                steps_completed=final_state.get("progress", {}).get("current_step", 0),
+                total_steps=final_state.get("progress", {}).get("total_steps", 0),
+                progress_percentage=final_state.get("progress", {}).get(
                     "percentage", 0
                 ),
-                "configuration": final_state.get("workflow_config", {}),
-                "performance_metrics": (
+                configuration=final_state.get("workflow_config", {}),
+                performance_metrics=(
                     self.workflow.get_workflow_metrics()
                     if hasattr(self.workflow, "get_workflow_metrics")
                     else {}
                 ),
-                "service_metrics": self._service_metrics,
-            },
-            # Error information (if any)
-            "errors": final_state.get("error_state"),
-            "warnings": self._extract_warnings_from_state(final_state),
-            # Enhanced features status
-            "enhancement_features": {
-                "structured_parsing_used": True,
-                "prompt_manager_used": self.config.enable_prompt_manager,
-                "validation_performed": self.config.enable_validation,
-                "quality_checks_performed": self.config.enable_quality_checks,
-                "enhanced_error_handling": self.config.enable_enhanced_error_handling,
-                "fallback_mechanisms_available": self.config.enable_fallback_mechanisms,
-            },
-        }
+                service_metrics=self._service_metrics,
+            ),
+            error=final_state.get("error_state"),
+            warnings=self._extract_warnings_from_state(final_state),
+            enhancement_features=EnhancementFeaturesStatus(
+                structured_parsing_used=True,
+                prompt_manager_used=self.config.enable_prompt_manager,
+                validation_performed=self.config.enable_validation,
+                quality_checks_performed=self.config.enable_quality_checks,
+                enhanced_error_handling=self.config.enable_enhanced_error_handling,
+                fallback_mechanisms_available=self.config.enable_fallback_mechanisms,
+            ),
+        )
 
         return response
 
     def _create_error_response(
         self, error_message: str, session_id: str, start_time: datetime
-    ) -> Dict[str, Any]:
+    ) -> ContractAnalysisServiceResponse:
         """Create error response"""
 
         processing_time = (datetime.now(UTC) - start_time).total_seconds()
 
-        return {
-            "success": False,
-            "session_id": session_id,
-            "error": error_message,
-            "analysis_timestamp": datetime.now(UTC).isoformat(),
-            "processing_time_seconds": processing_time,
-            "workflow_version": "unified_v1.0",
-            "service_metrics": self._service_metrics,
-            "configuration_status": (
-                self.config.validate_config()
-                if hasattr(self.config, "validate_config")
-                else {}
+        return ContractAnalysisServiceResponse(
+            success=False,
+            session_id=session_id,
+            error=error_message,
+            analysis_timestamp=datetime.now(UTC),
+            processing_time_seconds=processing_time,
+            workflow_version="unified_v1.0",
+            analysis_results={},
+            report_data={},
+            quality_metrics=AnalysisQualityMetrics(),
+            workflow_metadata=WorkflowMetadata(
+                configuration=(
+                    self.config.validate_config()
+                    if hasattr(self.config, "validate_config")
+                    else {}
+                ),
+                service_metrics=self._service_metrics,
             ),
-        }
+            warnings=[],
+            enhancement_features=EnhancementFeaturesStatus(
+                structured_parsing_used=True,
+                prompt_manager_used=self.config.enable_prompt_manager,
+                validation_performed=self.config.enable_validation,
+                quality_checks_performed=self.config.enable_quality_checks,
+                enhanced_error_handling=self.config.enable_enhanced_error_handling,
+                fallback_mechanisms_available=self.config.enable_fallback_mechanisms,
+            ),
+        )
 
     def _extract_warnings_from_state(self, state: RealEstateAgentState) -> List[str]:
         """Extract warnings from workflow state"""
@@ -702,9 +722,12 @@ class ContractAnalysisService:
         except Exception as e:
             logger.error(f"Failed to send progress update: {str(e)}")
 
-    async def get_analysis_status(self, contract_id: str) -> Optional[Dict[str, Any]]:
+    async def get_analysis_status(self, contract_id: str) -> Optional[AnalysisStatus]:
         """Get current analysis status"""
-        return self.active_analyses.get(contract_id)
+        info = self.active_analyses.get(contract_id)
+        if not info:
+            return None
+        return AnalysisStatus(**info)
 
     async def cancel_analysis(self, contract_id: str, session_id: str) -> bool:
         """Cancel ongoing analysis"""
@@ -728,13 +751,13 @@ class ContractAnalysisService:
 
     async def retry_analysis(
         self, contract_id: str, session_id: str, user_id: str
-    ) -> Dict[str, Any]:
+    ) -> OperationResponse:
         """Retry failed analysis"""
 
         # Get previous analysis data
         analysis_info = self.active_analyses.get(contract_id)
         if not analysis_info:
-            return {"success": False, "error": "Analysis not found"}
+            return OperationResponse(success=False, error="Analysis not found")
 
         # Clear error state
         if contract_id in self.active_analyses:
@@ -751,7 +774,7 @@ class ContractAnalysisService:
 
         # Note: In a full implementation, you would need to store and retrieve
         # the original document data and parameters to retry the analysis
-        return {"success": True, "message": "Retry initiated"}
+        return OperationResponse(success=True, message="Retry initiated")
 
     def cleanup_completed_analyses(self, max_age_hours: int = 24):
         """Clean up old completed analyses"""
@@ -778,25 +801,25 @@ class ContractAnalysisService:
             ]
         )
 
-    def get_all_analyses_summary(self) -> Dict[str, Any]:
+    def get_all_analyses_summary(self) -> AnalysesSummary:
         """Get summary of all analyses"""
         status_counts = {}
         for analysis in self.active_analyses.values():
             status = analysis["status"]
             status_counts[status] = status_counts.get(status, 0) + 1
 
-        return {
-            "total_analyses": len(self.active_analyses),
-            "status_breakdown": status_counts,
-            "active_count": self.get_active_analyses_count(),
-        }
+        return AnalysesSummary(
+            total_analyses=len(self.active_analyses),
+            status_breakdown=status_counts,
+            active_count=self.get_active_analyses_count(),
+        )
 
-    async def get_service_health(self) -> Dict[str, Any]:
+    async def get_service_health(self) -> ServiceHealthResponse:
         """Get service health status"""
 
         health_status = {
             "status": "healthy",
-            "timestamp": datetime.now(UTC).isoformat(),
+            "timestamp": datetime.now(UTC),
             "version": "unified_v1.0",
             "configuration": (
                 self.config.validate_config()
@@ -854,9 +877,9 @@ class ContractAnalysisService:
         else:
             health_status["components"]["websocket_manager"] = {"status": "disabled"}
 
-        return health_status
+        return ServiceHealthResponse(**health_status)
 
-    def get_service_metrics(self) -> Dict[str, Any]:
+    def get_service_metrics(self) -> ServiceMetricsResponse:
         """Get comprehensive service metrics"""
 
         metrics = {
@@ -885,11 +908,11 @@ class ContractAnalysisService:
             except Exception as e:
                 metrics["prompt_manager_error"] = str(e)
 
-        return metrics
+        return ServiceMetricsResponse(**metrics)
 
     async def reload_configuration(
         self, new_config: Optional[EnhancedWorkflowConfig] = None
-    ) -> Dict[str, Any]:
+    ) -> ReloadConfigurationResponse:
         """Reload service configuration"""
 
         try:
@@ -915,20 +938,20 @@ class ContractAnalysisService:
 
             logger.info("Service configuration reloaded successfully")
 
-            return {
-                "success": True,
-                "message": "Configuration reloaded successfully",
-                "validation": config_validation,
-                "timestamp": datetime.now(UTC).isoformat(),
-            }
+            return ReloadConfigurationResponse(
+                success=True,
+                message="Configuration reloaded successfully",
+                validation=config_validation,
+                timestamp=datetime.now(UTC),
+            )
 
         except Exception as e:
             logger.error(f"Failed to reload configuration: {e}")
-            return {
-                "success": False,
-                "error": str(e),
-                "timestamp": datetime.now(UTC).isoformat(),
-            }
+            return ReloadConfigurationResponse(
+                success=False,
+                error=str(e),
+                timestamp=datetime.now(UTC),
+            )
 
 
 # Database helpers colocated with analysis service to keep status logic centralized

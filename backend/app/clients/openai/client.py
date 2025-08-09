@@ -56,6 +56,14 @@ class OpenAIClient(BaseClient):
             if self.config.organization:
                 client_kwargs["organization"] = self.config.organization
 
+            # If configured, attach default headers (e.g., for OpenRouter)
+            try:
+                default_headers = self.config.extra_config.get("default_headers")  # type: ignore[attr-defined]
+                if default_headers:
+                    client_kwargs["default_headers"] = default_headers
+            except Exception:
+                pass
+
             self._openai_client = OpenAI(**client_kwargs)
 
             # Test the connection
@@ -235,13 +243,32 @@ class OpenAIClient(BaseClient):
 
     @with_retry(max_retries=3, backoff_factor=2.0)
     async def generate_content(self, prompt: str, **kwargs) -> str:
-        """Call OpenAI API to generate content."""
+        """Call OpenAI API to generate content.
+
+        Accepted kwargs include:
+        - model: Optional[str]
+        - temperature: Optional[float]
+        - max_tokens: Optional[int]
+        - top_p: Optional[float]
+        - frequency_penalty: Optional[float]
+        - presence_penalty: Optional[float]
+        - messages: Optional[List[Dict[str, Any]]] - if provided, used as-is
+        - system_prompt: Optional[str] - if provided and messages not supplied,
+          will be prepended as a system message before the user prompt.
+        """
         try:
             # Handle both single prompt and messages format
             if "messages" in kwargs:
                 messages = kwargs["messages"]
             else:
-                messages = [{"role": "user", "content": prompt}]
+                system_prompt: Optional[str] = kwargs.get("system_prompt")
+                if system_prompt:
+                    messages = [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": prompt},
+                    ]
+                else:
+                    messages = [{"role": "user", "content": prompt}]
 
             # Prepare parameters
             params = {
@@ -299,4 +326,3 @@ class OpenAIClient(BaseClient):
                 client_name=self.client_name,
                 original_error=e,
             )
-

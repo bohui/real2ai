@@ -220,6 +220,7 @@ class Document(TimestampedBaseModel):
     text_extraction_method: Optional[str] = Field(None, max_length=100)
 
     # Document content metrics
+    full_text: Optional[str] = None
     total_pages: int = Field(default=0, ge=0)
     total_text_length: int = Field(default=0, ge=0)
     total_word_count: int = Field(default=0, ge=0)
@@ -240,7 +241,9 @@ class Contract(TimestampedBaseModel):
     """Contracts table for contract metadata (shared resource using content_hash)"""
 
     id: UUID = Field(..., description="Contract UUID")
-    content_hash: str = Field(..., description="SHA-256 hash of document content for caching")
+    content_hash: str = Field(
+        ..., description="SHA-256 hash of document content for caching"
+    )
     contract_type: ContractType = ContractType.PURCHASE_AGREEMENT
     australian_state: AustralianState = AustralianState.NSW
     contract_terms: Dict[str, Any] = Field(default_factory=dict)
@@ -252,7 +255,9 @@ class ContractAnalysis(TimestampedBaseModel):
     """Contract analyses table for AI analysis results (shared resource using content_hash)"""
 
     id: UUID = Field(..., description="Analysis UUID")
-    content_hash: str = Field(..., description="SHA-256 hash of document content for caching")
+    content_hash: str = Field(
+        ..., description="SHA-256 hash of document content for caching"
+    )
     agent_version: str = "1.0"
     status: AnalysisStatus = AnalysisStatus.PENDING
 
@@ -319,7 +324,9 @@ class DocumentEntity(TimestampedBaseModel):
     """Document entities table for extracted entities"""
 
     id: UUID = Field(..., description="Entity UUID")
-    content_hash: str = Field(..., description="SHA-256 hash of document content for caching")
+    content_hash: str = Field(
+        ..., description="SHA-256 hash of document content for caching"
+    )
     page_id: Optional[UUID] = Field(None, description="Reference to document_pages.id")
     page_number: int = Field(..., ge=1)
 
@@ -430,7 +437,9 @@ class PropertyData(TimestampedBaseModel):
     """Property data table for enhanced property analysis"""
 
     id: UUID = Field(..., description="Property data UUID")
-    property_hash: str = Field(..., description="Hash of normalized address for caching")
+    property_hash: str = Field(
+        ..., description="Hash of normalized address for caching"
+    )
 
     # Property details
     address: str = Field(..., max_length=255)
