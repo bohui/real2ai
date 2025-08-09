@@ -8,6 +8,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter } from "react-router-dom";
 import { vi } from "vitest";
 
+// Mock SEO Provider component
+const MockSEOProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  return React.createElement('div', { 'data-testid': 'seo-provider' }, children);
+};
+
 // Mock store states for different test scenarios
 export interface TestStoreConfig {
   auth?: {
@@ -54,7 +59,11 @@ const createTestProviders = (includeRouter: boolean = true) => {
     );
 
     return (
-      <QueryClientProvider client={queryClient}>{content}</QueryClientProvider>
+      <QueryClientProvider client={queryClient}>
+        <MockSEOProvider>
+          {content}
+        </MockSEOProvider>
+      </QueryClientProvider>
     );
   };
   return TestProviders;

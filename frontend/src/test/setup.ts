@@ -220,3 +220,71 @@ vi.mock('framer-motion', () => ({
   },
   AnimatePresence: ({ children }: { children: React.ReactNode }) => children,
 }))
+
+// Mock SEO Context
+vi.mock('@/contexts/SEOContext', () => {
+  const MockSEOProvider = ({ children }: { children: React.ReactNode }) => children;
+  return {
+    default: MockSEOProvider,
+    SEOProvider: MockSEOProvider,
+    useSEOContext: () => ({
+      currentSEO: {},
+      updateGlobalSEO: vi.fn(),
+      updateDynamicSEO: vi.fn(),
+      resetSEO: vi.fn(),
+      setSEOForRoute: vi.fn(),
+      isLoading: false,
+    }),
+    usePageSEO: () => vi.fn(),
+  };
+})
+
+// Mock useWebSocket hook
+vi.mock('@/hooks/useWebSocket', () => ({
+  useWebSocket: () => ({
+    ws: null,
+    isConnected: false,
+    isConnecting: false,
+    reconnect: vi.fn(),
+    disconnect: vi.fn(),
+    sendMessage: vi.fn(),
+  }),
+}))
+
+// Mock WebSocket for tests
+class MockWebSocket {
+  static instances: MockWebSocket[] = []
+  static lastInstance: MockWebSocket | null = null
+  
+  readyState = 1 // OPEN
+  onopen: ((event: Event) => void) | null = null
+  onclose: ((event: CloseEvent) => void) | null = null
+  onmessage: ((event: MessageEvent) => void) | null = null
+  onerror: ((event: Event) => void) | null = null
+
+  constructor(url: string) {
+    MockWebSocket.instances.push(this)
+    MockWebSocket.lastInstance = this
+    setTimeout(() => {
+      this.onopen?.(new Event('open'))
+    }, 0)
+  }
+
+  close() {
+    this.readyState = 3 // CLOSED
+    setTimeout(() => {
+      this.onclose?.(new CloseEvent('close'))
+    }, 0)
+  }
+
+  send(data: string) {
+    // Mock sending data
+  }
+
+  static reset() {
+    MockWebSocket.instances = []
+    MockWebSocket.lastInstance = null
+  }
+}
+
+global.WebSocket = MockWebSocket as any
