@@ -191,10 +191,21 @@ def update_state_step(
 
     # Avoid returning static identity keys in node outputs to prevent
     # INVALID_CONCURRENT_GRAPH_UPDATE when multiple edges merge in a step
-    static_keys = ["user_id", "session_id", "agent_version"]
+    # Only exclude keys that are truly static and never intended to be updated
+    static_keys = [
+        "user_id", "session_id", "agent_version", 
+        "user_preferences", "australian_state", "user_type"
+    ]
     for static_key in static_keys:
         if not (data and static_key in data):
             updated_state.pop(static_key, None)
+    
+    # For document_data and document_metadata, only exclude if not being explicitly updated
+    # This allows legitimate updates during document processing while preventing accidental returns
+    document_keys = ["document_data", "document_metadata"]
+    for doc_key in document_keys:
+        if not (data and doc_key in data):
+            updated_state.pop(doc_key, None)
 
     return updated_state
 

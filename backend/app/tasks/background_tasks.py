@@ -63,6 +63,14 @@ async def update_analysis_progress(
         user_client = await AuthContext.get_authenticated_client()
 
         # Update or create progress record
+        # Determine status based on step and progress
+        if current_step.endswith("_failed") or current_step == "failed":
+            status = "failed"
+        elif progress_percent >= 100:
+            status = "completed"
+        else:
+            status = "in_progress"
+        
         progress_data = {
             "content_hash": content_hash,
             "user_id": user_id,
@@ -71,7 +79,7 @@ async def update_analysis_progress(
             "step_description": step_description,
             "step_started_at": datetime.now(timezone.utc).isoformat(),
             "estimated_completion_minutes": estimated_completion_minutes,
-            "status": "in_progress" if progress_percent < 100 else "completed",
+            "status": status,
             "error_message": error_message,
         }
 
@@ -82,33 +90,37 @@ async def update_analysis_progress(
             conflict_columns=["content_hash", "user_id"],
         )
 
-        # Resolve a session id (document_id) for WS delivery and send progress
+        # Resolve session ids (document_ids) for WS delivery and send progress
+        # Send to ALL documents with this content_hash since multiple uploads may exist
         try:
-            # Find the latest document for this user/content_hash to route messages
+            # Find ALL documents for this user/content_hash to route messages
             doc_result = await user_client.database.select(
                 "documents",
                 columns="id",
                 filters={"user_id": user_id, "content_hash": content_hash},
                 order_by="created_at DESC",
-                limit=1,
             )
             if doc_result.get("data"):
-                session_id = doc_result["data"][0]["id"]
-                await websocket_manager.send_message(
-                    session_id,
-                    {
-                        "event_type": "analysis_progress",
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                        "data": {
-                            "content_hash": content_hash,
-                            "progress_percent": progress_percent,
-                            "current_step": current_step,
-                            "step_description": step_description,
-                            "estimated_completion_minutes": estimated_completion_minutes,
-                            "error_message": error_message,
+                # Send to all documents with this content_hash
+                for doc in doc_result["data"]:
+                    session_id = doc["id"]
+                    logger.info(f"Sending progress to document {session_id} for content_hash {content_hash}")
+                    await websocket_manager.send_message(
+                        session_id,
+                        {
+                            "event_type": "analysis_progress",
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                            "data": {
+                                "content_hash": content_hash,
+                                "progress_percent": progress_percent,
+                                "current_step": current_step,
+                                "step_description": step_description,
+                                "estimated_completion_minutes": estimated_completion_minutes,
+                                "status": status,  # Include status in WebSocket message
+                                "error_message": error_message,
+                            },
                         },
-                    },
-                )
+                    )
         except Exception as ws_error:
             logger.warning(f"WS progress routing failed: {ws_error}")
 
@@ -124,7 +136,7 @@ async def update_analysis_progress(
                     "current_step": current_step,
                     "step_description": step_description,
                     "estimated_completion_minutes": estimated_completion_minutes,
-                    "status": "processing" if progress_percent < 100 else "completed",
+                    "status": status,  # Use the same status determined above
                 },
             },
         )
@@ -421,12 +433,31 @@ async def comprehensive_document_analysis(
                 # Try to recover from analysis_options as last resort
                 content_hash = analysis_options.get("content_hash")
             if content_hash:
+                # Fetch the last progress to preserve resume information
+                last_progress_percent = 0
+                last_step = "unknown"
+                try:
+                    user_client = await AuthContext.get_authenticated_client()
+                    latest_progress = await user_client.database.select(
+                        "analysis_progress",
+                        columns="current_step, progress_percent",
+                        filters={"content_hash": content_hash, "user_id": user_id},
+                        order_by="updated_at DESC",
+                        limit=1,
+                    )
+                    if latest_progress.get("data"):
+                        last_step = latest_progress["data"][0].get("current_step", "unknown")
+                        last_progress_percent = latest_progress["data"][0].get("progress_percent", 0)
+                except Exception as fetch_err:
+                    logger.warning(f"Could not fetch last progress: {fetch_err}")
+                
+                # Update progress preserving the last step and percentage for resume capability
                 await update_analysis_progress(
                     user_id,
                     content_hash,
-                    progress_percent=0,
-                    current_step="failed",
-                    step_description="Analysis failed. Please try again or contact support.",
+                    progress_percent=last_progress_percent,  # Preserve last progress
+                    current_step=f"{last_step}_failed",  # Keep step info with failed suffix
+                    step_description=f"Analysis failed at {last_step}. Ready to resume from this point.",
                     error_message=str(e),
                 )
 

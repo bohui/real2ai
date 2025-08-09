@@ -343,16 +343,33 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
               undefined,
           };
           console.log("🔄 Transformed progress data:", progressData);
-          // Update progress and ensure analyzing state is maintained
-          set((prev) => ({
-            analysisProgress: progressData,
-            isAnalyzing: true,
-            // Preserve error after a failure unless a user-initiated retry is in flight
-            analysisError: prev.retryInFlight ? null : prev.analysisError,
-            // First progress after retry clears the retry flag
-            retryInFlight: prev.retryInFlight ? false : prev.retryInFlight,
-          }));
-          console.log("✅ Progress updated and isAnalyzing set to true");
+          
+          // Check if this is a failed status
+          const isFailed = data.data.status === "failed" || 
+                          data.data.current_step?.endsWith("_failed") || 
+                          data.data.current_step === "failed";
+          
+          if (isFailed) {
+            console.log("❌ Analysis failed status detected");
+            set({
+              analysisProgress: progressData,
+              isAnalyzing: false,  // Set to false for failed state
+              analysisError: data.data.error_message || progressData.step_description || "Analysis failed",
+              retryAvailable: true,
+              retryInFlight: false,
+            });
+          } else {
+            // Update progress and ensure analyzing state is maintained
+            set((prev) => ({
+              analysisProgress: progressData,
+              isAnalyzing: true,
+              // Preserve error after a failure unless a user-initiated retry is in flight
+              analysisError: prev.retryInFlight ? null : prev.analysisError,
+              // First progress after retry clears the retry flag
+              retryInFlight: prev.retryInFlight ? false : prev.retryInFlight,
+            }));
+            console.log("✅ Progress updated and isAnalyzing set to true");
+          }
 
           // If backend signals completion via progress event, fetch results now
           if (
@@ -600,16 +617,33 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
               undefined,
           };
           console.log("🔄 Transformed progress data (contract):", progressData);
-          // Update progress and ensure analyzing state is maintained
-          set((prev) => ({
-            analysisProgress: progressData,
-            isAnalyzing: true,
-            analysisError: prev.retryInFlight ? null : prev.analysisError,
-            retryInFlight: prev.retryInFlight ? false : prev.retryInFlight,
-          }));
-          console.log(
-            "✅ Progress updated and isAnalyzing set to true (contract)",
-          );
+          
+          // Check if this is a failed status
+          const isFailed = data.data.status === "failed" || 
+                          data.data.current_step?.endsWith("_failed") || 
+                          data.data.current_step === "failed";
+          
+          if (isFailed) {
+            console.log("❌ Analysis failed status detected (contract)");
+            set({
+              analysisProgress: progressData,
+              isAnalyzing: false,  // Set to false for failed state
+              analysisError: data.data.error_message || progressData.step_description || "Analysis failed",
+              retryAvailable: true,
+              retryInFlight: false,
+            });
+          } else {
+            // Update progress and ensure analyzing state is maintained
+            set((prev) => ({
+              analysisProgress: progressData,
+              isAnalyzing: true,
+              analysisError: prev.retryInFlight ? null : prev.analysisError,
+              retryInFlight: prev.retryInFlight ? false : prev.retryInFlight,
+            }));
+            console.log(
+              "✅ Progress updated and isAnalyzing set to true (contract)",
+            );
+          }
 
           // If backend signals completion via progress event, fetch results now
           if (

@@ -629,12 +629,26 @@ class ContractAnalysisService:
                     "compile_report",
                 ]
                 try:
+                    # Handle both normal step names and failed step names (e.g., "extract_terms_failed")
+                    clean_step = resume_from_step
+                    if resume_from_step and resume_from_step.endswith("_failed"):
+                        # Remove the "_failed" suffix to get the actual step name
+                        clean_step = resume_from_step[:-7]  # Remove "_failed" (7 chars)
+                    
                     self._resume_index = (
-                        self._step_order.index(resume_from_step)
-                        if resume_from_step
+                        self._step_order.index(clean_step)
+                        if clean_step
                         else 0
                     )
+                    
+                    # If resuming from a failed step, we want to retry that step
+                    # so we don't skip it
+                    if resume_from_step and resume_from_step.endswith("_failed"):
+                        logger.info(f"Resuming from failed step: {clean_step} (will retry)")
+                    else:
+                        logger.info(f"Resuming from step: {clean_step} (will skip completed steps)")
                 except ValueError:
+                    logger.warning(f"Unknown resume step: {resume_from_step}, starting from beginning")
                     self._resume_index = 0
 
             def _should_skip(self, step_name: str) -> bool:
