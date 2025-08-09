@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from typing import Dict, Any, Optional, List
 import argparse
 
-from app.services.cache_service import CacheService
+from app.services.cache.cache_service import CacheService
 from app.clients.factory import get_supabase_client
 
 logger = logging.getLogger(__name__)

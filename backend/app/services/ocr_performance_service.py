@@ -234,7 +234,7 @@ class OCRPerformanceService:
     ) -> Dict[str, Any]:
         """Get comprehensive performance analytics"""
 
-        cutoff_time = datetime.now(UTC) - timedelta(hours=time_range_hours)
+        cutoff_time = datetime.now(timezone.utc) - timedelta(hours=time_range_hours)
 
         # Filter metrics by time range and user
         relevant_metrics = [
@@ -370,7 +370,7 @@ class OCRPerformanceService:
                 "cost_tracking": cost_status,
                 "recent_performance": recent_performance,
                 "recommendations": await self._generate_health_recommendations(),
-                "last_updated": datetime.now(UTC).isoformat(),
+                "last_updated": datetime.now(timezone.utc).isoformat(),
             }
 
         except Exception as e:
@@ -378,7 +378,7 @@ class OCRPerformanceService:
             return {
                 "service_status": "error",
                 "error_message": str(e),
-                "last_updated": datetime.now(UTC).isoformat(),
+                "last_updated": datetime.now(timezone.utc).isoformat(),
             }
 
     # Private helper methods
@@ -399,7 +399,7 @@ class OCRPerformanceService:
     async def _check_cache(self, cache_key: str) -> Optional[OCRCacheEntry]:
         """Check if result exists in cache"""
         entry = self.cache_storage.get(cache_key)
-        if entry and entry.expiry_time > datetime.now(UTC):
+        if entry and entry.expiry_time > datetime.now(timezone.utc):
             return entry
         elif entry:  # Expired entry
             del self.cache_storage[cache_key]
@@ -536,7 +536,7 @@ class OCRPerformanceService:
                 "enhancement_applied", []
             ),
             cost_estimate_usd=cost_estimates[quality_tier],
-            timestamp=datetime.now(UTC),
+            timestamp=datetime.now(timezone.utc),
         )
 
     # Placeholder methods for complex analysis functions

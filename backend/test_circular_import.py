@@ -19,7 +19,7 @@ def test_imports():
         print("✓ DocumentService imported successfully")
 
         print("Testing SemanticAnalysisService import...")
-        from app.services.semantic_analysis_service import SemanticAnalysisService
+        from app.services.ai.semantic_analysis_service import SemanticAnalysisService
 
         print("✓ SemanticAnalysisService imported successfully")
 

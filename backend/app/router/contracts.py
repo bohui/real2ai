@@ -11,7 +11,7 @@ from uuid import UUID
 from app.core.auth import get_current_user, User
 from app.core.auth_context import AuthContext
 from app.services.document_service import DocumentService
-from app.services.cache_service import get_cache_service, CacheService
+from app.services.cache.cache_service import get_cache_service, CacheService
 from app.core.error_handler import handle_api_error, create_error_context, ErrorCategory
 from app.core.retry_manager import retry_database_operation, retry_api_call
 from app.core.notification_system import (

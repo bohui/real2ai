@@ -10,8 +10,8 @@ from app.core.config import get_settings
 from app.core.error_handler import handle_api_error, create_error_context, ErrorCategory
 from app.schema.enums import ContractType, AustralianState
 from app.services.document_service import DocumentService
-from app.services.websocket_singleton import websocket_manager
-from app.services.websocket_service import WebSocketEvents
+from app.services.communication.websocket_singleton import websocket_manager
+from app.services.communication.websocket_service import WebSocketEvents
 from app.schema.document import (
     DocumentUploadResponse,
     ReportGenerationRequest,

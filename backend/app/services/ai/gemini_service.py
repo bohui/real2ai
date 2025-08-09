@@ -7,7 +7,7 @@ separating business logic from connection management.
 
 import logging
 from typing import Any, Dict, Optional, List
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 
 from app.services.base.user_aware_service import UserAwareService
 from app.clients import get_gemini_client
@@ -333,7 +333,7 @@ class GeminiService(UserAwareService):
                 "summary_length": len(summary),
                 "compression_ratio": len(summary) / len(content) if content else 0,
                 "style": style,
-                "timestamp": datetime.now(UTC).isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
             
         except Exception as e:
@@ -509,7 +509,7 @@ class GeminiService(UserAwareService):
         result = {
             "granularity": granularity,
             "raw_response": response,
-            "timestamp": datetime.now(UTC).isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
         
         # Simple parsing for overall sentiment
@@ -577,7 +577,7 @@ class GeminiService(UserAwareService):
         
         return {
             "structure_analysis": response,
-            "analyzed_at": datetime.now(UTC).isoformat(),
+            "analyzed_at": datetime.now(timezone.utc).isoformat(),
         }
     
     async def _detect_language(self, text: str) -> str:
@@ -602,14 +602,14 @@ class GeminiService(UserAwareService):
                 "service": "GeminiService",
                 "status": "healthy" if client_health.get("status") == "healthy" else "unhealthy",
                 "client_status": client_health,
-                "timestamp": datetime.now(UTC).isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
         except Exception as e:
             return {
                 "service": "GeminiService",
                 "status": "unhealthy",
                 "error": str(e),
-                "timestamp": datetime.now(UTC).isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
     
     async def cleanup(self) -> None:

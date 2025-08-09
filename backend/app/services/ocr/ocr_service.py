@@ -4,7 +4,7 @@ OCR Service - Orchestrates OCR operations with specialized processors.
 
 import logging
 from typing import Dict, Any
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 
 from app.clients.base.client import with_retry
 from app.clients.base.exceptions import ClientError, ClientValidationError
@@ -92,7 +92,7 @@ class OCRService:
                 result = {
                     **extraction_result,
                     "analysis": analysis_result,
-                    "analysis_timestamp": datetime.now(UTC).isoformat(),
+                    "analysis_timestamp": datetime.now(timezone.utc).isoformat(),
                 }
             else:
                 result = extraction_result

@@ -16,7 +16,7 @@ from app.schema.property import (
 )
 from app.models.contract_state import AustralianState
 from app.clients.factory import get_supabase_client
-from app.services.unified_cache_service import UnifiedCacheService
+from app.services.cache.unified_cache_service import UnifiedCacheService
 
 logger = logging.getLogger(__name__)
 

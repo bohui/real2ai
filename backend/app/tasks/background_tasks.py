@@ -23,9 +23,9 @@ from app.models.contract_state import (
 )
 from app.services.contract_analysis_service import ContractAnalysisService
 from app.services.document_service import DocumentService
-from app.services.websocket_service import WebSocketEvents
-from app.services.websocket_singleton import websocket_manager
-from app.services.redis_pubsub import publish_progress_sync
+from app.services.communication.websocket_service import WebSocketEvents
+from app.services.communication.websocket_singleton import websocket_manager
+from app.services.communication.redis_pubsub import publish_progress_sync
 
 logger = logging.getLogger(__name__)
 
@@ -204,78 +204,54 @@ async def comprehensive_document_analysis(
                     "Content hash not found in document or analysis options"
                 )
 
-            # Check if this is a retry operation and clear progress accordingly
-            is_retry = analysis_options.get("is_retry", False)
-            if is_retry:
-                logger.info(
-                    f"Retry detected for content_hash {content_hash}, clearing previous progress"
+            # Determine resume point from latest analysis_progress (if any)
+            try:
+                latest_progress = await user_client.database.select(
+                    "analysis_progress",
+                    columns="current_step, progress_percent, updated_at",
+                    filters={"content_hash": content_hash, "user_id": user_id},
+                    order_by="updated_at DESC",
+                    limit=1,
                 )
-                # Clear any existing user progress records for this retry
-                try:
-                    await user_client.database.delete(
-                        "analysis_progress",
-                        filters={"content_hash": content_hash, "user_id": user_id},
-                    )
-                except Exception as cleanup_error:
-                    logger.warning(
-                        f"Failed to clear previous progress: {cleanup_error}"
-                    )
-                    # Continue with retry even if cleanup fails
+                if latest_progress.get("data"):
+                    last_step = latest_progress["data"][0].get("current_step")
+                    # Inject resume info into analysis options
+                    if last_step:
+                        analysis_options["resume_from_step"] = last_step
+                        logger.info(
+                            f"Resuming analysis for {content_hash} from step: {last_step}"
+                        )
+            except Exception as resume_err:
+                logger.warning(
+                    f"Unable to fetch latest progress for resume: {resume_err}"
+                )
 
             # =============================================
-            # PHASE 1: DOCUMENT PROCESSING (0-75%)
+            # PHASE 1: COARSE PROGRESS ONLY (skip pre-processing)
             # =============================================
 
-            # Use service-level processing that persists and is idempotent
+            # Record a minimal DB-backed milestone to indicate the job is queued/starting
             await update_analysis_progress(
                 user_id,
                 content_hash,
                 progress_percent=5,
-                current_step="text_extraction",
-                step_description="Extracting text from document...",
+                current_step="queued",
+                step_description="Queued for AI contract analysis...",
                 estimated_completion_minutes=3,
             )
 
-            # Refresh TTL at start of long-running task
+            # Keep the task context fresh for long-running operations
             await recovery_ctx.refresh_context_ttl()
-
-            summary = await document_service.process_document_by_id(document_id)
-            if not summary or not summary.get("success"):
-                error_msg = (
-                    summary.get("error")
-                    if isinstance(summary, dict)
-                    else "Processing failed"
-                )
-                await update_analysis_progress(
-                    user_id,
-                    content_hash,
-                    progress_percent=0,
-                    current_step="text_extraction",
-                    step_description="Text extraction failed",
-                    error_message=error_msg,
-                )
-                raise Exception(error_msg)
-
-            await update_analysis_progress(
-                user_id,
-                content_hash,
-                progress_percent=PROGRESS_STAGES["document_processing"][
-                    "document_complete"
-                ],
-                current_step="document_complete",
-                step_description="Document processing completed successfully",
-                estimated_completion_minutes=1,
-            )
 
             # =============================================
             # PHASE 2: CONTRACT ANALYSIS (75-100%)
             # =============================================
 
-            # Step 6: Contract Analysis Start (75-80%)
+            # Step: Contract Analysis Start (coarse milestone)
             await update_analysis_progress(
                 user_id,
                 content_hash,
-                progress_percent=PROGRESS_STAGES["contract_analysis"]["analysis_start"],
+                progress_percent=10,
                 current_step="contract_analysis",
                 step_description="Starting AI contract analysis...",
                 estimated_completion_minutes=1,
@@ -290,60 +266,25 @@ async def comprehensive_document_analysis(
 
             # processed_document = doc_result["data"][0]
 
-            # Support multiple shapes for stored results
-            extracted_text = summary.get("full_text") or summary.get("extracted_text")
-
-            # Fall back to the in-memory summary produced earlier
-            # if (not extracted_text) and summary and summary.get("success"):
-            #     extracted_text = summary.get("extracted_text")
-
-            # As a last resort, fetch a processed summary via service helper
-            # if not extracted_text:
-            #     processed_summary = (
-            #         await document_service.get_processed_document_summary(
-            #             document_id=document_id
-            #         )
-            #     )
-            #     if processed_summary and processed_summary.get("success"):
-            #         extracted_text = processed_summary.get(
-            #             "full_text"
-            #         ) or processed_summary.get("extracted_text")
-
-            if not extracted_text:
-                raise ValueError(
-                    f"No extracted text available for document {document_id}"
-                )
-
-            logger.info(f"Retrieved document content: {len(extracted_text)} characters")
-
-            # Prepare document_data structure for ContractAnalysisService
-            # Derive metrics with compatibility across result shapes
-            extraction_confidence = (
-                summary.get("extraction_confidence")
-                or (summary.get("text_extraction") or {}).get("overall_confidence", 0.0)
-                or summary.get("extraction_confidence", 0.0)
-            )
-            word_count = (
-                summary.get("total_word_count")
-                or summary.get("word_count")
-                or (summary.get("text_extraction") or {}).get("total_word_count")
-                or (len(extracted_text.split()) if extracted_text else 0)
-            )
-            page_count = summary.get("total_pages") or summary.get("page_count", 1)
-
+            # Prepare minimal document_data for ContractAnalysisService
+            # Validation requires either content or file_path; provide file_path to avoid pre-processing duplication
             document_data = {
                 "document_id": document_id,
-                "filename": summary.get(
-                    "original_filename", summary.get("filename", "unknown")
+                "filename": document.get(
+                    "original_filename", document.get("filename", "unknown")
                 ),
-                "content": extracted_text,  # Critical: pass the extracted text
+                "file_type": document.get("file_type", "pdf"),
+                "storage_path": document.get("storage_path", ""),
                 "content_hash": content_hash,
-                "file_type": summary.get("file_type", "pdf"),
-                "storage_path": summary.get("storage_path", ""),
-                "extraction_confidence": extraction_confidence,
-                "word_count": word_count,
-                "page_count": page_count,
+                "file_path": document.get("storage_path", ""),
             }
+
+            # Resolve Australian state from document metadata or options (default to NSW)
+            state_to_use = (
+                document.get("australian_state")
+                or analysis_options.get("australian_state")
+                or "NSW"
+            )
 
             # Initialize ContractAnalysisService with WebSocket progress tracking
 
@@ -366,13 +307,31 @@ async def comprehensive_document_analysis(
             #     contract_data.get("australian_state", "NSW")
             # )
 
+            async def persist_progress(step: str, percent: int, description: str):
+                # Persist to Supabase then refresh task TTL to keep context alive
+                try:
+                    await update_analysis_progress(
+                        user_id,
+                        content_hash,
+                        progress_percent=percent,
+                        current_step=step,
+                        step_description=description,
+                        estimated_completion_minutes=None,
+                    )
+                finally:
+                    try:
+                        await recovery_ctx.refresh_context_ttl()
+                    except Exception:
+                        pass
+
             analysis_response = await contract_service.start_analysis(
                 user_id=user_id,
                 session_id=content_hash,  # Use content_hash as session_id
                 document_data=document_data,
-                australian_state=summary.get("australian_state"),
+                australian_state=state_to_use,
                 user_preferences=analysis_options,
                 user_type="buyer",  # Default user type
+                progress_callback=persist_progress,
             )
 
             # Extract analysis results from service response
@@ -387,28 +346,17 @@ async def comprehensive_document_analysis(
 
             logger.info(f"Contract analysis completed successfully")
 
+            # Coarse milestone after analysis to indicate we are persisting results
             await update_analysis_progress(
                 user_id,
                 content_hash,
-                progress_percent=PROGRESS_STAGES["contract_analysis"][
-                    "workflow_processing"
-                ],
-                current_step="workflow_processing",
-                step_description="Contract analysis completed, preparing results...",
-                estimated_completion_minutes=0,
-            )
-
-            # Step 8: Results Caching (90-95%)
-            await update_analysis_progress(
-                user_id,
-                content_hash,
-                progress_percent=PROGRESS_STAGES["contract_analysis"][
-                    "results_caching"
-                ],
+                progress_percent=95,
                 current_step="results_caching",
                 step_description="Caching results for future use...",
                 estimated_completion_minutes=0,
             )
+
+            # (Already updated results_caching above with coarse milestone)
 
             # Save analysis results using service role client for shared table access
             service_client = await get_service_supabase_client()

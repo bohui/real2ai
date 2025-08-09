@@ -5,9 +5,9 @@ from typing import Dict, Any, List
 from fastapi import APIRouter, Depends, Query, HTTPException, Body, status
 from app.core.auth import get_current_user
 from app.core.auth import User
-from app.services.cache_service import get_cache_service, CacheService
+from app.services.cache.cache_service import get_cache_service, CacheService
 from app.core.error_handler import handle_api_error, create_error_context, ErrorCategory
-from app.services.redis_pubsub import redis_pubsub_service
+from app.services.communication.redis_pubsub import redis_pubsub_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/cache", tags=["cache"])

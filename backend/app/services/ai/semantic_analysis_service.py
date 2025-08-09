@@ -5,7 +5,7 @@ Integrates extract_image_semantics into the document analysis pipeline
 
 import logging
 from typing import Dict, Any, Optional, List
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import HTTPException
@@ -20,7 +20,7 @@ from app.prompts.schema.image_semantics_schema import (
     RiskIndicator,
 )
 from app.prompts.schema.diagram_risk_schema import DiagramRiskAssessment, RiskExtractor
-from app.services.gemini_ocr_service import GeminiOCRService
+from app.services.ai.gemini_ocr_service import GeminiOCRService
 
 # Circular import removed - DocumentService will be passed as parameter if needed
 from app.clients.base.exceptions import ClientError
@@ -112,7 +112,7 @@ class SemanticAnalysisService(PromptEnabledService, UserAwareService):
                 "storage_path": storage_path,
                 "filename": filename,
                 "file_type": file_type,
-                "analysis_timestamp": datetime.now(UTC).isoformat(),
+                "analysis_timestamp": datetime.now(timezone.utc).isoformat(),
                 "document_id": document_id,
             },
             "semantic_analysis": None,
@@ -188,7 +188,7 @@ class SemanticAnalysisService(PromptEnabledService, UserAwareService):
                 {
                     "stage": "semantic_extraction",
                     "status": "completed",
-                    "timestamp": datetime.now(UTC).isoformat(),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
                     "details": {
                         "image_type_detected": semantic_result.get(
                             "image_type_detected"
@@ -220,7 +220,7 @@ class SemanticAnalysisService(PromptEnabledService, UserAwareService):
                 {
                     "stage": "risk_assessment",
                     "status": "completed",
-                    "timestamp": datetime.now(UTC).isoformat(),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
                     "details": {
                         "total_risks_identified": risk_assessment.get(
                             "total_risks_identified", 0
@@ -256,7 +256,7 @@ class SemanticAnalysisService(PromptEnabledService, UserAwareService):
                     {
                         "stage": "enhanced_analysis",
                         "status": "completed",
-                        "timestamp": datetime.now(UTC).isoformat(),
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
                     }
                 )
 
@@ -289,7 +289,7 @@ class SemanticAnalysisService(PromptEnabledService, UserAwareService):
                 {
                     "stage": "consolidation",
                     "status": "completed",
-                    "timestamp": datetime.now(UTC).isoformat(),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
                     "details": {
                         "total_stages": len(analysis_results["processing_stages"]) + 1,
                         "success": True,
@@ -312,7 +312,7 @@ class SemanticAnalysisService(PromptEnabledService, UserAwareService):
                 {
                     "error": str(e),
                     "stage": "semantic_analysis",
-                    "timestamp": datetime.now(UTC).isoformat(),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
                 }
             )
 
@@ -348,7 +348,7 @@ class SemanticAnalysisService(PromptEnabledService, UserAwareService):
             "consolidated_risks": [],
             "overall_assessment": {},
             "recommendations": [],
-            "analysis_timestamp": datetime.now(UTC).isoformat(),
+            "analysis_timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
         try:
@@ -1032,7 +1032,7 @@ class SemanticAnalysisService(PromptEnabledService, UserAwareService):
                 "progress_tracking",
                 "user_context_aware",
             ],
-            "timestamp": datetime.now(UTC).isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
         # Check OCR service

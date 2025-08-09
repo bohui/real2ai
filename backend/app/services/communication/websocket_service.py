@@ -6,7 +6,7 @@ import json
 import asyncio
 import logging
 from typing import Dict, List, Any, Optional
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 from fastapi import WebSocket, WebSocketDisconnect
 
 from app.core.prompts.service_mixin import PromptEnabledService
@@ -40,7 +40,7 @@ class ConnectionManager:
         if websocket not in self.active_connections:
             self.active_connections.append(websocket)
             self.connection_info[websocket] = {
-                "connected_at": datetime.now(UTC),
+                "connected_at": datetime.now(timezone.utc),
                 "metadata": metadata or {},
                 "authenticated": (
                     metadata.get("authenticated", False) if metadata else False
@@ -55,7 +55,7 @@ class ConnectionManager:
     async def _rate_limit_outgoing(self, websocket: WebSocket) -> bool:
         """Simple per-connection message rate limiter: max 30 messages per 10 seconds."""
         info = self.connection_info.get(websocket, {})
-        now = datetime.now(UTC).timestamp()
+        now = datetime.now(timezone.utc).timestamp()
         history = info.setdefault("_out_msg_times", [])
         # keep only last 10 seconds
         history[:] = [t for t in history if now - t <= 10]
@@ -237,7 +237,7 @@ class WebSocketEvents:
         """Analysis started event"""
         return {
             "event_type": "analysis_started",
-            "timestamp": datetime.now(UTC).isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "data": {
                 "contract_id": contract_id,
                 "status": "processing",
@@ -255,7 +255,7 @@ class WebSocketEvents:
         """Analysis progress event"""
         return {
             "event_type": "analysis_progress",
-            "timestamp": datetime.now(UTC).isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "data": {
                 "contract_id": contract_id,
                 "current_step": step,
@@ -269,7 +269,7 @@ class WebSocketEvents:
         """Analysis completed event"""
         return {
             "event_type": "analysis_completed",
-            "timestamp": datetime.now(UTC).isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "data": {
                 "contract_id": contract_id,
                 "status": "completed",
@@ -284,7 +284,7 @@ class WebSocketEvents:
         """Analysis failed event"""
         return {
             "event_type": "analysis_failed",
-            "timestamp": datetime.now(UTC).isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "data": {
                 "contract_id": contract_id,
                 "status": "failed",
@@ -300,7 +300,7 @@ class WebSocketEvents:
         """Document uploaded event"""
         return {
             "event_type": "document_uploaded",
-            "timestamp": datetime.now(UTC).isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "data": {
                 "document_id": document_id,
                 "filename": filename,
@@ -315,7 +315,7 @@ class WebSocketEvents:
         """Document processed event"""
         return {
             "event_type": "document_processed",
-            "timestamp": datetime.now(UTC).isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "data": {
                 "document_id": document_id,
                 "extraction_results": extraction_results,
@@ -329,7 +329,7 @@ class WebSocketEvents:
         """System notification event"""
         return {
             "event_type": "system_notification",
-            "timestamp": datetime.now(UTC).isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "data": {
                 "message": message,
                 "type": notification_type,  # info, warning, error, success
@@ -342,12 +342,12 @@ class WebSocketEvents:
         """Heartbeat event to keep connection alive"""
         return {
             "event_type": "heartbeat",
-            "timestamp": datetime.now(UTC).isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "data": {"status": "alive"},
         }
 
 
-class EnhancedWebSocketService(PromptEnabledService):
+class WebSocketService(PromptEnabledService):
     """Enhanced WebSocket service with PromptManager integration for dynamic message generation"""
 
     def __init__(self, websocket_manager: WebSocketManager):
@@ -381,7 +381,7 @@ class EnhancedWebSocketService(PromptEnabledService):
             # Create base message structure
             base_message = {
                 "event_type": notification_type,
-                "timestamp": datetime.now(UTC).isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "data": context,
             }
 
@@ -534,7 +534,7 @@ class EnhancedWebSocketService(PromptEnabledService):
         context = {
             "message": content,
             "type": priority,
-            "broadcast_time": datetime.now(UTC).isoformat(),
+            "broadcast_time": datetime.now(timezone.utc).isoformat(),
         }
 
         successful_sends = 0

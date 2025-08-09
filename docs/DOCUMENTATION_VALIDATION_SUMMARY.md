@@ -11,7 +11,7 @@
 - FastAPI application structure matches documentation
 - Service classes confirmed:
   - `DocumentService` ✅
-  - `EnhancedWebSocketService` (inherits from `PromptEnabledService`) ✅
+  - `WebSocketService` (inherits from `PromptEnabledService`) ✅
   - `PropertyProfileService` ✅
   - `UnifiedCacheService` ✅
   - `MarketAnalysisService` ✅
@@ -84,7 +84,7 @@
 
 ### Identified Discrepancies (Minor)
 
-1. **Service Class Names**: Some services have enhanced versions (e.g., `EnhancedWebSocketService`) which are correctly documented
+1. **Service Class Names**: Some services have enhanced versions (e.g., `WebSocketService`) which are correctly documented
 2. **File Counts**: Documentation mentions "25+ templates" - actual count is 38 (higher than documented, which is good)
 3. **Component Count**: Frontend has 41 components, slightly higher than some documentation estimates
 

@@ -5,7 +5,7 @@ Demonstrates the new structured output parsing capabilities
 
 import logging
 from typing import Dict, Any, Optional, List
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 
 from fastapi import HTTPException
 
@@ -16,7 +16,7 @@ from app.core.prompts.output_parser import create_parser, ParsingResult
 from app.services.base.user_aware_service import UserAwareService
 from app.models.contract_state import ProcessingStatus, AustralianState, ContractType
 from app.prompts.schema.image_semantics_schema import ImageSemantics, ImageType
-from app.services.gemini_service import GeminiService
+from app.services.ai.gemini_service import GeminiService
 from app.clients.base.exceptions import (
     ClientError,
     ClientConnectionError,
@@ -303,7 +303,7 @@ Focus on accuracy and completeness. Extract all visible text content."""
                         "extraction_mode": (
                             "quick" if use_quick_mode else "comprehensive"
                         ),
-                        "processing_timestamp": datetime.now(UTC).isoformat(),
+                        "processing_timestamp": datetime.now(timezone.utc).isoformat(),
                         "processing_metadata": {
                             "entire_document_processed": True,
                             "validation_errors": parsing_result.validation_errors,
@@ -346,7 +346,7 @@ Focus on accuracy and completeness. Extract all visible text content."""
                 "file_processed": filename,
                 "error": str(e),
                 "error_type": type(e).__name__,
-                "processing_timestamp": datetime.now(UTC).isoformat(),
+                "processing_timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
     async def _handle_ocr_parsing_failure(
@@ -374,7 +374,7 @@ Focus on accuracy and completeness. Extract all visible text content."""
                         "parsing_success": False,
                         "parsing_recovery": True,
                         "file_processed": filename,
-                        "processing_timestamp": datetime.now(UTC).isoformat(),
+                        "processing_timestamp": datetime.now(timezone.utc).isoformat(),
                         "processing_metadata": {
                             "parsing_errors": parsing_result.parsing_errors,
                             "validation_errors": parsing_result.validation_errors,
@@ -395,7 +395,7 @@ Focus on accuracy and completeness. Extract all visible text content."""
             "parsing_success": False,
             "parsing_recovery": False,
             "file_processed": filename,
-            "processing_timestamp": datetime.now(UTC).isoformat(),
+            "processing_timestamp": datetime.now(timezone.utc).isoformat(),
             "processing_metadata": {
                 "parsing_errors": parsing_result.parsing_errors,
                 "validation_errors": parsing_result.validation_errors,
@@ -543,7 +543,7 @@ Focus on accuracy and completeness. Extract all visible text content."""
                         "image_type_detected": (
                             image_type.value if image_type else "unknown"
                         ),
-                        "analysis_timestamp": datetime.now(UTC).isoformat(),
+                        "analysis_timestamp": datetime.now(timezone.utc).isoformat(),
                         "processing_metadata": {
                             "prompt_with_format_instructions": True,
                             "validation_errors": parsing_result.validation_errors,
@@ -588,7 +588,7 @@ Focus on accuracy and completeness. Extract all visible text content."""
                 "file_processed": filename,
                 "error": str(e),
                 "error_type": type(e).__name__,
-                "analysis_timestamp": datetime.now(UTC).isoformat(),
+                "analysis_timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
     @langsmith_trace(name="gemini_text_diagram_insight", run_type="llm")
@@ -729,7 +729,7 @@ Focus on accuracy and completeness. Extract all visible text content."""
                         "parsing_success": False,
                         "parsing_recovery": True,
                         "file_processed": filename,
-                        "analysis_timestamp": datetime.now(UTC).isoformat(),
+                        "analysis_timestamp": datetime.now(timezone.utc).isoformat(),
                         "processing_metadata": {
                             "parsing_errors": parsing_result.parsing_errors,
                             "validation_errors": parsing_result.validation_errors,
@@ -747,7 +747,7 @@ Focus on accuracy and completeness. Extract all visible text content."""
             "parsing_success": False,
             "parsing_recovery": False,
             "file_processed": filename,
-            "analysis_timestamp": datetime.now(UTC).isoformat(),
+            "analysis_timestamp": datetime.now(timezone.utc).isoformat(),
             "processing_metadata": {
                 "parsing_errors": parsing_result.parsing_errors,
                 "validation_errors": parsing_result.validation_errors,

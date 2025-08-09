@@ -26,7 +26,7 @@ from app.core.config import get_settings
 from app.clients.factory import get_supabase_client
 from app.clients.supabase.client import SupabaseClient
 from app.services.document_service import DocumentService
-from app.services.websocket_singleton import websocket_manager
+from app.services.communication.websocket_singleton import websocket_manager
 from app.core.langsmith_init import initialize_langsmith, get_langsmith_status
 
 # Import routers

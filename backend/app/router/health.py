@@ -7,7 +7,7 @@ from typing import Dict, Any
 
 from app.core.config import get_settings
 from app.core.langsmith_init import get_langsmith_status
-from app.services.redis_pubsub import redis_pubsub_service
+from app.services.communication.redis_pubsub import redis_pubsub_service
 from app.clients.factory import get_supabase_client
 
 logger = logging.getLogger(__name__)

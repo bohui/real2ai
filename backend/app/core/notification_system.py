@@ -11,8 +11,8 @@ from enum import Enum
 from dataclasses import dataclass, asdict
 from fastapi import WebSocket
 
-from app.services.websocket_service import WebSocketManager
-from app.services.redis_pubsub import redis_pubsub_service
+from app.services.communication.websocket_service import WebSocketManager
+from app.services.communication.redis_pubsub import redis_pubsub_service
 
 logger = logging.getLogger(__name__)
 

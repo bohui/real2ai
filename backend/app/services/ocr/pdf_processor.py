@@ -5,7 +5,7 @@ PDF processing for OCR operations.
 import asyncio
 import pymupdf
 from typing import Dict, Any, List
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 from google.genai.types import Content, Part
 
 from app.clients.base.exceptions import ClientError
@@ -91,7 +91,7 @@ class PDFProcessor:
                 "extraction_confidence": average_confidence,
                 "character_count": len(combined_text),
                 "word_count": len(combined_text.split()) if combined_text else 0,
-                "extraction_timestamp": datetime.now(UTC).isoformat(),
+                "extraction_timestamp": datetime.now(timezone.utc).isoformat(),
                 "processing_details": {
                     **processing_details,
                     "pages_data": extracted_pages,

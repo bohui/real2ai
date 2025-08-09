@@ -159,14 +159,14 @@ router = APIRouter(prefix="/property-intelligence", tags=["Property Intelligence
 # Dependency injection for services
 async def get_property_service():
     """Get property intelligence service"""
-    from app.services.property_intelligence_service import PropertyIntelligenceService
+    from app.services.property.property_intelligence_service import PropertyIntelligenceService
 
     return PropertyIntelligenceService()
 
 
 async def get_market_service():
     """Get market intelligence service"""
-    from app.services.market_intelligence_service import MarketIntelligenceService
+    from app.services.property.market_intelligence_service import MarketIntelligenceService
 
     return MarketIntelligenceService()
 

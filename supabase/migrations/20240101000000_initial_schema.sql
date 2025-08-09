@@ -221,6 +221,10 @@ CREATE TABLE document_diagrams (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Ensure idempotent upserts for diagrams on retries
+CREATE UNIQUE INDEX IF NOT EXISTS unique_document_diagrams_doc_page_type
+    ON document_diagrams(document_id, page_number, diagram_type);
+
 -- Document analyses table for comprehensive document analysis (separate from contract analysis)
 CREATE TABLE document_analyses (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

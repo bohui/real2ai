@@ -21,18 +21,68 @@ import re
 import uuid
 import io
 from typing import Dict, Any, Optional, List, Tuple, BinaryIO
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 from pathlib import Path
 from decimal import Decimal, InvalidOperation
 import mimetypes
 
-import pymupdf  # pymupdf
-from PIL import Image
-import pytesseract
-from fastapi import UploadFile, HTTPException
-import pypdf
-from docx import Document as DocxDocument
-from unstructured.partition.auto import partition
+# Optional dependencies - handle gracefully if not installed
+try:
+    import pymupdf  # pymupdf
+
+    PYMUPDF_AVAILABLE = True
+except ImportError:
+    PYMUPDF_AVAILABLE = False
+    pymupdf = None
+
+try:
+    from PIL import Image
+
+    PIL_AVAILABLE = True
+except ImportError:
+    PIL_AVAILABLE = False
+    Image = None
+
+try:
+    import pytesseract
+
+    PYTESSERACT_AVAILABLE = True
+except ImportError:
+    PYTESSERACT_AVAILABLE = False
+    pytesseract = None
+
+try:
+    from fastapi import UploadFile, HTTPException
+
+    FASTAPI_AVAILABLE = True
+except ImportError:
+    FASTAPI_AVAILABLE = False
+    UploadFile = None
+    HTTPException = None
+
+try:
+    import pypdf
+
+    PYPDF_AVAILABLE = True
+except ImportError:
+    PYPDF_AVAILABLE = False
+    pypdf = None
+
+try:
+    from docx import Document as DocxDocument
+
+    DOCX_AVAILABLE = True
+except ImportError:
+    DOCX_AVAILABLE = False
+    DocxDocument = None
+
+try:
+    from unstructured.partition.auto import partition
+
+    UNSTRUCTURED_AVAILABLE = True
+except ImportError:
+    UNSTRUCTURED_AVAILABLE = False
+    partition = None
 
 from app.models.supabase_models import (
     Document,
@@ -49,7 +99,7 @@ from app.prompts.schema.entity_extraction_schema import (
     ContractType,
 )
 from app.models.contract_state import ContractType as ContractStateType
-from app.services.gemini_ocr_service import GeminiOCRService
+from app.services.ai.gemini_ocr_service import GeminiOCRService
 from app.services.base.user_aware_service import (
     UserAwareService,
     ServiceInitializationMixin,
@@ -365,7 +415,7 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
     #         DeprecationWarning,
     #         stacklevel=2,
     #     )
-    #     processing_start = datetime.now(UTC)
+    #     processing_start = datetime.now(timezone.utc)
     #     document_id = None
     #     temp_file_path = None
 
@@ -468,7 +518,7 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
     #                         "error": "Database persistence failed",
     #                         "details": str(db_error),
     #                         "stage": "database_persistence",
-    #                         "timestamp": datetime.now(UTC).isoformat(),
+    #                         "timestamp": datetime.now(timezone.utc).isoformat(),
     #                         "text_extraction_successful": text_extraction_result.get(
     #                             "success", False
     #                         ),
@@ -482,7 +532,7 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
     #             # Re-raise the original database error
     #             raise db_error
 
-    #         processing_time = (datetime.now(UTC) - processing_start).total_seconds()
+    #         processing_time = (datetime.now(timezone.utc) - processing_start).total_seconds()
 
     #         return self._create_success_response(
     #             document_id,
@@ -496,7 +546,7 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
     #         )
 
     #     except Exception as e:
-    #         processing_time = (datetime.now(UTC) - processing_start).total_seconds()
+    #         processing_time = (datetime.now(timezone.utc) - processing_start).total_seconds()
     #         self.logger.error(f"Document processing failed: {str(e)}", exc_info=True)
 
     #         # Update document status if it exists (USER OPERATION)
@@ -506,7 +556,7 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
     #                 ProcessingStatus.FAILED.value,
     #                 error_details={
     #                     "error": str(e),
-    #                     "timestamp": datetime.now(UTC).isoformat(),
+    #                     "timestamp": datetime.now(timezone.utc).isoformat(),
     #                     "processing_time": processing_time,
     #                 },
     #             )
@@ -541,7 +591,7 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
 
         Processing is handled separately by background tasks.
         """
-        upload_start = datetime.now(UTC)
+        upload_start = datetime.now(timezone.utc)
         document_id = None
 
         try:
@@ -551,7 +601,9 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
             # Step 1: Validate file (same as before)
             validation_result = await self._validate_uploaded_file(file)
             if not validation_result.valid:
-                upload_time = (datetime.now(UTC) - upload_start).total_seconds()
+                upload_time = (
+                    datetime.now(timezone.utc) - upload_start
+                ).total_seconds()
                 return FastUploadResult(
                     success=False,
                     document_id=None,
@@ -575,7 +627,9 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
             )
 
             if not upload_result.success:
-                upload_time = (datetime.now(UTC) - upload_start).total_seconds()
+                upload_time = (
+                    datetime.now(timezone.utc) - upload_start
+                ).total_seconds()
                 return FastUploadResult(
                     success=False,
                     document_id=None,
@@ -595,7 +649,7 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
                 document_id, ProcessingStatus.UPLOADED.value
             )
 
-            upload_time = (datetime.now(UTC) - upload_start).total_seconds()
+            upload_time = (datetime.now(timezone.utc) - upload_start).total_seconds()
 
             self.logger.info(
                 f"Fast upload completed for document {document_id} in {upload_time:.2f}s"
@@ -610,7 +664,7 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
             )
 
         except Exception as e:
-            upload_time = (datetime.now(UTC) - upload_start).total_seconds()
+            upload_time = (datetime.now(timezone.utc) - upload_start).total_seconds()
             self.logger.error(f"Fast upload failed: {str(e)}", exc_info=True)
 
             # Update document status if it exists (USER OPERATION)
@@ -620,12 +674,12 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
                     ProcessingStatus.FAILED.value,
                     error_details={
                         "error": str(e),
-                        "timestamp": datetime.now(UTC).isoformat(),
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
                         "upload_time": upload_time,
                     },
                 )
 
-            upload_time = (datetime.now(UTC) - upload_start).total_seconds()
+            upload_time = (datetime.now(timezone.utc) - upload_start).total_seconds()
             return FastUploadResult(
                 success=False,
                 document_id=None,
@@ -789,7 +843,7 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
                 success=False,
                 error="Document not found or access denied",
                 processing_time=0.0,
-                processing_timestamp=datetime.now(UTC).isoformat(),
+                processing_timestamp=datetime.now(timezone.utc).isoformat(),
             )
 
         document = doc_result["data"][0]
@@ -840,14 +894,14 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
                 ProcessingStatus.FAILED.value,
                 error_details={
                     "error": text_extraction_result.error or "Unknown error",
-                    "timestamp": datetime.now(UTC).isoformat(),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
                 },
             )
             return ProcessingErrorResponse(
                 success=False,
                 error=text_extraction_result.error or "Extraction failed",
                 processing_time=0.0,
-                processing_timestamp=datetime.now(UTC).isoformat(),
+                processing_timestamp=datetime.now(timezone.utc).isoformat(),
             )
 
         # Persist page-level results
@@ -927,7 +981,7 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
             or len(text_extraction_result.pages),
             extraction_method=primary_method,
             extraction_confidence=0.0,
-            processing_timestamp=datetime.now(UTC).isoformat(),
+            processing_timestamp=datetime.now(timezone.utc).isoformat(),
             llm_used=self.use_llm_document_processing,
             original_filename=original_filename,
             file_type=file_type_value,
@@ -992,7 +1046,8 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
                 extraction_method=doc.get("text_extraction_method"),
                 extraction_confidence=doc.get("extraction_confidence", 0.0),
                 processing_timestamp=str(
-                    doc.get("processing_completed_at") or datetime.now(UTC).isoformat()
+                    doc.get("processing_completed_at")
+                    or datetime.now(timezone.utc).isoformat()
                 ),
                 llm_used=self.use_llm_document_processing,
                 original_filename=doc.get("original_filename"),
@@ -1012,7 +1067,7 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
             user_client = await self.get_user_client()
 
             update_data = {
-                "processing_started_at": datetime.now(UTC),
+                "processing_started_at": datetime.now(timezone.utc),
             }
 
             await user_client.database.update("documents", document_id, update_data)
@@ -1365,7 +1420,7 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
             "success": True,
             "document_id": document_id,
             "processing_time": processing_time,
-            "processing_timestamp": datetime.now(UTC).isoformat(),
+            "processing_timestamp": datetime.now(timezone.utc).isoformat(),
             "text_extraction": {
                 "total_pages": text_result.get(
                     "total_pages", DocumentServiceConstants.DEFAULT_PAGE_NUMBER
@@ -1394,12 +1449,14 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
         self, error_message: str, processing_start: datetime
     ) -> TextExtractionResult:
         """Create standardized error response"""
-        processing_time = (datetime.now(UTC) - processing_start).total_seconds()
+        processing_time = (
+            datetime.now(timezone.utc) - processing_start
+        ).total_seconds()
         return {
             "success": False,
             "error": error_message,
             "processing_time": processing_time,
-            "processing_timestamp": datetime.now(UTC).isoformat(),
+            "processing_timestamp": datetime.now(timezone.utc).isoformat(),
             "recovery_suggestions": [
                 "Verify file format is supported (PDF, DOCX, PNG, JPG, TIFF, BMP)",
                 "Check file size is under the limit",
@@ -2207,7 +2264,7 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
                     "has_diagrams": layout_features.has_diagrams,
                     "has_tables": layout_features.has_tables,
                     # Processing metadata
-                    "processed_at": datetime.now(UTC),
+                    "processed_at": datetime.now(timezone.utc),
                     "processing_method": page.extraction_method or "unknown",
                 }
 
@@ -2242,7 +2299,7 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
                     resolved_type = page_analysis.diagram_type or "unknown"
 
                     diagram_data = {
-                        "id": str(uuid.uuid4()),
+                        # Intentionally omit "id" to let DB assign or keep existing on conflict
                         "document_id": document_id,
                         "page_number": page.page_number,
                         # Classification from content analysis
@@ -2268,11 +2325,16 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
                             "quality_indicators", {}
                         ).get("readability_score", 0.0),
                         # Metadata
-                        "detected_at": datetime.now(UTC),
-                        "basic_analysis_at": datetime.now(UTC),
+                        "detected_at": datetime.now(timezone.utc),
+                        "basic_analysis_at": datetime.now(timezone.utc),
                     }
 
-                    await user_client.database.create("document_diagrams", diagram_data)
+                    # Upsert to avoid duplicates on retry: requires unique index on (document_id, page_number, diagram_type)
+                    await user_client.database.upsert(
+                        "document_diagrams",
+                        diagram_data,
+                        conflict_columns=["document_id", "page_number", "diagram_type"],
+                    )
                     diagrams_saved += 1
 
             if diagrams_saved > 0:
@@ -2323,7 +2385,7 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
                 "extraction_confidence": avg_confidence,
                 "overall_quality_score": avg_confidence,  # Use confidence as quality proxy for now
                 "text_extraction_method": primary_method,
-                "processing_completed_at": datetime.now(UTC),
+                "processing_completed_at": datetime.now(timezone.utc),
                 "processing_results": {
                     "text_extraction": text_extraction_result,
                     "diagram_processing": diagram_processing_result,

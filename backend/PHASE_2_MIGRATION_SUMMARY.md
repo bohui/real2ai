@@ -33,7 +33,7 @@ Phase 2 successfully migrates the critical services to use the new PromptManager
 **File**: `app/services/websocket_service.py`
 
 **Enhancements**:
-- ✅ New `EnhancedWebSocketService` class with PromptManager integration
+- ✅ New `WebSocketService` class with PromptManager integration
 - ✅ Template-based message generation for notifications
 - ✅ Enhanced progress updates and error messages
 - ✅ System-wide message broadcasting with templates

@@ -8,7 +8,7 @@ separating business logic from connection management.
 import json
 import logging
 from typing import Any, Dict, Optional, List
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 
 from app.services.base.user_aware_service import UserAwareService
 from app.clients import get_openai_client
@@ -234,7 +234,7 @@ class OpenAIService(UserAwareService):
                 "analysis_method": "openai_text_analysis",
                 "analysis_type": analysis_type,
                 "model_used": kwargs.get("model", self.openai_client.config.model_name),
-                "timestamp": datetime.now(UTC).isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
             
             logger.debug("Document analysis completed successfully")
@@ -305,7 +305,7 @@ class OpenAIService(UserAwareService):
                 "extraction_method": method,
                 "extraction_confidence": confidence,
                 "content_type": content_type,
-                "timestamp": datetime.now(UTC).isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 **text_metrics,
             }
             
@@ -384,7 +384,7 @@ class OpenAIService(UserAwareService):
                 "model_used": kwargs.get("model", self.openai_client.config.model_name),
                 "multi_label": multi_label,
                 "confidence_threshold": confidence_threshold,
-                "timestamp": datetime.now(UTC).isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             })
             
             logger.debug(f"Content classified: {result.get('classifications', [])}")
@@ -453,7 +453,7 @@ class OpenAIService(UserAwareService):
                 "compression_ratio": compression_ratio,
                 "style": style,
                 "focus_areas": focus_areas,
-                "timestamp": datetime.now(UTC).isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
             
         except Exception as e:
@@ -515,7 +515,7 @@ class OpenAIService(UserAwareService):
                     "response": response,
                     "message_count": len(messages),
                     "model_used": model or self.openai_client.config.model_name,
-                    "timestamp": datetime.now(UTC).isoformat(),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
                 }
             else:
                 # Streaming would require additional implementation
@@ -830,14 +830,14 @@ class OpenAIService(UserAwareService):
                 "service": "OpenAIService",
                 "status": "healthy" if client_health.get("status") == "healthy" else "unhealthy",
                 "client_status": client_health,
-                "timestamp": datetime.now(UTC).isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
         except Exception as e:
             return {
                 "service": "OpenAIService",
                 "status": "unhealthy",
                 "error": str(e),
-                "timestamp": datetime.now(UTC).isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
     
     async def cleanup(self) -> None:

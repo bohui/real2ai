@@ -11,8 +11,8 @@ from typing import Dict, List, Any, Optional, Union
 from datetime import datetime, timezone
 from dataclasses import dataclass
 
-from ..clients.factory import get_domain_client, get_corelogic_client
-from ..clients.base.exceptions import (
+from app.clients.factory import get_domain_client, get_corelogic_client
+from app.clients.base.exceptions import (
     PropertyNotFoundError, PropertyValuationError, ClientError,
     PropertyDataIncompleteError
 )

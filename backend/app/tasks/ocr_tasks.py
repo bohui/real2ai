@@ -16,7 +16,7 @@ from app.core.celery import celery_app
 from app.core.task_context import user_aware_task
 from app.core.auth_context import AuthContext
 from app.services.document_service import DocumentService
-from app.services.websocket_singleton import websocket_manager
+from app.services.communication.websocket_singleton import websocket_manager
 from app.clients.factory import get_supabase_client
 
 logger = logging.getLogger(__name__)

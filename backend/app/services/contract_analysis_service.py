@@ -4,8 +4,8 @@ Unified Contract Analysis Service with WebSocket Integration and Enhanced Featur
 
 import asyncio
 import logging
-from typing import Dict, Any, Optional, List
-from datetime import datetime, UTC
+from typing import Dict, Any, Optional, List, Callable, Awaitable
+from datetime import datetime, timezone
 
 from app.agents.contract_workflow import ContractAnalysisWorkflow
 from app.core.config import (
@@ -29,7 +29,10 @@ from app.schema import (
     AnalysisStatus,
     OperationResponse,
 )
-from app.services.websocket_service import WebSocketManager, WebSocketEvents
+from app.services.communication.websocket_service import (
+    WebSocketManager,
+    WebSocketEvents,
+)
 from app.clients.supabase.client import SupabaseClient
 
 logger = logging.getLogger(__name__)
@@ -143,6 +146,7 @@ class ContractAnalysisService:
         user_experience: str = "novice",
         user_type: str = "buyer",
         enable_websocket_progress: Optional[bool] = None,
+        progress_callback: Optional[Callable[[str, int, str], Awaitable[None]]] = None,
     ) -> ContractAnalysisServiceResponse:
         """
         Unified contract analysis method with optional WebSocket progress tracking
@@ -162,7 +166,7 @@ class ContractAnalysisService:
             Enhanced analysis results with comprehensive metadata
         """
 
-        start_time = datetime.now(UTC)
+        start_time = datetime.now(timezone.utc)
         self._service_metrics["total_requests"] += 1
 
         # Generate session ID if not provided
@@ -237,14 +241,18 @@ class ContractAnalysisService:
             # Execute analysis with optional progress tracking
             if use_websocket_progress:
                 final_state = await self._execute_with_progress_tracking(
-                    initial_state, session_id, contract_id
+                    initial_state,
+                    session_id,
+                    contract_id,
+                    progress_callback=progress_callback,
+                    resume_from_step=(user_preferences or {}).get("resume_from_step"),
                 )
             else:
                 logger.debug(f"Executing workflow for session {session_id}")
                 final_state = await self.workflow.analyze_contract(initial_state)
 
             # Calculate processing time
-            processing_time = (datetime.now(UTC) - start_time).total_seconds()
+            processing_time = (datetime.now(timezone.utc) - start_time).total_seconds()
 
             # Update service metrics
             if final_state.get(
@@ -319,7 +327,7 @@ class ContractAnalysisService:
             return response
 
         except Exception as e:
-            processing_time = (datetime.now(UTC) - start_time).total_seconds()
+            processing_time = (datetime.now(timezone.utc) - start_time).total_seconds()
             self._service_metrics["failed_analyses"] += 1
 
             error_msg = f"Contract analysis failed: {str(e)}"
@@ -346,6 +354,7 @@ class ContractAnalysisService:
         australian_state: AustralianState,
         user_preferences: Optional[Dict[str, Any]] = None,
         user_type: str = "buyer",
+        progress_callback: Optional[Callable[[str, int, str], Awaitable[None]]] = None,
     ) -> StartAnalysisResponse:
         """
         Start contract analysis with real-time progress tracking (backward compatibility method)
@@ -369,6 +378,7 @@ class ContractAnalysisService:
             session_id=session_id,
             user_type=user_type,
             enable_websocket_progress=True,
+            progress_callback=progress_callback,
         )
 
         # Transform response to match original format
@@ -454,7 +464,7 @@ class ContractAnalysisService:
             user_experience=user_experience,
             current_step="initialized",
             agent_version="unified_v1.0",
-            created_at=datetime.now(UTC).isoformat(),
+            created_at=datetime.now(timezone.utc).isoformat(),
             workflow_config={
                 "validation_enabled": self.config.enable_validation,
                 "quality_checks_enabled": self.config.enable_quality_checks,
@@ -479,7 +489,7 @@ class ContractAnalysisService:
                 or not final_state.get("error_state")
             ),
             session_id=final_state.get("session_id"),
-            analysis_timestamp=datetime.now(UTC),
+            analysis_timestamp=datetime.now(timezone.utc),
             processing_time_seconds=processing_time,
             workflow_version="unified_v1.0",
             analysis_results=analysis_results,
@@ -527,13 +537,13 @@ class ContractAnalysisService:
     ) -> ContractAnalysisServiceResponse:
         """Create error response"""
 
-        processing_time = (datetime.now(UTC) - start_time).total_seconds()
+        processing_time = (datetime.now(timezone.utc) - start_time).total_seconds()
 
         return ContractAnalysisServiceResponse(
             success=False,
             session_id=session_id,
             error=error_message,
-            analysis_timestamp=datetime.now(UTC),
+            analysis_timestamp=datetime.now(timezone.utc),
             processing_time_seconds=processing_time,
             workflow_version="unified_v1.0",
             analysis_results={},
@@ -588,7 +598,13 @@ class ContractAnalysisService:
         return warnings
 
     async def _execute_with_progress_tracking(
-        self, initial_state: RealEstateAgentState, session_id: str, contract_id: str
+        self,
+        initial_state: RealEstateAgentState,
+        session_id: str,
+        contract_id: str,
+        *,
+        progress_callback: Optional[Callable[[str, int, str], Awaitable[None]]] = None,
+        resume_from_step: Optional[str] = None,
     ) -> RealEstateAgentState:
         """
         Execute workflow with real-time progress updates
@@ -601,8 +617,47 @@ class ContractAnalysisService:
                 self.parent_service = parent_service
                 self.session_id = session_id
                 self.contract_id = contract_id
+                self.progress_callback = progress_callback
+                # Fixed order of primary steps for resume logic
+                self._step_order = [
+                    "validate_input",
+                    "process_document",
+                    "extract_terms",
+                    "analyze_compliance",
+                    "assess_risks",
+                    "generate_recommendations",
+                    "compile_report",
+                ]
+                try:
+                    self._resume_index = (
+                        self._step_order.index(resume_from_step)
+                        if resume_from_step
+                        else 0
+                    )
+                except ValueError:
+                    self._resume_index = 0
+
+            def _should_skip(self, step_name: str) -> bool:
+                try:
+                    idx = self._step_order.index(step_name)
+                except ValueError:
+                    return False
+                return idx < self._resume_index
+
+            def _schedule_persist(self, step: str, percent: int, description: str):
+                # Schedule external progress persistence callback if provided
+                if not self.progress_callback:
+                    return
+                try:
+                    loop = asyncio.get_running_loop()
+                    loop.create_task(self.progress_callback(step, percent, description))
+                except RuntimeError:
+                    # No event loop available; skip persistence to avoid blocking
+                    pass
 
             def validate_input(self, state):
+                if self._should_skip("validate_input"):
+                    return state
                 # Send progress update
                 self.parent_service._schedule_progress_update(
                     self.session_id,
@@ -611,9 +666,14 @@ class ContractAnalysisService:
                     14,
                     "Validating document and input parameters",
                 )
+                self._schedule_persist(
+                    "validate_input", 14, "Validating document and input parameters"
+                )
                 return super().validate_input(state)
 
             def process_document(self, state):
+                if self._should_skip("process_document"):
+                    return state
                 self.parent_service._schedule_progress_update(
                     self.session_id,
                     self.contract_id,
@@ -621,9 +681,16 @@ class ContractAnalysisService:
                     28,
                     "Processing document and extracting text content",
                 )
+                self._schedule_persist(
+                    "process_document",
+                    28,
+                    "Processing document and extracting text content",
+                )
                 return super().process_document(state)
 
             def extract_contract_terms(self, state):
+                if self._should_skip("extract_terms"):
+                    return state
                 self.parent_service._schedule_progress_update(
                     self.session_id,
                     self.contract_id,
@@ -631,9 +698,16 @@ class ContractAnalysisService:
                     42,
                     "Extracting key contract terms using Australian tools",
                 )
+                self._schedule_persist(
+                    "extract_terms",
+                    42,
+                    "Extracting key contract terms using Australian tools",
+                )
                 return super().extract_contract_terms(state)
 
             def analyze_australian_compliance(self, state):
+                if self._should_skip("analyze_compliance"):
+                    return state
                 self.parent_service._schedule_progress_update(
                     self.session_id,
                     self.contract_id,
@@ -641,9 +715,16 @@ class ContractAnalysisService:
                     57,
                     "Analyzing compliance with Australian property laws",
                 )
+                self._schedule_persist(
+                    "analyze_compliance",
+                    57,
+                    "Analyzing compliance with Australian property laws",
+                )
                 return super().analyze_australian_compliance(state)
 
             def assess_contract_risks(self, state):
+                if self._should_skip("assess_risks"):
+                    return state
                 self.parent_service._schedule_progress_update(
                     self.session_id,
                     self.contract_id,
@@ -651,9 +732,14 @@ class ContractAnalysisService:
                     71,
                     "Assessing contract risks and potential issues",
                 )
+                self._schedule_persist(
+                    "assess_risks", 71, "Assessing contract risks and potential issues"
+                )
                 return super().assess_contract_risks(state)
 
             def generate_recommendations(self, state):
+                if self._should_skip("generate_recommendations"):
+                    return state
                 self.parent_service._schedule_progress_update(
                     self.session_id,
                     self.contract_id,
@@ -661,15 +747,25 @@ class ContractAnalysisService:
                     85,
                     "Generating actionable recommendations",
                 )
+                self._schedule_persist(
+                    "generate_recommendations",
+                    85,
+                    "Generating actionable recommendations",
+                )
                 return super().generate_recommendations(state)
 
             def compile_analysis_report(self, state):
+                if self._should_skip("compile_report"):
+                    return state
                 self.parent_service._schedule_progress_update(
                     self.session_id,
                     self.contract_id,
                     "compile_report",
                     100,
                     "Compiling final analysis report",
+                )
+                self._schedule_persist(
+                    "compile_report", 100, "Compiling final analysis report"
                 )
                 return super().compile_analysis_report(state)
 
@@ -740,7 +836,9 @@ class ContractAnalysisService:
         except RuntimeError:
             # No running loop: fall back to Redis pub/sub sync publish
             try:
-                from app.services.redis_pubsub import publish_progress_sync
+                from app.services.communication.redis_pubsub import (
+                    publish_progress_sync,
+                )
 
                 message = WebSocketEvents.analysis_progress(
                     contract_id, step, progress_percent, description
@@ -809,7 +907,7 @@ class ContractAnalysisService:
 
     def cleanup_completed_analyses(self, max_age_hours: int = 24):
         """Clean up old completed analyses"""
-        cutoff_time = datetime.now(UTC).timestamp() - (max_age_hours * 3600)
+        cutoff_time = datetime.now(timezone.utc).timestamp() - (max_age_hours * 3600)
 
         to_remove = []
         for contract_id, analysis_info in self.active_analyses.items():
@@ -850,7 +948,7 @@ class ContractAnalysisService:
 
         health_status = {
             "status": "healthy",
-            "timestamp": datetime.now(UTC),
+            "timestamp": datetime.now(timezone.utc),
             "version": "unified_v1.0",
             "configuration": (
                 self.config.validate_config()
@@ -930,7 +1028,7 @@ class ContractAnalysisService:
                 "total_analyses": len(self.active_analyses),
                 "progress_tracking_enabled": self.enable_websocket_progress,
             },
-            "timestamp": datetime.now(UTC).isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
         if self.prompt_manager and hasattr(self.prompt_manager, "get_metrics"):
@@ -973,7 +1071,7 @@ class ContractAnalysisService:
                 success=True,
                 message="Configuration reloaded successfully",
                 validation=config_validation,
-                timestamp=datetime.now(UTC),
+                timestamp=datetime.now(timezone.utc),
             )
 
         except Exception as e:
@@ -981,7 +1079,7 @@ class ContractAnalysisService:
             return ReloadConfigurationResponse(
                 success=False,
                 error=str(e),
-                timestamp=datetime.now(UTC),
+                timestamp=datetime.now(timezone.utc),
             )
 
 

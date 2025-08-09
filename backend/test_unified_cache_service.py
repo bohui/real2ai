@@ -16,7 +16,7 @@ def test_cache_basic_operations():
     """Test basic cache operations (get/set/invalidate)."""
     async def async_test():
         try:
-            from app.services.unified_cache_service import UnifiedCacheService, CachePriority
+            from app.services.cache.unified_cache_service import UnifiedCacheService, CachePriority
             
             # Create cache service
             config = {
@@ -78,7 +78,7 @@ def test_cache_ttl_and_expiration():
     """Test cache TTL calculation and expiration."""
     async def async_test():
         try:
-            from app.services.unified_cache_service import UnifiedCacheService
+            from app.services.cache.unified_cache_service import UnifiedCacheService
             
             cache_service = UnifiedCacheService({
                 "max_memory_mb": 10,
@@ -142,7 +142,7 @@ def test_cache_strategies():
     """Test different cache strategies for different operation types."""
     async def async_test():
         try:
-            from app.services.unified_cache_service import UnifiedCacheService, CachePriority
+            from app.services.cache.unified_cache_service import UnifiedCacheService, CachePriority
             
             cache_service = UnifiedCacheService({
                 "max_memory_mb": 10,
@@ -213,7 +213,7 @@ def test_cache_metrics_and_analytics():
     """Test cache metrics and analytics functionality."""
     async def async_test():
         try:
-            from app.services.unified_cache_service import UnifiedCacheService
+            from app.services.cache.unified_cache_service import UnifiedCacheService
             
             cache_service = UnifiedCacheService({
                 "max_memory_mb": 10,
@@ -283,7 +283,7 @@ def test_cache_memory_management():
     """Test cache memory management and eviction."""
     async def async_test():
         try:
-            from app.services.unified_cache_service import UnifiedCacheService, CachePriority
+            from app.services.cache.unified_cache_service import UnifiedCacheService, CachePriority
             
             # Create cache with very small memory limit
             cache_service = UnifiedCacheService({
@@ -352,7 +352,7 @@ def test_cache_invalidation_triggers():
     """Test trigger-based cache invalidation."""
     async def async_test():
         try:
-            from app.services.unified_cache_service import UnifiedCacheService
+            from app.services.cache.unified_cache_service import UnifiedCacheService
             
             cache_service = UnifiedCacheService({
                 "max_memory_mb": 10,
@@ -411,7 +411,7 @@ def test_cache_warming():
     """Test cache warming functionality."""
     async def async_test():
         try:
-            from app.services.unified_cache_service import UnifiedCacheService
+            from app.services.cache.unified_cache_service import UnifiedCacheService
             
             cache_service = UnifiedCacheService({
                 "max_memory_mb": 10,

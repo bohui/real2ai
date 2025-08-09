@@ -36,7 +36,7 @@ router = APIRouter(prefix="/property", tags=["Property Profile"])
 async def get_property_profile_service():
     """Get property profile service instance."""
     try:
-        from app.services.property_profile_service import PropertyProfileService
+        from app.services.property.property_profile_service import PropertyProfileService
         from app.clients.factory import get_client_factory
         
         factory = get_client_factory()

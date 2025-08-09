@@ -9,9 +9,9 @@ from datetime import datetime, UTC, timedelta
 
 from app.core.auth import get_current_user_ws, verify_ws_token, get_user_by_id_service
 from app.core.auth_context import AuthContext
-from app.services.websocket_service import WebSocketEvents
-from app.services.websocket_singleton import websocket_manager
-from app.services.redis_pubsub import redis_pubsub_service
+from app.services.communication.websocket_service import WebSocketEvents
+from app.services.communication.websocket_singleton import websocket_manager
+from app.services.communication.redis_pubsub import redis_pubsub_service
 from app.core.error_handler import handle_api_error, create_error_context, ErrorCategory
 from app.clients.factory import get_service_supabase_client
 from enum import Enum
@@ -519,7 +519,7 @@ async def document_analysis_websocket(
         # Send document_uploaded notification if this is a recent upload
         try:
             # Check if document was recently uploaded (within last 5 minutes)
-            from app.services.websocket_service import WebSocketEvents
+            from app.services.communication.websocket_service import WebSocketEvents
 
             # Get document details to check upload time
             user_client = await AuthContext.get_authenticated_client()
