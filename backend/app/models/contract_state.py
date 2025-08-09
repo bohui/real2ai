@@ -189,6 +189,13 @@ def update_state_step(
                 if value is not None:
                     updated_state[key] = value
 
+    # Avoid returning static identity keys in node outputs to prevent
+    # INVALID_CONCURRENT_GRAPH_UPDATE when multiple edges merge in a step
+    static_keys = ["user_id", "session_id", "agent_version"]
+    for static_key in static_keys:
+        if not (data and static_key in data):
+            updated_state.pop(static_key, None)
+
     return updated_state
 
 
