@@ -2509,15 +2509,20 @@ class ContractAnalysisWorkflow:
         try:
             # Use PromptManager with compliance_check template
             context = PromptContext(
-                australian_state=australian_state,
-                contract_terms=contract_terms,
-                contract_type="property_contract",
-                analysis_type="compliance_check",
-                user_experience="intermediate",
+                context_type=ContextType.COMPLIANCE,
+                variables={
+                    "australian_state": australian_state,
+                    "contract_terms": contract_terms,
+                    "contract_type": "property_contract",
+                    "analysis_type": "compliance_check",
+                    "user_experience": "intermediate",
+                },
             )
 
-            rendered_prompt = self.prompt_manager.render_template(
-                "analysis/compliance_check", context
+            rendered_prompt = await self.prompt_manager.render(
+                template_name="analysis/compliance_check",
+                context=context,
+                service_name="contract_analysis_workflow",
             )
 
             llm_response = await self._generate_content_with_fallback(
@@ -2900,15 +2905,22 @@ class ContractAnalysisWorkflow:
         try:
             # Use PromptManager with document_quality_validation template
             context = PromptContext(
-                document_text=document_text,
-                document_metadata=document_metadata,
-                document_type="property_contract",
-                australian_state=document_metadata.get("state", "NSW"),
-                extraction_method=document_metadata.get("extraction_method", "ocr"),
+                context_type=ContextType.ANALYSIS,
+                variables={
+                    "document_text": document_text,
+                    "document_metadata": document_metadata,
+                    "document_type": "property_contract",
+                    "australian_state": document_metadata.get("state", "NSW"),
+                    "extraction_method": document_metadata.get(
+                        "extraction_method", "ocr"
+                    ),
+                },
             )
 
-            rendered_prompt = self.prompt_manager.render_template(
-                "validation/document_quality_validation", context
+            rendered_prompt = await self.prompt_manager.render(
+                template_name="validation/document_quality_validation",
+                context=context,
+                service_name="contract_analysis_workflow",
             )
 
             llm_response = await self._generate_content_with_fallback(

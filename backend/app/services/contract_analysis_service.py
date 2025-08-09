@@ -655,7 +655,7 @@ class ContractAnalysisService:
                     # No event loop available; skip persistence to avoid blocking
                     pass
 
-            def validate_input(self, state):
+            async def validate_input(self, state):
                 if self._should_skip("validate_input"):
                     return state
                 # Send progress update
@@ -671,7 +671,7 @@ class ContractAnalysisService:
                 )
                 return super().validate_input(state)
 
-            def process_document(self, state):
+            async def process_document(self, state):
                 if self._should_skip("process_document"):
                     return state
                 self.parent_service._schedule_progress_update(
@@ -686,9 +686,9 @@ class ContractAnalysisService:
                     28,
                     "Processing document and extracting text content",
                 )
-                return super().process_document(state)
+                return await super().process_document(state)
 
-            def extract_contract_terms(self, state):
+            async def extract_contract_terms(self, state):
                 if self._should_skip("extract_terms"):
                     return state
                 self.parent_service._schedule_progress_update(
@@ -703,9 +703,9 @@ class ContractAnalysisService:
                     42,
                     "Extracting key contract terms using Australian tools",
                 )
-                return super().extract_contract_terms(state)
+                return await super().extract_contract_terms(state)
 
-            def analyze_australian_compliance(self, state):
+            async def analyze_australian_compliance(self, state):
                 if self._should_skip("analyze_compliance"):
                     return state
                 self.parent_service._schedule_progress_update(
@@ -720,9 +720,9 @@ class ContractAnalysisService:
                     57,
                     "Analyzing compliance with Australian property laws",
                 )
-                return super().analyze_australian_compliance(state)
+                return await super().analyze_australian_compliance(state)
 
-            def assess_contract_risks(self, state):
+            async def assess_contract_risks(self, state):
                 if self._should_skip("assess_risks"):
                     return state
                 self.parent_service._schedule_progress_update(
@@ -735,9 +735,9 @@ class ContractAnalysisService:
                 self._schedule_persist(
                     "assess_risks", 71, "Assessing contract risks and potential issues"
                 )
-                return super().assess_contract_risks(state)
+                return await super().assess_contract_risks(state)
 
-            def generate_recommendations(self, state):
+            async def generate_recommendations(self, state):
                 if self._should_skip("generate_recommendations"):
                     return state
                 self.parent_service._schedule_progress_update(
@@ -752,9 +752,9 @@ class ContractAnalysisService:
                     85,
                     "Generating actionable recommendations",
                 )
-                return super().generate_recommendations(state)
+                return await super().generate_recommendations(state)
 
-            def compile_analysis_report(self, state):
+            async def compile_analysis_report(self, state):
                 if self._should_skip("compile_report"):
                     return state
                 self.parent_service._schedule_progress_update(
