@@ -243,14 +243,33 @@ async def comprehensive_document_analysis(
             # =============================================
 
             # Record a minimal DB-backed milestone to indicate the job is queued/starting
-            await update_analysis_progress(
-                user_id,
-                content_hash,
-                progress_percent=5,
-                current_step="queued",
-                step_description="Queued for AI contract analysis...",
-                estimated_completion_minutes=3,
-            )
+            # Check if this is a retry operation to preserve progress continuity
+            is_retry = analysis_options.get("is_retry", False)
+            resume_from_step = analysis_options.get("resume_from_step")
+            
+            if is_retry and resume_from_step:
+                # For retry operations, preserve the previous progress and show resumption
+                previous_progress = latest_progress["data"][0]["progress_percent"] if latest_progress.get("data") else 5
+                await update_analysis_progress(
+                    user_id,
+                    content_hash,
+                    progress_percent=previous_progress,
+                    current_step="retrying",
+                    step_description=f"Resuming analysis from {resume_from_step}...",
+                    estimated_completion_minutes=2,
+                )
+                logger.info(f"Retry operation: maintaining progress at {previous_progress}% for step {resume_from_step}")
+            else:
+                # Normal startup: new analysis
+                await update_analysis_progress(
+                    user_id,
+                    content_hash,
+                    progress_percent=5,
+                    current_step="queued",
+                    step_description="Queued for AI contract analysis...",
+                    estimated_completion_minutes=3,
+                )
+                logger.info("New analysis: starting from queued at 5%")
 
             # Keep the task context fresh for long-running operations
             await recovery_ctx.refresh_context_ttl()

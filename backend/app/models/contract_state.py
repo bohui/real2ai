@@ -162,50 +162,33 @@ def update_state_step(
     step: str,
     data: Optional[Dict[str, Any]] = None,
     error: Optional[str] = None,
-) -> RealEstateAgentState:
-    """Update state with new step and optional data"""
+) -> Dict[str, Any]:
+    """Update state with new step and optional data - returns minimal state to prevent concurrent updates"""
 
-    # Create a new state object to avoid mutations
-    updated_state = dict(state)
-    updated_state["current_step"] = step
+    # Start with minimal state update
+    updated_state = {"current_step": step}
 
+    # Handle errors (these are always allowed)
     if error:
         updated_state["error_state"] = error
         updated_state["parsing_status"] = ProcessingStatus.FAILED
 
+    # Add explicitly provided data
     if data:
-        # Only update fields that are not already set or are explicitly provided
         for key, value in data.items():
-            if key not in updated_state or updated_state[key] is None:
-                updated_state[key] = value
-            elif isinstance(updated_state[key], dict) and isinstance(value, dict):
-                # Merge dictionaries instead of replacing
-                updated_state[key].update(value)
-            elif isinstance(updated_state[key], list) and isinstance(value, list):
-                # Extend lists instead of replacing
-                updated_state[key].extend(value)
-            else:
-                # Only update if the new value is not None
-                if value is not None:
+            if value is not None:
+                # For lists and dicts, we might need special handling
+                if key in state and isinstance(state[key], dict) and isinstance(value, dict):
+                    # Merge dictionaries
+                    merged_dict = dict(state[key])
+                    merged_dict.update(value)
+                    updated_state[key] = merged_dict
+                elif key in state and isinstance(state[key], list) and isinstance(value, list):
+                    # Extend lists
+                    updated_state[key] = state[key] + value
+                else:
+                    # Direct assignment
                     updated_state[key] = value
-
-    # Avoid returning static identity keys in node outputs to prevent
-    # INVALID_CONCURRENT_GRAPH_UPDATE when multiple edges merge in a step
-    # Only exclude keys that are truly static and never intended to be updated
-    static_keys = [
-        "user_id", "session_id", "agent_version", 
-        "user_preferences", "australian_state", "user_type"
-    ]
-    for static_key in static_keys:
-        if not (data and static_key in data):
-            updated_state.pop(static_key, None)
-    
-    # For document_data and document_metadata, only exclude if not being explicitly updated
-    # This allows legitimate updates during document processing while preventing accidental returns
-    document_keys = ["document_data", "document_metadata"]
-    for doc_key in document_keys:
-        if not (data and doc_key in data):
-            updated_state.pop(doc_key, None)
 
     return updated_state
 

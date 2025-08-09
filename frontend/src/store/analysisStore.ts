@@ -360,14 +360,25 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
             });
           } else {
             // Update progress and ensure analyzing state is maintained
-            set((prev) => ({
-              analysisProgress: progressData,
-              isAnalyzing: true,
-              // Preserve error after a failure unless a user-initiated retry is in flight
-              analysisError: prev.retryInFlight ? null : prev.analysisError,
-              // First progress after retry clears the retry flag
-              retryInFlight: prev.retryInFlight ? false : prev.retryInFlight,
-            }));
+            set((prev) => {
+              // During retry, only clear retryInFlight if progress is actually advancing
+              // This prevents clearing the flag when backend sends a new task starting from 0%
+              const isRetryProgressing = prev.retryInFlight && 
+                prev.analysisProgress && 
+                progressData.progress_percent >= prev.analysisProgress.progress_percent;
+              
+              const shouldClearRetryFlag = prev.retryInFlight && 
+                (isRetryProgressing || progressData.progress_percent > 10); // Allow some tolerance for initial steps
+              
+              return {
+                analysisProgress: progressData,
+                isAnalyzing: true,
+                // Preserve error after a failure unless retry is actually progressing
+                analysisError: shouldClearRetryFlag ? null : prev.analysisError,
+                // Only clear retry flag when we're confident the retry is progressing
+                retryInFlight: shouldClearRetryFlag ? false : prev.retryInFlight,
+              };
+            });
             console.log("✅ Progress updated and isAnalyzing set to true");
           }
 
@@ -634,12 +645,25 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
             });
           } else {
             // Update progress and ensure analyzing state is maintained
-            set((prev) => ({
-              analysisProgress: progressData,
-              isAnalyzing: true,
-              analysisError: prev.retryInFlight ? null : prev.analysisError,
-              retryInFlight: prev.retryInFlight ? false : prev.retryInFlight,
-            }));
+            set((prev) => {
+              // During retry, only clear retryInFlight if progress is actually advancing
+              // This prevents clearing the flag when backend sends a new task starting from 0%
+              const isRetryProgressing = prev.retryInFlight && 
+                prev.analysisProgress && 
+                progressData.progress_percent >= prev.analysisProgress.progress_percent;
+              
+              const shouldClearRetryFlag = prev.retryInFlight && 
+                (isRetryProgressing || progressData.progress_percent > 10); // Allow some tolerance for initial steps
+              
+              return {
+                analysisProgress: progressData,
+                isAnalyzing: true,
+                // Preserve error after a failure unless retry is actually progressing
+                analysisError: shouldClearRetryFlag ? null : prev.analysisError,
+                // Only clear retry flag when we're confident the retry is progressing
+                retryInFlight: shouldClearRetryFlag ? false : prev.retryInFlight,
+              };
+            });
             console.log(
               "✅ Progress updated and isAnalyzing set to true (contract)",
             );
@@ -925,12 +949,22 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
   updateProgress: (progress: AnalysisProgressUpdate) => {
     console.log("🔄 Updating analysis progress:", progress);
     // Ensure we're setting both the progress and maintaining the analyzing state
-    set((prev) => ({
-      analysisProgress: progress,
-      isAnalyzing: true,
-      analysisError: prev.retryInFlight ? null : prev.analysisError,
-      retryInFlight: prev.retryInFlight ? false : prev.retryInFlight,
-    }));
+    set((prev) => {
+      // During retry, only clear retryInFlight if progress is actually advancing
+      const isRetryProgressing = prev.retryInFlight && 
+        prev.analysisProgress && 
+        progress.progress_percent >= prev.analysisProgress.progress_percent;
+      
+      const shouldClearRetryFlag = prev.retryInFlight && 
+        (isRetryProgressing || progress.progress_percent > 10);
+      
+      return {
+        analysisProgress: progress,
+        isAnalyzing: true,
+        analysisError: shouldClearRetryFlag ? null : prev.analysisError,
+        retryInFlight: shouldClearRetryFlag ? false : prev.retryInFlight,
+      };
+    });
     console.log("✅ Progress updated, isAnalyzing set to true");
   },
 
