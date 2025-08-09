@@ -196,6 +196,8 @@ class FastUploadResult(SchemaBase):
 class ProcessedDocumentSummary(SchemaBase):
     success: bool
     document_id: str
+    australian_state: str
+
     # Primary fields used by services and background tasks
     full_text: Optional[str] = None
     total_word_count: Optional[int] = None
@@ -212,9 +214,6 @@ class ProcessedDocumentSummary(SchemaBase):
     file_type: Optional[str] = None
     storage_path: Optional[str] = None
     content_hash: Optional[str] = None
-
-    # Document context
-    australian_state: Optional[str] = None
 
 
 class DiagramHint(SchemaBase):

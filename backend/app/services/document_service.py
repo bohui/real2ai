@@ -876,17 +876,63 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
         extraction_methods = text_extraction_result.extraction_methods or []
         primary_method = extraction_methods[0] if extraction_methods else None
 
+        # Retrieve authoritative australian_state and optional metadata from document record
+        try:
+            user_client = await self.get_user_client()
+            doc_row_result = await user_client.database.select(
+                "documents",
+                columns="australian_state, original_filename, file_type, storage_path, content_hash",
+                filters={"id": document_id},
+            )
+            if not doc_row_result.get("data"):
+                raise ValueError("Document not found while building summary")
+            doc_row = doc_row_result["data"][0]
+            australian_state_value = doc_row.get("australian_state")
+            original_filename = doc_row.get("original_filename")
+            file_type_value = doc_row.get("file_type")
+            storage_path_value = doc_row.get("storage_path")
+            content_hash_value = doc_row.get("content_hash")
+
+            # If document record doesn't have state, derive from authoritative contract
+            if not australian_state_value:
+                if not content_hash_value:
+                    raise ValueError(
+                        "Australian state missing on document and no content_hash to resolve contract"
+                    )
+                contract_lookup = await user_client.database.select(
+                    "contracts",
+                    columns="australian_state",
+                    filters={"content_hash": content_hash_value},
+                )
+                if contract_lookup.get("data"):
+                    australian_state_value = contract_lookup["data"][0].get(
+                        "australian_state"
+                    )
+            if not australian_state_value:
+                raise ValueError(
+                    "Australian state missing; set it on your profile or contract before processing"
+                )
+        except Exception as meta_error:
+            # Surface a clear error if state is missing; no silent fallback
+            raise ValueError(f"Failed to build document summary metadata: {meta_error}")
+
         return ProcessedDocumentSummary(
             success=True,
             document_id=document_id,
+            australian_state=australian_state_value,
             full_text=full_text,
             character_count=len(full_text),
             total_word_count=len(full_text.split()) if full_text else 0,
-            total_pages=text_extraction_result.total_pages or len(text_extraction_result.pages),
+            total_pages=text_extraction_result.total_pages
+            or len(text_extraction_result.pages),
             extraction_method=primary_method,
             extraction_confidence=0.0,
             processing_timestamp=datetime.now(UTC).isoformat(),
             llm_used=self.use_llm_document_processing,
+            original_filename=original_filename,
+            file_type=file_type_value,
+            storage_path=storage_path_value,
+            content_hash=content_hash_value,
         )
 
     async def get_processed_document_summary(
@@ -915,10 +961,29 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
 
             # Fall back to minimal fields if processing_results are not present
             full_text = doc.get("full_text") or ""
+            australian_state_value = doc.get("australian_state")
+            if not australian_state_value:
+                content_hash_value = doc.get("content_hash")
+                if content_hash_value:
+                    contract_lookup = await user_client.database.select(
+                        "contracts",
+                        columns="australian_state",
+                        filters={"content_hash": content_hash_value},
+                    )
+                    if contract_lookup.get("data"):
+                        australian_state_value = contract_lookup["data"][0].get(
+                            "australian_state"
+                        )
+            if not australian_state_value:
+                # Enforce presence to satisfy required schema
+                raise ValueError(
+                    "Australian state missing for processed document summary"
+                )
 
             return ProcessedDocumentSummary(
                 success=True,
                 document_id=document_id,
+                australian_state=australian_state_value,
                 full_text=full_text,
                 character_count=len(full_text),
                 total_word_count=doc.get("total_word_count", 0),
@@ -929,6 +994,10 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
                     doc.get("processing_completed_at") or datetime.now(UTC).isoformat()
                 ),
                 llm_used=self.use_llm_document_processing,
+                original_filename=doc.get("original_filename"),
+                file_type=doc.get("file_type"),
+                storage_path=doc.get("storage_path"),
+                content_hash=doc.get("content_hash"),
             )
         except Exception as e:
             self.logger.warning(
