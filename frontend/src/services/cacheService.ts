@@ -14,6 +14,7 @@ import {
   ContractCacheCheckRequest,
   PropertySearchWithCacheRequest,
 } from "@/types";
+import { apiService } from "@/services/api";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ||
   "http://localhost:8000";
@@ -29,26 +30,35 @@ class CacheService {
     endpoint: string,
     options: RequestInit = {},
   ): Promise<T> {
-    // Use unified auth token key set by ApiService
-    const token = localStorage.getItem("auth_token");
+    const method = (options.method || "GET").toUpperCase();
+    const payload = options.body
+      ? JSON.parse(options.body as string)
+      : undefined;
 
-    const response = await fetch(`${this.baseUrl}${endpoint}`, {
-      ...options,
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": token ? `Bearer ${token}` : "",
-        ...options.headers,
-      },
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(
-        errorData.detail || `HTTP error! status: ${response.status}`,
-      );
+    // Delegate to centralized API service (handles auth + token refresh)
+    switch (method) {
+      case "GET": {
+        const { data } = await apiService.get<T>(endpoint);
+        return data;
+      }
+      case "POST": {
+        const { data } = await apiService.post<T>(endpoint, payload);
+        return data;
+      }
+      case "PUT": {
+        const { data } = await apiService.put<T>(endpoint, payload);
+        return data;
+      }
+      case "DELETE": {
+        const { data } = await apiService.delete<T>(endpoint);
+        return data;
+      }
+      default: {
+        // Fallback to GET if method unsupported here
+        const { data } = await apiService.get<T>(endpoint);
+        return data;
+      }
     }
-
-    return response.json();
   }
 
   // =====================================================
@@ -115,9 +125,11 @@ class CacheService {
     limit: number = 50,
     offset: number = 0,
   ): Promise<CacheHistoryResponse> {
+    // Ensure limit is at least 1 to prevent 422 validation errors
+    const validLimit = Math.max(1, limit);
     // Route unified under contracts API
     return this.makeRequest(
-      `/api/contracts/history?limit=${limit}&offset=${offset}`,
+      `/api/contracts/history?limit=${validLimit}&offset=${offset}`,
     );
   }
 

@@ -415,7 +415,7 @@ async def start_contract_analysis(
 
 @router.get("/history")
 async def get_contract_history(
-    limit: int = Query(50, ge=1, le=100, description="Number of records to return"),
+    limit: int = Query(50, ge=1, le=100, description="Number of records to return (minimum 1, maximum 100)"),
     offset: int = Query(0, ge=0, description="Number of records to skip"),
     user: User = Depends(get_current_user),
     cache_service: CacheService = Depends(get_cache_service),

@@ -453,27 +453,42 @@ class ContractAnalysisService:
     ) -> RealEstateAgentState:
         """Create initial state for workflow"""
 
-        return RealEstateAgentState(
-            session_id=session_id,
-            user_id=user_id,
-            australian_state=australian_state,
-            document_data=document_data,
-            user_preferences=user_preferences,
-            user_type=user_type,
-            contract_type=contract_type,
-            user_experience=user_experience,
-            current_step="initialized",
-            agent_version="unified_v1.0",
-            created_at=datetime.now(timezone.utc).isoformat(),
-            workflow_config={
+        return {
+            "session_id": session_id,
+            "user_id": user_id,
+            "australian_state": australian_state,
+            "document_data": document_data,
+            "user_preferences": user_preferences,
+            "user_type": user_type,
+            "contract_type": contract_type,
+            "user_experience": user_experience,
+            "current_step": ["initialized"],  # Use list for Annotated concurrent updates
+            "agent_version": "unified_v1.0",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "workflow_config": {
                 "validation_enabled": self.config.enable_validation,
                 "quality_checks_enabled": self.config.enable_quality_checks,
                 "prompt_manager_enabled": self.config.enable_prompt_manager,
                 "structured_parsing_enabled": self.config.enable_structured_parsing,
             },
-            confidence_scores={},
-            parsing_status=ProcessingStatus.PENDING,
-        )
+            "confidence_scores": {},
+            "parsing_status": ProcessingStatus.PENDING,
+            # Required fields from TypedDict
+            "document_metadata": None,
+            "contract_terms": None,
+            "risk_assessment": None,
+            "compliance_check": None,
+            "recommendations": [],
+            "property_data": None,
+            "market_analysis": None,
+            "financial_analysis": None,
+            "error_state": None,
+            "processing_time": None,
+            "progress": None,
+            "analysis_results": {},
+            "report_data": None,
+            "final_recommendations": []
+        }
 
     def _create_analysis_response(
         self, final_state: RealEstateAgentState, processing_time: float

@@ -10,13 +10,30 @@ This module provides comprehensive security validation for file uploads includin
 """
 
 import logging
-import magic
 import re
 import hashlib
 from typing import Dict, List, Optional, Tuple, Set
 from pathlib import Path
 from fastapi import UploadFile, HTTPException
 import structlog
+
+# Optional magic import with fallback
+try:
+    import magic
+    MAGIC_AVAILABLE = True
+except ImportError:
+    MAGIC_AVAILABLE = False
+    magic = None
+
+# Optional security config import with fallback
+try:
+    from app.core.security_config import security_config, file_security_policy, security_event_logger
+    SECURITY_CONFIG_AVAILABLE = True
+except ImportError:
+    SECURITY_CONFIG_AVAILABLE = False
+    security_config = None
+    file_security_policy = None
+    security_event_logger = None
 
 # Configure logger
 logger = structlog.get_logger(__name__)
@@ -136,6 +153,8 @@ class FileSecurityValidator:
     
     def __init__(self):
         self.config = FileSecurityConfig()
+        self.security_policy = file_security_policy
+        self.event_logger = security_event_logger
         
     async def validate_file_security(
         self, 
@@ -166,15 +185,10 @@ class FileSecurityValidator:
             file_size = len(file_content)
             
             # Log security validation attempt
-            security_logger.info(
-                "File security validation started",
-                extra={
-                    "user_id": user_id,
-                    "filename": filename,
-                    "file_size": file_size,
-                    "content_type": content_type,
-                    "validation_timestamp": logger.info.__name__
-                }
+            self.event_logger.log_upload_attempt(
+                user_id=user_id or "anonymous",
+                filename=filename,
+                file_size=file_size
             )
             
             # 1. Filename sanitization and validation
@@ -188,7 +202,7 @@ class FileSecurityValidator:
             file_extension = self._get_file_extension(filename)
             
             # 3. File size validation
-            size_result = self._validate_file_size(file_size, file_extension, max_size_override)
+            size_result = self._validate_file_size(file_size, file_extension, max_size_override, user_id)
             if not size_result.is_valid:
                 return size_result
                 
@@ -203,7 +217,7 @@ class FileSecurityValidator:
                 return magic_bytes_result
                 
             # 6. Content scanning for malicious patterns
-            content_result = self._scan_content_for_threats(file_content, filename)
+            content_result = self._scan_content_for_threats(file_content, filename, user_id)
             if not content_result.is_valid:
                 return content_result
                 
@@ -311,7 +325,8 @@ class FileSecurityValidator:
         self, 
         file_size: int, 
         file_extension: str,
-        max_size_override: Optional[int] = None
+        max_size_override: Optional[int] = None,
+        user_id: Optional[str] = None
     ) -> SecurityValidationResult:
         """Validate file size against limits."""
         
@@ -321,14 +336,24 @@ class FileSecurityValidator:
                 error_message="File is empty"
             )
             
-        # Use override or config-based limit
+        # Use override or policy-based limit
         if max_size_override:
             max_size = max_size_override
         else:
-            max_size = self.config.MAX_FILE_SIZES.get(file_extension, 50 * 1024 * 1024)
+            max_size = self.security_policy.get_max_file_size(file_extension)
             
         if file_size > max_size:
             max_mb = max_size / (1024 * 1024)
+            
+            # Log security violation
+            if user_id:
+                self.event_logger.log_security_violation(
+                    user_id=user_id,
+                    filename="unknown",  # filename not available in this context
+                    violation_type="file_size_exceeded",
+                    details=f"File size {file_size} bytes exceeds limit {max_size} bytes"
+                )
+            
             return SecurityValidationResult(
                 is_valid=False,
                 error_message=f"File too large. Maximum size for {file_extension} files: {max_mb:.1f}MB"
@@ -337,9 +362,18 @@ class FileSecurityValidator:
         return SecurityValidationResult(is_valid=True)
     
     def _validate_mime_type(self, content: bytes, file_extension: str) -> SecurityValidationResult:
-        """Validate MIME type using python-magic."""
+        """Validate MIME type using python-magic if available."""
         
         warnings = []
+        
+        # Check if python-magic is available
+        if not MAGIC_AVAILABLE:
+            warnings.append("python-magic not available, skipping MIME type validation")
+            return SecurityValidationResult(
+                is_valid=True,
+                warnings=warnings,
+                metadata={"mime_validation": "skipped", "reason": "python-magic not installed"}
+            )
         
         try:
             # Detect MIME type from content
@@ -413,7 +447,7 @@ class FileSecurityValidator:
             
         return SecurityValidationResult(is_valid=True, warnings=warnings)
     
-    def _scan_content_for_threats(self, content: bytes, filename: str) -> SecurityValidationResult:
+    def _scan_content_for_threats(self, content: bytes, filename: str, user_id: Optional[str] = None) -> SecurityValidationResult:
         """Scan file content for malicious patterns."""
         
         warnings = []
@@ -422,14 +456,18 @@ class FileSecurityValidator:
         # Check for suspicious patterns
         for pattern in self.config.MALICIOUS_PATTERNS:
             if pattern in content_lower:
-                security_logger.warning(
-                    "Suspicious pattern detected in file",
-                    extra={
-                        "filename": filename,
-                        "pattern": pattern.decode('utf-8', errors='ignore'),
-                        "pattern_hex": pattern.hex()
-                    }
-                )
+                pattern_str = pattern.decode('utf-8', errors='ignore')
+                
+                # Log malware detection
+                if user_id:
+                    file_hash = hashlib.sha256(content).hexdigest()
+                    self.event_logger.log_malware_detection(
+                        user_id=user_id,
+                        filename=filename,
+                        threat_type=f"suspicious_pattern_{pattern_str}",
+                        file_hash=file_hash
+                    )
+                
                 return SecurityValidationResult(
                     is_valid=False,
                     error_message="File contains potentially malicious content"

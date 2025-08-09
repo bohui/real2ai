@@ -17,6 +17,8 @@ RUN apt-get update && apt-get install -y \
     libpq-dev \
     libffi-dev \
     libssl-dev \
+    libmagic1 \
+    libmagic-dev \
     curl \
     && rm -rf /var/lib/apt/lists/*
 

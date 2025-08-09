@@ -20,6 +20,7 @@ const AnalysisPage: React.FC = () => {
     currentAnalysis,
     currentDocument,
     isAnalyzing,
+    retryInFlight,
     analysisError,
     cacheStatus,
     triggerAnalysisStart,
@@ -289,11 +290,12 @@ const AnalysisPage: React.FC = () => {
                           🔄 Analysis in progress - streaming updates...
                         </p>
                       )}
-                      {cacheStatus === "failed" && (
-                        <p className="text-sm text-danger-600 font-medium">
-                          ❌ Previous analysis failed
-                        </p>
-                      )}
+                      {cacheStatus === "failed" &&
+                        !(isAnalyzing || retryInFlight) && (
+                          <p className="text-sm text-danger-600 font-medium">
+                            ❌ Previous analysis failed
+                          </p>
+                        )}
                       {cacheStatus === "miss" && (
                         <p className="text-sm text-neutral-600 font-medium">
                           🆕 New document - ready to analyze

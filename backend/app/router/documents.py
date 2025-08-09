@@ -1,6 +1,6 @@
 """Document management router."""
 
-from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, BackgroundTasks
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, BackgroundTasks, Request
 from typing import Optional, Dict, Any, List
 import logging
 
@@ -8,6 +8,9 @@ from app.core.auth import get_current_user, User
 from app.core.auth_context import AuthContext
 from app.core.config import get_settings
 from app.core.error_handler import handle_api_error, create_error_context, ErrorCategory
+from app.core.file_security import file_security_validator
+from app.core.rate_limiter import upload_rate_limiter
+from app.core.security_config import security_config, file_security_policy
 from app.schema.enums import ContractType, AustralianState
 from app.services.document_service import DocumentService
 from app.services.communication.websocket_singleton import websocket_manager
@@ -83,6 +86,7 @@ async def test_document_service(
 
 @router.post("/upload", response_model=DocumentUploadResponse)
 async def upload_document(
+    request: Request,
     file: UploadFile = File(...),
     contract_type: ContractType = ContractType.PURCHASE_AGREEMENT,
     australian_state: AustralianState = AustralianState.NSW,
@@ -107,31 +111,82 @@ async def upload_document(
     )
 
     try:
+        # Get client IP for rate limiting and security logging
+        client_ip = request.client.host if request.client else "unknown"
+        
+        # Check rate limiting
+        is_limited, limit_reason = upload_rate_limiter.is_rate_limited(
+            user_id=str(user.id),
+            client_ip=client_ip
+        )
+        
+        if is_limited:
+            logger.warning(
+                f"Rate limit exceeded for user {user.id} from IP {client_ip}: {limit_reason}"
+            )
+            raise HTTPException(
+                status_code=429,
+                detail=f"Rate limit exceeded: {limit_reason}. Please try again later."
+            )
+        
         # Log upload attempt
         logger.info(
-            f"Fast upload attempt: filename={file.filename}, size={file.size}, content_type={file.content_type}"
+            f"Fast upload attempt: filename={file.filename}, size={file.size}, content_type={file.content_type}, client_ip={client_ip}"
         )
 
-        # Basic file validation
-        if file.size == 0:
-            logger.warning(f"Empty file upload attempted: {file.filename}")
+        # Comprehensive security validation
+        logger.info(f"Starting security validation for file: {file.filename}")
+        
+        security_result = await file_security_validator.validate_file_security(
+            file=file,
+            max_size_override=settings.max_file_size,
+            user_id=str(user.id)
+        )
+        
+        if not security_result.is_valid:
+            logger.warning(
+                f"File security validation failed: {security_result.error_message}",
+                extra={
+                    "user_id": str(user.id),
+                    "filename": file.filename,
+                    "error": security_result.error_message
+                }
+            )
             raise HTTPException(
                 status_code=400,
-                detail="Empty file uploaded. Please select a valid document with content.",
+                detail=f"File security validation failed: {security_result.error_message}"
             )
-
-        if file.size > settings.max_file_size:
-            raise HTTPException(
-                status_code=413,
-                detail=f"File too large. Maximum size: {settings.max_file_size / 1024 / 1024}MB",
+        
+        # Log security warnings if any
+        if security_result.warnings:
+            logger.warning(
+                f"File security warnings for {file.filename}: {'; '.join(security_result.warnings)}",
+                extra={
+                    "user_id": str(user.id),
+                    "filename": file.filename,
+                    "warnings": security_result.warnings
+                }
             )
-
-        file_extension = file.filename.split(".")[-1].lower()
-        if file_extension not in settings.allowed_file_types_list:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid file type. Allowed: {', '.join(settings.allowed_file_types_list)}",
-            )
+        
+        # Update filename to sanitized version if available
+        if security_result.metadata and security_result.metadata.get("sanitized_filename"):
+            original_filename = file.filename
+            sanitized_filename = security_result.metadata["sanitized_filename"]
+            if original_filename != sanitized_filename:
+                logger.info(
+                    f"Using sanitized filename: {original_filename} -> {sanitized_filename}",
+                    extra={"user_id": str(user.id)}
+                )
+                # Note: We keep the original filename for display but could use sanitized for storage
+        
+        logger.info(
+            f"File security validation passed for {file.filename}",
+            extra={
+                "user_id": str(user.id),
+                "file_hash": security_result.metadata.get("file_hash", "unknown"),
+                "validation_checks": security_result.metadata.get("validation_checks_passed", [])
+            }
+        )
 
         # Fast upload - just store file and create record
         logger.info("Starting fast document upload...")
@@ -642,4 +697,47 @@ async def assess_document_quality(
         raise
     except Exception as e:
         logger.error(f"Quality assessment error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.get("/security/status")
+async def get_security_status(
+    request: Request,
+    user: User = Depends(get_current_user),
+):
+    """Get current security configuration and user rate limit status."""
+    
+    try:
+        # Get client IP
+        client_ip = request.client.host if request.client else "unknown"
+        
+        # Get rate limit info
+        rate_limit_info = upload_rate_limiter.get_rate_limit_info(
+            user_id=str(user.id),
+            client_ip=client_ip
+        )
+        
+        # Get security settings
+        security_settings = file_security_policy.get_security_settings()
+        
+        return {
+            "security_enabled": True,
+            "security_features": [
+                "MIME type validation using python-magic",
+                "File magic bytes verification",
+                "Malicious content pattern detection",
+                "Filename sanitization",
+                "File size validation by type",
+                "Comprehensive security logging",
+                "Rate limiting protection"
+            ],
+            "security_settings": security_settings,
+            "rate_limit_status": rate_limit_info,
+            "user_id": str(user.id),
+            "client_ip": client_ip,
+            "timestamp": logger.info.__name__  # Current time marker
+        }
+        
+    except Exception as e:
+        logger.error(f"Security status error: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")

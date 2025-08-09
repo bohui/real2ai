@@ -386,12 +386,60 @@ def verify_token(token: str) -> TokenData:
 
 
 def _get_jwt_secret_and_alg() -> tuple[str, str]:
+    """
+    Get JWT secret and algorithm with secure fallback handling.
+    
+    Security Requirements:
+    - Production MUST have JWT_SECRET_KEY set - no fallbacks allowed
+    - Development can use generated secret with warning
+    - Never use anon key as JWT secret (authentication bypass vulnerability)
+    """
+    import secrets
+    import os
+    
     settings = get_settings()
     secret = settings.jwt_secret_key
-    if not secret:
-        # Fall back to anon key to avoid hard failure in dev; strongly recommend setting JWT_SECRET_KEY
-        secret = settings.supabase_anon_key
     alg = settings.jwt_algorithm or "HS256"
+    
+    if not secret:
+        # Check if we're in production - FAIL HARD
+        is_production = settings.environment.lower() in ("production", "prod", "live")
+        
+        if is_production:
+            logger.critical(
+                "CRITICAL SECURITY ERROR: JWT_SECRET_KEY not set in production environment. "
+                "This is a mandatory security requirement. Application startup failed."
+            )
+            raise ValueError(
+                "JWT_SECRET_KEY must be set in production environment. "
+                "Cannot start application without proper JWT secret configuration."
+            )
+        
+        # Development environment - generate secure secret with warning
+        logger.warning(
+            "JWT_SECRET_KEY not set in development environment. "
+            "Generating secure random secret for this session. "
+            "For production deployment, JWT_SECRET_KEY MUST be configured."
+        )
+        
+        # Generate cryptographically secure random secret (256 bits)
+        secret = secrets.token_urlsafe(32)
+        
+        logger.info(
+            f"Generated secure JWT secret for development (length: {len(secret)} chars). "
+            "This secret will change on each restart. Set JWT_SECRET_KEY for persistence."
+        )
+    else:
+        # Validate secret strength in production
+        is_production = settings.environment.lower() in ("production", "prod", "live")
+        if is_production and len(secret) < 32:
+            logger.warning(
+                f"JWT secret is short ({len(secret)} chars) for production. "
+                "Recommend at least 32 characters for security."
+            )
+        
+        logger.info("Using configured JWT_SECRET_KEY for token signing")
+    
     return secret, alg
 
 
@@ -417,6 +465,96 @@ def verify_ws_token(token: str) -> Optional[str]:
         return payload.get("sub")
     except Exception:
         return None
+
+
+def validate_jwt_configuration() -> dict[str, any]:
+    """
+    Validate JWT configuration on application startup.
+    
+    Returns validation results with status and recommendations.
+    Should be called during application initialization.
+    """
+    try:
+        settings = get_settings()
+        is_production = settings.environment.lower() in ("production", "prod", "live")
+        
+        validation_result = {
+            "status": "valid",
+            "environment": settings.environment,
+            "is_production": is_production,
+            "issues": [],
+            "warnings": [],
+            "recommendations": []
+        }
+        
+        # Check JWT secret configuration
+        if not settings.jwt_secret_key:
+            if is_production:
+                validation_result["status"] = "critical"
+                validation_result["issues"].append(
+                    "JWT_SECRET_KEY not configured in production environment"
+                )
+                validation_result["recommendations"].append(
+                    "Set JWT_SECRET_KEY environment variable with at least 32 characters"
+                )
+            else:
+                validation_result["warnings"].append(
+                    "JWT_SECRET_KEY not set - will use generated secret in development"
+                )
+                validation_result["recommendations"].append(
+                    "Set JWT_SECRET_KEY for consistent development sessions"
+                )
+        else:
+            # Validate secret strength
+            secret_length = len(settings.jwt_secret_key)
+            if secret_length < 32:
+                if is_production:
+                    validation_result["status"] = "warning"
+                    validation_result["warnings"].append(
+                        f"JWT secret is short ({secret_length} chars) for production"
+                    )
+                    validation_result["recommendations"].append(
+                        "Use at least 32 characters for JWT_SECRET_KEY in production"
+                    )
+            
+            # Check if secret looks like anon key (potential misconfiguration)
+            if settings.jwt_secret_key == settings.supabase_anon_key:
+                validation_result["status"] = "critical"
+                validation_result["issues"].append(
+                    "JWT_SECRET_KEY appears to be set to Supabase anon key - security risk"
+                )
+                validation_result["recommendations"].append(
+                    "Generate unique JWT_SECRET_KEY separate from Supabase keys"
+                )
+        
+        # Check algorithm configuration
+        if settings.jwt_algorithm not in ["HS256", "HS384", "HS512"]:
+            validation_result["warnings"].append(
+                f"Unusual JWT algorithm: {settings.jwt_algorithm}"
+            )
+            validation_result["recommendations"].append(
+                "Consider using HS256, HS384, or HS512 for HMAC-based signing"
+            )
+        
+        # Log validation results
+        if validation_result["status"] == "critical":
+            for issue in validation_result["issues"]:
+                logger.critical(f"JWT Configuration Issue: {issue}")
+        elif validation_result["status"] == "warning":
+            for warning in validation_result["warnings"]:
+                logger.warning(f"JWT Configuration Warning: {warning}")
+        else:
+            logger.info("JWT configuration validation passed")
+        
+        return validation_result
+        
+    except Exception as e:
+        logger.error(f"JWT configuration validation failed: {str(e)}")
+        return {
+            "status": "error",
+            "issues": [f"Validation failed: {str(e)}"],
+            "recommendations": ["Check application configuration and logs"]
+        }
 
 
 async def get_user_by_id_service(user_id: str) -> Optional[User]:

@@ -32,7 +32,9 @@ export const ContractHistoryList: React.FC<ContractHistoryListProps> = ({
     setIsLoading(true);
     
     try {
-      const response = await cacheService.getContractHistory(loadOffset, limit);
+      // getContractHistory accepts (limit, offset). We were passing them reversed,
+      // which caused empty results (e.g., limit=0, offset=20). Fix the order.
+      const response = await cacheService.getContractHistory(limit, loadOffset);
       
       if (response.status === 'success') {
         const newHistory = response.data.history.filter(item => 'content_hash' in item) as UserContractView[];

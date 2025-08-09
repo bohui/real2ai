@@ -116,6 +116,37 @@ async def detailed_health_check() -> Dict[str, Any]:
         "details": langsmith_status
     }
     
+    # Check JWT configuration status
+    try:
+        from app.core.auth import validate_jwt_configuration
+        jwt_validation = validate_jwt_configuration()
+        
+        jwt_health = {
+            "status": "healthy" if jwt_validation["status"] == "valid" else jwt_validation["status"],
+            "environment": jwt_validation["environment"],
+            "is_production": jwt_validation["is_production"],
+            "has_secret_configured": bool(settings.jwt_secret_key),
+            "algorithm": settings.jwt_algorithm
+        }
+        
+        if jwt_validation["status"] != "valid":
+            jwt_health["issues"] = jwt_validation.get("issues", [])
+            jwt_health["warnings"] = jwt_validation.get("warnings", [])
+            jwt_health["recommendations"] = jwt_validation.get("recommendations", [])
+            
+            # If JWT config is critical, mark overall health as degraded
+            if jwt_validation["status"] == "critical":
+                health_status["status"] = "degraded"
+        
+        health_status["services"]["jwt_configuration"] = jwt_health
+        
+    except Exception as e:
+        health_status["services"]["jwt_configuration"] = {
+            "status": "error",
+            "error": str(e)
+        }
+        health_status["status"] = "degraded"
+    
     # Check task recovery system
     try:
         from app.services.recovery_monitor import recovery_monitor

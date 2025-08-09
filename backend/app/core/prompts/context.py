@@ -18,6 +18,7 @@ class ContextType(Enum):
     USER = "user"
     CONTRACT = "contract"
     ANALYSIS = "analysis"
+    CONTRACT_ANALYSIS = "contract_analysis"
     OCR = "ocr"
     COMPLIANCE = "compliance"
     RISK = "risk"

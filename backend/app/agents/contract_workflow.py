@@ -28,6 +28,8 @@ from app.models.contract_state import (
     ComplianceCheck,
     update_state_step,
     calculate_confidence_score,
+    create_step_update,
+    get_current_step,
 )
 from app.schema.enums import ProcessingStatus
 from app.models.workflow_outputs import (
@@ -480,19 +482,19 @@ class ContractAnalysisWorkflow:
                 if not isinstance(document_data, dict):
                     raise ValueError("document_data must be a dictionary")
 
-            # Update progress
+            # Update progress using the new pattern
+            progress_update = {}
             if "progress" in state and state["progress"]:
-                state["progress"]["current_step"] += 1
-                state["progress"]["percentage"] = int(
-                    (
-                        state["progress"]["current_step"]
-                        / state["progress"]["total_steps"]
-                    )
-                    * 100
-                )
-
+                current_step_num = state["progress"]["current_step"] + 1
+                progress_update["progress"] = {
+                    **state["progress"],
+                    "current_step": current_step_num,
+                    "percentage": int((current_step_num / state["progress"]["total_steps"]) * 100)
+                }
+                
+            # Return proper state update
             logger.debug(f"Input validation completed for user {state['user_id']}")
-            return update_state_step(state, "input_validated")
+            return create_step_update("input_validated", progress_update)
 
         except Exception as e:
             logger.error(f"Input validation failed: {e}")
@@ -510,13 +512,15 @@ class ContractAnalysisWorkflow:
         if not self.enable_quality_checks:
             return state
 
-        # Update progress
+        # Prepare progress update
+        progress_update = {}
         if "progress" in state and state["progress"]:
-            state["progress"]["current_step"] += 1
-            state["progress"]["percentage"] = int(
-                (state["progress"]["current_step"] / state["progress"]["total_steps"])
-                * 100
-            )
+            current_step_num = state["progress"]["current_step"] + 1
+            progress_update["progress"] = {
+                **state["progress"],
+                "current_step": current_step_num,
+                "percentage": int((current_step_num / state["progress"]["total_steps"]) * 100)
+            }
 
         try:
             # Handle case where document_data might be None
@@ -578,13 +582,14 @@ class ContractAnalysisWorkflow:
                 "document_quality_metrics": quality_metrics,
                 "llm_used": use_llm and (self.openai_client or self.gemini_client),
             }
+            
+            # Merge with progress update
+            progress_update.update(updated_data)
 
             logger.debug(
                 f"Document quality validation completed using {'LLM' if use_llm else 'rule-based'} method"
             )
-            return update_state_step(
-                state, "document_quality_validated", data=updated_data
-            )
+            return create_step_update("document_quality_validated", progress_update)
 
         except Exception as e:
             logger.error(f"Document quality validation failed: {e}")

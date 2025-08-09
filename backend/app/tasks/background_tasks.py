@@ -365,15 +365,22 @@ async def comprehensive_document_analysis(
                 progress_callback=persist_progress,
             )
 
-            # Extract analysis results from service response
-            if not analysis_response.get("success"):
-                error_msg = analysis_response.get("error", "Contract analysis failed")
+            # Handle None response
+            if analysis_response is None:
+                error_msg = "Contract analysis service returned None"
+                logger.error(error_msg)
+                raise ValueError(f"Contract analysis failed: {error_msg}")
+
+            # Extract analysis results from service response 
+            # StartAnalysisResponse object - access attributes directly
+            if not analysis_response.success:
+                error_msg = getattr(analysis_response, 'error', "Contract analysis failed")
                 logger.error(f"Contract analysis failed: {error_msg}")
                 raise ValueError(f"Contract analysis failed: {error_msg}")
 
             # Get analysis results from the service response
-            analysis_result = analysis_response.get("analysis_results", {})
-            final_state = analysis_response.get("final_state", {})
+            analysis_result = getattr(analysis_response, 'analysis_results', {})
+            final_state = getattr(analysis_response, 'final_state', {})
 
             logger.info(f"Contract analysis completed successfully")
 

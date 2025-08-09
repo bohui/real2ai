@@ -2,9 +2,10 @@
 LangGraph State Models for Real2.AI Contract Analysis
 """
 
-from typing import TypedDict, Optional, Dict, List, Any
+from typing import TypedDict, Optional, Dict, List, Any, Annotated
 from datetime import datetime
 import uuid
+from operator import add
 
 from app.schema.enums import AustralianState, ContractType, ProcessingStatus, RiskLevel
 
@@ -18,15 +19,15 @@ class RealEstateAgentState(TypedDict):
     agent_version: str
 
     # Document Processing
-    document_data: Optional[Dict[str, Any]]
-    document_metadata: Optional[Dict[str, Any]]
-    parsing_status: ProcessingStatus
+    document_data: Annotated[Optional[Dict[str, Any]], lambda x, y: y]  # Last value wins
+    document_metadata: Annotated[Optional[Dict[str, Any]], lambda x, y: y]  # Last value wins  
+    parsing_status: Annotated[ProcessingStatus, lambda x, y: y]  # Last value wins for status updates
 
     # Contract Analysis
     contract_terms: Optional[Dict[str, Any]]
     risk_assessment: Optional[Dict[str, Any]]
     compliance_check: Optional[Dict[str, Any]]
-    recommendations: List[Dict[str, Any]]
+    recommendations: Annotated[List[Dict[str, Any]], add]  # Use add for list concatenation
 
     # Property Data (Phase 2+)
     property_data: Optional[Dict[str, Any]]
@@ -39,7 +40,7 @@ class RealEstateAgentState(TypedDict):
     user_type: str  # buyer, investor, agent
 
     # Processing State
-    current_step: str
+    current_step: Annotated[List[str], add]  # Use Annotated for concurrent updates
     error_state: Optional[str]
     confidence_scores: Dict[str, float]
     processing_time: Optional[float]
@@ -145,7 +146,7 @@ def create_initial_state(
         australian_state=australian_state,
         user_type=user_type,
         # Processing State
-        current_step="initialized",
+        current_step=["initialized"],  # Now a list for Annotated handling
         error_state=None,
         confidence_scores={},
         processing_time=None,
@@ -165,8 +166,12 @@ def update_state_step(
 ) -> Dict[str, Any]:
     """Update state with new step and optional data - returns minimal state to prevent concurrent updates"""
 
-    # Start with minimal state update
-    updated_state = {"current_step": step}
+    # Handle backward compatibility: convert string step to list for Annotated pattern
+    if isinstance(step, str):
+        updated_state = {"current_step": [step]}  # Convert to list for concurrent updates
+    else:
+        # Already a list
+        updated_state = {"current_step": step}
 
     # Handle errors (these are always allowed)
     if error:
@@ -191,6 +196,22 @@ def update_state_step(
                     updated_state[key] = value
 
     return updated_state
+
+
+def get_current_step(state: RealEstateAgentState) -> str:
+    """Get the latest step from the Annotated list"""
+    steps = state.get("current_step", ["initialized"])
+    return steps[-1] if steps else "initialized"
+
+
+def create_step_update(step_name: str, progress_data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Create a proper state update for LangGraph concurrent handling"""
+    update = {"current_step": [step_name]}
+    
+    if progress_data:
+        update.update(progress_data)
+    
+    return update
 
 
 def calculate_confidence_score(state: RealEstateAgentState) -> float:
