@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 from datetime import datetime
 from supabase import Client
 from postgrest import APIError
+from enum import Enum
 
 from ..base.client import with_retry
 from ..base.interfaces import DatabaseOperations
@@ -21,32 +22,43 @@ logger = logging.getLogger(__name__)
 
 
 def serialize_datetime_values(data: Dict[str, Any]) -> Dict[str, Any]:
-    """Serialize datetime objects to ISO format strings for JSON compatibility."""
+    """Serialize values to be JSON-compatible for PostgREST.
+
+    - datetime -> ISO string
+    - Enum -> .value
+    - Pydantic models (v2: model_dump, v1: dict) -> plain dict
+    - Recurse through dicts and lists
+    """
     if not isinstance(data, dict):
         return data
 
-    serialized = {}
-    for key, value in data.items():
+    def convert_value(value: Any) -> Any:
+        # Handle datetime
         if isinstance(value, datetime):
-            serialized[key] = value.isoformat()
-        elif isinstance(value, dict):
-            serialized[key] = serialize_datetime_values(value)
-        elif isinstance(value, list):
-            serialized[key] = [
-                (
-                    item.isoformat()
-                    if isinstance(item, datetime)
-                    else (
-                        serialize_datetime_values(item)
-                        if isinstance(item, dict)
-                        else item
-                    )
-                )
-                for item in value
-            ]
-        else:
-            serialized[key] = value
-    return serialized
+            return value.isoformat()
+        # Handle Enum
+        if isinstance(value, Enum):
+            return value.value
+        # Handle Pydantic BaseModel (v2) and (v1)
+        if hasattr(value, "model_dump") and callable(getattr(value, "model_dump")):
+            try:
+                value = value.model_dump()
+            except Exception:
+                pass
+        elif hasattr(value, "dict") and callable(getattr(value, "dict")):
+            try:
+                value = value.dict()
+            except Exception:
+                pass
+
+        # Recurse
+        if isinstance(value, dict):
+            return serialize_datetime_values(value)
+        if isinstance(value, list):
+            return [convert_value(item) for item in value]
+        return value
+
+    return {key: convert_value(val) for key, val in data.items()}
 
 
 def is_jwt_expired_error(error: Exception) -> bool:
@@ -673,7 +685,9 @@ class SupabaseDatabaseClient(DatabaseOperations):
                 original_error=e,
             )
         except ConnectionRefusedError as e:
-            self.logger.error(f"Connection refused error selecting from table '{table}': {e}")
+            self.logger.error(
+                f"Connection refused error selecting from table '{table}': {e}"
+            )
             raise ClientConnectionError(
                 f"Database connection refused. Please check if Supabase is running and accessible at {self.config.url}",
                 client_name=self.client_name,

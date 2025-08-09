@@ -133,7 +133,26 @@ class TaskRegistry:
             },
         )
 
-        registry_id = result[0]["upsert_task_registry"] if result else None
+        # Robustly parse RPC return (string UUID, dict, or list of dicts)
+        registry_id = None
+        if result:
+            try:
+                if isinstance(result, str):
+                    registry_id = result
+                elif isinstance(result, dict):
+                    registry_id = result.get("upsert_task_registry") or result.get("id")
+                elif isinstance(result, list) and len(result) > 0:
+                    first_item = result[0]
+                    if isinstance(first_item, dict):
+                        registry_id = first_item.get(
+                            "upsert_task_registry"
+                        ) or first_item.get("id")
+                    elif isinstance(first_item, str):
+                        registry_id = first_item
+            except Exception as parse_error:
+                logger.debug(
+                    f"Could not parse upsert_task_registry RPC result: {parse_error}"
+                )
         if not registry_id:
             raise Exception("Failed to create task registry entry")
 
@@ -169,7 +188,19 @@ class TaskRegistry:
             },
         )
 
-        success = result[0]["update_task_registry_state"] if result else False
+        # Robustly parse boolean result from RPC
+        success = False
+        if result is not None:
+            if isinstance(result, bool):
+                success = result
+            elif isinstance(result, dict):
+                success = bool(result.get("update_task_registry_state", False))
+            elif isinstance(result, list) and len(result) > 0:
+                first_item = result[0]
+                if isinstance(first_item, bool):
+                    success = first_item
+                elif isinstance(first_item, dict):
+                    success = bool(first_item.get("update_task_registry_state", False))
 
         if success:
             logger.debug(f"Updated task {task_id} state to {new_state.value}")
@@ -196,7 +227,21 @@ class TaskRegistry:
             },
         )
 
-        checkpoint_id = result[0]["create_task_checkpoint"] if result else None
+        # Extract UUID regardless of return shape
+        checkpoint_id = None
+        if result:
+            if isinstance(result, str):
+                checkpoint_id = result
+            elif isinstance(result, dict):
+                checkpoint_id = result.get("create_task_checkpoint") or result.get("id")
+            elif isinstance(result, list) and len(result) > 0:
+                first_item = result[0]
+                if isinstance(first_item, dict):
+                    checkpoint_id = first_item.get(
+                        "create_task_checkpoint"
+                    ) or first_item.get("id")
+                elif isinstance(first_item, str):
+                    checkpoint_id = first_item
         if not checkpoint_id:
             raise Exception("Failed to create checkpoint")
 

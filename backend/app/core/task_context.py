@@ -35,9 +35,13 @@ class SecureTaskContextStore:
     def __init__(self):
         self.settings = get_settings()
         logger.info(f"Settings loaded: {type(self.settings)}")
-        logger.info(f"Environment TASK_ENCRYPTION_KEY exists: {'TASK_ENCRYPTION_KEY' in os.environ}")
-        if 'TASK_ENCRYPTION_KEY' in os.environ:
-            logger.info(f"TASK_ENCRYPTION_KEY from env: {os.environ['TASK_ENCRYPTION_KEY'][:10]}...")
+        logger.info(
+            f"Environment TASK_ENCRYPTION_KEY exists: {'TASK_ENCRYPTION_KEY' in os.environ}"
+        )
+        if "TASK_ENCRYPTION_KEY" in os.environ:
+            logger.info(
+                f"TASK_ENCRYPTION_KEY from env: {os.environ['TASK_ENCRYPTION_KEY'][:10]}..."
+            )
         self.redis_client = None
         self.cipher = None
         self.default_ttl = timedelta(hours=4)  # Extended TTL for long-running tasks
@@ -59,8 +63,10 @@ class SecureTaskContextStore:
             # Initialize encryption cipher
             encryption_key = getattr(self.settings, "task_encryption_key", None)
             logger.info(f"Settings task_encryption_key: {encryption_key is not None}")
-            logger.info(f"Available settings attributes: {[attr for attr in dir(self.settings) if 'task' in attr.lower()]}")
-            
+            logger.info(
+                f"Available settings attributes: {[attr for attr in dir(self.settings) if 'task' in attr.lower()]}"
+            )
+
             if not encryption_key:
                 # Generate a key for development (NOT for production)
                 logger.warning("No task_encryption_key found, generating temporary key")
@@ -117,11 +123,11 @@ class SecureTaskContextStore:
             # Store with TTL
             context_key = f"task_auth:{task_id}"
             ttl_seconds = int(self.default_ttl.total_seconds())
-            self.redis_client.setex(
-                context_key, ttl_seconds, encrypted_context
-            )
+            self.redis_client.setex(context_key, ttl_seconds, encrypted_context)
 
-            logger.info(f"Stored task context for task: {task_id}, TTL: {ttl_seconds}s, Key: {context_key}")
+            logger.info(
+                f"Stored task context for task: {task_id}, TTL: {ttl_seconds}s, Key: {context_key}"
+            )
             return context_key
 
         except Exception as e:
@@ -151,7 +157,9 @@ class SecureTaskContextStore:
                 # Check if key exists but is empty vs completely missing
                 exists = self.redis_client.exists(context_key)
                 ttl = self.redis_client.ttl(context_key)
-                logger.error(f"Context retrieval failed - Key exists: {bool(exists)}, TTL: {ttl}, Key: {context_key}")
+                logger.error(
+                    f"Context retrieval failed - Key exists: {bool(exists)}, TTL: {ttl}, Key: {context_key}"
+                )
                 raise ValueError("Task context expired or not found")
 
             # Decrypt and parse
@@ -206,7 +214,9 @@ class SecureTaskContextStore:
         try:
             result = self.redis_client.expire(context_key, additional_seconds)
             if result:
-                logger.info(f"Extended TTL for context: {context_key} to {additional_seconds}s")
+                logger.info(
+                    f"Extended TTL for context: {context_key} to {additional_seconds}s"
+                )
             return bool(result)
         except Exception as e:
             logger.warning(f"Failed to extend TTL for {context_key}: {e}")
@@ -229,7 +239,9 @@ class SecureTaskContextStore:
             ttl_seconds = int(self.default_ttl.total_seconds())
             result = self.redis_client.expire(context_key, ttl_seconds)
             if result:
-                logger.info(f"Refreshed TTL for context: {context_key} to {ttl_seconds}s")
+                logger.info(
+                    f"Refreshed TTL for context: {context_key} to {ttl_seconds}s"
+                )
             return bool(result)
         except Exception as e:
             logger.warning(f"Failed to refresh TTL for {context_key}: {e}")
@@ -306,11 +318,12 @@ async def task_auth_context(context_key: str, extend_ttl: bool = True):
     """
     task_store = await get_task_store()
 
+    success: bool = False
     try:
         # Extend TTL for long-running tasks before retrieval
         if extend_ttl:
             await task_store.extend_context_ttl(context_key)
-        
+
         # Restore auth context
         auth_context = await task_store.retrieve_context(context_key)
         AuthContext.restore_task_context(auth_context)
@@ -319,12 +332,21 @@ async def task_auth_context(context_key: str, extend_ttl: bool = True):
             f"Restored task auth context for user: {AuthContext.get_user_id()}"
         )
         yield AuthContext
+        # Mark success only after the context manager body finishes without exception
+        success = True
 
     finally:
         # Clean up context
         AuthContext.clear_auth_context()
-        await task_store.cleanup_context(context_key)
-        logger.debug("Cleaned up task auth context")
+        if success:
+            # Only delete stored context when the task completed successfully
+            await task_store.cleanup_context(context_key)
+            logger.debug("Cleaned up task auth context")
+        else:
+            # Preserve context for retries; it will expire via TTL if not used
+            logger.debug(
+                "Preserving task auth context for retry due to task error; cleanup deferred"
+            )
 
 
 def user_aware_task(
@@ -368,7 +390,7 @@ def user_aware_task(
                     remaining_args = args[1:]
                     logger.info(f"Extracted context_key: {context_key}")
                     logger.info(f"Remaining args: {remaining_args}")
-                    
+
                     loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(loop)
                     try:
@@ -395,7 +417,7 @@ def user_aware_task(
                         raise TypeError("Missing context_key argument")
                     context_key = args[0]
                     remaining_args = args[1:]
-                    
+
                     loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(loop)
                     try:
@@ -425,12 +447,14 @@ def user_aware_task(
                         raise TypeError("Missing context_key argument")
                     context_key = args[0]
                     remaining_args = args[1:]
-                    
+
                     loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(loop)
                     try:
                         return loop.run_until_complete(
-                            _async_wrapper_async(context_key, func, *remaining_args, **kwargs)
+                            _async_wrapper_async(
+                                context_key, func, *remaining_args, **kwargs
+                            )
                         )
                     finally:
                         loop.close()
@@ -445,12 +469,14 @@ def user_aware_task(
                         raise TypeError("Missing context_key argument")
                     context_key = args[0]
                     remaining_args = args[1:]
-                    
+
                     loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(loop)
                     try:
                         return loop.run_until_complete(
-                            _async_wrapper_sync(context_key, func, *remaining_args, **kwargs)
+                            _async_wrapper_sync(
+                                context_key, func, *remaining_args, **kwargs
+                            )
                         )
                     finally:
                         loop.close()
@@ -587,7 +613,7 @@ class TaskContextManager:
         """
         if not self.store:
             await self.initialize()
-        
+
         return await self.store.refresh_context_ttl(context_key)
 
     async def launch_user_task(self, celery_task, task_id: str, *args, **kwargs):
@@ -621,10 +647,10 @@ async def refresh_current_task_ttl(context_key: str) -> bool:
     """
     Utility function for tasks to refresh their context TTL during execution.
     This prevents context expiration for long-running tasks.
-    
+
     Args:
         context_key: The task context key
-        
+
     Returns:
         True if TTL refresh was successful
     """

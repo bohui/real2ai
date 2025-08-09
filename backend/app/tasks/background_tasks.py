@@ -235,7 +235,7 @@ async def comprehensive_document_analysis(
                 step_description="Extracting text from document...",
                 estimated_completion_minutes=3,
             )
-            
+
             # Refresh TTL at start of long-running task
             await recovery_ctx.refresh_context_ttl()
 
@@ -468,14 +468,19 @@ async def comprehensive_document_analysis(
 
         # Update progress with error
         try:
-            await update_analysis_progress(
-                user_id,
-                content_hash,
-                progress_percent=0,
-                current_step="failed",
-                step_description="Analysis failed. Please try again or contact support.",
-                error_message=str(e),
-            )
+            # Only attempt progress update if we have a content_hash
+            if "content_hash" not in locals() or not content_hash:
+                # Try to recover from analysis_options as last resort
+                content_hash = analysis_options.get("content_hash")
+            if content_hash:
+                await update_analysis_progress(
+                    user_id,
+                    content_hash,
+                    progress_percent=0,
+                    current_step="failed",
+                    step_description="Analysis failed. Please try again or contact support.",
+                    error_message=str(e),
+                )
 
             # Update analysis record with error
             service_client = await get_service_supabase_client()
