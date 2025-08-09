@@ -942,24 +942,6 @@ async def handle_status_request(
     from app.core.auth_context import AuthContext
 
     try:
-        # Check if contract_id is provided
-        if not contract_id or contract_id == "None":
-            # No contract_id means no analysis has been started yet
-            status_message = {
-                "event_type": "status_update",
-                "timestamp": datetime.now(UTC).isoformat(),
-                "data": {
-                    "contract_id": None,
-                    "status": "not_started",
-                    "message": "No analysis has been started for this document",
-                    "progress_percent": 0,
-                },
-            }
-            await websocket_manager.send_personal_message(
-                document_id, websocket, status_message
-            )
-            return
-
         # Get user-authenticated client (respects RLS)
         user_client = await AuthContext.get_authenticated_client(require_auth=True)
 
@@ -976,6 +958,22 @@ async def handle_status_request(
         content_hash = doc_result["data"][0].get("content_hash")
         if not content_hash:
             raise ValueError(f"Document {document_id} has no content hash")
+
+        # If client didn't provide a contract_id, try to resolve it by content_hash
+        if not contract_id or contract_id == "None":
+            try:
+                contract_result = await user_client.database.select(
+                    "contracts",
+                    columns="id",
+                    filters={"content_hash": content_hash},
+                    order_by="created_at DESC",
+                    limit=1,
+                )
+                if contract_result.get("data"):
+                    contract_id = contract_result["data"][0]["id"]
+            except Exception:
+                # If this lookup fails, continue; we'll still report status by content_hash
+                pass
 
         # Check if user has access to this content_hash through user_contract_views
         user_contract_view_result = await user_client.database.select(
