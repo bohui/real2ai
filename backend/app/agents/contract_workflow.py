@@ -218,16 +218,30 @@ class ContractAnalysisWorkflow:
         self.recommendations_parser = create_parser(
             RecommendationsOutput, strict_mode=False
         )
-        
+
         # Initialize comprehensive structured response parsers for JSON fixes
         self.structured_parsers = {
-            'risk_analysis': create_parser(RiskAnalysisOutput, strict_mode=False, retry_on_failure=True),
-            'recommendations': create_parser(RecommendationsOutput, strict_mode=False, retry_on_failure=True),
-            'contract_terms': create_parser(ContractTermsOutput, strict_mode=False, retry_on_failure=True),
-            'compliance_analysis': create_parser(ComplianceAnalysisOutput, strict_mode=False, retry_on_failure=True),
-            'terms_validation': create_parser(ContractTermsValidationOutput, strict_mode=False, retry_on_failure=True),
-            'document_quality': create_parser(DocumentQualityMetrics, strict_mode=False, retry_on_failure=True),
-            'workflow_validation': create_parser(WorkflowValidationOutput, strict_mode=False, retry_on_failure=True),
+            "risk_analysis": create_parser(
+                RiskAnalysisOutput, strict_mode=False, retry_on_failure=True
+            ),
+            "recommendations": create_parser(
+                RecommendationsOutput, strict_mode=False, retry_on_failure=True
+            ),
+            "contract_terms": create_parser(
+                ContractTermsOutput, strict_mode=False, retry_on_failure=True
+            ),
+            "compliance_analysis": create_parser(
+                ComplianceAnalysisOutput, strict_mode=False, retry_on_failure=True
+            ),
+            "terms_validation": create_parser(
+                ContractTermsValidationOutput, strict_mode=False, retry_on_failure=True
+            ),
+            "document_quality": create_parser(
+                DocumentQualityMetrics, strict_mode=False, retry_on_failure=True
+            ),
+            "workflow_validation": create_parser(
+                WorkflowValidationOutput, strict_mode=False, retry_on_failure=True
+            ),
         }
 
         # Performance metrics
@@ -361,32 +375,42 @@ class ContractAnalysisWorkflow:
                 original_error=e,
             )
 
-    def _parse_structured_response(self, response: str, response_type: str) -> tuple[Optional[Dict[str, Any]], bool, str]:
+    def _parse_structured_response(
+        self, response: str, response_type: str
+    ) -> tuple[Optional[Dict[str, Any]], bool, str]:
         """
         Parse LLM response using structured parser with fallback
-        
+
         Args:
             response: Raw LLM response
             response_type: Type of response ('risk_analysis', 'recommendations', etc.)
-            
+
         Returns:
             tuple: (parsed_data, success, error_message)
         """
         if response_type in self.structured_parsers:
             parser = self.structured_parsers[response_type]
             result = parser.parse_with_retry(response)
-            
+
             if result.success:
-                parsed_data = result.parsed_data.dict() if hasattr(result.parsed_data, 'dict') else result.parsed_data
+                parsed_data = (
+                    result.parsed_data.dict()
+                    if hasattr(result.parsed_data, "dict")
+                    else result.parsed_data
+                )
                 return parsed_data, True, ""
             else:
                 error_msg = "; ".join(result.parsing_errors + result.validation_errors)
-                logger.warning(f"Structured parsing failed for {response_type}: {error_msg}")
-        
+                logger.warning(
+                    f"Structured parsing failed for {response_type}: {error_msg}"
+                )
+
         # Fallback to manual JSON parsing with code block handling
         return self._fallback_json_parse(response)
-    
-    def _fallback_json_parse(self, response: str) -> tuple[Optional[Dict[str, Any]], bool, str]:
+
+    def _fallback_json_parse(
+        self, response: str
+    ) -> tuple[Optional[Dict[str, Any]], bool, str]:
         """
         Fallback JSON parsing with code block handling
         Fixes the "Invalid JSON. Error: Expecting value: line 1 column 1" issue
@@ -394,26 +418,26 @@ class ContractAnalysisWorkflow:
         try:
             # Handle code block wrapped responses
             cleaned_response = response.strip()
-            
+
             # Remove code block markers
-            if cleaned_response.startswith('```json'):
+            if cleaned_response.startswith("```json"):
                 cleaned_response = cleaned_response[7:]  # Remove ```json
-            if cleaned_response.startswith('```'):
+            if cleaned_response.startswith("```"):
                 cleaned_response = cleaned_response[3:]  # Remove ```
-            if cleaned_response.endswith('```'):
+            if cleaned_response.endswith("```"):
                 cleaned_response = cleaned_response[:-3]  # Remove trailing ```
-            
+
             cleaned_response = cleaned_response.strip()
-            
+
             # Try parsing the cleaned response
             parsed_data = json.loads(cleaned_response)
             return parsed_data, True, ""
-            
+
         except json.JSONDecodeError as e:
             return None, False, f"Invalid JSON. Error: {e}"
         except Exception as e:
             return None, False, f"Parsing error: {e}"
-    
+
     def _is_valid_json_response(self, response: str) -> tuple[bool, str]:
         """
         Check if response is valid JSON with improved code block handling
@@ -421,19 +445,19 @@ class ContractAnalysisWorkflow:
         """
         try:
             cleaned_response = response.strip()
-            
+
             # Handle code block wrapped responses
-            if cleaned_response.startswith('```json'):
+            if cleaned_response.startswith("```json"):
                 cleaned_response = cleaned_response[7:]
-            if cleaned_response.startswith('```'):
+            if cleaned_response.startswith("```"):
                 cleaned_response = cleaned_response[3:]
-            if cleaned_response.endswith('```'):
+            if cleaned_response.endswith("```"):
                 cleaned_response = cleaned_response[:-3]
-            
+
             cleaned_response = cleaned_response.strip()
             json.loads(cleaned_response)
             return True, ""
-            
+
         except json.JSONDecodeError as e:
             return False, f"Invalid JSON. Error: {e}"
         except Exception as e:
@@ -446,27 +470,26 @@ class ContractAnalysisWorkflow:
         """
         try:
             cleaned_response = response.strip()
-            
+
             # Handle code block wrapped responses
-            if cleaned_response.startswith('```json'):
+            if cleaned_response.startswith("```json"):
                 cleaned_response = cleaned_response[7:]
-            if cleaned_response.startswith('```'):
+            if cleaned_response.startswith("```"):
                 cleaned_response = cleaned_response[3:]
-            if cleaned_response.endswith('```'):
+            if cleaned_response.endswith("```"):
                 cleaned_response = cleaned_response[:-3]
-            
+
             cleaned_response = cleaned_response.strip()
             return json.loads(cleaned_response)
-            
+
         except json.JSONDecodeError:
             # Re-raise with original response for debugging
             raise
         except Exception as e:
             raise json.JSONDecodeError(f"JSON parsing error: {e}", response, 0)
 
-
     def _create_fallback_compliance_result(self) -> Dict[str, Any]:
-        '''Fallback compliance result when parsing fails'''
+        """Fallback compliance result when parsing fails"""
         return {
             "overall_compliance_score": 5,
             "state_compliance": False,
@@ -475,15 +498,15 @@ class ContractAnalysisWorkflow:
                     "area": "analysis",
                     "issue": "Unable to complete automated compliance analysis",
                     "severity": "medium",
-                    "recommendation": "Manual legal review required"
+                    "recommendation": "Manual legal review required",
                 }
             ],
             "mandatory_disclosures": [],
-            "cooling_off_period": {"applicable": None, "period_days": None}
+            "cooling_off_period": {"applicable": None, "period_days": None},
         }
-    
+
     def _create_fallback_risk_result(self) -> Dict[str, Any]:
-        '''Fallback risk result when parsing fails'''
+        """Fallback risk result when parsing fails"""
         return {
             "overall_risk_score": 5,
             "risk_factors": [
@@ -491,43 +514,49 @@ class ContractAnalysisWorkflow:
                     "factor": "Parsing Error",
                     "severity": "medium",
                     "description": "Unable to perform complete risk analysis due to parsing issues",
-                    "mitigation_suggestions": ["Manual review required", "Re-analyze with updated system"]
+                    "mitigation_suggestions": [
+                        "Manual review required",
+                        "Re-analyze with updated system",
+                    ],
                 }
             ],
             "critical_issues": [],
             "recommendations": ["Manual review of contract recommended"],
-            "confidence_score": 0.3
+            "confidence_score": 0.3,
         }
-    
+
     def _create_fallback_quality_result(self) -> Dict[str, Any]:
-        '''Fallback quality result when parsing fails'''
+        """Fallback quality result when parsing fails"""
         return {
             "overall_quality_score": 0.5,
             "quality_issues": ["Automated quality assessment failed"],
             "recommendations": ["Manual quality review required"],
-            "processing_notes": ["Parsing error occurred during analysis"]
+            "processing_notes": ["Parsing error occurred during analysis"],
         }
-    
+
     def _create_fallback_validation_result(self) -> Dict[str, Any]:
-        '''Fallback validation result when parsing fails'''
+        """Fallback validation result when parsing fails"""
         return {
             "terms_validated": {},
             "missing_mandatory_terms": ["Unable to validate"],
             "validation_confidence": 0.2,
-            "recommendations": ["Manual validation required"]
+            "recommendations": ["Manual validation required"],
         }
-    
+
     def _create_fallback_recommendations(self) -> List[Dict[str, Any]]:
-        '''Fallback recommendations when parsing fails'''
+        """Fallback recommendations when parsing fails"""
         return [
             {
                 "category": "system",
-                "priority": "high", 
+                "priority": "high",
                 "title": "Manual Review Required",
                 "description": "Automated analysis was incomplete. Manual legal review recommended.",
-                "action_items": ["Contact legal professional", "Review contract manually"],
+                "action_items": [
+                    "Contact legal professional",
+                    "Review contract manually",
+                ],
                 "timeline": "immediate",
-                "cost_impact": "medium"
+                "cost_impact": "medium",
             }
         ]
 
@@ -590,12 +619,16 @@ class ContractAnalysisWorkflow:
             "process_document",
             self.check_processing_success,
             {
-                "success": "validate_document_quality" if self.enable_validation else "extract_terms",
-                "retry": "retry_processing", 
+                "success": (
+                    "validate_document_quality"
+                    if self.enable_validation
+                    else "extract_terms"
+                ),
+                "retry": "retry_processing",
                 "error": "handle_error",
             },
         )
-        
+
         # Add conditional edge for document quality validation
         if self.enable_validation:
             workflow.add_conditional_edges(
@@ -860,7 +893,36 @@ class ContractAnalysisWorkflow:
 
             # Fail-fast for empty documents - prevent UI hang
             if not document_text or len(document_text.strip()) < 50:
-                logger.error("Document text is too short or empty - failing analysis")
+                # Enhanced diagnostic logging for troubleshooting
+                extraction_method = document_data.get("extraction_method", "unknown")
+                extraction_confidence = document_data.get("extraction_confidence", 0.0)
+                document_id = state.get("document_id", "unknown")
+                content_hash = state.get("content_hash", "unknown")
+
+                diagnostic_info = {
+                    "raw_length": len(document_text) if document_text else 0,
+                    "stripped_length": (
+                        len(document_text.strip()) if document_text else 0
+                    ),
+                    "document_id": document_id,
+                    "extraction_method": extraction_method,
+                    "extraction_confidence": extraction_confidence,
+                    "content_hash": content_hash,
+                    "file_type": document_data.get("file_type", "unknown"),
+                }
+
+                logger.error(
+                    f"Document content insufficient for analysis - diagnostic info: {diagnostic_info}"
+                )
+
+                # Preview of content for debugging (if any exists)
+                if document_text and len(document_text.strip()) > 0:
+                    preview = (
+                        document_text.strip()[:200] + "..."
+                        if len(document_text.strip()) > 200
+                        else document_text.strip()
+                    )
+                    logger.debug(f"Document text preview: {repr(preview)}")
                 state["document_quality_metrics"] = {
                     "text_quality_score": 0.0,
                     "completeness_score": 0.0,
@@ -873,12 +935,24 @@ class ContractAnalysisWorkflow:
                         "Check document format and quality",
                     ],
                 }
+                if "confidence_scores" not in state:
+                    state["confidence_scores"] = {}
                 state["confidence_scores"]["document_quality"] = 0.0
+                # Enhanced error message with diagnostic information
+                error_message = (
+                    f"Document content is insufficient for analysis. "
+                    f"Extracted {diagnostic_info['stripped_length']} characters "
+                    f"(minimum required: 50). "
+                    f"Extraction method: {extraction_method}, "
+                    f"confidence: {extraction_confidence:.2f}. "
+                    f"Please ensure document is readable and try uploading again."
+                )
+
                 # Return failed status to prevent UI hang
                 return update_state_step(
                     state,
                     "document_analysis_failed",
-                    error="Document content is insufficient for analysis. Please upload a valid document.",
+                    error=error_message,
                 )
 
             use_llm = self.use_llm_config.get("document_quality", True)
@@ -2111,16 +2185,16 @@ class ContractAnalysisWorkflow:
 
     def check_document_quality(self, state: RealEstateAgentState) -> str:
         """Check document quality validation result"""
-        
+
         # Check for any error state first
         if state.get("error_state"):
             return "error"
-            
+
         # Check if the current step indicates a failed document analysis
         current_step = get_current_step(state)
         if current_step == "document_analysis_failed":
             return "error"
-        
+
         # Check document quality metrics if available
         quality_metrics = state.get("document_quality_metrics", {})
         if quality_metrics:
@@ -2128,131 +2202,132 @@ class ContractAnalysisWorkflow:
             issues = quality_metrics.get("issues_identified", [])
             if any("too short or empty" in issue for issue in issues):
                 return "error"
-                
+
             # Check overall quality score
             overall_quality = quality_metrics.get(
-                "overall_quality_score", 
-                quality_metrics.get("text_quality_score", 1.0)
+                "overall_quality_score", quality_metrics.get("text_quality_score", 1.0)
             )
-            
+
             if overall_quality < 0.3:
                 return "error"
             elif overall_quality < 0.5:
                 # Retry for borderline quality
                 retry_count = state.get("retry_count", 0)
                 return "retry" if retry_count < 2 else "error"
-        
+
         return "quality_passed"
 
     # Keep existing fallback methods but add enhanced logging
 
-    def _create_risk_assessment_prompt(
-        self, contract_terms: Dict, compliance_check: Dict, state: str
-    ) -> str:
-        """Enhanced fallback risk assessment prompt"""
-        logger.debug("Using fallback risk assessment prompt")
-        return f"""
-        Analyze the following Australian property contract for risks and issues:
-        
-        CONTRACT TERMS:
-        {json.dumps(contract_terms, indent=2)}
-        
-        COMPLIANCE STATUS:
-        {json.dumps(compliance_check, indent=2)}
-        
-        STATE: {state}
-        
-        Please provide a comprehensive risk assessment including:
-        1. Overall risk score (0-10, where 10 is highest risk)
-        2. Specific risk factors with severity levels
-        3. Potential financial impacts
-        4. Legal compliance issues
-        
-        Format response as JSON with the following structure:
-        {{
-            "overall_risk_score": <number>,
-            "risk_factors": [
-                {{
-                    "factor": "<description>",
-                    "severity": "<low|medium|high|critical>",
-                    "description": "<detailed explanation>",
-                    "impact": "<potential consequences>",
-                    "australian_specific": <boolean>
-                }}
-            ],
-            "risk_summary": "<executive summary>",
-            "confidence_level": <0-1>,
-            "critical_issues": ["<issue1>", "<issue2>"],
-            "state_specific_risks": ["<risk1>", "<risk2>"]
-        }}
-        """
+    # def _create_risk_assessment_prompt(
+    #     self, contract_terms: Dict, compliance_check: Dict, state: str
+    # ) -> str:
+    #     """Enhanced fallback risk assessment prompt"""
+    #     logger.debug("Using fallback risk assessment prompt")
+    #     return f"""
+    #     Analyze the following Australian property contract for risks and issues:
 
-    def _create_recommendations_prompt(self, state: RealEstateAgentState) -> str:
-        """Enhanced fallback recommendations prompt"""
-        logger.debug("Using fallback recommendations prompt")
-        return f"""
-        Based on this contract analysis, provide specific actionable recommendations:
-        
-        ANALYSIS SUMMARY:
-        - Risk Assessment: {json.dumps(state.get("risk_analysis", {}), indent=2)}
-        - Compliance Issues: {json.dumps(state.get("compliance_check", {}), indent=2)}
-        - Australian State: {state["australian_state"]}
-        - User Type: {state["user_type"]}
-        
-        Provide recommendations in JSON format:
-        {{
-            "recommendations": [
-                {{
-                    "priority": "<low|medium|high|critical>",
-                    "category": "<legal|financial|practical>",
-                    "recommendation": "<specific action>",
-                    "action_required": <boolean>,
-                    "australian_context": "<state-specific notes>",
-                    "estimated_cost": <number or null>
-                }}
-            ],
-            "executive_summary": "<summary of key recommendations>",
-            "immediate_actions": ["<action1>", "<action2>"],
-            "next_steps": ["<step1>", "<step2>"]
-        }}
-        """
+    #     CONTRACT TERMS:
+    #     {json.dumps(contract_terms, indent=2)}
 
-    def _create_contract_extraction_prompt(self, document_text: str, state: str) -> str:
-        """Enhanced fallback contract terms extraction prompt"""
-        logger.debug("Using fallback contract terms extraction prompt")
-        return f"""
-        Extract key contract terms from the following Australian property contract:
-        
-        CONTRACT TEXT:
-        {document_text}
-        
-        STATE: {state}
-        
-        Please provide a JSON response with the following structure:
-        {{
-            "terms": {{
-                "purchase_price": <number or null>,
-                "deposit_amount": <number or null>,
-                "property_address": "<string or null>",
-                "settlement_date": "<string or null>"
-            }},
-            "confidence_scores": {{
-                "purchase_price": <0-1>,
-                "deposit_amount": <0-1>,
-                "property_address": <0-1>,
-                "settlement_date": <0-1>
-            }},
-            "overall_confidence": <0-1>,
-            "extraction_method": "fallback",
-            "extraction_timestamp": "<ISO 8601 timestamp>"
-        }}
-        """
+    #     COMPLIANCE STATUS:
+    #     {json.dumps(compliance_check, indent=2)}
+
+    #     STATE: {state}
+
+    #     Please provide a comprehensive risk assessment including:
+    #     1. Overall risk score (0-10, where 10 is highest risk)
+    #     2. Specific risk factors with severity levels
+    #     3. Potential financial impacts
+    #     4. Legal compliance issues
+
+    #     Format response as JSON with the following structure:
+    #     {{
+    #         "overall_risk_score": <number>,
+    #         "risk_factors": [
+    #             {{
+    #                 "factor": "<description>",
+    #                 "severity": "<low|medium|high|critical>",
+    #                 "description": "<detailed explanation>",
+    #                 "impact": "<potential consequences>",
+    #                 "australian_specific": <boolean>
+    #             }}
+    #         ],
+    #         "risk_summary": "<executive summary>",
+    #         "confidence_level": <0-1>,
+    #         "critical_issues": ["<issue1>", "<issue2>"],
+    #         "state_specific_risks": ["<risk1>", "<risk2>"]
+    #     }}
+    #     """
+
+    # def _create_recommendations_prompt(self, state: RealEstateAgentState) -> str:
+    #     """Enhanced fallback recommendations prompt"""
+    #     logger.debug("Using fallback recommendations prompt")
+    #     return f"""
+    #     Based on this contract analysis, provide specific actionable recommendations:
+
+    #     ANALYSIS SUMMARY:
+    #     - Risk Assessment: {json.dumps(state.get("risk_analysis", {}), indent=2)}
+    #     - Compliance Issues: {json.dumps(state.get("compliance_check", {}), indent=2)}
+    #     - Australian State: {state["australian_state"]}
+    #     - User Type: {state["user_type"]}
+
+    #     Provide recommendations in JSON format:
+    #     {{
+    #         "recommendations": [
+    #             {{
+    #                 "priority": "<low|medium|high|critical>",
+    #                 "category": "<legal|financial|practical>",
+    #                 "recommendation": "<specific action>",
+    #                 "action_required": <boolean>,
+    #                 "australian_context": "<state-specific notes>",
+    #                 "estimated_cost": <number or null>
+    #             }}
+    #         ],
+    #         "executive_summary": "<summary of key recommendations>",
+    #         "immediate_actions": ["<action1>", "<action2>"],
+    #         "next_steps": ["<step1>", "<step2>"]
+    #     }}
+    #     """
+
+    # def _create_contract_extraction_prompt(self, document_text: str, state: str) -> str:
+    #     """Enhanced fallback contract terms extraction prompt"""
+    #     logger.debug("Using fallback contract terms extraction prompt")
+    #     return f"""
+    #     Extract key contract terms from the following Australian property contract:
+
+    #     CONTRACT TEXT:
+    #     {document_text}
+
+    #     STATE: {state}
+
+    #     Please provide a JSON response with the following structure:
+    #     {{
+    #         "terms": {{
+    #             "purchase_price": <number or null>,
+    #             "deposit_amount": <number or null>,
+    #             "property_address": "<string or null>",
+    #             "settlement_date": "<string or null>"
+    #         }},
+    #         "confidence_scores": {{
+    #             "purchase_price": <0-1>,
+    #             "deposit_amount": <0-1>,
+    #             "property_address": <0-1>,
+    #             "settlement_date": <0-1>
+    #         }},
+    #         "overall_confidence": <0-1>,
+    #         "extraction_method": "fallback",
+    #         "extraction_timestamp": "<ISO 8601 timestamp>"
+    #     }}
+    #     """
 
     # Keep all existing helper methods with enhanced error handling and logging
     def _parse_risk_analysis(self, llm_response: str) -> Dict[str, Any]:
         """Enhanced risk analysis parsing with structured parsing - FIXED VERSION"""
-        parsed_data, success, error_msg = self._parse_structured_response(llm_response, 'risk_analysis')
-        
+        parsed_data, success, error_msg = self._parse_structured_response(
+            llm_response, "risk_analysis"
+        )
+
         if success and parsed_data:
             logger.debug("Risk analysis parsed successfully using structured parser")
             return parsed_data
@@ -2279,11 +2354,15 @@ class ContractAnalysisWorkflow:
 
     def _parse_recommendations(self, llm_response: str) -> List[Dict[str, Any]]:
         """Enhanced recommendations parsing with structured parsing - FIXED VERSION"""
-        parsed_data, success, error_msg = self._parse_structured_response(llm_response, 'recommendations')
-        
+        parsed_data, success, error_msg = self._parse_structured_response(
+            llm_response, "recommendations"
+        )
+
         if success and parsed_data:
             recommendations = parsed_data.get("recommendations", [])
-            logger.debug(f"Recommendations parsed successfully: {len(recommendations)} items")
+            logger.debug(
+                f"Recommendations parsed successfully: {len(recommendations)} items"
+            )
             return recommendations
         else:
             logger.warning(f"Recommendations parsing failed: {error_msg}")
@@ -2727,13 +2806,15 @@ class ContractAnalysisWorkflow:
 
             # Use improved JSON validation that handles code blocks
             is_valid_json, error_message = self._is_valid_json_response(response)
-            
+
             if is_valid_json:
                 self._metrics["successful_parses"] += 1
                 logger.debug(f"Response quality check passed for {provider}")
             else:
                 self._metrics["failed_parses"] += 1
-                logger.warning(f"Response quality issue from {provider}: {error_message}")
+                logger.warning(
+                    f"Response quality issue from {provider}: {error_message}"
+                )
                 logger.debug(
                     f"Malformed response preview (first 200 chars): {response[:200]}"
                 )
