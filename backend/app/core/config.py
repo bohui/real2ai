@@ -46,7 +46,14 @@ class Settings(BaseSettings):
     # JWT Settings
     jwt_secret_key: Optional[str] = None
     jwt_algorithm: str = "HS256"
-    jwt_expiration_hours: int = 24
+    jwt_expiration_hours: int = 1  # Changed from 24 to 1 hour to match Supabase
+    
+    # Token Coordination Settings
+    backend_token_ttl_buffer_minutes: int = 5  # Backend tokens expire 5 min before Supabase
+    token_refresh_threshold_minutes: int = 10  # Refresh when 10 min or less remaining
+    auto_refresh_enabled: bool = True  # Enable proactive token refresh
+    supabase_access_token_ttl_minutes: int = 60  # Standard Supabase access token TTL
+    
     # Auth strategy
     use_backend_tokens: bool = (
         True  # If true, issue backend API tokens and keep Supabase tokens server-side

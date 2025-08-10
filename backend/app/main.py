@@ -88,10 +88,11 @@ async def lifespan(app: FastAPI) -> Any:
     """Lifespan context manager for startup and shutdown events"""
     # Startup
     logger.info("Starting Real2.AI API...")
-    
+
     # Run startup diagnostics including time sync checks
     try:
         from app.startup_diagnostics import run_startup_diagnostics
+
         await run_startup_diagnostics()
     except Exception as e:
         logger.error(f"Startup diagnostics failed: {e}")
@@ -104,13 +105,14 @@ async def lifespan(app: FastAPI) -> Any:
         logger.info(f"LangSmith tracing enabled for project: {status['project_name']}")
     else:
         logger.info("LangSmith tracing disabled")
-    
+
     # Validate JWT configuration on startup
     logger.info("Validating JWT configuration...")
     try:
         from app.core.auth import validate_jwt_configuration
+
         jwt_validation = validate_jwt_configuration()
-        
+
         if jwt_validation["status"] == "critical":
             logger.critical("CRITICAL JWT CONFIGURATION ISSUES FOUND:")
             for issue in jwt_validation["issues"]:
@@ -118,9 +120,11 @@ async def lifespan(app: FastAPI) -> Any:
             logger.critical("Recommendations:")
             for rec in jwt_validation["recommendations"]:
                 logger.critical(f"  - {rec}")
-            logger.critical("Application startup FAILED due to critical JWT security issues")
+            logger.critical(
+                "Application startup FAILED due to critical JWT security issues"
+            )
             raise RuntimeError("Critical JWT configuration issues prevent startup")
-        
+
         elif jwt_validation["status"] == "warning":
             logger.warning("JWT configuration warnings:")
             for warning in jwt_validation["warnings"]:
@@ -128,9 +132,9 @@ async def lifespan(app: FastAPI) -> Any:
             logger.warning("Recommendations:")
             for rec in jwt_validation["recommendations"]:
                 logger.warning(f"  - {rec}")
-        
+
         logger.info("JWT configuration validation completed successfully")
-    
+
     except Exception as e:
         if "Critical JWT configuration issues" in str(e):
             # Re-raise critical issues
@@ -283,8 +287,8 @@ app.include_router(cache_router)
 
 # Import background tasks
 from app.tasks.background_tasks import (
-    process_document_background,
-    analyze_contract_background,
+    # process_document_background,
+    # analyze_contract_background,
     enhanced_reprocess_document_with_ocr_background,
     batch_ocr_processing_background,
     generate_pdf_report,

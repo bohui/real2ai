@@ -174,13 +174,19 @@ class NotificationDismissResponse(TypedDict):
 
 
 # Background Task Types
-class CeleryTaskResult:
-    """Celery task result wrapper."""
-
-    id: str
-
-    def __init__(self, id: str):
-        self.id = id
+"""
+DEPRECATED: Unused placeholder class commented out.
+Original name: CeleryTaskResult
+Reason: No references in codebase; Celery tasks return ids directly.
+Date: 2025-08-10
+"""
+# class CeleryTaskResult:
+#     """Celery task result wrapper."""
+#
+#     id: str
+#
+#     def __init__(self, id: str):
+#         self.id = id
 
 
 # Client Type Aliases

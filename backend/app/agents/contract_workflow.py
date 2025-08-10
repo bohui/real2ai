@@ -488,77 +488,82 @@ class ContractAnalysisWorkflow:
         except Exception as e:
             raise json.JSONDecodeError(f"JSON parsing error: {e}", response, 0)
 
-    def _create_fallback_compliance_result(self) -> Dict[str, Any]:
-        """Fallback compliance result when parsing fails"""
-        return {
-            "overall_compliance_score": 5,
-            "state_compliance": False,
-            "compliance_issues": [
-                {
-                    "area": "analysis",
-                    "issue": "Unable to complete automated compliance analysis",
-                    "severity": "medium",
-                    "recommendation": "Manual legal review required",
-                }
-            ],
-            "mandatory_disclosures": [],
-            "cooling_off_period": {"applicable": None, "period_days": None},
-        }
+    # """
+    # DEPRECATED: Unused fallback result builders. Not referenced by workflow; structured
+    # parsing with safe JSON fallbacks is used instead.
+    # """
 
-    def _create_fallback_risk_result(self) -> Dict[str, Any]:
-        """Fallback risk result when parsing fails"""
-        return {
-            "overall_risk_score": 5,
-            "risk_factors": [
-                {
-                    "factor": "Parsing Error",
-                    "severity": "medium",
-                    "description": "Unable to perform complete risk analysis due to parsing issues",
-                    "mitigation_suggestions": [
-                        "Manual review required",
-                        "Re-analyze with updated system",
-                    ],
-                }
-            ],
-            "critical_issues": [],
-            "recommendations": ["Manual review of contract recommended"],
-            "confidence_score": 0.3,
-        }
+    # def _create_fallback_compliance_result(self) -> Dict[str, Any]:
+    #     """Fallback compliance result when parsing fails"""
+    #     return {
+    #         "overall_compliance_score": 5,
+    #         "state_compliance": False,
+    #         "compliance_issues": [
+    #             {
+    #                 "area": "analysis",
+    #                 "issue": "Unable to complete automated compliance analysis",
+    #                 "severity": "medium",
+    #                 "recommendation": "Manual legal review required",
+    #             }
+    #         ],
+    #         "mandatory_disclosures": [],
+    #         "cooling_off_period": {"applicable": None, "period_days": None},
+    #     }
 
-    def _create_fallback_quality_result(self) -> Dict[str, Any]:
-        """Fallback quality result when parsing fails"""
-        return {
-            "overall_quality_score": 0.5,
-            "quality_issues": ["Automated quality assessment failed"],
-            "recommendations": ["Manual quality review required"],
-            "processing_notes": ["Parsing error occurred during analysis"],
-        }
+    # def _create_fallback_risk_result(self) -> Dict[str, Any]:
+    #     """Fallback risk result when parsing fails"""
+    #     return {
+    #         "overall_risk_score": 5,
+    #         "risk_factors": [
+    #             {
+    #                 "factor": "Parsing Error",
+    #                 "severity": "medium",
+    #                 "description": "Unable to perform complete risk analysis due to parsing issues",
+    #                 "mitigation_suggestions": [
+    #                     "Manual review required",
+    #                     "Re-analyze with updated system",
+    #                 ],
+    #             }
+    #         ],
+    #         "critical_issues": [],
+    #         "recommendations": ["Manual review of contract recommended"],
+    #         "confidence_score": 0.3,
+    #     }
 
-    def _create_fallback_validation_result(self) -> Dict[str, Any]:
-        """Fallback validation result when parsing fails"""
-        return {
-            "terms_validated": {},
-            "missing_mandatory_terms": ["Unable to validate"],
-            "validation_confidence": 0.2,
-            "recommendations": ["Manual validation required"],
-        }
+    # def _create_fallback_quality_result(self) -> Dict[str, Any]:
+    #     """Fallback quality result when parsing fails"""
+    #     return {
+    #         "overall_quality_score": 0.5,
+    #         "quality_issues": ["Automated quality assessment failed"],
+    #         "recommendations": ["Manual quality review required"],
+    #         "processing_notes": ["Parsing error occurred during analysis"],
+    #     }
 
-    def _create_fallback_recommendations(self) -> List[Dict[str, Any]]:
-        """Fallback recommendations when parsing fails"""
-        return [
-            {
-                "category": "system",
-                "priority": "high",
-                "title": "Manual Review Required",
-                "description": "Automated analysis was incomplete. Manual legal review recommended.",
-                "action_items": [
-                    "Contact legal professional",
-                    "Review contract manually",
-                ],
-                "timeline": "immediate",
-                "cost_impact": "medium",
-            }
-        ]
+    # def _create_fallback_validation_result(self) -> Dict[str, Any]:
+    #     """Fallback validation result when parsing fails"""
+    #     return {
+    #         "terms_validated": {},
+    #         "missing_mandatory_terms": ["Unable to validate"],
+    #         "validation_confidence": 0.2,
+    #         "recommendations": ["Manual validation required"],
+    #     }
+
+    # def _create_fallback_recommendations(self) -> List[Dict[str, Any]]:
+    #     """Fallback recommendations when parsing fails"""
+    #     return [
+    #         {
+    #             "category": "system",
+    #             "priority": "high",
+    #             "title": "Manual Review Required",
+    #             "description": "Automated analysis was incomplete. Manual legal review recommended.",
+    #             "action_items": [
+    #                 "Contact legal professional",
+    #                 "Review contract manually",
+    #             ],
+    #             "timeline": "immediate",
+    #             "cost_impact": "medium",
+    #         }
+    #     ]
 
     def _create_workflow(self) -> StateGraph:
         """Create the enhanced LangGraph workflow"""

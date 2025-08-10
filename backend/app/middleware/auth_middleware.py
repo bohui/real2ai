@@ -41,7 +41,7 @@ class AuthContextMiddleware(BaseHTTPMiddleware):
         self, request: Request, call_next: RequestResponseEndpoint
     ) -> Response:
         """
-        Process the request and set auth context.
+        Process the request and set auth context with token coordination.
 
         Args:
             request: FastAPI request object
@@ -52,6 +52,7 @@ class AuthContextMiddleware(BaseHTTPMiddleware):
         """
         # Extract token from request
         token, user_id, user_email = self._extract_auth_info(request)
+        new_token_header = None  # Track if we need to send a new token to frontend
 
         # Debug: Log token type
         if token:
@@ -59,9 +60,26 @@ class AuthContextMiddleware(BaseHTTPMiddleware):
             is_backend_token = BackendTokenService.is_backend_token(token)
             logger.info(f"Token type check - is_backend_token: {is_backend_token}")
         
-        # If backend-issued token, exchange to Supabase access for RLS
+        # If backend-issued token, check for near expiry and coordinate refresh
         if token and BackendTokenService.is_backend_token(token):
-            logger.info(f"Backend token detected, attempting exchange for user: {user_id}")
+            logger.info(f"Backend token detected for user: {user_id}")
+            
+            # Check if backend token is near expiry (10 minutes threshold)
+            if BackendTokenService.is_near_expiry(token, threshold_minutes=10):
+                logger.info(f"Backend token near expiry for user: {user_id}, attempting coordinated refresh")
+                
+                # Attempt to refresh both tokens in coordination
+                refreshed_token = await BackendTokenService.refresh_coordinated_tokens(token)
+                if refreshed_token:
+                    logger.info(f"Successfully refreshed coordinated tokens for user: {user_id}")
+                    # Use the new backend token for this request
+                    token = refreshed_token
+                    # Mark that we need to send the new token to frontend
+                    new_token_header = refreshed_token
+                else:
+                    logger.warning(f"Failed to refresh coordinated tokens for user: {user_id}")
+            
+            # Exchange backend token for Supabase access token for RLS
             exchanged = await BackendTokenService.ensure_supabase_access_token(token)
             if exchanged:
                 # Replace token with Supabase access token so DB ops are RLS-authenticated
@@ -90,6 +108,12 @@ class AuthContextMiddleware(BaseHTTPMiddleware):
         try:
             # Process the request
             response = await call_next(request)
+            
+            # If we have a new token from coordinated refresh, add it to response headers
+            if new_token_header:
+                response.headers["X-New-Token"] = new_token_header
+                logger.info(f"Sending new coordinated token to frontend for user: {user_id}")
+            
             return response
         finally:
             # Always clear auth context after request

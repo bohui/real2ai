@@ -191,8 +191,8 @@ class CheckpointResumeStrategy(RecoveryStrategy):
         """Get Celery task function by name"""
         task_map = {
             "comprehensive_document_analysis": background_tasks.comprehensive_document_analysis,
-            "process_document_background": background_tasks.process_document_background,
-            "analyze_contract_background": background_tasks.analyze_contract_background,
+            # "process_document_background": background_tasks.process_document_background,
+            # "analyze_contract_background": background_tasks.analyze_contract_background,
         }
         return task_map.get(task_name)
 

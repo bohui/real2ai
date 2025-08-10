@@ -39,6 +39,8 @@ class ApiService {
   private failedQueue: Array<
     { resolve: (value?: any) => void; reject: (error?: any) => void }
   > = [];
+  private tokenRefreshInterval: NodeJS.Timeout | null = null;
+  private tokenExpiryTime: number | null = null;
 
   constructor() {
     this.client = axios.create({
@@ -62,7 +64,16 @@ class ApiService {
 
     // Response interceptor for error handling and token refresh
     this.client.interceptors.response.use(
-      (response) => response,
+      (response) => {
+        // Check for new token in response headers (from backend coordination)
+        const newToken = response.headers['x-new-token'];
+        if (newToken) {
+          console.log('Received coordinated token refresh from backend');
+          this.setToken(newToken);
+          this.setupTokenRefreshInterval();
+        }
+        return response;
+      },
       async (error: AxiosError) => {
         const originalRequest = error.config as AxiosRequestConfigExtended;
 
@@ -147,18 +158,28 @@ class ApiService {
     } else {
       localStorage.removeItem("refresh_token");
     }
+    // Setup proactive refresh for new tokens
+    this.setupTokenRefreshInterval();
   }
 
   setToken(token: string): void {
     this.token = token;
     localStorage.setItem("auth_token", token);
+    // Setup proactive refresh for new token
+    this.setupTokenRefreshInterval();
   }
 
   clearTokens(): void {
     this.token = null;
     this.refreshToken = null;
+    this.tokenExpiryTime = null;
     localStorage.removeItem("auth_token");
     localStorage.removeItem("refresh_token");
+    // Clear refresh interval
+    if (this.tokenRefreshInterval) {
+      clearInterval(this.tokenRefreshInterval);
+      this.tokenRefreshInterval = null;
+    }
   }
 
   clearToken(): void {
@@ -170,9 +191,92 @@ class ApiService {
     const refreshToken = localStorage.getItem("refresh_token");
     if (token) {
       this.token = token;
+      // Setup proactive refresh for loaded token
+      this.setupTokenRefreshInterval();
     }
     if (refreshToken) {
       this.refreshToken = refreshToken;
+    }
+  }
+
+  private extractTokenExpiry(token: string): number | null {
+    try {
+      // Decode JWT payload without verification
+      const parts = token.split('.');
+      if (parts.length !== 3) return null;
+      
+      const payload = JSON.parse(atob(parts[1]));
+      
+      // For backend tokens, check supa_exp first, then exp
+      // This ensures we refresh before the underlying Supabase token expires
+      const expiry = payload.supa_exp || payload.exp;
+      
+      if (expiry && typeof expiry === 'number') {
+        return expiry;
+      }
+    } catch (error) {
+      console.warn('Failed to extract token expiry:', error);
+    }
+    return null;
+  }
+
+  private setupTokenRefreshInterval(): void {
+    // Clear existing interval
+    if (this.tokenRefreshInterval) {
+      clearInterval(this.tokenRefreshInterval);
+      this.tokenRefreshInterval = null;
+    }
+
+    if (!this.token) return;
+
+    // Extract token expiry
+    this.tokenExpiryTime = this.extractTokenExpiry(this.token);
+    
+    if (this.tokenExpiryTime) {
+      // Check every minute if token needs refresh
+      this.tokenRefreshInterval = setInterval(() => {
+        this.checkAndRefreshToken();
+      }, 60000); // Check every minute
+      
+      // Also do an immediate check
+      this.checkAndRefreshToken();
+    }
+  }
+
+  private async checkAndRefreshToken(): Promise<void> {
+    if (!this.tokenExpiryTime) return;
+
+    const now = Math.floor(Date.now() / 1000);
+    const timeToExpiry = this.tokenExpiryTime - now;
+    
+    // Log for debugging
+    console.debug(`Token expires in ${timeToExpiry}s`);
+    
+    // Refresh when 10 minutes or less remaining (configurable)
+    const refreshThreshold = 600; // 10 minutes in seconds
+    
+    if (timeToExpiry <= refreshThreshold && timeToExpiry > 0) {
+      console.log(`Token expiring soon (${timeToExpiry}s remaining), initiating proactive refresh`);
+      
+      try {
+        // Only refresh if we have a refresh token or if backend supports token refresh
+        if (this.refreshToken) {
+          await this.refreshTokens();
+          console.log('Proactive token refresh successful');
+        } else {
+          // For backend tokens without refresh capability, we need to check if
+          // the backend can provide a new token via the next API call
+          console.log('Backend token near expiry, will receive new token on next API call');
+        }
+      } catch (error) {
+        console.warn('Proactive token refresh failed:', error);
+        // The regular 401 interceptor will handle this on the next request
+      }
+    } else if (timeToExpiry <= 0) {
+      // Token already expired
+      console.warn('Token already expired, clearing tokens');
+      this.clearTokens();
+      window.dispatchEvent(new CustomEvent('auth:unauthorized'));
     }
   }
 
