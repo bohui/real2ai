@@ -70,7 +70,7 @@ async def update_analysis_progress(
             status = "completed"
         else:
             status = "in_progress"
-        
+
         progress_data = {
             "content_hash": content_hash,
             "user_id": user_id,
@@ -104,7 +104,9 @@ async def update_analysis_progress(
                 # Send to all documents with this content_hash
                 for doc in doc_result["data"]:
                     session_id = doc["id"]
-                    logger.info(f"Sending progress to document {session_id} for content_hash {content_hash}")
+                    logger.info(
+                        f"Sending progress to document {session_id} for content_hash {content_hash}"
+                    )
                     await websocket_manager.send_message(
                         session_id,
                         {
@@ -246,10 +248,14 @@ async def comprehensive_document_analysis(
             # Check if this is a retry operation to preserve progress continuity
             is_retry = analysis_options.get("is_retry", False)
             resume_from_step = analysis_options.get("resume_from_step")
-            
+
             if is_retry and resume_from_step:
                 # For retry operations, preserve the previous progress and show resumption
-                previous_progress = latest_progress["data"][0]["progress_percent"] if latest_progress.get("data") else 5
+                previous_progress = (
+                    latest_progress["data"][0]["progress_percent"]
+                    if latest_progress.get("data")
+                    else 5
+                )
                 await update_analysis_progress(
                     user_id,
                     content_hash,
@@ -258,7 +264,9 @@ async def comprehensive_document_analysis(
                     step_description=f"Resuming analysis from {resume_from_step}...",
                     estimated_completion_minutes=2,
                 )
-                logger.info(f"Retry operation: maintaining progress at {previous_progress}% for step {resume_from_step}")
+                logger.info(
+                    f"Retry operation: maintaining progress at {previous_progress}% for step {resume_from_step}"
+                )
             else:
                 # Normal startup: new analysis
                 await update_analysis_progress(
@@ -371,16 +379,18 @@ async def comprehensive_document_analysis(
                 logger.error(error_msg)
                 raise ValueError(f"Contract analysis failed: {error_msg}")
 
-            # Extract analysis results from service response 
+            # Extract analysis results from service response
             # StartAnalysisResponse object - access attributes directly
             if not analysis_response.success:
-                error_msg = getattr(analysis_response, 'error', "Contract analysis failed")
+                error_msg = getattr(
+                    analysis_response, "error", "Contract analysis failed"
+                )
                 logger.error(f"Contract analysis failed: {error_msg}")
                 raise ValueError(f"Contract analysis failed: {error_msg}")
 
             # Get analysis results from the service response
-            analysis_result = getattr(analysis_response, 'analysis_results', {})
-            final_state = getattr(analysis_response, 'final_state', {})
+            analysis_result = getattr(analysis_response, "analysis_results", {})
+            final_state = getattr(analysis_response, "final_state", {})
 
             logger.info(f"Contract analysis completed successfully")
 
@@ -405,7 +415,8 @@ async def comprehensive_document_analysis(
                 "risk_score": analysis_result.get("risk_assessment", {}).get(
                     "overall_risk_score", 0.0
                 ),
-                "processing_time": analysis_response.get("processing_time_seconds", 0),
+                "processing_time": getattr(analysis_response, "processing_time", 0)
+                or 0,
                 "processing_completed_at": datetime.now(timezone.utc).isoformat(),
             }
 
@@ -432,7 +443,8 @@ async def comprehensive_document_analysis(
                 "risk_score": analysis_result.get("risk_assessment", {}).get(
                     "overall_risk_score", 0.0
                 ),
-                "processing_time": analysis_response.get("processing_time_seconds", 0),
+                "processing_time": getattr(analysis_response, "processing_time", 0)
+                or 0,
                 "recommendations_count": len(
                     analysis_result.get("recommendations", [])
                 ),
@@ -472,11 +484,15 @@ async def comprehensive_document_analysis(
                         limit=1,
                     )
                     if latest_progress.get("data"):
-                        last_step = latest_progress["data"][0].get("current_step", "unknown")
-                        last_progress_percent = latest_progress["data"][0].get("progress_percent", 0)
+                        last_step = latest_progress["data"][0].get(
+                            "current_step", "unknown"
+                        )
+                        last_progress_percent = latest_progress["data"][0].get(
+                            "progress_percent", 0
+                        )
                 except Exception as fetch_err:
                     logger.warning(f"Could not fetch last progress: {fetch_err}")
-                
+
                 # Update progress preserving the last step and percentage for resume capability
                 await update_analysis_progress(
                     user_id,

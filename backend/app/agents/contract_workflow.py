@@ -221,6 +221,7 @@ class ContractAnalysisWorkflow:
             "successful_parses": 0,
             "fallback_uses": 0,
             "validation_failures": 0,
+            "total_processing_time": 0.0,
             "average_processing_time": 0.0,
         }
 
@@ -489,9 +490,11 @@ class ContractAnalysisWorkflow:
                 progress_update["progress"] = {
                     **state["progress"],
                     "current_step": current_step_num,
-                    "percentage": int((current_step_num / state["progress"]["total_steps"]) * 100)
+                    "percentage": int(
+                        (current_step_num / state["progress"]["total_steps"]) * 100
+                    ),
                 }
-                
+
             # Return proper state update
             logger.debug(f"Input validation completed for user {state['user_id']}")
             return create_step_update("input_validated", progress_update)
@@ -519,7 +522,9 @@ class ContractAnalysisWorkflow:
             progress_update["progress"] = {
                 **state["progress"],
                 "current_step": current_step_num,
-                "percentage": int((current_step_num / state["progress"]["total_steps"]) * 100)
+                "percentage": int(
+                    (current_step_num / state["progress"]["total_steps"]) * 100
+                ),
             }
 
         try:
@@ -582,7 +587,7 @@ class ContractAnalysisWorkflow:
                 "document_quality_metrics": quality_metrics,
                 "llm_used": use_llm and (self.openai_client or self.gemini_client),
             }
-            
+
             # Merge with progress update
             progress_update.update(updated_data)
 
@@ -1444,11 +1449,11 @@ class ContractAnalysisWorkflow:
                 "analysis_timestamp": datetime.now(UTC).isoformat(),
                 "user_id": state["user_id"],
                 "australian_state": state["australian_state"],
-                "contract_terms": state.get("contract_terms", {}),
-                "risk_assessment": state.get("risk_assessment", {}),
-                "compliance_check": state.get("compliance_check", {}),
-                "recommendations": state.get("final_recommendations", []),
-                "confidence_scores": state.get("confidence_scores", {}),
+                "contract_terms": state.get("contract_terms") or {},
+                "risk_assessment": state.get("risk_assessment") or {},
+                "compliance_check": state.get("compliance_check") or {},
+                "recommendations": state.get("final_recommendations") or [],
+                "confidence_scores": state.get("confidence_scores") or {},
                 "overall_confidence": overall_confidence,
                 "confidence_assessment": confidence_result.get(
                     "quality_assessment", ""
@@ -1457,39 +1462,37 @@ class ContractAnalysisWorkflow:
                     "steps_completed": state["current_step"],
                     "processing_time": state.get("processing_time"),
                     "analysis_version": state["agent_version"],
-                    "progress": state.get("progress", {}),
+                    "progress": state.get("progress") or {},
                     "enhanced_workflow": True,
                     "validation_enabled": self.enable_validation,
                     "quality_checks_enabled": self.enable_quality_checks,
                 },
                 "quality_metrics": {
-                    "extraction_quality": state.get("document_metadata", {}).get(
+                    "extraction_quality": (state.get("document_metadata") or {}).get(
                         "text_quality", {}
                     ),
                     "confidence_breakdown": state.get("confidence_scores", {}),
                     "processing_method": {
-                        "document_extraction": state.get("document_metadata", {}).get(
-                            "extraction_method", "unknown"
-                        ),
-                        "term_extraction": state.get("extraction_metadata", {}).get(
+                        "document_extraction": (
+                            state.get("document_metadata") or {}
+                        ).get("extraction_method", "unknown"),
+                        "term_extraction": (state.get("extraction_metadata") or {}).get(
                             "extraction_method", "standard"
                         ),
-                        "risk_parsing": state.get("risk_assessment", {}).get(
+                        "risk_parsing": (state.get("risk_assessment") or {}).get(
                             "parsing_method", "unknown"
                         ),
-                        "recommendations_parsing": state.get(
-                            "recommendations_metadata", {}
+                        "recommendations_parsing": (
+                            state.get("recommendations_metadata") or {}
                         ).get("parsing_method", "unknown"),
                     },
                     "workflow_metrics": self._get_workflow_metrics(),
-                    "document_quality_metrics": state.get(
-                        "document_quality_metrics", {}
-                    ),
+                    "document_quality_metrics": state.get("document_quality_metrics")
+                    or {},
                     "validation_results": {
-                        "terms_validation": state.get("terms_validation", {}),
-                        "final_output_validation": state.get(
-                            "final_output_validation", {}
-                        ),
+                        "terms_validation": state.get("terms_validation") or {},
+                        "final_output_validation": state.get("final_output_validation")
+                        or {},
                     },
                 },
             }
@@ -1536,9 +1539,9 @@ class ContractAnalysisWorkflow:
     ) -> Dict[str, Any]:
         """Create enhanced summary report for display"""
 
-        risk_assessment = analysis_results.get("risk_assessment", {})
-        compliance_check = analysis_results.get("compliance_check", {})
-        recommendations = analysis_results.get("recommendations", [])
+        risk_assessment = analysis_results.get("risk_assessment") or {}
+        compliance_check = analysis_results.get("compliance_check") or {}
+        recommendations = analysis_results.get("recommendations") or []
 
         # Enhanced executive summary
         executive_summary = {
@@ -1591,7 +1594,7 @@ class ContractAnalysisWorkflow:
             "confidence_breakdown": analysis_results.get("confidence_scores", {}),
             "processing_quality": analysis_results.get("quality_metrics", {}),
             "overall_confidence": analysis_results.get("overall_confidence", 0),
-            "validation_results": analysis_results.get("quality_metrics", {}).get(
+            "validation_results": (analysis_results.get("quality_metrics") or {}).get(
                 "validation_results", {}
             ),
             "enhancement_indicators": {
@@ -1610,9 +1613,9 @@ class ContractAnalysisWorkflow:
             "processing_metadata": {
                 "workflow_version": "enhanced_v1.0",
                 "analysis_timestamp": analysis_results.get("analysis_timestamp"),
-                "processing_time": analysis_results.get("processing_summary", {}).get(
-                    "processing_time"
-                ),
+                "processing_time": (
+                    analysis_results.get("processing_summary") or {}
+                ).get("processing_time"),
                 "performance_metrics": self._get_workflow_metrics(),
             },
         }
@@ -1644,13 +1647,9 @@ class ContractAnalysisWorkflow:
                 "confidence_scores": state.get("confidence_scores", {}),
             },
         }
-
+        # Avoid updating 'analysis_results' in error path to prevent concurrent graph update conflicts
         updated_data = {
-            "analysis_results": {
-                "error_details": error_details,
-                "status": "failed",
-                "workflow_metrics": self._get_workflow_metrics(),
-            },
+            "error_details": error_details,
             "parsing_status": ProcessingStatus.FAILED,
         }
 

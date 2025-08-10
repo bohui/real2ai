@@ -390,8 +390,40 @@ class TemplateLibrary:
             template_dir=self.template_dir,
         )
 
+        # Derive a stable relative path name (e.g., "validation/document_quality_validation")
+        try:
+            relative_path = template_file.relative_to(self.template_dir)
+        except ValueError:
+            # If for some reason the file is not under template_dir, fallback to name only
+            relative_path = template_file.name
+
+        # Remove extension and normalize to POSIX-style path
+        if isinstance(relative_path, Path):
+            relative_name = relative_path.with_suffix("").as_posix()
+        else:
+            # string fallback; strip last extension
+            relative_name = str(relative_path)
+            if "." in relative_name:
+                relative_name = relative_name.rsplit(".", 1)[0]
+
+        # If metadata name is missing/unknown, use the relative path as the canonical name
+        if not metadata.name or metadata.name in {"unknown", "fragment"}:
+            metadata.name = relative_name
+
+        # Register template under both the metadata name and the relative path alias
         self.templates[metadata.name] = template
-        logger.debug(f"Loaded template: {metadata.name} from {template_file}")
+        self.templates[relative_name] = template
+
+        # Also register a shortened alias without leading "templates/" for convenience
+        # This allows callers to reference templates like "validation/document_quality_validation"
+        # even when files live under the "templates/" subdirectory.
+        if isinstance(relative_name, str) and relative_name.startswith("templates/"):
+            short_alias = relative_name[len("templates/") :]
+            self.templates[short_alias] = template
+
+        logger.debug(
+            f"Loaded template: metadata_name='{metadata.name}', alias='{relative_name}' from {template_file}"
+        )
 
     def _parse_frontmatter(self, content: str) -> TemplateMetadata:
         """Parse YAML frontmatter from template file"""

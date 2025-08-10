@@ -96,10 +96,11 @@ class GeminiSettings(BaseSettings):
         DEFAULT_CIRCUIT_TIMEOUT_SECONDS  # 5 minutes for AI services
     )
 
-    class Config:
-        env_file = [".env", ".env.local"]
-        case_sensitive = False
-        extra = "ignore"  # Ignore extra environment variables
+    model_config = {
+        "env_file": [".env", ".env.local"],
+        "case_sensitive": False,
+        "extra": "ignore"  # Ignore extra environment variables
+    }
 
     def to_client_config(self) -> GeminiClientConfig:
         """Convert to GeminiClientConfig."""

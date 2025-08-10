@@ -462,7 +462,9 @@ class ContractAnalysisService:
             "user_type": user_type,
             "contract_type": contract_type,
             "user_experience": user_experience,
-            "current_step": ["initialized"],  # Use list for Annotated concurrent updates
+            "current_step": [
+                "initialized"
+            ],  # Use list for Annotated concurrent updates
             "agent_version": "unified_v1.0",
             "created_at": datetime.now(timezone.utc).isoformat(),
             "workflow_config": {
@@ -487,7 +489,7 @@ class ContractAnalysisService:
             "progress": None,
             "analysis_results": {},
             "report_data": None,
-            "final_recommendations": []
+            "final_recommendations": [],
         }
 
     def _create_analysis_response(
@@ -495,7 +497,11 @@ class ContractAnalysisService:
     ) -> ContractAnalysisServiceResponse:
         """Create enhanced analysis response"""
 
-        analysis_results = final_state.get("analysis_results", {})
+        # Safely coalesce optional fields that may be present but set to None
+        analysis_results = final_state.get("analysis_results") or {}
+        report_data = final_state.get("report_data") or {}
+        workflow_config = final_state.get("workflow_config") or {}
+        progress_info = final_state.get("progress") or {}
 
         # Create comprehensive response
         response = ContractAnalysisServiceResponse(
@@ -508,24 +514,36 @@ class ContractAnalysisService:
             processing_time_seconds=processing_time,
             workflow_version="unified_v1.0",
             analysis_results=analysis_results,
-            report_data=final_state.get("report_data", {}),
+            report_data=report_data,
             quality_metrics=AnalysisQualityMetrics(
                 overall_confidence=analysis_results.get("overall_confidence", 0.0),
                 confidence_breakdown=analysis_results.get("confidence_breakdown", {}),
                 quality_assessment=analysis_results.get("confidence_assessment", ""),
                 processing_quality=analysis_results.get("quality_metrics", {}),
-                document_quality=final_state.get("document_quality_metrics", {}),
-                validation_results=final_state.get("quality_metrics", {}).get(
-                    "validation_results", {}
+                document_quality=(final_state.get("document_quality_metrics") or {}),
+                validation_results=(
+                    (final_state.get("quality_metrics") or {}).get(
+                        "validation_results", {}
+                    )
                 ),
             ),
             workflow_metadata=WorkflowMetadata(
-                steps_completed=final_state.get("progress", {}).get("current_step", 0),
-                total_steps=final_state.get("progress", {}).get("total_steps", 0),
-                progress_percentage=final_state.get("progress", {}).get(
-                    "percentage", 0
+                steps_completed=(
+                    progress_info.get("current_step", 0)
+                    if isinstance(progress_info, dict)
+                    else 0
                 ),
-                configuration=final_state.get("workflow_config", {}),
+                total_steps=(
+                    progress_info.get("total_steps", 0)
+                    if isinstance(progress_info, dict)
+                    else 0
+                ),
+                progress_percentage=(
+                    progress_info.get("percentage", 0)
+                    if isinstance(progress_info, dict)
+                    else 0
+                ),
+                configuration=workflow_config,
                 performance_metrics=(
                     self.workflow.get_workflow_metrics()
                     if hasattr(self.workflow, "get_workflow_metrics")
@@ -589,24 +607,24 @@ class ContractAnalysisService:
         warnings = []
 
         # Document quality warnings
-        doc_quality = state.get("document_quality_metrics", {})
+        doc_quality = state.get("document_quality_metrics") or {}
         if doc_quality.get("issues_identified"):
             warnings.extend(doc_quality["issues_identified"])
 
         # Compliance warnings
-        compliance_check = state.get("compliance_check", {})
+        compliance_check = state.get("compliance_check") or {}
         if compliance_check.get("warnings"):
             warnings.extend(compliance_check["warnings"])
 
         # Terms validation warnings
-        terms_validation = state.get("terms_validation", {})
+        terms_validation = state.get("terms_validation") or {}
         if terms_validation.get("missing_mandatory_terms"):
             warnings.append(
                 f"Missing mandatory terms: {', '.join(terms_validation['missing_mandatory_terms'])}"
             )
 
         # Final output validation warnings
-        final_validation = state.get("final_output_validation", {})
+        final_validation = state.get("final_output_validation") or {}
         if not final_validation.get("validation_passed", True):
             warnings.append("Final output validation failed")
 
@@ -649,21 +667,25 @@ class ContractAnalysisService:
                     if resume_from_step and resume_from_step.endswith("_failed"):
                         # Remove the "_failed" suffix to get the actual step name
                         clean_step = resume_from_step[:-7]  # Remove "_failed" (7 chars)
-                    
+
                     self._resume_index = (
-                        self._step_order.index(clean_step)
-                        if clean_step
-                        else 0
+                        self._step_order.index(clean_step) if clean_step else 0
                     )
-                    
+
                     # If resuming from a failed step, we want to retry that step
                     # so we don't skip it
                     if resume_from_step and resume_from_step.endswith("_failed"):
-                        logger.info(f"Resuming from failed step: {clean_step} (will retry)")
+                        logger.info(
+                            f"Resuming from failed step: {clean_step} (will retry)"
+                        )
                     else:
-                        logger.info(f"Resuming from step: {clean_step} (will skip completed steps)")
+                        logger.info(
+                            f"Resuming from step: {clean_step} (will skip completed steps)"
+                        )
                 except ValueError:
-                    logger.warning(f"Unknown resume step: {resume_from_step}, starting from beginning")
+                    logger.warning(
+                        f"Unknown resume step: {resume_from_step}, starting from beginning"
+                    )
                     self._resume_index = 0
 
             def _should_skip(self, step_name: str) -> bool:

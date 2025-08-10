@@ -19,15 +19,23 @@ class RealEstateAgentState(TypedDict):
     agent_version: str
 
     # Document Processing
-    document_data: Annotated[Optional[Dict[str, Any]], lambda x, y: y]  # Last value wins
-    document_metadata: Annotated[Optional[Dict[str, Any]], lambda x, y: y]  # Last value wins  
-    parsing_status: Annotated[ProcessingStatus, lambda x, y: y]  # Last value wins for status updates
+    document_data: Annotated[
+        Optional[Dict[str, Any]], lambda x, y: y
+    ]  # Last value wins
+    document_metadata: Annotated[
+        Optional[Dict[str, Any]], lambda x, y: y
+    ]  # Last value wins
+    parsing_status: Annotated[
+        ProcessingStatus, lambda x, y: y
+    ]  # Last value wins for status updates
 
     # Contract Analysis
     contract_terms: Optional[Dict[str, Any]]
     risk_assessment: Optional[Dict[str, Any]]
     compliance_check: Optional[Dict[str, Any]]
-    recommendations: Annotated[List[Dict[str, Any]], add]  # Use add for list concatenation
+    recommendations: Annotated[
+        List[Dict[str, Any]], add
+    ]  # Use add for list concatenation
 
     # Property Data (Phase 2+)
     property_data: Optional[Dict[str, Any]]
@@ -47,7 +55,10 @@ class RealEstateAgentState(TypedDict):
     progress: Optional[Dict[str, Any]]
 
     # Output
-    analysis_results: Dict[str, Any]
+    analysis_results: Annotated[
+        Dict[str, Any],
+        lambda existing, incoming: {**(existing or {}), **(incoming or {})},
+    ]
     report_data: Optional[Dict[str, Any]]
     final_recommendations: List[Dict[str, Any]]
 
@@ -168,7 +179,9 @@ def update_state_step(
 
     # Handle backward compatibility: convert string step to list for Annotated pattern
     if isinstance(step, str):
-        updated_state = {"current_step": [step]}  # Convert to list for concurrent updates
+        updated_state = {
+            "current_step": [step]
+        }  # Convert to list for concurrent updates
     else:
         # Already a list
         updated_state = {"current_step": step}
@@ -183,12 +196,20 @@ def update_state_step(
         for key, value in data.items():
             if value is not None:
                 # For lists and dicts, we might need special handling
-                if key in state and isinstance(state[key], dict) and isinstance(value, dict):
+                if (
+                    key in state
+                    and isinstance(state[key], dict)
+                    and isinstance(value, dict)
+                ):
                     # Merge dictionaries
                     merged_dict = dict(state[key])
                     merged_dict.update(value)
                     updated_state[key] = merged_dict
-                elif key in state and isinstance(state[key], list) and isinstance(value, list):
+                elif (
+                    key in state
+                    and isinstance(state[key], list)
+                    and isinstance(value, list)
+                ):
                     # Extend lists
                     updated_state[key] = state[key] + value
                 else:
@@ -204,13 +225,15 @@ def get_current_step(state: RealEstateAgentState) -> str:
     return steps[-1] if steps else "initialized"
 
 
-def create_step_update(step_name: str, progress_data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def create_step_update(
+    step_name: str, progress_data: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
     """Create a proper state update for LangGraph concurrent handling"""
     update = {"current_step": [step_name]}
-    
+
     if progress_data:
         update.update(progress_data)
-    
+
     return update
 
 

@@ -68,6 +68,35 @@ mappings:
       cache_hit_rate: 0.75
       success_rate: 0.95
 
+  contract_analysis_workflow:
+    primary_templates:
+      - name: "validation/document_quality_validation"
+        priority: 90
+        description: "Document quality checks before analysis"
+      - name: "validation/terms_completeness_validation"
+        priority: 85
+        description: "Validate presence of key contractual terms"
+      - name: "analysis/contract_structure"
+        priority: 80
+        description: "Structure and section detection"
+      - name: "analysis/risk_analysis_structured"
+        priority: 75
+        description: "Structured risk analysis"
+    compositions:
+      - name: "complete_contract_analysis"
+        description: "Full contract analysis workflow"
+        priority: 100
+    context_requirements:
+      - "extracted_text"
+      - "australian_state"
+      - "contract_type"
+      - "user_type"
+      - "user_experience_level"
+    performance_targets:
+      render_time_ms: 300
+      cache_hit_rate: 0.75
+      success_rate: 0.95
+
   websocket:
     primary_templates:
       - name: "progress_update"

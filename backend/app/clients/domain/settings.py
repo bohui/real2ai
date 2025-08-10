@@ -169,9 +169,10 @@ class DomainSettings(BaseSettings):
             log_level=self.domain_log_level,
         )
     
-    class Config:
-        """Pydantic configuration."""
-        env_file = ".env"
-        case_sensitive = False
-        validate_assignment = True
-        extra = "ignore"  # Ignore extra environment variables
+    model_config = {
+        # Pydantic configuration
+        "env_file": ".env",
+        "case_sensitive": False,
+        "validate_assignment": True,
+        "extra": "ignore"  # Ignore extra environment variables
+    }

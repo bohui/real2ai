@@ -79,10 +79,11 @@ class OpenAISettings(BaseSettings):
     openrouter_http_referer: Optional[str] = None
     openrouter_x_title: Optional[str] = None
 
-    class Config:
-        env_file = [".env", ".env.local"]
-        case_sensitive = False
-        extra = "ignore"  # Ignore extra environment variables
+    model_config = {
+        "env_file": [".env", ".env.local"],
+        "case_sensitive": False,
+        "extra": "ignore"  # Ignore extra environment variables
+    }
 
     def to_client_config(self) -> OpenAIClientConfig:
         """Convert to OpenAIClientConfig.

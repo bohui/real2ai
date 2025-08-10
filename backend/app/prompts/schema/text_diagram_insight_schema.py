@@ -15,6 +15,7 @@ class TextDiagramInsight(BaseModel):
         description="Specific diagram type if applicable (e.g., sewer_service_diagram)",
     )
 
-    class Config:
-        use_enum_values = True
-        arbitrary_types_allowed = True
+    model_config = {
+        "use_enum_values": True,
+        "arbitrary_types_allowed": True
+    }

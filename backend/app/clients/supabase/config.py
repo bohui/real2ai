@@ -57,10 +57,11 @@ class SupabaseSettings(BaseSettings):
     supabase_failure_threshold: int = 5
     supabase_circuit_timeout: int = 60
 
-    class Config:
-        env_file = [".env", ".env.local"]
-        case_sensitive = False
-        extra = "ignore"  # Ignore extra environment variables
+    model_config = {
+        "env_file": [".env", ".env.local"],
+        "case_sensitive": False,
+        "extra": "ignore"  # Ignore extra environment variables
+    }
 
     def to_client_config(self) -> SupabaseClientConfig:
         """Convert to SupabaseClientConfig."""

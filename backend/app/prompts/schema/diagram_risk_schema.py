@@ -377,9 +377,10 @@ class DiagramRiskAssessment(BaseModel):
         None, description="Estimated financial impact of risks"
     )
 
-    class Config:
-        use_enum_values = True
-        arbitrary_types_allowed = True
+    model_config = {
+        "use_enum_values": True,
+        "arbitrary_types_allowed": True
+    }
 
 
 # Example usage and helper functions

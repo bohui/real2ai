@@ -143,9 +143,10 @@ class ImageSemantics(BaseModel):
     processing_notes: List[str] = Field(default=[], description="Notes about analysis process")
     suggested_followup: List[str] = Field(default=[], description="Suggested follow-up actions")
     
-    class Config:
-        use_enum_values = True
-        arbitrary_types_allowed = True
+    model_config = {
+        "use_enum_values": True,
+        "arbitrary_types_allowed": True
+    }
 
 # Helper functions for semantic analysis
 class SemanticAnalyzer:

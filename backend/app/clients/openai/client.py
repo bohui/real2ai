@@ -241,6 +241,7 @@ class OpenAIClient(BaseClient):
 
     # Core API Methods - Connection Layer Only
 
+    @langsmith_trace(name="openai_client_generate_content", run_type="llm")
     @with_retry(max_retries=3, backoff_factor=2.0)
     async def generate_content(self, prompt: str, **kwargs) -> str:
         """Call OpenAI API to generate content.

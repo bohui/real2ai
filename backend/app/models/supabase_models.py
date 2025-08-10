@@ -165,11 +165,12 @@ class TimestampedBaseModel(BaseModel):
         None, description="Managed by database trigger"
     )
 
-    class Config:
+    model_config = {
         # Allow population by field name (for database results)
-        populate_by_name = True
+        "populate_by_name": True,
         # Enable JSON serialization
-        json_encoders = {datetime: lambda v: v.isoformat() if v else None}
+        "json_encoders": {datetime: lambda v: v.isoformat() if v else None}
+    }
 
 
 # Core Models
@@ -190,8 +191,9 @@ class Profile(TimestampedBaseModel):
     onboarding_completed_at: Optional[datetime] = None
     onboarding_preferences: Dict[str, Any] = Field(default_factory=dict)
 
-    class Config:
-        from_attributes = True  # For SQLAlchemy compatibility
+    model_config = {
+        "from_attributes": True  # For SQLAlchemy compatibility
+    }
 
 
 class Document(TimestampedBaseModel):
@@ -429,8 +431,9 @@ class UsageLog(TimestampedBaseModel):
     timestamp: Optional[datetime] = None
 
     # Override field name for this model since it uses 'timestamp' instead of 'created_at'
-    class Config:
-        fields = {"created_at": "timestamp"}
+    model_config = {
+        "fields": {"created_at": "timestamp"}
+    }
 
 
 class PropertyData(TimestampedBaseModel):
@@ -753,8 +756,9 @@ class PropertyAPIUsage(TimestampedBaseModel):
     timestamp: datetime
 
     # Override field name for this model since it uses 'timestamp' instead of 'created_at'
-    class Config:
-        fields = {"created_at": "timestamp"}
+    model_config = {
+        "fields": {"created_at": "timestamp"}
+    }
 
 
 class MarketInsight(TimestampedBaseModel):
@@ -802,8 +806,9 @@ class AnalysisProgressDetailed(BaseModel):
     file_type: str
     processing_status: str
 
-    class Config:
-        from_attributes = True
+    model_config = {
+        "from_attributes": True
+    }
 
 
 # Task Recovery System Models
@@ -909,8 +914,9 @@ class UserContractHistory(BaseModel):
     file_type: Optional[str] = None
     file_size: Optional[int] = None
 
-    class Config:
-        from_attributes = True
+    model_config = {
+        "from_attributes": True
+    }
 
 
 class UserPropertyHistory(BaseModel):
@@ -929,8 +935,9 @@ class UserPropertyHistory(BaseModel):
     analysis_result: Optional[Dict[str, Any]] = None
     access_count: Optional[int] = None
 
-    class Config:
-        from_attributes = True
+    model_config = {
+        "from_attributes": True
+    }
 
 
 # Helper functions for model operations

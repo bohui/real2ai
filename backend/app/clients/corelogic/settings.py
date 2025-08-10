@@ -99,11 +99,12 @@ class CoreLogicSettings(BaseSettings):
     # Default Location
     corelogic_default_state: str = Field("NSW", env="CORELOGIC_DEFAULT_STATE")
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = False
-        extra = "ignore"  # Ignore extra environment variables
+    model_config = {
+        "env_file": ".env",
+        "env_file_encoding": "utf-8",
+        "case_sensitive": False,
+        "extra": "ignore"  # Ignore extra environment variables
+    }
 
     @validator("corelogic_environment")
     def validate_environment(cls, v):
