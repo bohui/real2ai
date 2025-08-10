@@ -128,7 +128,7 @@ Focus on practical quality metrics that inform whether the document is suitable 
 
 You must respond with a valid JSON object matching this exact structure:
 
-```json
+```jsonc
 {
   "text_quality_score": <number between 0-1>,
   "completeness_score": <number between 0-1>,

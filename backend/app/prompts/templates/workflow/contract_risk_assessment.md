@@ -108,7 +108,7 @@ Focus on practical, actionable insights that help the {{user_experience}} buyer 
 
 You must respond with a valid JSON object matching this exact structure:
 
-```json
+```jsonc
 {
   "overall_risk_score": <number between 0-10>,
   "risk_factors": [

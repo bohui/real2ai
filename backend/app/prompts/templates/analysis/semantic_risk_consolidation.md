@@ -89,7 +89,7 @@ Consolidate and prioritize risks identified across multiple property diagrams to
 
 For each unique risk, provide:
 
-```json
+```jsonc
 {
   "risk_category": "infrastructure|environmental|boundary|development|compliance",
   "risk_description": "Specific consolidated risk description",

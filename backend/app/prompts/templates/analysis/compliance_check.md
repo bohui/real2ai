@@ -163,7 +163,7 @@ Focus on practical, actionable compliance guidance that helps ensure legal adher
 
 You must respond with a valid JSON object matching this exact structure:
 
-```json
+```jsonc
 {
   "overall_compliance_score": <number between 0-10>,
   "state_compliance": <true|false>,

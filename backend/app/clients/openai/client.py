@@ -3,6 +3,7 @@ Main OpenAI client implementation.
 """
 
 import logging
+import asyncio
 from typing import Any, Dict, Optional, List
 from openai import OpenAI
 from openai import RateLimitError, APIError, AuthenticationError
@@ -102,8 +103,26 @@ class OpenAIClient(BaseClient):
 
             self._langchain_client = ChatOpenAI(**langchain_kwargs)
 
-            # Test the connection
-            await self._test_connection()
+            # Test the connection (optionally, and with timeout)
+            should_test = bool(
+                self.config.extra_config.get("init_connection_test", True)
+            )
+            if should_test:
+                test_timeout = int(
+                    self.config.extra_config.get("init_test_timeout", 12)
+                )
+
+                async def _run_test_with_timeout():
+                    await self._test_connection()
+
+                try:
+                    await asyncio.wait_for(
+                        _run_test_with_timeout(), timeout=test_timeout
+                    )
+                except asyncio.TimeoutError:
+                    self.logger.warning(
+                        f"OpenAI connection test exceeded {test_timeout}s. Proceeding without blocking startup."
+                    )
 
             self._initialized = True
             self.logger.info(

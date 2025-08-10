@@ -167,7 +167,7 @@ Focus on practical completeness evaluation that informs contract analysis reliab
 
 You must respond with a valid JSON object matching this exact structure:
 
-```json
+```jsonc
 {
   "overall_completeness_score": <number between 0-1>,
   "validation_confidence": <number between 0-1>,

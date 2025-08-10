@@ -643,8 +643,9 @@ class PromptValidator:
             import json
 
             # Prefer fenced code blocks with json
+            # Only consider explicitly labeled JSON fences to avoid false positives
             fenced_blocks = re.findall(
-                r"```(?:json)?\s*(\{[\s\S]*?\}|\[[\s\S]*?\])\s*```",
+                r"```json\s*(\{[\s\S]*?\}|\[[\s\S]*?\])\s*```",
                 content,
                 re.IGNORECASE,
             )

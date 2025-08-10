@@ -181,7 +181,7 @@ Focus on ensuring the analysis meets professional standards and provides reliabl
 
 You must respond with a valid JSON object matching this exact structure:
 
-```json
+```jsonc
 {
   "validation_score": <number between 0-1>,
   "validation_passed": <true|false>,

@@ -65,6 +65,10 @@ class OpenAISettings(BaseSettings):
     openai_request_timeout: int = 60
     openai_max_retries: int = 3
 
+    # Initialization behavior
+    openai_init_connection_test: bool = True
+    openai_init_test_timeout: int = 12
+
     # Base client settings
     openai_backoff_factor: float = 2.0
     openai_circuit_breaker_enabled: bool = True
@@ -82,7 +86,7 @@ class OpenAISettings(BaseSettings):
     model_config = {
         "env_file": [".env", ".env.local"],
         "case_sensitive": False,
-        "extra": "ignore"  # Ignore extra environment variables
+        "extra": "ignore",  # Ignore extra environment variables
     }
 
     def to_client_config(self) -> OpenAIClientConfig:
@@ -107,13 +111,10 @@ class OpenAISettings(BaseSettings):
             effective_api_key = self.openrouter_api_key or self.openai_api_key
             # Prefer OpenRouter base when using OpenRouter models/keys
             effective_api_base = (
-                self.openrouter_api_base
-                or "https://openrouter.ai/api/v1"
+                self.openrouter_api_base or "https://openrouter.ai/api/v1"
             )
             effective_model = (
-                self.openrouter_model_name
-                or self.openai_model_name
-                or DEFAULT_MODEL
+                self.openrouter_model_name or self.openai_model_name or DEFAULT_MODEL
             )
         else:
             effective_api_key = self.openai_api_key
@@ -132,6 +133,9 @@ class OpenAISettings(BaseSettings):
         if default_headers:
             extra_config["default_headers"] = default_headers
         extra_config["is_openrouter"] = use_openrouter
+        # Initialization behavior controls
+        extra_config["init_connection_test"] = self.openai_init_connection_test
+        extra_config["init_test_timeout"] = self.openai_init_test_timeout
 
         return OpenAIClientConfig(
             # API settings

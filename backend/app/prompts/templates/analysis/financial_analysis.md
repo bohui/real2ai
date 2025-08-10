@@ -185,7 +185,7 @@ Focus on practical, actionable financial advice that helps the buyer understand 
 
 You must respond with a valid JSON object matching this exact structure:
 
-```json
+```jsonc
 {
   "total_financial_commitment": {
     "purchase_price": <number>,

@@ -76,9 +76,21 @@ mappings:
       - name: "validation/terms_completeness_validation"
         priority: 85
         description: "Validate presence of key contractual terms"
+      - name: "validation/final_output_validation"
+        priority: 83
+        description: "Final output validation"
       - name: "analysis/contract_structure"
         priority: 80
         description: "Structure and section detection"
+      - name: "analysis/compliance_check"
+        priority: 78
+        description: "Legal compliance validation"
+      - name: "workflow/contract_risk_assessment"
+        priority: 76
+        description: "Contract risk assessment workflow"
+      - name: "workflow/contract_recommendations"
+        priority: 74
+        description: "Contract recommendations workflow"
       - name: "analysis/risk_analysis_structured"
         priority: 75
         description: "Structured risk analysis"

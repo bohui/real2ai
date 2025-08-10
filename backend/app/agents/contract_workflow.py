@@ -84,6 +84,9 @@ from app.core.langsmith_config import (
     log_trace_info,
 )
 
+# App settings for environment-aware logging
+from app.core.config import get_settings
+
 # DocumentService imported lazily to avoid circular imports
 
 logger = logging.getLogger(__name__)
@@ -158,7 +161,7 @@ class ContractAnalysisWorkflow:
         enable_quality_checks: bool = True,
         extraction_config: Optional[Dict[str, Any]] = None,
         use_llm_config: Optional[Dict[str, bool]] = None,
-        enable_fallbacks: bool = False,
+        enable_fallbacks: bool = True,
     ):
         # Initialize clients (will be set up in initialize method)
         self.openai_client = None
@@ -225,10 +228,91 @@ class ContractAnalysisWorkflow:
             "average_processing_time": 0.0,
         }
 
+        # Environment-aware logging controls
+        self._settings = get_settings()
+        self._is_production = self._settings.environment.lower() in (
+            "production",
+            "prod",
+            "live",
+        )
+        self._verbose_logging = bool(
+            self._settings.enhanced_workflow_detailed_logging
+            and not self._is_production
+        )
+        # Note: root logger level is configured globally; this only marks our intent
+        if self._verbose_logging:
+            try:
+                logger.setLevel(logging.DEBUG)
+            except Exception:
+                pass
+
         self.workflow = self._create_workflow()
         logger.info(
             f"Enhanced ContractAnalysisWorkflow initialized with extraction config: {self.extraction_config}, use_llm config: {self.use_llm_config}, and fallbacks enabled: {self.enable_fallbacks}"
         )
+
+    # ---- Logging helpers (environment-aware) ----
+    def _log_step_debug(
+        self,
+        step_name: str,
+        message: str,
+        state: Optional[RealEstateAgentState] = None,
+        details: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        if not self._verbose_logging:
+            return
+        safe_state = {}
+        try:
+            if state:
+                safe_state = {
+                    "session_id": state.get("session_id"),
+                    "user_id": state.get("user_id"),
+                    "progress": state.get("progress", {}).get("current_step"),
+                }
+        except Exception:
+            safe_state = {}
+        payload = {
+            "step": step_name,
+            "state": safe_state,
+            "details": details or {},
+        }
+        logger.debug(
+            f"[ContractWorkflow] {message} | context={json.dumps(payload, default=str)}"
+        )
+
+    def _log_exception(
+        self,
+        step_name: str,
+        error: Exception,
+        state: Optional[RealEstateAgentState] = None,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        base: Dict[str, Any] = {
+            "step": step_name,
+            "error_type": type(error).__name__,
+            "message": str(error),
+        }
+        if state:
+            base["session_id"] = state.get("session_id")
+            # Only include user_id when verbose logging is enabled (avoid PII in prod)
+            if self._verbose_logging:
+                base["user_id"] = state.get("user_id")
+        if context:
+            base["context"] = context
+
+        if self._verbose_logging:
+            logger.exception(
+                f"[ContractWorkflow] Error occurred | data={json.dumps(base, default=str)}",
+            )
+        else:
+            minimal = {
+                k: base.get(k)
+                for k in ("step", "error_type", "message", "session_id")
+                if k in base
+            }
+            logger.error(
+                f"[ContractWorkflow] Error occurred | data={json.dumps(minimal, default=str)}"
+            )
 
     async def initialize(self):
         """Initialize the workflow clients"""
@@ -250,7 +334,15 @@ class ContractAnalysisWorkflow:
             logger.info("ContractAnalysisWorkflow clients initialized successfully")
 
         except Exception as e:
-            logger.error(f"Failed to initialize workflow clients: {e}")
+            self._log_exception(
+                step_name="initialize",
+                error=e,
+                state=None,
+                context={
+                    "openai_client_init": bool(self.openai_client is not None),
+                    "gemini_client_init": bool(self.gemini_client is not None),
+                },
+            )
             raise ClientConnectionError(
                 f"Failed to initialize workflow clients: {str(e)}",
                 client_name="ContractAnalysisWorkflow",
@@ -403,6 +495,16 @@ class ContractAnalysisWorkflow:
             await self.initialize()
 
         try:
+            self._log_step_debug(
+                step_name="analyze_contract",
+                message="Starting workflow execution",
+                state=initial_state,
+                details={
+                    "enable_validation": self.enable_validation,
+                    "enable_quality_checks": self.enable_quality_checks,
+                    "use_llm_config": self.use_llm_config,
+                },
+            )
             # Create and compile workflow
             workflow = self._create_workflow()
 
@@ -426,7 +528,11 @@ class ContractAnalysisWorkflow:
             return final_state
 
         except Exception as e:
-            logger.error(f"Contract analysis failed: {e}")
+            self._log_exception(
+                step_name="analyze_contract",
+                error=e,
+                state=initial_state,
+            )
             # Return error state
             error_state = initial_state.copy()
             error_state["error_state"] = str(e)
@@ -500,7 +606,11 @@ class ContractAnalysisWorkflow:
             return create_step_update("input_validated", progress_update)
 
         except Exception as e:
-            logger.error(f"Input validation failed: {e}")
+            self._log_exception(
+                step_name="validate_input",
+                error=e,
+                state=state,
+            )
             return update_state_step(
                 state,
                 "input_validation_failed",
@@ -553,6 +663,30 @@ class ContractAnalysisWorkflow:
 
             document_text = document_data.get("content", "")
             document_metadata = document_data.get("metadata", {})
+
+            # Fail-fast for empty documents - prevent UI hang
+            if not document_text or len(document_text.strip()) < 50:
+                logger.error("Document text is too short or empty - failing analysis")
+                state["document_quality_metrics"] = {
+                    "text_quality_score": 0.0,
+                    "completeness_score": 0.0,
+                    "readability_score": 0.0,
+                    "key_terms_coverage": 0.0,
+                    "extraction_confidence": 0.0,
+                    "issues_identified": ["Document text is too short or empty"],
+                    "improvement_suggestions": [
+                        "Verify document was properly extracted",
+                        "Check document format and quality",
+                    ],
+                }
+                state["confidence_scores"]["document_quality"] = 0.0
+                # Return failed status to prevent UI hang
+                return update_state_step(
+                    state,
+                    "document_analysis_failed",
+                    error="Document content is insufficient for analysis. Please upload a valid document.",
+                )
+
             use_llm = self.use_llm_config.get("document_quality", True)
 
             # Check if we should use LLM for document quality validation
@@ -577,11 +711,35 @@ class ContractAnalysisWorkflow:
                 "text_quality_score", 0.5
             )
 
-            # Log quality issues
-            if quality_metrics.get("issues_identified"):
-                logger.warning(
-                    f"Document quality issues: {quality_metrics['issues_identified']}"
+            # Fail-fast for critical quality issues - prevent UI hang
+            issues = quality_metrics.get("issues_identified", [])
+            if issues and "Document text is too short or empty" in issues:
+                logger.error(
+                    "Critical document quality issue detected - failing analysis"
                 )
+                return update_state_step(
+                    state,
+                    "document_analysis_failed",
+                    error="Document quality is too poor for analysis. Please upload a higher quality document.",
+                )
+
+            # Check overall quality score for fail-fast
+            overall_quality = quality_metrics.get(
+                "overall_quality_score", quality_metrics.get("text_quality_score", 0.5)
+            )
+            if overall_quality < 0.3:  # Very poor quality threshold
+                logger.error(
+                    f"Document quality too poor (score: {overall_quality}) - failing analysis"
+                )
+                return update_state_step(
+                    state,
+                    "document_analysis_failed",
+                    error=f"Document quality score ({overall_quality:.2f}) is too low for reliable analysis. Please upload a clearer document.",
+                )
+
+            # Log quality issues
+            if issues:
+                logger.warning(f"Document quality issues: {issues}")
 
             updated_data = {
                 "document_quality_metrics": quality_metrics,
@@ -597,7 +755,11 @@ class ContractAnalysisWorkflow:
             return create_step_update("document_quality_validated", progress_update)
 
         except Exception as e:
-            logger.error(f"Document quality validation failed: {e}")
+            self._log_exception(
+                step_name="validate_document_quality_step",
+                error=e,
+                state=state,
+            )
             # Continue workflow with warning
             state["confidence_scores"]["document_quality"] = 0.5
             return update_state_step(
@@ -691,7 +853,14 @@ class ContractAnalysisWorkflow:
             return update_state_step(state, "terms_extracted", data=updated_data)
 
         except Exception as e:
-            logger.error(f"Contract terms extraction failed: {e}")
+            self._log_exception(
+                step_name="extract_contract_terms",
+                error=e,
+                state=state,
+                context={
+                    "use_llm": self.use_llm_config.get("contract_analysis", True),
+                },
+            )
             return update_state_step(
                 state,
                 "term_extraction_failed",
@@ -1654,7 +1823,12 @@ class ContractAnalysisWorkflow:
             "parsing_status": ProcessingStatus.FAILED,
         }
 
-        logger.error(f"Enhanced workflow error: {error_message}")
+        self._log_exception(
+            step_name="handle_processing_error",
+            error=Exception(error_message),
+            state=state,
+            context={"failed_step": state.get("current_step")},
+        )
         return update_state_step(state, "error_handled", data=updated_data)
 
     def retry_failed_step(self, state: RealEstateAgentState) -> RealEstateAgentState:
@@ -1664,13 +1838,28 @@ class ContractAnalysisWorkflow:
         max_retries = 3  # Increased for enhanced workflow
 
         if retry_count >= max_retries:
-            logger.warning(f"Max retries ({max_retries}) exceeded, handling error")
+            self._log_step_debug(
+                step_name="retry_failed_step",
+                message=f"Max retries ({max_retries}) exceeded, delegating to error handler",
+                state=state,
+                details={"retry_count": retry_count},
+            )
             return self.handle_processing_error(state)
 
         # Enhanced retry with exponential backoff
         retry_delay = 2**retry_count  # 2, 4, 8 seconds
         logger.info(
             f"Retrying step (attempt {retry_count + 1}/{max_retries}) after {retry_delay}s delay"
+        )
+        self._log_step_debug(
+            step_name="retry_failed_step",
+            message="Retry scheduled",
+            state=state,
+            details={
+                "attempt": retry_count + 1,
+                "max_retries": max_retries,
+                "delay_seconds": retry_delay,
+            },
         )
 
         time.sleep(retry_delay)
@@ -2271,6 +2460,9 @@ class ContractAnalysisWorkflow:
                 model=self.model_name,
                 temperature=0.1,
             )
+
+            # Monitor response quality
+            self._monitor_response_quality(response, "openai")
             return response
 
         except Exception as openai_error:
@@ -2285,12 +2477,64 @@ class ContractAnalysisWorkflow:
                         model="gemini-2.5-flash",
                         temperature=0.1,
                     )
+
+                    # Monitor fallback response quality
+                    self._monitor_response_quality(response, "gemini_fallback")
                     return response
                 except Exception as gemini_error:
                     logger.error(f"Gemini fallback also failed: {gemini_error}")
                     raise openai_error  # Re-raise original error
 
             raise openai_error
+
+    def _monitor_response_quality(self, response: str, provider: str) -> None:
+        """Monitor response quality for debugging malformed JSON issues"""
+        try:
+            # Basic quality checks
+            response_length = len(response)
+            is_json_like = response.strip().startswith(
+                "{"
+            ) and response.strip().endswith("}")
+
+            # Try JSON parsing to check validity
+            is_valid_json = False
+            try:
+                import json
+
+                json.loads(response)
+                is_valid_json = True
+                self._metrics["successful_parses"] += 1
+            except json.JSONDecodeError as e:
+                logger.warning(
+                    f"Response quality issue from {provider}: Invalid JSON. Error: {e}"
+                )
+                logger.debug(
+                    f"Malformed response preview (first 200 chars): {response[:200]}"
+                )
+                self._metrics["failed_parses"] += 1
+
+            # Update quality metrics
+            quality_metrics = {
+                "provider": provider,
+                "response_length": response_length,
+                "is_json_like": is_json_like,
+                "is_valid_json": is_valid_json,
+                "timestamp": datetime.now(UTC).isoformat(),
+            }
+
+            # Store last few responses for debugging
+            if not hasattr(self, "_response_quality_history"):
+                self._response_quality_history = []
+
+            self._response_quality_history.append(quality_metrics)
+            # Keep only last 10 responses
+            if len(self._response_quality_history) > 10:
+                self._response_quality_history.pop(0)
+
+            logger.debug(f"Response quality metrics for {provider}: {quality_metrics}")
+
+        except Exception as e:
+            logger.error(f"Failed to monitor response quality: {e}")
 
     def get_workflow_metrics(self) -> Dict[str, Any]:
         """Get comprehensive workflow performance metrics"""
@@ -2737,12 +2981,21 @@ class ContractAnalysisWorkflow:
 
                 risk_result = json.loads(llm_response)
                 return risk_result
-            except json.JSONDecodeError:
+            except json.JSONDecodeError as json_error:
+                # Log the raw response for debugging
+                logger.error(
+                    f"JSON parsing failed for risk assessment. Raw response (first 500 chars): {llm_response[:500]}"
+                )
+                logger.error(f"JSON decode error: {json_error}")
+
                 if not self.enable_fallbacks:
                     logger.error("JSON parsing failed and fallbacks disabled")
                     raise ValueError("Failed to parse LLM risk assessment response")
 
                 # Fallback to rule-based analysis
+                logger.warning(
+                    "Falling back to rule-based risk assessment due to JSON parsing failure"
+                )
                 return self._assess_risks_rule_based(contract_terms, compliance_check)
 
         except Exception as e:

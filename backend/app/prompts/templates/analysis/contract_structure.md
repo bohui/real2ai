@@ -40,7 +40,7 @@ Analyze this {{ contract_type }} and extract structured information for a {{ use
 
 Extract the following information as structured JSON:
 
-```json
+```jsonc
 {
   "document_metadata": {
     "contract_type": "{{ contract_type }}",

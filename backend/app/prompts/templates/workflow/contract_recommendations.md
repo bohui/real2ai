@@ -117,7 +117,7 @@ Focus on practical, implementable advice that empowers the buyer to take appropr
 
 You must respond with a valid JSON object matching this exact structure:
 
-```json
+```jsonc
 {
   "recommendations": [
     {
