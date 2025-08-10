@@ -71,12 +71,19 @@ class PromptNotFoundError(PromptError):
                     f"Available templates: {', '.join(available_prompts[:5])}"
                 )
 
+        # Remove keys that are passed explicitly to avoid duplicates
+        filtered_kwargs = {
+            k: v
+            for k, v in kwargs.items()
+            if k not in ["details", "recovery_suggestions", "prompt_id", "severity"]
+        }
+
         super().__init__(
             message=message,
             prompt_id=prompt_id,
             severity=PromptErrorSeverity.HIGH,
             recovery_suggestions=recovery_suggestions,
-            **kwargs,
+            **filtered_kwargs,
         )
 
 
@@ -108,7 +115,13 @@ class PromptValidationError(PromptError):
         filtered_kwargs = {
             k: v
             for k, v in kwargs.items()
-            if k not in ["details", "recovery_suggestions"]
+            if k
+            not in [
+                "details",
+                "recovery_suggestions",
+                "prompt_id",
+                "severity",
+            ]
         }
 
         super().__init__(
@@ -160,11 +173,17 @@ class PromptVersionError(PromptError):
                     f"Available versions: {', '.join(available_versions)}"
                 )
 
-        # Remove details from kwargs to avoid duplicate parameter
+        # Remove keys that are passed explicitly to avoid duplicates
         filtered_kwargs = {
             k: v
             for k, v in kwargs.items()
-            if k not in ["details", "recovery_suggestions"]
+            if k
+            not in [
+                "details",
+                "recovery_suggestions",
+                "prompt_id",
+                "severity",
+            ]
         }
 
         super().__init__(
@@ -221,7 +240,13 @@ class PromptContextError(PromptError):
         filtered_kwargs = {
             k: v
             for k, v in kwargs.items()
-            if k not in ["details", "recovery_suggestions"]
+            if k
+            not in [
+                "details",
+                "recovery_suggestions",
+                "prompt_id",
+                "severity",
+            ]
         }
 
         super().__init__(
@@ -271,7 +296,13 @@ class PromptCompositionError(PromptError):
         filtered_kwargs = {
             k: v
             for k, v in kwargs.items()
-            if k not in ["details", "recovery_suggestions"]
+            if k
+            not in [
+                "details",
+                "recovery_suggestions",
+                "prompt_id",
+                "severity",
+            ]
         }
 
         super().__init__(
@@ -319,11 +350,17 @@ class PromptServiceError(PromptError):
                 "Check service logs for detailed error information",
             ]
 
-        # Remove details from kwargs to avoid duplicate parameter
+        # Remove keys that are passed explicitly to avoid duplicates
         filtered_kwargs = {
             k: v
             for k, v in kwargs.items()
-            if k not in ["details", "recovery_suggestions"]
+            if k
+            not in [
+                "details",
+                "recovery_suggestions",
+                "prompt_id",
+                "severity",
+            ]
         }
 
         super().__init__(
