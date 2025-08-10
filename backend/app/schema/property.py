@@ -420,6 +420,56 @@ class PropertySearchResponse(BaseModel):
     page_size: int = 20
 
 
+class PropertyInvestmentAnalysis(BaseModel):
+    """Property investment analysis data"""
+
+    rental_yield: float = Field(..., description="Annual rental yield percentage")
+    capital_growth_forecast_1_year: float = Field(..., description="1-year capital growth forecast percentage")
+    capital_growth_forecast_3_year: float = Field(..., description="3-year capital growth forecast percentage")
+    capital_growth_forecast_5_year: float = Field(..., description="5-year capital growth forecast percentage")
+    cash_flow_monthly: float = Field(..., description="Monthly cash flow (AUD)")
+    roi_percentage: float = Field(..., description="Return on investment percentage")
+    payback_period_years: float = Field(..., description="Investment payback period in years")
+    investment_score: float = Field(..., description="Investment score (0-100)")
+    investment_grade: str = Field(..., description="Investment grade (A, B, C, D, F)")
+    comparable_roi: float = Field(..., description="Comparable market ROI percentage")
+
+
+class PropertyMarketTrends(BaseModel):
+    """Property market trends data"""
+
+    location: str = Field(..., description="Location (suburb, state)")
+    property_type: Optional[str] = Field(None, description="Property type filter")
+    time_period: str = Field(..., description="Time period for trends")
+    median_price_trend: float = Field(..., description="Median price trend percentage")
+    sales_volume_trend: float = Field(..., description="Sales volume trend percentage")
+    days_on_market_trend: float = Field(..., description="Days on market trend")
+    price_per_sqm_trend: Optional[float] = Field(None, description="Price per square meter trend")
+    rental_yield_trend: Optional[float] = Field(None, description="Rental yield trend")
+    market_momentum: str = Field(..., description="Market momentum (strong_growth, moderate_growth, stable, declining)")
+    forecast_confidence: float = Field(..., description="Forecast confidence score (0-1)")
+    data_points: int = Field(..., description="Number of data points used")
+    trend_start_date: datetime = Field(..., description="Start date for trend analysis")
+    trend_end_date: datetime = Field(..., description="End date for trend analysis")
+
+
+class PropertyMarketInsight(BaseModel):
+    """Property market intelligence insights"""
+
+    insight_type: str = Field(..., description="Type of insight (trend, forecast, opportunity)")
+    title: str = Field(..., description="Insight title")
+    description: str = Field(..., description="Detailed insight description")
+    location: str = Field(..., description="Location for the insight")
+    property_type: Optional[str] = Field(None, description="Property type (if applicable)")
+    impact_score: float = Field(..., description="Impact score (0-100)")
+    confidence_level: float = Field(..., description="Confidence level (0-1)")
+    time_horizon: str = Field(..., description="Time horizon for the insight")
+    supporting_data: Dict[str, Any] = Field(default_factory=dict, description="Supporting data points")
+    actionable_recommendations: List[str] = Field(default_factory=list, description="Actionable recommendations")
+    created_at: datetime = Field(default_factory=datetime.now, description="When the insight was generated")
+    expires_at: Optional[datetime] = Field(None, description="When the insight expires")
+
+
 class PropertyDataValidationResult(BaseModel):
     """Property data validation result"""
 

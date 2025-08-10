@@ -6,6 +6,8 @@ import logging
 from typing import Any, Dict, Optional, List
 from openai import OpenAI
 from openai import RateLimitError, APIError, AuthenticationError
+from langchain_openai import ChatOpenAI
+from langchain.schema import HumanMessage, SystemMessage
 
 from ..base.client import BaseClient, with_retry
 from ..base.exceptions import (
@@ -29,6 +31,7 @@ class OpenAIClient(BaseClient):
         super().__init__(config, "OpenAIClient")
         self.config: OpenAIClientConfig = config
         self._openai_client: Optional[OpenAI] = None
+        self._langchain_client: Optional[ChatOpenAI] = None
 
     @property
     def openai_client(self) -> OpenAI:
@@ -36,6 +39,13 @@ class OpenAIClient(BaseClient):
         if not self._openai_client:
             raise ClientError("OpenAI client not initialized", self.client_name)
         return self._openai_client
+
+    @property
+    def langchain_client(self) -> ChatOpenAI:
+        """Get the LangChain ChatOpenAI client for LangSmith tracing."""
+        if not self._langchain_client:
+            raise ClientError("LangChain client not initialized", self.client_name)
+        return self._langchain_client
 
     @with_retry(max_retries=3, backoff_factor=2.0)
     async def initialize(self) -> None:
@@ -66,11 +76,39 @@ class OpenAIClient(BaseClient):
 
             self._openai_client = OpenAI(**client_kwargs)
 
+            # Initialize LangChain ChatOpenAI client for LangSmith tracing
+            langchain_kwargs = {
+                "openai_api_key": self.config.api_key,
+                "model": self.config.model_name,
+                "temperature": self.config.temperature,
+                "max_tokens": self.config.max_tokens,
+                "top_p": self.config.top_p,
+                "frequency_penalty": self.config.frequency_penalty,
+                "presence_penalty": self.config.presence_penalty,
+                "request_timeout": self.config.request_timeout,
+                "max_retries": self.config.max_retries,
+            }
+
+            if self.config.api_base:
+                langchain_kwargs["openai_api_base"] = self.config.api_base
+
+            if self.config.organization:
+                langchain_kwargs["openai_organization"] = self.config.organization
+
+            # Remove None values
+            langchain_kwargs = {
+                k: v for k, v in langchain_kwargs.items() if v is not None
+            }
+
+            self._langchain_client = ChatOpenAI(**langchain_kwargs)
+
             # Test the connection
             await self._test_connection()
 
             self._initialized = True
-            self.logger.info("OpenAI client initialized successfully")
+            self.logger.info(
+                "OpenAI client and LangChain ChatOpenAI initialized successfully"
+            )
 
         except Exception as e:
             self.logger.error(f"Failed to initialize OpenAI client: {e}")
@@ -228,8 +266,14 @@ class OpenAIClient(BaseClient):
                 # OpenAI client doesn't require explicit closing
                 self._openai_client = None
 
+            if self._langchain_client:
+                # LangChain client doesn't require explicit closing
+                self._langchain_client = None
+
             self._initialized = False
-            self.logger.info("OpenAI client closed successfully")
+            self.logger.info(
+                "OpenAI client and LangChain ChatOpenAI closed successfully"
+            )
 
         except Exception as e:
             self.logger.error(f"Error closing OpenAI client: {e}")
@@ -241,10 +285,10 @@ class OpenAIClient(BaseClient):
 
     # Core API Methods - Connection Layer Only
 
-    @langsmith_trace(name="openai_client_generate_content", run_type="llm")
+    @langsmith_trace(name="openai_client_generate_content", run_type="chain")
     @with_retry(max_retries=3, backoff_factor=2.0)
     async def generate_content(self, prompt: str, **kwargs) -> str:
-        """Call OpenAI API to generate content.
+        """Call OpenAI API to generate content using LangChain for LangSmith tracing.
 
         Accepted kwargs include:
         - model: Optional[str]
@@ -271,10 +315,82 @@ class OpenAIClient(BaseClient):
                 else:
                     messages = [{"role": "user", "content": prompt}]
 
-            # Prepare parameters
+            # Convert to LangChain message format
+            langchain_messages = []
+            for msg in messages:
+                if msg["role"] == "system":
+                    langchain_messages.append(SystemMessage(content=msg["content"]))
+                elif msg["role"] == "user":
+                    langchain_messages.append(HumanMessage(content=msg["content"]))
+                # Add other message types as needed
+
+            # Log trace info for debugging
+            log_trace_info(
+                "generate_content_with_langchain",
+                model=kwargs.get("model", self.config.model_name),
+                message_count=len(langchain_messages),
+                temperature=kwargs.get("temperature", self.config.temperature),
+            )
+
+            # Use LangChain ChatOpenAI for automatic LangSmith tracing
+            # Update parameters if they differ from initialized values
+            langchain_client = self.langchain_client
+            if kwargs.get("model") and kwargs["model"] != self.config.model_name:
+                # Create a temporary client with different model
+                langchain_kwargs = {
+                    "openai_api_key": self.config.api_key,
+                    "model": kwargs["model"],
+                    "temperature": kwargs.get("temperature", self.config.temperature),
+                    "max_tokens": kwargs.get("max_tokens", self.config.max_tokens),
+                    "top_p": kwargs.get("top_p", self.config.top_p),
+                    "frequency_penalty": kwargs.get(
+                        "frequency_penalty", self.config.frequency_penalty
+                    ),
+                    "presence_penalty": kwargs.get(
+                        "presence_penalty", self.config.presence_penalty
+                    ),
+                }
+                if self.config.api_base:
+                    langchain_kwargs["openai_api_base"] = self.config.api_base
+                if self.config.organization:
+                    langchain_kwargs["openai_organization"] = self.config.organization
+
+                # Remove None values
+                langchain_kwargs = {
+                    k: v for k, v in langchain_kwargs.items() if v is not None
+                }
+                langchain_client = ChatOpenAI(**langchain_kwargs)
+
+            # Call LangChain ChatOpenAI through queue system for rate limiting
+            queue = OpenAILLMQueueManager.get_queue(
+                kwargs.get("model", self.config.model_name)
+            )
+            if hasattr(langchain_client, "ainvoke"):
+                response = await queue.run_async(
+                    lambda: langchain_client.ainvoke(langchain_messages)
+                )
+            else:
+                response = await queue.run_in_executor(
+                    lambda: langchain_client.invoke(langchain_messages)
+                )
+
+            if not response.content:
+                raise ClientError(
+                    "No content generated from OpenAI", client_name=self.client_name
+                )
+
+            return response.content
+
+        except Exception as langchain_error:
+            # Fallback to direct OpenAI client if LangChain fails
+            self.logger.warning(
+                f"LangChain call failed, falling back to direct OpenAI: {langchain_error}"
+            )
+
+            # Prepare parameters for direct OpenAI call
             params = {
                 "model": kwargs.get("model", self.config.model_name),
-                "messages": messages,
+                "messages": messages,  # Use original messages format
                 "temperature": kwargs.get("temperature", self.config.temperature),
                 "max_tokens": kwargs.get("max_tokens", self.config.max_tokens),
                 "top_p": kwargs.get("top_p", self.config.top_p),
@@ -289,38 +405,39 @@ class OpenAIClient(BaseClient):
             # Remove None values
             params = {k: v for k, v in params.items() if v is not None}
 
-            # Execute via task queue for rate limiting
+            # Execute via task queue for rate limiting (original approach)
             queue = OpenAILLMQueueManager.get_queue(params.get("model"))
-            response = await queue.run_in_executor(
-                lambda: self.openai_client.chat.completions.create(**params)
-            )
-
-            if not response.choices or not response.choices[0].message.content:
-                raise ClientError(
-                    "No content generated from OpenAI", client_name=self.client_name
+            try:
+                response = await queue.run_in_executor(
+                    lambda: self.openai_client.chat.completions.create(**params)
                 )
 
-            return response.choices[0].message.content
+                if not response.choices or not response.choices[0].message.content:
+                    raise ClientError(
+                        "No content generated from OpenAI", client_name=self.client_name
+                    )
 
-        except (RateLimitError, APIError) as e:
-            if isinstance(e, RateLimitError):
-                raise ClientRateLimitError(
-                    f"OpenAI rate limit exceeded: {str(e)}",
-                    client_name=self.client_name,
-                    original_error=e,
-                )
-            elif "quota" in str(e).lower():
-                raise ClientQuotaExceededError(
-                    f"OpenAI quota exceeded: {str(e)}",
-                    client_name=self.client_name,
-                    original_error=e,
-                )
-            else:
-                raise ClientError(
-                    f"OpenAI API error: {str(e)}",
-                    client_name=self.client_name,
-                    original_error=e,
-                )
+                return response.choices[0].message.content
+
+            except (RateLimitError, APIError) as e:
+                if isinstance(e, RateLimitError):
+                    raise ClientRateLimitError(
+                        f"OpenAI rate limit exceeded: {str(e)}",
+                        client_name=self.client_name,
+                        original_error=e,
+                    )
+                elif "quota" in str(e).lower():
+                    raise ClientQuotaExceededError(
+                        f"OpenAI quota exceeded: {str(e)}",
+                        client_name=self.client_name,
+                        original_error=e,
+                    )
+                else:
+                    raise ClientError(
+                        f"OpenAI API error: {str(e)}",
+                        client_name=self.client_name,
+                        original_error=e,
+                    )
         except Exception as e:
             raise ClientError(
                 f"Content generation failed: {str(e)}",

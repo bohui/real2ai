@@ -416,7 +416,12 @@ async def start_contract_analysis(
 
 @router.get("/history")
 async def get_contract_history(
-    limit: int = Query(50, ge=1, le=100, description="Number of records to return (minimum 1, maximum 100)"),
+    limit: int = Query(
+        50,
+        ge=1,
+        le=100,
+        description="Number of records to return (minimum 1, maximum 100)",
+    ),
     offset: int = Query(0, ge=0, description="Number of records to skip"),
     user: User = Depends(get_current_user),
     cache_service: CacheService = Depends(get_cache_service),
@@ -854,31 +859,30 @@ async def get_database_performance_report(
     user: User = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """Get database performance report for contract operations.
-    
+
     Returns performance metrics including:
     - Query execution times
     - Cache hit ratios
     - Optimization status
     - Performance recommendations
     """
-    
+
     context = create_error_context(
-        user_id=str(user.id), 
-        operation="get_database_performance_report"
+        user_id=str(user.id), operation="get_database_performance_report"
     )
-    
+
     try:
         # Get authenticated client
         db_client = await AuthContext.get_authenticated_client(require_auth=True)
         await _initialize_database_client(db_client)
-        
+
         # Get optimizer instance and performance data
         optimizer = get_database_optimizer()
         session_metrics = optimizer.get_session_metrics()
-        
+
         # Get database performance report
         db_report = await optimizer.get_performance_report(db_client)
-        
+
         return {
             "session_metrics": session_metrics,
             "database_report": db_report,
@@ -887,11 +891,11 @@ async def get_database_performance_report(
                 "composite_indexes_active": True,
                 "performance_monitoring_active": True,
                 "target_response_time_ms": 100,
-                "optimization_version": "1.0"
+                "optimization_version": "1.0",
             },
-            "generated_at": datetime.utcnow().isoformat()
+            "generated_at": datetime.utcnow().isoformat(),
         }
-        
+
     except Exception as e:
         raise handle_api_error(e, context, ErrorCategory.DATABASE)
 
@@ -961,24 +965,24 @@ async def _get_analysis_status_with_validation(
     db_client: UserAuthenticatedClient, contract_id: str, user_id: str
 ) -> AnalysisRecord:
     """Get analysis status with validation using optimized query (75% faster).
-    
+
     PERFORMANCE OPTIMIZATION:
     - Original: 4 separate queries (200-500ms)
     - Optimized: 1 consolidated query with JOINs (<100ms)
     - Uses composite indexes for optimal performance
     """
-    
+
     # Use the optimized database query that replaces 4 separate queries
     optimizer = get_database_optimizer()
-    
+
     try:
         access_result = await optimizer.get_user_contract_access_optimized(
             db_client=db_client,
             user_id=user_id,
             contract_id=contract_id,
-            use_cache=True
+            use_cache=True,
         )
-        
+
         # Log performance metrics
         if access_result.performance_metrics:
             metrics = access_result.performance_metrics
@@ -986,7 +990,7 @@ async def _get_analysis_status_with_validation(
                 f"Optimized query performance: {metrics.execution_time_ms:.1f}ms "
                 f"(target: <100ms, cached: {metrics.cache_hit})"
             )
-        
+
         # Validate access
         if not access_result.has_access:
             if access_result.access_source == "contract_not_found":
@@ -995,11 +999,11 @@ async def _get_analysis_status_with_validation(
                 raise ValueError("You don't have access to any contracts")
             else:
                 raise ValueError("You don't have access to this contract")
-        
+
         # Validate analysis exists
         if not access_result.analysis_id:
             raise ValueError("Analysis not found for this contract")
-        
+
         # Convert to AnalysisRecord format
         return {
             "id": access_result.analysis_id,
@@ -1008,27 +1012,27 @@ async def _get_analysis_status_with_validation(
             "updated_at": access_result.analysis_updated_at,
             "processing_time": access_result.processing_time,
             "error_message": access_result.error_message,
-            "analysis_metadata": access_result.analysis_metadata or {}
+            "analysis_metadata": access_result.analysis_metadata or {},
         }
-        
+
     except ValueError:
         # Re-raise validation errors
         raise
     except Exception as e:
         logger.error(f"Optimized query failed, using fallback: {str(e)}")
-        
+
         # The optimizer automatically handles fallback to original pattern
         # This should not normally happen if indexes are properly created
         access_result = await optimizer.get_user_contract_access_optimized(
             db_client=db_client,
             user_id=user_id,
             contract_id=contract_id,
-            use_cache=False  # Disable cache for fallback
+            use_cache=False,  # Disable cache for fallback
         )
-        
+
         if not access_result.has_access or not access_result.analysis_id:
             raise ValueError("Contract access validation failed")
-        
+
         return {
             "id": access_result.analysis_id,
             "status": access_result.analysis_status,
@@ -1036,7 +1040,7 @@ async def _get_analysis_status_with_validation(
             "updated_at": access_result.analysis_updated_at,
             "processing_time": access_result.processing_time,
             "error_message": access_result.error_message,
-            "analysis_metadata": access_result.analysis_metadata or {}
+            "analysis_metadata": access_result.analysis_metadata or {},
         }
 
 
@@ -1211,12 +1215,25 @@ async def get_contract_analysis(
     """Get contract analysis results with cache information."""
 
     try:
+        # Diagnostic logging: request context
+        logger.info(
+            f"get_contract_analysis start: user_id={user.id}, contract_id={contract_id}"
+        )
+
         # Get authenticated client
         db_client = await AuthContext.get_authenticated_client(require_auth=True)
 
         # Ensure database client is initialized
         if not hasattr(db_client, "_client") or db_client._client is None:
             await db_client.initialize()
+        # Diagnostic logging: auth context token presence (length only)
+        try:
+            token = AuthContext.get_user_token()
+            logger.info(
+                f"AuthContext token present={bool(token)}, length={len(token) if token else 0}"
+            )
+        except Exception:
+            logger.info("AuthContext token check failed (non-fatal)")
 
         # First check if user has access to this contract through user_contract_views
         access_result = (
@@ -1228,6 +1245,9 @@ async def get_contract_analysis(
 
         user_content_hashes = []
         if access_result.data:
+            logger.info(
+                f"user_contract_views rows for user {user.id}: {len(access_result.data)}"
+            )
             user_content_hashes = [
                 view["content_hash"]
                 for view in access_result.data
@@ -1243,6 +1263,9 @@ async def get_contract_analysis(
         )
 
         if doc_access_result.data:
+            logger.info(
+                f"documents rows for user {user.id}: {len(doc_access_result.data)}"
+            )
             doc_content_hashes = [
                 doc["content_hash"]
                 for doc in doc_access_result.data
@@ -1250,7 +1273,13 @@ async def get_contract_analysis(
             ]
             user_content_hashes.extend(doc_content_hashes)
 
+        logger.info(
+            f"Aggregated accessible content_hashes count for user {user.id}: {len(user_content_hashes)}"
+        )
         if not user_content_hashes:
+            logger.warning(
+                f"No accessible content hashes found for user {user.id}; likely RLS/auth issue"
+            )
             raise HTTPException(
                 status_code=403, detail="You don't have access to any contracts"
             )
@@ -1268,9 +1297,18 @@ async def get_contract_analysis(
 
         contract = contract_result.data[0]
         content_hash = contract["content_hash"]
+        logger.info(
+            f"Contract resolved: contract_id={contract_id}, content_hash={content_hash}"
+        )
 
         # Verify the user has access to this specific content_hash
         if content_hash not in user_content_hashes:
+            sample_hashes = list(user_content_hashes)[:5]
+            logger.warning(
+                "Access check failed: user does not have content_hash. "
+                f"user_id={user.id}, contract_id={contract_id}, content_hash={content_hash}, "
+                f"sample_accessible_hashes={sample_hashes}"
+            )
             raise HTTPException(
                 status_code=403, detail="You don't have access to this contract"
             )
@@ -1304,6 +1342,9 @@ async def get_contract_analysis(
             response["cached"] = True
             response["cache_source"] = metadata["cached_from"]
 
+        logger.info(
+            f"get_contract_analysis success: user_id={user.id}, contract_id={contract_id}, status={analysis['status']}"
+        )
         return response
 
     except HTTPException:

@@ -15,7 +15,9 @@ from app.schema.property import (
     PropertyValuation,
     PropertyMarketData,
     PropertyRiskAssessment,
-    PropertySearchRequest
+    PropertySearchRequest,
+    PropertyInvestmentAnalysis,
+    ComparableSale
 )
 from app.models.contract_state import AustralianState, RiskLevel
 from app.clients.factory import get_supabase_client

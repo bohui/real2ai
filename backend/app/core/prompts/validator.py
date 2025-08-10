@@ -640,25 +640,33 @@ class PromptValidator:
 
         # Check for JSON structure if expected
         if "json" in content.lower() and ("{" in content or "[" in content):
-            # Try to find JSON blocks
-            json_blocks = re.findall(r"\{[^{}]*\}", content)
-            metrics["json_blocks_found"] = len(json_blocks)
+            import json
 
-            if json_blocks:
-                import json
+            # Prefer fenced code blocks with json
+            fenced_blocks = re.findall(
+                r"```(?:json)?\s*(\{[\s\S]*?\}|\[[\s\S]*?\])\s*```",
+                content,
+                re.IGNORECASE,
+            )
+            simple_blocks = []
+            if not fenced_blocks:
+                # Fallback: attempt to capture balanced-like top-level objects/arrays conservatively
+                simple_blocks = re.findall(r"\{[^{}]*\}|\[[^\[\]]*\]", content)
+            all_blocks = fenced_blocks or simple_blocks
+            metrics["json_blocks_found"] = len(all_blocks)
 
-                for i, block in enumerate(json_blocks[:5]):  # Check first 5 blocks
-                    try:
-                        json.loads(block)
-                    except json.JSONDecodeError:
-                        issues.append(
-                            ValidationIssue(
-                                severity=ValidationSeverity.WARNING,
-                                code="INVALID_JSON",
-                                message=f"JSON block {i+1} appears malformed",
-                                suggestion="Validate JSON structure in template",
-                            )
+            for i, block in enumerate(all_blocks[:5]):  # Check first 5 blocks
+                try:
+                    json.loads(block)
+                except json.JSONDecodeError:
+                    issues.append(
+                        ValidationIssue(
+                            severity=ValidationSeverity.WARNING,
+                            code="INVALID_JSON",
+                            message=f"JSON block {i+1} appears malformed",
+                            suggestion="Validate JSON structure in template",
                         )
+                    )
 
         return issues, metrics
 

@@ -12,7 +12,9 @@ import json
 import statistics
 
 from app.schema.property import (
-    PropertyMarketData
+    PropertyMarketData,
+    PropertyMarketTrends,
+    PropertyMarketInsight
 )
 from app.models.contract_state import AustralianState
 from app.clients.factory import get_supabase_client
