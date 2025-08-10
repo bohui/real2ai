@@ -76,16 +76,26 @@ def is_jwt_expired_error(error: Exception) -> bool:
     ]
 
     if any(indicator in error_str for indicator in jwt_indicators):
+        # Additional logging for clock sync diagnosis
+        logger.warning(
+            f"JWT expiration detected - this may indicate clock synchronization issues. "
+            f"Error: {error_str[:200]}"
+        )
         return True
 
     # Check error details/message if available
     if error_details:
         details_str = str(error_details).lower()
         if any(indicator in details_str for indicator in jwt_indicators):
+            logger.warning(
+                f"JWT expiration detected in error details - possible clock sync issue. "
+                f"Details: {details_str[:200]}"
+            )
             return True
 
     # Check if error code is PGRST301 specifically
     if hasattr(error, "code") and error.code == "PGRST301":
+        logger.warning("PGRST301 error detected - JWT expiration or clock sync issue")
         return True
 
     return False
@@ -224,6 +234,17 @@ class SupabaseDatabaseClient(DatabaseOperations):
                 self.logger.info(
                     f"JWT expiration detected in database create operation for table '{table}'"
                 )
+                
+                # Add detailed JWT diagnostics
+                try:
+                    from app.core.auth_context import AuthContext
+                    from app.utils.jwt_diagnostics import log_jwt_timing_issue
+                    token = AuthContext.get_user_token()
+                    if token:
+                        log_jwt_timing_issue(token, f"database_create_{table}_jwt_expired", e)
+                except Exception as diag_error:
+                    self.logger.debug(f"JWT diagnostics failed: {diag_error}")
+                
                 raise ClientError(
                     f"JWT expired: {str(e)}",
                     client_name=self.client_name,
@@ -562,6 +583,16 @@ class SupabaseDatabaseClient(DatabaseOperations):
             return result.data
 
         except APIError as e:
+            # Add JWT diagnostics for RPC failures
+            try:
+                from app.core.auth_context import AuthContext
+                from app.utils.jwt_diagnostics import log_jwt_timing_issue
+                token = AuthContext.get_user_token()
+                if token and is_jwt_expired_error(e):
+                    log_jwt_timing_issue(token, f"rpc_{function_name}_jwt_expired", e)
+            except Exception as diag_error:
+                logger.debug(f"JWT diagnostics failed: {diag_error}")
+            
             # Handle specific case for ensure_bucket_exists which returns 200 but with JSON parsing issues
             if function_name == "ensure_bucket_exists" and hasattr(e, "details"):
                 try:

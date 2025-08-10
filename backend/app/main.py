@@ -88,6 +88,14 @@ async def lifespan(app: FastAPI) -> Any:
     """Lifespan context manager for startup and shutdown events"""
     # Startup
     logger.info("Starting Real2.AI API...")
+    
+    # Run startup diagnostics including time sync checks
+    try:
+        from app.startup_diagnostics import run_startup_diagnostics
+        await run_startup_diagnostics()
+    except Exception as e:
+        logger.error(f"Startup diagnostics failed: {e}")
+        # Continue startup even if diagnostics fail
 
     # Initialize LangSmith tracing
     langsmith_enabled = initialize_langsmith()

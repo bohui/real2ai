@@ -141,6 +141,13 @@ class AuthContext:
             client = await get_supabase_client()
 
         if token:
+            # Add JWT timing diagnostics
+            try:
+                from app.utils.jwt_diagnostics import log_jwt_timing_issue
+                log_jwt_timing_issue(token, f"AuthContext.get_authenticated_client(isolated={isolated})")
+            except Exception as diag_error:
+                logger.debug(f"JWT diagnostics failed: {diag_error}")
+            
             # Set user token for RLS enforcement
             client.set_user_token(token, refresh_token)
             logger.info(
