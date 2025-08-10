@@ -295,7 +295,8 @@ class RecoveryMonitor:
     async def cleanup_old_records(self, days_to_keep: int = 30):
         """Clean up old recovery records"""
         try:
-            client = await AuthContext.get_authenticated_client()
+            # Use isolated client to prevent JWT token race conditions in concurrent tasks
+            client = await AuthContext.get_authenticated_client(isolated=True)
             cutoff_date = (
                 datetime.now(timezone.utc) - timedelta(days=days_to_keep)
             ).isoformat()

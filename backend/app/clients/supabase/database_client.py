@@ -398,10 +398,15 @@ class SupabaseDatabaseClient(DatabaseOperations):
                 self.logger.debug(f"Successfully updated record: {updated_record}")
                 return updated_record
             else:
-                raise ClientError(
-                    f"No data returned from update operation on table '{table}' for record {record_id}",
-                    client_name=self.client_name,
+                # This typically indicates RLS policy blocked the operation due to JWT token mismatch
+                # Common in background tasks when multiple concurrent tasks share the same client
+                error_msg = (
+                    f"No data returned from update operation on table '{table}' for record {record_id}. "
+                    f"This usually indicates Row Level Security (RLS) blocked the operation, "
+                    f"possibly due to JWT token race condition in concurrent background tasks."
                 )
+                self.logger.warning(error_msg)
+                raise ClientError(error_msg, client_name=self.client_name)
 
         except APIError as e:
             self.logger.error(
@@ -506,10 +511,15 @@ class SupabaseDatabaseClient(DatabaseOperations):
                 self.logger.debug(f"Successfully upserted record: {upserted_record}")
                 return upserted_record
             else:
-                raise ClientError(
-                    f"No data returned from upsert operation on table '{table}'",
-                    client_name=self.client_name,
+                # This typically indicates RLS policy blocked the operation due to JWT token mismatch
+                # Common in background tasks when multiple concurrent tasks share the same client
+                error_msg = (
+                    f"No data returned from upsert operation on table '{table}'. "
+                    f"This usually indicates Row Level Security (RLS) blocked the operation, "
+                    f"possibly due to JWT token race condition in concurrent background tasks."
                 )
+                self.logger.warning(error_msg)
+                raise ClientError(error_msg, client_name=self.client_name)
 
         except APIError as e:
             self.logger.error(f"API error upserting record in table '{table}': {e}")

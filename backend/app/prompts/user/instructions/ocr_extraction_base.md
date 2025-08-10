@@ -4,7 +4,7 @@ category: "instructions"
 name: "ocr_extraction_base"
 version: "2.1.0"
 description: "Fragment-based OCR extraction for Australian contract documents"
-fragment_orchestration: "ocr_extraction_orchestrator"
+fragment_orchestration: "ocr_extraction"
 required_variables:
   - "document_type"
   - "australian_state"

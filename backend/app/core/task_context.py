@@ -313,7 +313,8 @@ async def task_auth_context(context_key: str, extend_ttl: bool = True):
     Usage:
         async with task_auth_context(context_key):
             # AuthContext is restored with user token
-            client = await AuthContext.get_authenticated_client()
+            # Use isolated client to prevent JWT token race conditions in concurrent tasks
+            client = await AuthContext.get_authenticated_client(isolated=True)
             # Perform user-scoped operations
     """
     task_store = await get_task_store()
@@ -370,7 +371,8 @@ def user_aware_task(
         async def process_document(recovery_ctx, context_key: str, document_id: str, user_id: str):
             # AuthContext is automatically restored
             # recovery_ctx provides checkpointing capabilities if recovery_enabled=True
-            client = await AuthContext.get_authenticated_client()
+            # Use isolated client to prevent JWT token race conditions in concurrent tasks
+            client = await AuthContext.get_authenticated_client(isolated=True)
             # Process document with user permissions
     """
 

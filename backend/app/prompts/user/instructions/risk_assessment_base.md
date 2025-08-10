@@ -4,7 +4,7 @@ category: "instructions"
 name: "risk_assessment_base"
 version: "2.0.0"
 description: "Fragment-based comprehensive risk assessment for Australian property contracts"
-fragment_orchestration: "risk_assessment_orchestrator"
+fragment_orchestration: "risk_assessment"
 required_variables:
   - "contract_data"
   - "contract_type"

@@ -313,7 +313,8 @@ class CacheService:
             }
 
             # Get user client for RLS
-            user_client = await AuthContext.get_authenticated_client()
+            # Use isolated client to prevent JWT token race conditions in concurrent tasks
+            user_client = await AuthContext.get_authenticated_client(isolated=True)
             result = await user_client.database.insert("user_property_views", view_data)
 
             if result.get("success"):
@@ -349,7 +350,8 @@ class CacheService:
 
         try:
             # Use function that combines contract views with analysis data (bypasses RLS issues)
-            user_client = await AuthContext.get_authenticated_client()
+            # Use isolated client to prevent JWT token race conditions in concurrent tasks
+            user_client = await AuthContext.get_authenticated_client(isolated=True)
             result = await user_client.rpc(
                 "get_user_contract_history",
                 {"p_user_id": user_id}
@@ -387,7 +389,8 @@ class CacheService:
 
         try:
             # Use function that combines property views with analysis data (bypasses RLS issues)
-            user_client = await AuthContext.get_authenticated_client()
+            # Use isolated client to prevent JWT token race conditions in concurrent tasks
+            user_client = await AuthContext.get_authenticated_client(isolated=True)
             result = await user_client.rpc(
                 "get_user_property_history",
                 {"p_user_id": user_id}

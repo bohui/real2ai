@@ -142,7 +142,11 @@ const SettingsPage: React.FC = () => {
     }
 
     try {
-      // Implementation would call password change API
+      const { apiService } = await import("@/services/api");
+      await apiService.changePassword({
+        current_password: passwordForm.current_password,
+        new_password: passwordForm.new_password,
+      });
       addNotification({
         type: "success",
         title: "Password changed",
@@ -158,6 +162,7 @@ const SettingsPage: React.FC = () => {
         type: "error",
         title: "Password change failed",
         message:
+          (error as any)?.response?.data?.detail ||
           "Unable to change password. Please check your current password.",
       });
     }

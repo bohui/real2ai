@@ -38,12 +38,15 @@ class UserAwareService(ABC):
         self._system_client = None
         self.logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
     
-    async def get_user_client(self) -> SupabaseClient:
+    async def get_user_client(self, isolated: bool = False) -> SupabaseClient:
         """
         Get user-authenticated Supabase client.
         
         This client will respect RLS policies and operate within the
         authenticated user's permissions.
+        
+        Args:
+            isolated: If True, creates isolated client to avoid token race conditions
         
         Returns:
             SupabaseClient with user authentication
@@ -51,10 +54,10 @@ class UserAwareService(ABC):
         Raises:
             HTTPException: If no user authentication available
         """
-        if self._user_client:
+        if self._user_client and not isolated:
             return self._user_client
         
-        return await AuthContext.get_authenticated_client(require_auth=True)
+        return await AuthContext.get_authenticated_client(require_auth=True, isolated=isolated)
     
     async def get_system_client(self) -> SupabaseClient:
         """

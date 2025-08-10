@@ -238,6 +238,17 @@ class ApiService {
     // Could call logout endpoint if it exists
   }
 
+  async changePassword(data: {
+    current_password: string;
+    new_password: string;
+  }): Promise<{ message: string }> {
+    const response = await this.client.post<{ message: string }>(
+      "/api/auth/change-password",
+      data,
+    );
+    return response.data;
+  }
+
   // User endpoints
   async getCurrentUser(): Promise<User> {
     const response = await this.client.get<User>("/api/users/profile");

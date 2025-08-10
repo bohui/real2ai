@@ -117,7 +117,8 @@ class TaskRegistry:
     ) -> str:
         """Create task registry entry"""
 
-        client = await AuthContext.get_authenticated_client()
+        # Use isolated client to prevent JWT token race conditions in concurrent tasks
+        client = await AuthContext.get_authenticated_client(isolated=True)
 
         result = await client.execute_rpc(
             "upsert_task_registry",
@@ -171,7 +172,8 @@ class TaskRegistry:
     ) -> bool:
         """Update task registry state"""
 
-        client = await AuthContext.get_authenticated_client()
+        # Use isolated client to prevent JWT token race conditions in concurrent tasks
+        client = await AuthContext.get_authenticated_client(isolated=True)
 
         result = await client.execute_rpc(
             "update_task_registry_state",
@@ -212,7 +214,8 @@ class TaskRegistry:
     async def create_checkpoint(self, task_id: str, checkpoint: CheckpointData) -> str:
         """Create task checkpoint"""
 
-        client = await AuthContext.get_authenticated_client()
+        # Use isolated client to prevent JWT token race conditions in concurrent tasks
+        client = await AuthContext.get_authenticated_client(isolated=True)
 
         result = await client.execute_rpc(
             "create_task_checkpoint",
@@ -253,7 +256,8 @@ class TaskRegistry:
     async def get_latest_checkpoint(self, task_id: str) -> Optional[CheckpointData]:
         """Get latest checkpoint for task"""
 
-        client = await AuthContext.get_authenticated_client()
+        # Use isolated client to prevent JWT token race conditions in concurrent tasks
+        client = await AuthContext.get_authenticated_client(isolated=True)
 
         result = await client.execute_rpc(
             "get_latest_checkpoint", {"p_task_id": task_id}

@@ -9,34 +9,37 @@ from app.schema.enums import AustralianState
 
 class UserRegistrationRequest(BaseModel):
     """User registration request"""
+
     email: EmailStr
     password: str
     australian_state: AustralianState
     user_type: str = "buyer"  # buyer, investor, agent
-    
-    @field_validator('password')
+
+    @field_validator("password")
     @classmethod
     def validate_password(cls, v):
         if len(v) < 8:
-            raise ValueError('Password must be at least 8 characters long')
+            raise ValueError("Password must be at least 8 characters long")
         return v
-    
-    @field_validator('user_type')
+
+    @field_validator("user_type")
     @classmethod
     def validate_user_type(cls, v):
-        if v not in ['buyer', 'investor', 'agent']:
-            raise ValueError('User type must be buyer, investor, or agent')
+        if v not in ["buyer", "investor", "agent"]:
+            raise ValueError("User type must be buyer, investor, or agent")
         return v
 
 
 class UserLoginRequest(BaseModel):
     """User login request"""
+
     email: EmailStr
     password: str
 
 
 class UserResponse(BaseModel):
     """User profile response"""
+
     id: str
     email: str
     australian_state: AustralianState
@@ -48,3 +51,17 @@ class UserResponse(BaseModel):
     onboarding_completed_at: Optional[datetime] = None
     onboarding_preferences: Dict[str, Any] = {}
     created_at: Optional[datetime] = None
+
+
+class ChangePasswordRequest(BaseModel):
+    """Change password request"""
+
+    current_password: str
+    new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_new_password(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError("Password must be at least 8 characters long")
+        return v

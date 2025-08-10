@@ -60,7 +60,8 @@ async def update_analysis_progress(
     """Update analysis progress with detailed tracking"""
     try:
         # Get user-authenticated client
-        user_client = await AuthContext.get_authenticated_client()
+        # Use isolated client to prevent JWT token race conditions in concurrent tasks
+        user_client = await AuthContext.get_authenticated_client(isolated=True)
 
         # Update or create progress record
         # Determine status based on step and progress
@@ -199,7 +200,8 @@ async def comprehensive_document_analysis(
             # Initialize services
             document_service = DocumentService(use_llm_document_processing=True)
             await document_service.initialize()
-            user_client = await document_service.get_user_client()
+            # Use isolated client to prevent JWT token race conditions in concurrent tasks
+            user_client = await document_service.get_user_client(isolated=True)
 
             # Get document record
             doc_result = await user_client.database.select(
@@ -475,7 +477,8 @@ async def comprehensive_document_analysis(
                 last_progress_percent = 0
                 last_step = "unknown"
                 try:
-                    user_client = await AuthContext.get_authenticated_client()
+                    # Use isolated client to prevent JWT token race conditions in concurrent tasks
+                    user_client = await AuthContext.get_authenticated_client(isolated=True)
                     latest_progress = await user_client.database.select(
                         "analysis_progress",
                         columns="current_step, progress_percent",
@@ -572,7 +575,8 @@ async def process_document_background(
                 await document_service.initialize()
 
                 # Get user-authenticated client (respects RLS)
-                user_client = await document_service.get_user_client()
+                # Use isolated client to prevent JWT token race conditions in concurrent tasks
+                user_client = await document_service.get_user_client(isolated=True)
 
                 # Update document status (user context - RLS enforced)
                 await user_client.update(
@@ -775,7 +779,8 @@ async def analyze_contract_background(
         await document_service.initialize()
 
         # Get user-authenticated client (respects RLS)
-        user_client = await document_service.get_user_client()
+        # Use isolated client to prevent JWT token race conditions in concurrent tasks
+        user_client = await document_service.get_user_client(isolated=True)
 
         # Update analysis status (user context - RLS enforced)
         await user_client.update(
@@ -1389,7 +1394,8 @@ async def enhanced_reprocess_document_with_ocr_background(
         await document_service.initialize()
 
         # Get user-authenticated client (respects RLS)
-        user_client = await document_service.get_user_client()
+        # Use isolated client to prevent JWT token race conditions in concurrent tasks
+        user_client = await document_service.get_user_client(isolated=True)
 
         # Update document status
         await user_client.update(
@@ -1538,7 +1544,8 @@ async def batch_ocr_processing_background(
         await document_service.initialize()
 
         # Get user-authenticated client (respects RLS)
-        user_client = await document_service.get_user_client()
+        # Use isolated client to prevent JWT token race conditions in concurrent tasks
+        user_client = await document_service.get_user_client(isolated=True)
 
         logger.info(f"Starting batch OCR processing for {total_docs} documents")
 

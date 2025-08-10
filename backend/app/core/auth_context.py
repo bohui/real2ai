@@ -109,12 +109,13 @@ class AuthContext:
         return _refresh_token.get()
 
     @classmethod
-    async def get_authenticated_client(cls, require_auth: bool = True):
+    async def get_authenticated_client(cls, require_auth: bool = True, isolated: bool = False):
         """
         Get Supabase client with proper authentication.
 
         Args:
             require_auth: If True, raises exception when no token is present
+            isolated: If True, creates isolated client to avoid token race conditions
 
         Returns:
             Authenticated Supabase client
@@ -132,14 +133,18 @@ class AuthContext:
                 detail="Authentication required",
             )
 
-        # Get base client
-        client = await get_supabase_client()
+        if isolated:
+            # Create isolated client instance to avoid token mutation race conditions
+            client = await cls._create_isolated_client()
+        else:
+            # Get base client (shared factory instance)
+            client = await get_supabase_client()
 
         if token:
             # Set user token for RLS enforcement
             client.set_user_token(token, refresh_token)
             logger.info(
-                f"Created authenticated client for user: {cls.get_user_id()}, token length: {len(token) if token else 0}"
+                f"Created {'isolated ' if isolated else ''}authenticated client for user: {cls.get_user_id()}, token length: {len(token) if token else 0}"
             )
         else:
             # No user token present; returning anon-key client (RLS enforced by default)
@@ -148,6 +153,55 @@ class AuthContext:
             )
 
         return client
+
+    @classmethod
+    async def _create_isolated_client(cls):
+        """
+        Create a new isolated Supabase client instance.
+        
+        This avoids token mutation race conditions in concurrent background tasks
+        by ensuring each task gets its own client instance.
+        """
+        from app.clients.factory import get_client_factory
+        from app.clients.supabase import SupabaseClient
+        from supabase import create_client
+        from app.clients.supabase.auth_client import SupabaseAuthClient
+        from app.clients.supabase.database_client import SupabaseDatabaseClient
+        
+        # Get config from factory but create new instance
+        factory = get_client_factory()
+        base_client = factory.get_client("supabase")
+        if not base_client.is_initialized:
+            await factory.initialize_client("supabase")
+            
+        # Create new isolated client with same config
+        raw_client = create_client(base_client.config.url, base_client.config.anon_key)
+        
+        isolated_client = SupabaseClient(base_client.config)
+        isolated_client._supabase_client = raw_client
+        isolated_client._auth_client = SupabaseAuthClient(raw_client, base_client.config)
+        isolated_client._db_client = SupabaseDatabaseClient(raw_client, base_client.config)
+        await isolated_client._db_client.initialize()
+        isolated_client._initialized = True
+        
+        logger.debug("Created isolated Supabase client instance")
+        return isolated_client
+
+    @classmethod
+    async def get_isolated_authenticated_client(cls, require_auth: bool = True):
+        """
+        Get an isolated Supabase client instance for background tasks.
+        
+        This creates a new client instance to prevent token mutation race conditions
+        that occur when multiple concurrent tasks share the same client.
+        
+        Args:
+            require_auth: If True, raises exception when no token is present
+            
+        Returns:
+            Isolated authenticated Supabase client
+        """
+        return await cls.get_authenticated_client(require_auth=require_auth, isolated=True)
 
     @classmethod
     def is_authenticated(cls) -> bool:
@@ -276,3 +330,14 @@ def with_auth_context(token: str, user_id: Optional[str] = None):
                 AuthContext.clear_auth_context()
 
     return AuthContextManager(token, user_id)
+
+
+# Convenience function for background tasks
+async def get_isolated_authenticated_client(require_auth: bool = True):
+    """
+    Convenience function to get an isolated authenticated client.
+    
+    This is the recommended way to get clients in background tasks to avoid
+    JWT token race conditions from shared client state.
+    """
+    return await AuthContext.get_isolated_authenticated_client(require_auth=require_auth)

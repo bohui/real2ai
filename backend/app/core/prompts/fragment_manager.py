@@ -196,7 +196,12 @@ class FragmentManager:
     def _load_orchestration_config(self, orchestration_id: str) -> Dict[str, Any]:
         """Load orchestration configuration"""
         if orchestration_id not in self._orchestration_configs:
-            config_file = self.config_dir / f"{orchestration_id}_orchestrator.yaml"
+            # Accept both raw IDs (e.g., "contract_analysis") and fully-suffixed IDs
+            # (e.g., "contract_analysis_orchestrator"). Normalize to a single filename.
+            filename = orchestration_id
+            if not filename.endswith("_orchestrator"):
+                filename = f"{filename}_orchestrator"
+            config_file = self.config_dir / f"{filename}.yaml"
 
             if not config_file.exists():
                 raise PromptCompositionError(

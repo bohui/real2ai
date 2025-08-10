@@ -4,7 +4,7 @@ category: "instructions"
 name: "contract_analysis_base"
 version: "2.0.0"
 description: "Base contract analysis template that works with fragments"
-fragment_orchestration: "contract_analysis_orchestrator"
+fragment_orchestration: "contract_analysis"
 required_variables:
   - "contract_text"
   - "australian_state"

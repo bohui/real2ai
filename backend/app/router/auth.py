@@ -6,7 +6,11 @@ import logging
 
 from app.core.auth import User, get_current_user_token
 from app.clients.factory import get_service_supabase_client
-from app.schema.auth import UserRegistrationRequest, UserLoginRequest
+from app.schema.auth import (
+    UserRegistrationRequest,
+    UserLoginRequest,
+    ChangePasswordRequest,
+)
 from app.core.error_handler import handle_api_error, create_error_context, ErrorCategory
 from app.core.config import get_settings
 from app.services.backend_token_service import BackendTokenService
@@ -225,3 +229,50 @@ async def logout_user(
         logger.error(f"Logout error: {str(e)}")
         # Even if logout fails, we can return success since the client should clear tokens
         return {"message": "Logged out (with warnings)", "status": "success"}
+
+
+@router.post("/change-password")
+async def change_password(
+    request: ChangePasswordRequest,
+    current_token: str = Depends(get_current_user_token),
+    db_client=Depends(get_service_supabase_client),
+):
+    """Change the current user's password using Supabase auth.
+
+    Works for both flows:
+    - If frontend holds Supabase tokens: request is directly authorized.
+    - If frontend uses backend-issued token: middleware exchanges it to Supabase token.
+    """
+    try:
+        # Use Supabase auth API to update password by reauthenticating with current password
+        # First sign in to verify current password (required by Supabase for password update)
+        # Extract email by verifying token via auth service not readily accessible here;
+        # Instead, query the current user profile via RLS-enabled DB request.
+        from app.core.auth_context import AuthContext
+
+        client = await AuthContext.get_authenticated_client(require_auth=True)
+
+        # Get current user id/email from profiles using token context
+        # The postgrest client already has RLS auth applied via middleware/context
+        profile_result = client.table("profiles").select("id,email").limit(1).execute()
+        if not profile_result.data:
+            raise HTTPException(status_code=404, detail="User profile not found")
+        email = profile_result.data[0]["email"]
+
+        # Verify current password by sign-in
+        auth_result = client.auth.sign_in_with_password(
+            {"email": email, "password": request.current_password}
+        )
+        if not auth_result.user:
+            raise HTTPException(status_code=401, detail="Current password is incorrect")
+
+        # Update password
+        client.supabase_client.auth.update_user({"password": request.new_password})
+
+        return {"message": "Password updated successfully"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Change password error: {str(e)}")
+        raise HTTPException(status_code=400, detail="Failed to update password")
