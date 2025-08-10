@@ -77,7 +77,7 @@ class DatabaseSeeder:
                 "subscription_status": "premium",
                 "credits_remaining": 50,
                 "organization": "Real2.AI Demo",
-                "password": "demo123456",
+                "password": "1qa2ws#ED!@",
             },
             {
                 "id": str(uuid.uuid4()),
@@ -370,8 +370,9 @@ class DatabaseSeeder:
 
                 # Generate content hash for shared contract (simplified for seeding)
                 import hashlib
+
                 content_hash = hashlib.sha256(f"{contract_id}".encode()).hexdigest()
-                
+
                 await conn.execute(
                     """
                     INSERT INTO contracts (id, content_hash, contract_type, australian_state)
@@ -383,7 +384,7 @@ class DatabaseSeeder:
                     contract_type,
                     state,
                 )
-                
+
                 # Create user_contract_views entry for user access
                 await conn.execute(
                     """
@@ -394,7 +395,7 @@ class DatabaseSeeder:
                     doc["user_id"],
                     content_hash,
                     None,  # property_address - could be added later
-                    'upload'
+                    "upload",
                 )
 
                 contract_ids.append(
@@ -618,8 +619,10 @@ class DatabaseSeeder:
 
                     # Generate property_hash for shared property data
                     property_address = prop["address"]
-                    property_hash = hashlib.sha256(property_address.lower().encode()).hexdigest()
-                    
+                    property_hash = hashlib.sha256(
+                        property_address.lower().encode()
+                    ).hexdigest()
+
                     await conn.execute(
                         """
                         INSERT INTO property_data (
@@ -652,7 +655,7 @@ class DatabaseSeeder:
                             }
                         ),
                     )
-                    
+
                     # Create user_property_views entry for user access
                     await conn.execute(
                         """
@@ -663,7 +666,7 @@ class DatabaseSeeder:
                         contract["user_id"],
                         property_hash,
                         property_address,
-                        'search'
+                        "search",
                     )
 
                     logger.info(f"Created property data for {prop['address']}")

@@ -87,8 +87,10 @@ class CacheService {
     limit: number = 50,
     offset: number = 0,
   ): Promise<CacheHistoryResponse> {
+    // Ensure limit is at least 1 to prevent 422 validation errors
+    const validLimit = Math.max(1, limit);
     return this.makeRequest(
-      `/api/cache/property/history?limit=${limit}&offset=${offset}`,
+      `/api/cache/property/history?limit=${validLimit}&offset=${offset}`,
     );
   }
 

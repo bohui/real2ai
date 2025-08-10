@@ -10,6 +10,7 @@ required_variables:
   - "australian_state"
   - "analysis_type"
 optional_variables:
+  - "condition"
   - "user_experience_level"
   - "specific_concerns"
   - "contract_type"

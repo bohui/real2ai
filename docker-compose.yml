@@ -16,10 +16,13 @@ services:
       - GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp_key.json
       - SUPABASE_URL=http://host.docker.internal:54321
       - REDIS_URL=redis://redis:6379
+      - TZ=UTC
     volumes:
       - ./backend/gcp_key.json:/secrets/gcp_key.json:ro
       - ./backend:/app
       - backend_data:/app/data
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
     depends_on:
       - redis
     networks:
@@ -66,10 +69,13 @@ services:
       - GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp_key.json
       - SUPABASE_URL=http://host.docker.internal:54321
       - REDIS_URL=redis://redis:6379
+      - TZ=UTC
     volumes:
       - ./backend/gcp_key.json:/secrets/gcp_key.json:ro
       - ./backend:/app
       - backend_data:/app/data
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
     depends_on:
       - redis
     networks:
@@ -99,10 +105,13 @@ services:
       - GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp_key.json
       - SUPABASE_URL=http://host.docker.internal:54321
       - REDIS_URL=redis://redis:6379
+      - TZ=UTC
     volumes:
       - ./backend/gcp_key.json:/secrets/gcp_key.json:ro
       - ./backend:/app
       - backend_data:/app/data
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
     depends_on:
       - redis
     networks:
@@ -132,10 +141,13 @@ services:
       - GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp_key.json
       - SUPABASE_URL=http://host.docker.internal:54321
       - REDIS_URL=redis://redis:6379
+      - TZ=UTC
     volumes:
       - ./backend/gcp_key.json:/secrets/gcp_key.json:ro
       - ./backend:/app
       - backend_data:/app/data
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
     depends_on:
       - redis
     networks:
@@ -162,9 +174,12 @@ services:
       - PYTHONPATH=/app
       - SUPABASE_URL=http://host.docker.internal:54321
       - REDIS_URL=redis://redis:6379
+      - TZ=UTC
     volumes:
       - ./backend:/app
       - backend_data:/app/data
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
     depends_on:
       - redis
     networks:

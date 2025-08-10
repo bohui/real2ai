@@ -39,6 +39,7 @@ from app.models.workflow_outputs import (
     WorkflowValidationOutput,
     ContractTermsValidationOutput,
     ContractTermsOutput,
+    ComplianceAnalysisOutput,
 )
 
 # Import categorized tools
@@ -217,6 +218,17 @@ class ContractAnalysisWorkflow:
         self.recommendations_parser = create_parser(
             RecommendationsOutput, strict_mode=False
         )
+        
+        # Initialize comprehensive structured response parsers for JSON fixes
+        self.structured_parsers = {
+            'risk_analysis': create_parser(RiskAnalysisOutput, strict_mode=False, retry_on_failure=True),
+            'recommendations': create_parser(RecommendationsOutput, strict_mode=False, retry_on_failure=True),
+            'contract_terms': create_parser(ContractTermsOutput, strict_mode=False, retry_on_failure=True),
+            'compliance_analysis': create_parser(ComplianceAnalysisOutput, strict_mode=False, retry_on_failure=True),
+            'terms_validation': create_parser(ContractTermsValidationOutput, strict_mode=False, retry_on_failure=True),
+            'document_quality': create_parser(DocumentQualityMetrics, strict_mode=False, retry_on_failure=True),
+            'workflow_validation': create_parser(WorkflowValidationOutput, strict_mode=False, retry_on_failure=True),
+        }
 
         # Performance metrics
         self._metrics = {
@@ -349,6 +361,176 @@ class ContractAnalysisWorkflow:
                 original_error=e,
             )
 
+    def _parse_structured_response(self, response: str, response_type: str) -> tuple[Optional[Dict[str, Any]], bool, str]:
+        """
+        Parse LLM response using structured parser with fallback
+        
+        Args:
+            response: Raw LLM response
+            response_type: Type of response ('risk_analysis', 'recommendations', etc.)
+            
+        Returns:
+            tuple: (parsed_data, success, error_message)
+        """
+        if response_type in self.structured_parsers:
+            parser = self.structured_parsers[response_type]
+            result = parser.parse_with_retry(response)
+            
+            if result.success:
+                parsed_data = result.parsed_data.dict() if hasattr(result.parsed_data, 'dict') else result.parsed_data
+                return parsed_data, True, ""
+            else:
+                error_msg = "; ".join(result.parsing_errors + result.validation_errors)
+                logger.warning(f"Structured parsing failed for {response_type}: {error_msg}")
+        
+        # Fallback to manual JSON parsing with code block handling
+        return self._fallback_json_parse(response)
+    
+    def _fallback_json_parse(self, response: str) -> tuple[Optional[Dict[str, Any]], bool, str]:
+        """
+        Fallback JSON parsing with code block handling
+        Fixes the "Invalid JSON. Error: Expecting value: line 1 column 1" issue
+        """
+        try:
+            # Handle code block wrapped responses
+            cleaned_response = response.strip()
+            
+            # Remove code block markers
+            if cleaned_response.startswith('```json'):
+                cleaned_response = cleaned_response[7:]  # Remove ```json
+            if cleaned_response.startswith('```'):
+                cleaned_response = cleaned_response[3:]  # Remove ```
+            if cleaned_response.endswith('```'):
+                cleaned_response = cleaned_response[:-3]  # Remove trailing ```
+            
+            cleaned_response = cleaned_response.strip()
+            
+            # Try parsing the cleaned response
+            parsed_data = json.loads(cleaned_response)
+            return parsed_data, True, ""
+            
+        except json.JSONDecodeError as e:
+            return None, False, f"Invalid JSON. Error: {e}"
+        except Exception as e:
+            return None, False, f"Parsing error: {e}"
+    
+    def _is_valid_json_response(self, response: str) -> tuple[bool, str]:
+        """
+        Check if response is valid JSON with improved code block handling
+        Fixes the _monitor_response_quality JSON validation issue
+        """
+        try:
+            cleaned_response = response.strip()
+            
+            # Handle code block wrapped responses
+            if cleaned_response.startswith('```json'):
+                cleaned_response = cleaned_response[7:]
+            if cleaned_response.startswith('```'):
+                cleaned_response = cleaned_response[3:]
+            if cleaned_response.endswith('```'):
+                cleaned_response = cleaned_response[:-3]
+            
+            cleaned_response = cleaned_response.strip()
+            json.loads(cleaned_response)
+            return True, ""
+            
+        except json.JSONDecodeError as e:
+            return False, f"Invalid JSON. Error: {e}"
+        except Exception as e:
+            return False, f"JSON validation error: {e}"
+
+    def _safe_json_parse(self, response: str) -> dict:
+        """
+        Safely parse JSON response with code block handling
+        Raises JSONDecodeError on failure for consistent error handling
+        """
+        try:
+            cleaned_response = response.strip()
+            
+            # Handle code block wrapped responses
+            if cleaned_response.startswith('```json'):
+                cleaned_response = cleaned_response[7:]
+            if cleaned_response.startswith('```'):
+                cleaned_response = cleaned_response[3:]
+            if cleaned_response.endswith('```'):
+                cleaned_response = cleaned_response[:-3]
+            
+            cleaned_response = cleaned_response.strip()
+            return json.loads(cleaned_response)
+            
+        except json.JSONDecodeError:
+            # Re-raise with original response for debugging
+            raise
+        except Exception as e:
+            raise json.JSONDecodeError(f"JSON parsing error: {e}", response, 0)
+
+
+    def _create_fallback_compliance_result(self) -> Dict[str, Any]:
+        '''Fallback compliance result when parsing fails'''
+        return {
+            "overall_compliance_score": 5,
+            "state_compliance": False,
+            "compliance_issues": [
+                {
+                    "area": "analysis",
+                    "issue": "Unable to complete automated compliance analysis",
+                    "severity": "medium",
+                    "recommendation": "Manual legal review required"
+                }
+            ],
+            "mandatory_disclosures": [],
+            "cooling_off_period": {"applicable": None, "period_days": None}
+        }
+    
+    def _create_fallback_risk_result(self) -> Dict[str, Any]:
+        '''Fallback risk result when parsing fails'''
+        return {
+            "overall_risk_score": 5,
+            "risk_factors": [
+                {
+                    "factor": "Parsing Error",
+                    "severity": "medium",
+                    "description": "Unable to perform complete risk analysis due to parsing issues",
+                    "mitigation_suggestions": ["Manual review required", "Re-analyze with updated system"]
+                }
+            ],
+            "critical_issues": [],
+            "recommendations": ["Manual review of contract recommended"],
+            "confidence_score": 0.3
+        }
+    
+    def _create_fallback_quality_result(self) -> Dict[str, Any]:
+        '''Fallback quality result when parsing fails'''
+        return {
+            "overall_quality_score": 0.5,
+            "quality_issues": ["Automated quality assessment failed"],
+            "recommendations": ["Manual quality review required"],
+            "processing_notes": ["Parsing error occurred during analysis"]
+        }
+    
+    def _create_fallback_validation_result(self) -> Dict[str, Any]:
+        '''Fallback validation result when parsing fails'''
+        return {
+            "terms_validated": {},
+            "missing_mandatory_terms": ["Unable to validate"],
+            "validation_confidence": 0.2,
+            "recommendations": ["Manual validation required"]
+        }
+    
+    def _create_fallback_recommendations(self) -> List[Dict[str, Any]]:
+        '''Fallback recommendations when parsing fails'''
+        return [
+            {
+                "category": "system",
+                "priority": "high", 
+                "title": "Manual Review Required",
+                "description": "Automated analysis was incomplete. Manual legal review recommended.",
+                "action_items": ["Contact legal professional", "Review contract manually"],
+                "timeline": "immediate",
+                "cost_impact": "medium"
+            }
+        ]
+
     def _create_workflow(self) -> StateGraph:
         """Create the enhanced LangGraph workflow"""
 
@@ -383,9 +565,9 @@ class ContractAnalysisWorkflow:
 
         # Enhanced Processing Flow with validation
         if self.enable_validation:
-            workflow.add_edge("validate_input", "validate_document_quality")
-            workflow.add_edge("validate_document_quality", "process_document")
-            workflow.add_edge("process_document", "extract_terms")
+            workflow.add_edge("validate_input", "process_document")
+            workflow.add_edge("process_document", "validate_document_quality")
+            workflow.add_edge("validate_document_quality", "extract_terms")
             workflow.add_edge("extract_terms", "validate_terms_completeness")
             workflow.add_edge("validate_terms_completeness", "analyze_compliance")
             workflow.add_edge("analyze_compliance", "analyze_contract_diagrams")
@@ -408,11 +590,23 @@ class ContractAnalysisWorkflow:
             "process_document",
             self.check_processing_success,
             {
-                "success": "extract_terms",
-                "retry": "retry_processing",
+                "success": "validate_document_quality" if self.enable_validation else "extract_terms",
+                "retry": "retry_processing", 
                 "error": "handle_error",
             },
         )
+        
+        # Add conditional edge for document quality validation
+        if self.enable_validation:
+            workflow.add_conditional_edges(
+                "validate_document_quality",
+                self.check_document_quality,
+                {
+                    "quality_passed": "extract_terms",
+                    "retry": "retry_processing",
+                    "error": "handle_error",
+                },
+            )
 
         workflow.add_conditional_edges(
             "extract_terms",
@@ -966,7 +1160,7 @@ class ContractAnalysisWorkflow:
                 try:
                     import json
 
-                    extraction_result = json.loads(llm_response)
+                    extraction_result = self._safe_json_parse(llm_response)
 
                     # Validate and structure the result
                     structured_result = self._structure_extraction_result(
@@ -1915,6 +2109,41 @@ class ContractAnalysisWorkflow:
         else:
             return "error"
 
+    def check_document_quality(self, state: RealEstateAgentState) -> str:
+        """Check document quality validation result"""
+        
+        # Check for any error state first
+        if state.get("error_state"):
+            return "error"
+            
+        # Check if the current step indicates a failed document analysis
+        current_step = get_current_step(state)
+        if current_step == "document_analysis_failed":
+            return "error"
+        
+        # Check document quality metrics if available
+        quality_metrics = state.get("document_quality_metrics", {})
+        if quality_metrics:
+            # Check for critical quality issues
+            issues = quality_metrics.get("issues_identified", [])
+            if any("too short or empty" in issue for issue in issues):
+                return "error"
+                
+            # Check overall quality score
+            overall_quality = quality_metrics.get(
+                "overall_quality_score", 
+                quality_metrics.get("text_quality_score", 1.0)
+            )
+            
+            if overall_quality < 0.3:
+                return "error"
+            elif overall_quality < 0.5:
+                # Retry for borderline quality
+                retry_count = state.get("retry_count", 0)
+                return "retry" if retry_count < 2 else "error"
+        
+        return "quality_passed"
+
     # Keep existing fallback methods but add enhanced logging
 
     def _create_risk_assessment_prompt(
@@ -2021,13 +2250,14 @@ class ContractAnalysisWorkflow:
 
     # Keep all existing helper methods with enhanced error handling and logging
     def _parse_risk_analysis(self, llm_response: str) -> Dict[str, Any]:
-        """Enhanced risk analysis parsing with better fallback"""
-        try:
-            parsed = json.loads(llm_response)
-            logger.debug("Risk analysis parsed successfully using JSON")
-            return parsed
-        except json.JSONDecodeError as e:
-            logger.warning(f"JSON parsing failed for risk analysis: {e}")
+        """Enhanced risk analysis parsing with structured parsing - FIXED VERSION"""
+        parsed_data, success, error_msg = self._parse_structured_response(llm_response, 'risk_analysis')
+        
+        if success and parsed_data:
+            logger.debug("Risk analysis parsed successfully using structured parser")
+            return parsed_data
+        else:
+            logger.warning(f"Risk analysis parsing failed: {error_msg}")
             # Enhanced fallback
             return {
                 "overall_risk_score": 5.0,
@@ -2048,16 +2278,15 @@ class ContractAnalysisWorkflow:
             }
 
     def _parse_recommendations(self, llm_response: str) -> List[Dict[str, Any]]:
-        """Enhanced recommendations parsing with better fallback"""
-        try:
-            parsed = json.loads(llm_response)
-            recommendations = parsed.get("recommendations", [])
-            logger.debug(
-                f"Recommendations parsed successfully: {len(recommendations)} items"
-            )
+        """Enhanced recommendations parsing with structured parsing - FIXED VERSION"""
+        parsed_data, success, error_msg = self._parse_structured_response(llm_response, 'recommendations')
+        
+        if success and parsed_data:
+            recommendations = parsed_data.get("recommendations", [])
+            logger.debug(f"Recommendations parsed successfully: {len(recommendations)} items")
             return recommendations
-        except json.JSONDecodeError as e:
-            logger.warning(f"JSON parsing failed for recommendations: {e}")
+        else:
+            logger.warning(f"Recommendations parsing failed: {error_msg}")
             # Enhanced fallback recommendations
             return [
                 {
@@ -2488,7 +2717,7 @@ class ContractAnalysisWorkflow:
             raise openai_error
 
     def _monitor_response_quality(self, response: str, provider: str) -> None:
-        """Monitor response quality for debugging malformed JSON issues"""
+        """Monitor response quality for debugging malformed JSON issues - FIXED VERSION"""
         try:
             # Basic quality checks
             response_length = len(response)
@@ -2496,22 +2725,18 @@ class ContractAnalysisWorkflow:
                 "{"
             ) and response.strip().endswith("}")
 
-            # Try JSON parsing to check validity
-            is_valid_json = False
-            try:
-                import json
-
-                json.loads(response)
-                is_valid_json = True
+            # Use improved JSON validation that handles code blocks
+            is_valid_json, error_message = self._is_valid_json_response(response)
+            
+            if is_valid_json:
                 self._metrics["successful_parses"] += 1
-            except json.JSONDecodeError as e:
-                logger.warning(
-                    f"Response quality issue from {provider}: Invalid JSON. Error: {e}"
-                )
+                logger.debug(f"Response quality check passed for {provider}")
+            else:
+                self._metrics["failed_parses"] += 1
+                logger.warning(f"Response quality issue from {provider}: {error_message}")
                 logger.debug(
                     f"Malformed response preview (first 200 chars): {response[:200]}"
                 )
-                self._metrics["failed_parses"] += 1
 
             # Update quality metrics
             quality_metrics = {
@@ -2624,7 +2849,7 @@ class ContractAnalysisWorkflow:
             try:
                 import json
 
-                quality_result = json.loads(llm_response)
+                quality_result = self._safe_json_parse(llm_response)
                 return quality_result
             except json.JSONDecodeError:
                 # Fallback to rule-based assessment
@@ -2785,7 +3010,7 @@ class ContractAnalysisWorkflow:
             try:
                 import json
 
-                compliance_result = json.loads(llm_response)
+                compliance_result = self._safe_json_parse(llm_response)
                 return compliance_result
             except json.JSONDecodeError:
                 # Fallback to rule-based analysis
@@ -2810,7 +3035,7 @@ class ContractAnalysisWorkflow:
                     fallback_prompt, use_gemini_fallback=True
                 )
 
-                compliance_result = json.loads(llm_response)
+                compliance_result = self._safe_json_parse(llm_response)
                 return compliance_result
             except Exception as fallback_error:
                 logger.warning(
@@ -2979,7 +3204,7 @@ class ContractAnalysisWorkflow:
             try:
                 import json
 
-                risk_result = json.loads(llm_response)
+                risk_result = self._safe_json_parse(llm_response)
                 return risk_result
             except json.JSONDecodeError as json_error:
                 # Log the raw response for debugging
@@ -3108,7 +3333,7 @@ class ContractAnalysisWorkflow:
             try:
                 import json
 
-                recommendations_result = json.loads(llm_response)
+                recommendations_result = self._safe_json_parse(llm_response)
                 return recommendations_result.get("recommendations", [])
             except json.JSONDecodeError:
                 if not self.enable_fallbacks:
@@ -3209,7 +3434,7 @@ class ContractAnalysisWorkflow:
             try:
                 import json
 
-                quality_result = json.loads(llm_response)
+                quality_result = self._safe_json_parse(llm_response)
                 return quality_result
             except json.JSONDecodeError:
                 # Fallback to rule-based validation
@@ -3238,7 +3463,7 @@ class ContractAnalysisWorkflow:
                     fallback_prompt, use_gemini_fallback=True
                 )
 
-                quality_result = json.loads(llm_response)
+                quality_result = self._safe_json_parse(llm_response)
                 return quality_result
             except Exception as fallback_error:
                 logger.warning(
@@ -3307,7 +3532,7 @@ class ContractAnalysisWorkflow:
             try:
                 import json
 
-                validation_result = json.loads(llm_response)
+                validation_result = self._safe_json_parse(llm_response)
                 return validation_result
             except json.JSONDecodeError:
                 if not self.enable_fallbacks:
@@ -3389,7 +3614,7 @@ class ContractAnalysisWorkflow:
             try:
                 import json
 
-                validation_result = json.loads(llm_response)
+                validation_result = self._safe_json_parse(llm_response)
                 return validation_result
             except json.JSONDecodeError:
                 if not self.enable_fallbacks:

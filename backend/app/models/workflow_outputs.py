@@ -209,9 +209,14 @@ class ComplianceAnalysisOutput(BaseModel):
     legal_opinion_required: bool = Field(
         default=False, description="Whether legal opinion is required"
     )
-    australian_state: Optional[str] = Field(
-        default=None, description="Australian state for compliance check"
+    australian_state: str = Field(
+        default="NSW", description="Australian state for compliance check"
     )
+    
+    @validator("australian_state", pre=True)
+    def set_default_australian_state(cls, v):
+        """Ensure australian_state is never None or empty"""
+        return v or "NSW"
 
 
 class DocumentQualityMetrics(BaseModel):
@@ -280,6 +285,14 @@ class ContractTermsValidationOutput(BaseModel):
     recommendations: List[str] = Field(
         default=[], description="Recommendations for term improvements"
     )
+    australian_state: str = Field(
+        default="NSW", description="Australian state for validation context"
+    )
+    
+    @validator("australian_state", pre=True)
+    def set_default_validation_state(cls, v):
+        """Ensure australian_state is never None or empty"""
+        return v or "NSW"
 
 
 class ContractTermsOutput(BaseModel):
@@ -307,6 +320,14 @@ class ContractTermsOutput(BaseModel):
     extraction_notes: List[str] = Field(
         default=[], description="Notes about the extraction process"
     )
+    australian_state: str = Field(
+        default="NSW", description="Australian state for extraction context"
+    )
+    
+    @validator("australian_state", pre=True)
+    def set_default_extraction_state(cls, v):
+        """Ensure australian_state is never None or empty"""
+        return v or "NSW"
 
 
 # Export all models for easy import

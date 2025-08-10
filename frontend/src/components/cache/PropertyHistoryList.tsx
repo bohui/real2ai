@@ -3,9 +3,9 @@
  * Displays user's property search history with cache indicators
  */
 
-import React, { useState, useEffect } from 'react';
-import { UserPropertyView } from '../../types';
-import { cacheService } from '../../services/cacheService';
+import React, { useState, useEffect } from "react";
+import { UserPropertyView } from "../../types";
+import { cacheService } from "../../services/cacheService";
 
 interface PropertyHistoryListProps {
   className?: string;
@@ -14,9 +14,9 @@ interface PropertyHistoryListProps {
 }
 
 export const PropertyHistoryList: React.FC<PropertyHistoryListProps> = ({
-  className = '',
+  className = "",
   limit = 20,
-  onPropertySelect
+  onPropertySelect,
 }) => {
   const [history, setHistory] = useState<UserPropertyView[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -30,27 +30,29 @@ export const PropertyHistoryList: React.FC<PropertyHistoryListProps> = ({
 
   const loadHistory = async (loadOffset: number = 0) => {
     setIsLoading(true);
-    
+
     try {
-      const response = await cacheService.getPropertyHistory(loadOffset, limit);
-      
-      if (response.status === 'success') {
-        const newHistory = response.data.history.filter(item => 'property_hash' in item) as UserPropertyView[];
-        
+      const response = await cacheService.getPropertyHistory(limit, loadOffset);
+
+      if (response.status === "success") {
+        const newHistory = response.data.history.filter(
+          (item) => "property_hash" in item
+        ) as UserPropertyView[];
+
         if (loadOffset === 0) {
           setHistory(newHistory);
         } else {
-          setHistory(prev => [...prev, ...newHistory]);
+          setHistory((prev) => [...prev, ...newHistory]);
         }
-        
+
         setHasMore(newHistory.length === limit);
         setOffset(loadOffset + newHistory.length);
       }
-      
+
       setError(null);
     } catch (err) {
-      console.error('Failed to load property history:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load history');
+      console.error("Failed to load property history:", err);
+      setError(err instanceof Error ? err.message : "Failed to load history");
     } finally {
       setIsLoading(false);
     }
@@ -67,11 +69,11 @@ export const PropertyHistoryList: React.FC<PropertyHistoryListProps> = ({
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
     const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-    
+
     if (diffDays === 0) {
-      return 'Today';
+      return "Today";
     } else if (diffDays === 1) {
-      return 'Yesterday';
+      return "Yesterday";
     } else if (diffDays < 7) {
       return `${diffDays} days ago`;
     } else {
@@ -81,47 +83,69 @@ export const PropertyHistoryList: React.FC<PropertyHistoryListProps> = ({
 
   const getSourceBadge = (source: string) => {
     const badges = {
-      'search': { text: 'Search', color: 'bg-blue-100 text-blue-800', icon: '🔍' },
-      'bookmark': { text: 'Bookmarked', color: 'bg-yellow-100 text-yellow-800', icon: '⭐' },
-      'analysis': { text: 'Analysis', color: 'bg-purple-100 text-purple-800', icon: '📊' }
+      search: {
+        text: "Search",
+        color: "bg-blue-100 text-blue-800",
+        icon: "🔍",
+      },
+      bookmark: {
+        text: "Bookmarked",
+        color: "bg-yellow-100 text-yellow-800",
+        icon: "⭐",
+      },
+      analysis: {
+        text: "Analysis",
+        color: "bg-purple-100 text-purple-800",
+        icon: "📊",
+      },
     };
-    
+
     const badge = badges[source as keyof typeof badges] || badges.search;
-    
+
     return (
-      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${badge.color}`}>
+      <span
+        className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${badge.color}`}
+      >
         <span className="mr-1">{badge.icon}</span>
         {badge.text}
       </span>
     );
   };
 
-  const getPopularityBadge = (popularityScore?: number, accessCount?: number) => {
-    if (typeof popularityScore !== 'number' && typeof accessCount !== 'number') {
+  const getPopularityBadge = (
+    popularityScore?: number,
+    accessCount?: number
+  ) => {
+    if (
+      typeof popularityScore !== "number" &&
+      typeof accessCount !== "number"
+    ) {
       return null;
     }
 
     const score = popularityScore || accessCount || 0;
-    let label = 'New';
-    let color = 'bg-gray-100 text-gray-800';
-    let icon = '📍';
+    let label = "New";
+    let color = "bg-gray-100 text-gray-800";
+    let icon = "📍";
 
     if (score > 10) {
-      label = 'Hot Property 🔥';
-      color = 'bg-red-100 text-red-800';
-      icon = '🔥';
+      label = "Hot Property 🔥";
+      color = "bg-red-100 text-red-800";
+      icon = "🔥";
     } else if (score > 5) {
-      label = 'Popular';
-      color = 'bg-orange-100 text-orange-800';
-      icon = '📈';
+      label = "Popular";
+      color = "bg-orange-100 text-orange-800";
+      icon = "📈";
     } else if (score > 2) {
-      label = 'Trending';
-      color = 'bg-yellow-100 text-yellow-800';
-      icon = '📊';
+      label = "Trending";
+      color = "bg-yellow-100 text-yellow-800";
+      icon = "📊";
     }
 
     return (
-      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${color}`}>
+      <span
+        className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${color}`}
+      >
         <span className="mr-1">{icon}</span>
         {label}
       </span>
@@ -168,7 +192,9 @@ export const PropertyHistoryList: React.FC<PropertyHistoryListProps> = ({
         <div className="text-center text-gray-500">
           <div className="text-4xl mb-2">🏠</div>
           <div className="text-lg font-medium">No Property History</div>
-          <div className="text-sm">Your property search history will appear here</div>
+          <div className="text-sm">
+            Your property search history will appear here
+          </div>
         </div>
       </div>
     );
@@ -177,16 +203,20 @@ export const PropertyHistoryList: React.FC<PropertyHistoryListProps> = ({
   return (
     <div className={`bg-white rounded-lg border shadow-sm ${className}`}>
       <div className="p-4 border-b">
-        <h3 className="text-lg font-semibold text-gray-900">Property Search History</h3>
-        <p className="text-sm text-gray-600">Your recent property searches and cached results</p>
+        <h3 className="text-lg font-semibold text-gray-900">
+          Property Search History
+        </h3>
+        <p className="text-sm text-gray-600">
+          Your recent property searches and cached results
+        </p>
       </div>
-      
+
       <div className="divide-y">
         {history.map((propertyView) => (
           <div
             key={propertyView.id}
             className={`p-4 hover:bg-gray-50 transition-colors ${
-              onPropertySelect ? 'cursor-pointer' : ''
+              onPropertySelect ? "cursor-pointer" : ""
             }`}
             onClick={() => onPropertySelect?.(propertyView)}
           >
@@ -198,21 +228,26 @@ export const PropertyHistoryList: React.FC<PropertyHistoryListProps> = ({
                   </h4>
                   {getSourceBadge(propertyView.source)}
                 </div>
-                
+
                 <div className="flex items-center space-x-4 text-xs text-gray-500">
                   <span>📅 {formatDate(propertyView.viewed_at)}</span>
                   {propertyView.access_count && (
                     <span>👁️ {propertyView.access_count} views</span>
                   )}
                   {propertyView.analysis_result && (
-                    <span className="text-green-600">✅ Analysis Available</span>
+                    <span className="text-green-600">
+                      ✅ Analysis Available
+                    </span>
                   )}
                 </div>
               </div>
-              
+
               <div className="flex flex-col items-end space-y-2">
-                {getPopularityBadge(propertyView.popularity_score, propertyView.access_count)}
-                
+                {getPopularityBadge(
+                  propertyView.popularity_score,
+                  propertyView.access_count
+                )}
+
                 {onPropertySelect && (
                   <button className="text-xs text-blue-600 hover:text-blue-800">
                     View Property →
@@ -220,15 +255,18 @@ export const PropertyHistoryList: React.FC<PropertyHistoryListProps> = ({
                 )}
               </div>
             </div>
-            
+
             {/* Show preview of analysis result if available */}
             {propertyView.analysis_result && (
               <div className="mt-2 p-2 bg-blue-50 rounded-md text-xs">
-                <div className="font-medium text-blue-900 mb-1">Cached Analysis Preview:</div>
+                <div className="font-medium text-blue-900 mb-1">
+                  Cached Analysis Preview:
+                </div>
                 <div className="text-blue-700">
                   {propertyView.analysis_result.estimated_value && (
                     <span className="mr-3">
-                      💰 Est. Value: ${propertyView.analysis_result.estimated_value.toLocaleString()}
+                      💰 Est. Value: $
+                      {propertyView.analysis_result.estimated_value.toLocaleString()}
                     </span>
                   )}
                   {propertyView.analysis_result.risk_level && (
@@ -247,7 +285,7 @@ export const PropertyHistoryList: React.FC<PropertyHistoryListProps> = ({
           </div>
         ))}
       </div>
-      
+
       {hasMore && (
         <div className="p-4 border-t bg-gray-50">
           <button
@@ -255,7 +293,7 @@ export const PropertyHistoryList: React.FC<PropertyHistoryListProps> = ({
             disabled={isLoading}
             className="w-full px-4 py-2 text-sm text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isLoading ? 'Loading...' : 'Load More'}
+            {isLoading ? "Loading..." : "Load More"}
           </button>
         </div>
       )}
