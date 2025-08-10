@@ -29,7 +29,7 @@ except ImportError as e:
     logger.warning(f"DocumentService not available: {e}")
 
 try:
-    from .evaluation_service import EvaluationService
+    from .evaluation_service import EvaluationOrchestrator as EvaluationService
     _EVALUATION_SERVICE_AVAILABLE = True
 except ImportError as e:
     EvaluationService = None

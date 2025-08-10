@@ -10,14 +10,14 @@ from dataclasses import dataclass
 from enum import Enum
 import statistics
 
-from ..clients.domain.client import DomainClient
-from ..clients.corelogic.client import CoreLogicClient
-from ..clients.base.exceptions import (
+from app.clients.domain.client import DomainClient
+from app.clients.corelogic.client import CoreLogicClient
+from app.clients.base.exceptions import (
     ClientError,
     PropertyNotFoundError,
     InvalidPropertyAddressError,
 )
-from ..schema import RiskLevel
+from app.schema import RiskLevel
 
 logger = logging.getLogger(__name__)
 
@@ -930,8 +930,8 @@ async def create_market_analysis_service(
     Returns:
         Initialized MarketAnalysisService
     """
-    from ..clients.domain.config import DomainClientConfig
-    from ..clients.corelogic.config import CoreLogicClientConfig
+    from app.clients.domain.config import DomainClientConfig
+    from app.clients.corelogic.config import CoreLogicClientConfig
 
     # Initialize Domain client
     if not domain_config:

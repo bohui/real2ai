@@ -743,6 +743,7 @@ class ContractAnalysisWorkflow:
                     "user_experience_level": user_experience,
                     "complexity": "standard",
                     "analysis_depth": "comprehensive",
+                    "analysis_timestamp": datetime.now(UTC).isoformat(),
                 },
             )
 
@@ -2515,11 +2516,15 @@ class ContractAnalysisWorkflow:
             context = PromptContext(
                 context_type=ContextType.ANALYSIS,
                 variables={
+                    "extracted_text": "",  # Required by service mapping - not used in this template but required
                     "australian_state": australian_state,
                     "contract_terms": contract_terms,
                     "contract_type": "property_contract",
+                    "user_type": "general",  # Required by service mapping - default value
+                    "user_experience_level": "intermediate",  # Required by service mapping - default value
                     "analysis_type": "compliance_check",
-                    "user_experience": "intermediate",
+                    "user_experience": "intermediate",  # Keep existing for template compatibility
+                    "analysis_timestamp": datetime.now(UTC).isoformat(),
                 },
             )
 
@@ -2686,11 +2691,15 @@ class ContractAnalysisWorkflow:
             risk_context = PromptContext(
                 context_type=ContextType.CONTRACT_ANALYSIS,
                 variables={
+                    "extracted_text": "",  # Required by service mapping - not used in this template but required
                     "australian_state": australian_state,
                     "contract_type": "purchase_agreement",
-                    "user_experience": "novice",  # Default for now
+                    "user_type": "general",  # Required by service mapping - default value
+                    "user_experience_level": "intermediate",  # Required by service mapping - default value
+                    "user_experience": "novice",  # Keep existing for template compatibility
                     "contract_terms": contract_terms,
                     "compliance_check": compliance_check,
+                    "analysis_timestamp": datetime.now(UTC).isoformat(),
                 },
             )
 
@@ -2799,13 +2808,20 @@ class ContractAnalysisWorkflow:
             recommendations_context = PromptContext(
                 context_type=ContextType.CONTRACT_ANALYSIS,
                 variables={
+                    "extracted_text": state.get(
+                        "document_text", ""
+                    ),  # Required by service mapping
                     "australian_state": state.get("australian_state", "NSW"),
                     "user_type": state.get("user_type", "buyer"),
-                    "user_experience": state.get("user_experience", "novice"),
+                    "user_experience_level": "intermediate",  # Required by service mapping - default value
+                    "user_experience": state.get(
+                        "user_experience", "novice"
+                    ),  # Keep existing for template compatibility
                     "contract_type": state.get("contract_type", "purchase_agreement"),
                     "risk_assessment": state.get("risk_analysis", {}),
                     "compliance_check": state.get("compliance_check", {}),
                     "contract_terms": state.get("contract_terms", {}),
+                    "analysis_timestamp": datetime.now(UTC).isoformat(),
                 },
             )
 
@@ -2912,12 +2928,18 @@ class ContractAnalysisWorkflow:
                 context_type=ContextType.ANALYSIS,
                 variables={
                     "document_text": document_text,
+                    "extracted_text": document_text,  # Required by service mapping
                     "document_metadata": document_metadata,
                     "document_type": "property_contract",
+                    "contract_type": "property_contract",  # Required by service mapping
                     "australian_state": document_metadata.get("state", "NSW"),
+                    "user_type": "general",  # Required by service mapping - default value
+                    "user_experience_level": "intermediate",  # Required by service mapping - default value
                     "extraction_method": document_metadata.get(
                         "extraction_method", "ocr"
                     ),
+                    # Ensure templates that expect analysis timestamp can render
+                    "analysis_timestamp": datetime.now(UTC).isoformat(),
                 },
             )
 
@@ -2987,10 +3009,14 @@ class ContractAnalysisWorkflow:
             validation_context = PromptContext(
                 context_type=ContextType.CONTRACT_ANALYSIS,
                 variables={
+                    "extracted_text": "",  # Required by service mapping - not used in this template but required
                     "australian_state": australian_state,
                     "contract_type": "purchase_agreement",
-                    "user_experience": "novice",  # Default
+                    "user_type": "general",  # Required by service mapping - default value
+                    "user_experience_level": "intermediate",  # Required by service mapping - default value
+                    "user_experience": "novice",  # Keep existing for template compatibility
                     "contract_terms": contract_terms,
+                    "analysis_timestamp": datetime.now(UTC).isoformat(),
                 },
             )
 
@@ -3062,13 +3088,21 @@ class ContractAnalysisWorkflow:
             validation_context = PromptContext(
                 context_type=ContextType.CONTRACT_ANALYSIS,
                 variables={
+                    "extracted_text": state.get(
+                        "document_text", ""
+                    ),  # Required by service mapping
                     "australian_state": state.get("australian_state", "NSW"),
                     "contract_type": state.get("contract_type", "purchase_agreement"),
+                    "user_type": "general",  # Required by service mapping - default value
+                    "user_experience_level": "intermediate",  # Required by service mapping - default value
                     "analysis_type": "comprehensive",
-                    "user_experience": state.get("user_experience", "novice"),
+                    "user_experience": state.get(
+                        "user_experience", "novice"
+                    ),  # Keep existing for template compatibility
                     "risk_assessment": state.get("risk_analysis", {}),
                     "compliance_check": state.get("compliance_check", {}),
                     "recommendations": state.get("recommendations", []),
+                    "analysis_timestamp": datetime.now(UTC).isoformat(),
                 },
             )
 
