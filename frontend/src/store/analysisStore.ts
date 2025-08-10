@@ -11,6 +11,31 @@ import {
   wsConnectionManager,
 } from "@/services/api";
 
+// Normalize backend step keys to match frontend UI step keys
+const normalizeStepKey = (step: string): string => {
+  switch (step) {
+    // Verb form mismatches between backend and UI
+    case "validate_input":
+      return "validating_input";
+    case "process_document":
+      return "processing_document";
+    case "extract_terms":
+      return "extracting_terms";
+    case "extract_terms_failed":
+      return "extracting_terms";
+    case "analyze_compliance":
+      return "analyzing_compliance";
+    case "assess_risks":
+      return "assessing_risks";
+    case "generate_recommendations":
+      return "generating_recommendations";
+    case "compile_report":
+      return "compiling_report";
+    default:
+      return step;
+  }
+};
+
 interface AnalysisState {
   // Current analysis state
   currentDocument: DocumentDetails | null;
@@ -336,25 +361,26 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
           // Transform the backend data structure to match frontend expectations
           const progressData: AnalysisProgressUpdate = {
             contract_id: data.data.contract_id || get().currentContractId || "",
-            current_step: data.data.current_step || "",
+            current_step: normalizeStepKey(data.data.current_step || ""),
             progress_percent: data.data.progress_percent || 0,
             step_description: data.data.step_description || "",
             estimated_time_remaining: data.data.estimated_completion_minutes ||
               undefined,
           };
           console.log("🔄 Transformed progress data:", progressData);
-          
+
           // Check if this is a failed status
-          const isFailed = data.data.status === "failed" || 
-                          data.data.current_step?.endsWith("_failed") || 
-                          data.data.current_step === "failed";
-          
+          const isFailed = data.data.status === "failed" ||
+            data.data.current_step?.endsWith("_failed") ||
+            data.data.current_step === "failed";
+
           if (isFailed) {
             console.log("❌ Analysis failed status detected");
             set({
               analysisProgress: progressData,
-              isAnalyzing: false,  // Set to false for failed state
-              analysisError: data.data.error_message || progressData.step_description || "Analysis failed",
+              isAnalyzing: false, // Set to false for failed state
+              analysisError: data.data.error_message ||
+                progressData.step_description || "Analysis failed",
               retryAvailable: true,
               retryInFlight: false,
             });
@@ -363,20 +389,23 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
             set((prev) => {
               // During retry, only clear retryInFlight if progress is actually advancing
               // This prevents clearing the flag when backend sends a new task starting from 0%
-              const isRetryProgressing = prev.retryInFlight && 
-                prev.analysisProgress && 
-                progressData.progress_percent >= prev.analysisProgress.progress_percent;
-              
-              const shouldClearRetryFlag = prev.retryInFlight && 
+              const isRetryProgressing = prev.retryInFlight &&
+                prev.analysisProgress &&
+                progressData.progress_percent >=
+                  prev.analysisProgress.progress_percent;
+
+              const shouldClearRetryFlag = prev.retryInFlight &&
                 (isRetryProgressing || progressData.progress_percent > 10); // Allow some tolerance for initial steps
-              
+
               return {
                 analysisProgress: progressData,
                 isAnalyzing: true,
                 // Preserve error after a failure unless retry is actually progressing
                 analysisError: shouldClearRetryFlag ? null : prev.analysisError,
                 // Only clear retry flag when we're confident the retry is progressing
-                retryInFlight: shouldClearRetryFlag ? false : prev.retryInFlight,
+                retryInFlight: shouldClearRetryFlag
+                  ? false
+                  : prev.retryInFlight,
               };
             });
             console.log("✅ Progress updated and isAnalyzing set to true");
@@ -621,25 +650,26 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
           // Transform the backend data structure to match frontend expectations
           const progressData: AnalysisProgressUpdate = {
             contract_id: data.data.contract_id || contractId,
-            current_step: data.data.current_step || "",
+            current_step: normalizeStepKey(data.data.current_step || ""),
             progress_percent: data.data.progress_percent || 0,
             step_description: data.data.step_description || "",
             estimated_time_remaining: data.data.estimated_completion_minutes ||
               undefined,
           };
           console.log("🔄 Transformed progress data (contract):", progressData);
-          
+
           // Check if this is a failed status
-          const isFailed = data.data.status === "failed" || 
-                          data.data.current_step?.endsWith("_failed") || 
-                          data.data.current_step === "failed";
-          
+          const isFailed = data.data.status === "failed" ||
+            data.data.current_step?.endsWith("_failed") ||
+            data.data.current_step === "failed";
+
           if (isFailed) {
             console.log("❌ Analysis failed status detected (contract)");
             set({
               analysisProgress: progressData,
-              isAnalyzing: false,  // Set to false for failed state
-              analysisError: data.data.error_message || progressData.step_description || "Analysis failed",
+              isAnalyzing: false, // Set to false for failed state
+              analysisError: data.data.error_message ||
+                progressData.step_description || "Analysis failed",
               retryAvailable: true,
               retryInFlight: false,
             });
@@ -648,20 +678,23 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
             set((prev) => {
               // During retry, only clear retryInFlight if progress is actually advancing
               // This prevents clearing the flag when backend sends a new task starting from 0%
-              const isRetryProgressing = prev.retryInFlight && 
-                prev.analysisProgress && 
-                progressData.progress_percent >= prev.analysisProgress.progress_percent;
-              
-              const shouldClearRetryFlag = prev.retryInFlight && 
+              const isRetryProgressing = prev.retryInFlight &&
+                prev.analysisProgress &&
+                progressData.progress_percent >=
+                  prev.analysisProgress.progress_percent;
+
+              const shouldClearRetryFlag = prev.retryInFlight &&
                 (isRetryProgressing || progressData.progress_percent > 10); // Allow some tolerance for initial steps
-              
+
               return {
                 analysisProgress: progressData,
                 isAnalyzing: true,
                 // Preserve error after a failure unless retry is actually progressing
                 analysisError: shouldClearRetryFlag ? null : prev.analysisError,
                 // Only clear retry flag when we're confident the retry is progressing
-                retryInFlight: shouldClearRetryFlag ? false : prev.retryInFlight,
+                retryInFlight: shouldClearRetryFlag
+                  ? false
+                  : prev.retryInFlight,
               };
             });
             console.log(
@@ -949,17 +982,21 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
   updateProgress: (progress: AnalysisProgressUpdate) => {
     console.log("🔄 Updating analysis progress:", progress);
     // Ensure we're setting both the progress and maintaining the analyzing state
+    const normalized: AnalysisProgressUpdate = {
+      ...progress,
+      current_step: normalizeStepKey(progress.current_step || ""),
+    };
     set((prev) => {
       // During retry, only clear retryInFlight if progress is actually advancing
-      const isRetryProgressing = prev.retryInFlight && 
-        prev.analysisProgress && 
-        progress.progress_percent >= prev.analysisProgress.progress_percent;
-      
-      const shouldClearRetryFlag = prev.retryInFlight && 
-        (isRetryProgressing || progress.progress_percent > 10);
-      
+      const isRetryProgressing = prev.retryInFlight &&
+        prev.analysisProgress &&
+        normalized.progress_percent >= prev.analysisProgress.progress_percent;
+
+      const shouldClearRetryFlag = prev.retryInFlight &&
+        (isRetryProgressing || normalized.progress_percent > 10);
+
       return {
-        analysisProgress: progress,
+        analysisProgress: normalized,
         isAnalyzing: true,
         analysisError: shouldClearRetryFlag ? null : prev.analysisError,
         retryInFlight: shouldClearRetryFlag ? false : prev.retryInFlight,
