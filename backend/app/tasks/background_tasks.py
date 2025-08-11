@@ -27,7 +27,7 @@ from app.services.communication.websocket_service import WebSocketEvents
 from app.services.communication.websocket_singleton import websocket_manager
 from app.services.communication.redis_pubsub import publish_progress_sync
 from app.core.task_recovery import CheckpointData
-from app.repositories.analyses_repository import AnalysesRepository
+from app.services.repositories.analyses_repository import AnalysesRepository
 
 logger = logging.getLogger(__name__)
 
@@ -459,13 +459,13 @@ async def comprehensive_document_analysis(
 
             # Save analysis results using AnalysesRepository
             analyses_repo = AnalysesRepository(use_service_role=True)
-            
+
             # Update analysis with results
             await analyses_repo.update_analysis_status(
                 analysis_id,
                 status="completed",
                 result=analysis_result,
-                completed_at=datetime.now(timezone.utc)
+                completed_at=datetime.now(timezone.utc),
             )
 
             # Step 9: Complete (95-100%)
@@ -555,7 +555,7 @@ async def comprehensive_document_analysis(
                 analysis_id,
                 status="failed",
                 error_details={"error_message": str(e)},
-                completed_at=datetime.now(timezone.utc)
+                completed_at=datetime.now(timezone.utc),
             )
         except Exception as update_error:
             logger.error(f"Failed to update error status: {str(update_error)}")
