@@ -12,18 +12,13 @@ Key changes:
 - Clear separation of concerns between user and system operations
 """
 
-import asyncio
 import json
-import warnings
 import logging
-import os
 import re
 import uuid
-import io
-from typing import Dict, Any, Optional, List, Tuple, BinaryIO
+from typing import Dict, Any, Optional, List
 from datetime import datetime, timezone
 from pathlib import Path
-from decimal import Decimal, InvalidOperation
 import mimetypes
 
 # Optional dependencies - handle gracefully if not installed
@@ -91,11 +86,6 @@ from app.models.supabase_models import (
     DiagramType,
     EntityType,
 )
-from app.prompts.schema.entity_extraction_schema import (
-    AustralianState,
-    ContractType,
-)
-from app.models.contract_state import ContractType as ContractStateType
 from app.services.ai.gemini_ocr_service import GeminiOCRService
 from app.services.base.user_aware_service import (
     UserAwareService,
@@ -103,11 +93,9 @@ from app.services.base.user_aware_service import (
 )
 from app.clients import get_gemini_client
 from app.core.config import get_settings
-from app.core.langsmith_config import langsmith_trace, langsmith_session, log_trace_info
+from app.core.langsmith_config import langsmith_trace
 from app.clients.base.exceptions import (
-    ClientError,
     ClientConnectionError,
-    ClientQuotaExceededError,
 )
 from app.schema.document import (
     FastUploadResult,
@@ -115,15 +103,9 @@ from app.schema.document import (
     FileValidationResult,
     UploadedFileInfo,
     TextExtractionResult,
-    PageExtraction,
-    ProcessedDocumentSummary,
-    ProcessingErrorResponse,
     DocumentDetails,
     SystemStatsResponse,
     ServiceHealthStatus,
-    ContentAnalysis as ContentAnalysisSchema,
-    QualityIndicators as QualityIndicatorsSchema,
-    PageProcessingSummary,
 )
 
 logger = logging.getLogger(__name__)
@@ -361,7 +343,6 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
                 )
             elif "JSON could not be generated" in error_str and "details" in error_str:
                 # Extract the JSON from the error details - this is a known Supabase client issue
-                import re
 
                 json_match = re.search(r"details.*?b'({.*?})'", error_str)
                 if json_match:
@@ -916,7 +897,6 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
     def _calculate_hash(self, file_content: bytes) -> str:
         """Calculate SHA-256 hash of file content"""
         import hashlib
-
         return hashlib.sha256(file_content).hexdigest()
 
     def _create_success_response(
