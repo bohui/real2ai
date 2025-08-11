@@ -114,7 +114,7 @@ class UserDocsRepository:
     ) -> bool:
         """
         Update document processing status.
-        
+
         Args:
             document_id: Document ID
             processing_status: Status (processing, basic_complete, failed, etc.)
@@ -439,6 +439,71 @@ class UserDocsRepository:
             results.append(result)
             
         return results
+    
+    async def batch_upsert_document_paragraphs(
+        self,
+        document_id: UUID,
+        paragraph_data: List[Dict[str, Any]]
+    ) -> List[DocumentParagraph]:
+        """
+        Batch upsert multiple document paragraphs efficiently.
+
+        Args:
+            document_id: Document ID
+            paragraph_data: List of paragraph data dictionaries with keys:
+                          page_number, paragraph_index, artifact_paragraph_id, annotations (optional)
+                          
+        Returns:
+            List of DocumentParagraph objects
+        """
+        if not paragraph_data:
+            return []
+        
+        conn = await self._get_connection()
+        
+        # Prepare data for batch insert - match individual upsert pattern
+        insert_values = []
+        for para in paragraph_data:
+            insert_values.append((
+                document_id,
+                para['page_number'],
+                para['paragraph_index'], 
+                para['artifact_paragraph_id'],
+                para.get('annotations')
+            ))
+        
+        # Batch upsert with UNNEST - match individual upsert SQL pattern
+        rows = await conn.fetch(
+            """
+            INSERT INTO user_document_paragraphs (
+                document_id, page_number, paragraph_index, artifact_paragraph_id, annotations
+            )
+            SELECT * FROM UNNEST($1::uuid[], $2::int[], $3::int[], $4::uuid[], $5::jsonb[])
+            ON CONFLICT (document_id, page_number, paragraph_index) DO UPDATE SET
+                artifact_paragraph_id = EXCLUDED.artifact_paragraph_id,
+                annotations = COALESCE(user_document_paragraphs.annotations, EXCLUDED.annotations),
+                updated_at = now()
+            RETURNING document_id, page_number, paragraph_index, artifact_paragraph_id,
+                      annotations, created_at, updated_at
+            """,
+            [v[0] for v in insert_values],  # document_ids
+            [v[1] for v in insert_values],  # page_numbers
+            [v[2] for v in insert_values],  # paragraph_indices
+            [v[3] for v in insert_values],  # artifact_paragraph_ids
+            [v[4] for v in insert_values]   # annotations
+        )
+        
+        return [
+            DocumentParagraph(
+                document_id=row['document_id'],
+                page_number=row['page_number'],
+                paragraph_index=row['paragraph_index'],
+                artifact_paragraph_id=row['artifact_paragraph_id'],
+                annotations=row['annotations'],
+                created_at=row['created_at'],
+                updated_at=row['updated_at']
+            ) for row in rows
+        ]
 
     async def batch_upsert_document_diagrams(
         self,
