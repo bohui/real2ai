@@ -35,7 +35,7 @@ interface LoginFormProps {
 
 const LoginForm: React.FC<LoginFormProps> = ({
   onSuccess,
-  redirectTo = "/dashboard",
+  redirectTo = import.meta.env.DEV ? "/app/analysis" : "/app/dashboard",
 }) => {
   const { login, isLoading, error } = useAuthStore();
   const { addNotification } = useUIStore();

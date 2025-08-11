@@ -382,19 +382,19 @@ class ContractAnalysisService:
         )
 
         # Transform response to match original format
-        if result["success"]:
+        if result.success:
             return StartAnalysisResponse(
                 success=True,
-                contract_id=result["session_id"],
-                session_id=result["session_id"],
-                final_state=result.get("analysis_results", {}),
-                analysis_results=result.get("analysis_results", {}),
-                processing_time=result["processing_time_seconds"],
+                contract_id=result.session_id,
+                session_id=result.session_id,
+                final_state=result.analysis_results,
+                analysis_results=result.analysis_results,
+                processing_time=result.processing_time_seconds,
             )
         else:
             return StartAnalysisResponse(
                 success=False,
-                error=result["error"],
+                error=result.error,
                 session_id=session_id,
             )
 

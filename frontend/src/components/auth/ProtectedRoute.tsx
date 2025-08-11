@@ -27,7 +27,12 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
 
   // Check role-based access if required
   if (requiredRole && user.user_type !== requiredRole) {
-    return <Navigate to="/app/dashboard" replace />;
+    return (
+      <Navigate
+        to={import.meta.env.DEV ? "/app/analysis" : "/app/dashboard"}
+        replace
+      />
+    );
   }
 
   // If onboarding is required and user is trying to access dashboard,

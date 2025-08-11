@@ -272,9 +272,13 @@ const App: React.FC = () => {
                   <Route
                     path="dashboard"
                     element={
-                      <Suspense fallback={<DashboardSkeleton />}>
-                        <DashboardPage />
-                      </Suspense>
+                      import.meta.env.DEV ? (
+                        <Navigate to="/app/analysis" replace />
+                      ) : (
+                        <Suspense fallback={<DashboardSkeleton />}>
+                          <DashboardPage />
+                        </Suspense>
+                      )
                     }
                   />
                   <Route
@@ -322,7 +326,16 @@ const App: React.FC = () => {
                   <Route path="settings" element={<SettingsPage />} />
                   <Route
                     index
-                    element={<Navigate to="/app/dashboard" replace />}
+                    element={
+                      <Navigate
+                        to={
+                          import.meta.env.DEV
+                            ? "/app/analysis"
+                            : "/app/dashboard"
+                        }
+                        replace
+                      />
+                    }
                   />
                 </Route>
 
@@ -331,7 +344,14 @@ const App: React.FC = () => {
                   path="/"
                   element={
                     <ProtectedRoute>
-                      <Navigate to="/app/dashboard" replace />
+                      <Navigate
+                        to={
+                          import.meta.env.DEV
+                            ? "/app/analysis"
+                            : "/app/dashboard"
+                        }
+                        replace
+                      />
                     </ProtectedRoute>
                   }
                 />
@@ -341,7 +361,14 @@ const App: React.FC = () => {
                   path="*"
                   element={
                     <ProtectedRoute>
-                      <Navigate to="/app/dashboard" replace />
+                      <Navigate
+                        to={
+                          import.meta.env.DEV
+                            ? "/app/analysis"
+                            : "/app/dashboard"
+                        }
+                        replace
+                      />
                     </ProtectedRoute>
                   }
                 />

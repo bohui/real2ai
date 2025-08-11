@@ -29,7 +29,12 @@ const LoginPage: React.FC = () => {
 
   // Redirect if already authenticated
   if (isAuthenticated) {
-    return <Navigate to="/app/dashboard" replace />;
+    return (
+      <Navigate
+        to={import.meta.env.DEV ? "/app/analysis" : "/app/dashboard"}
+        replace
+      />
+    );
   }
 
   return (
