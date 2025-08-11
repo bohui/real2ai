@@ -535,34 +535,40 @@ class ArtifactsRepository:
 
         conn = await self._get_connection()
         
-        # Try insert first
-        await conn.execute(
-            """
-            INSERT INTO artifact_paragraphs (
-                content_hmac, algorithm_version, params_fingerprint,
-                page_number, paragraph_index, paragraph_text_uri, 
-                paragraph_text_sha256, features
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-            ON CONFLICT (content_hmac, algorithm_version, params_fingerprint, page_number, paragraph_index) 
-            DO NOTHING
-            """,
-            content_hmac, algorithm_version, params_fingerprint,
-            page_number, paragraph_index, paragraph_text_uri,
-            paragraph_text_sha256, features
-        )
+        # Use advisory lock to prevent stampedes on first compute
+        lock_key = hash(f"{content_hmac}:{params_fingerprint}") & 0x7FFFFFFF  # Positive 32-bit integer
         
-        # Then SELECT to get the artifact
-        row = await conn.fetchrow(
-            """
-            SELECT id, content_hmac, algorithm_version, params_fingerprint,
-                   page_number, paragraph_index, paragraph_text_uri, paragraph_text_sha256,
-                   features, created_at
-            FROM artifact_paragraphs
-            WHERE content_hmac = $1 AND algorithm_version = $2 AND params_fingerprint = $3
-                  AND page_number = $4 AND paragraph_index = $5
-            """,
-            content_hmac, algorithm_version, params_fingerprint, page_number, paragraph_index
-        )
+        async with conn.transaction():
+            await conn.execute("SELECT pg_advisory_xact_lock($1)", lock_key)
+            
+            # Try insert first
+            await conn.execute(
+                """
+                INSERT INTO artifact_paragraphs (
+                    content_hmac, algorithm_version, params_fingerprint,
+                    page_number, paragraph_index, paragraph_text_uri, 
+                    paragraph_text_sha256, features
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                ON CONFLICT (content_hmac, algorithm_version, params_fingerprint, page_number, paragraph_index) 
+                DO NOTHING
+                """,
+                content_hmac, algorithm_version, params_fingerprint,
+                page_number, paragraph_index, paragraph_text_uri,
+                paragraph_text_sha256, features
+            )
+            
+            # Then SELECT to get the artifact (whether newly inserted or existing)
+            row = await conn.fetchrow(
+                """
+                SELECT id, content_hmac, algorithm_version, params_fingerprint,
+                       page_number, paragraph_index, paragraph_text_uri, paragraph_text_sha256,
+                       features, created_at
+                FROM artifact_paragraphs
+                WHERE content_hmac = $1 AND algorithm_version = $2 AND params_fingerprint = $3
+                      AND page_number = $4 AND paragraph_index = $5
+                """,
+                content_hmac, algorithm_version, params_fingerprint, page_number, paragraph_index
+            )
         
         if row is None:
             raise RuntimeError(f"Failed to insert or retrieve paragraph artifact {paragraph_index}")

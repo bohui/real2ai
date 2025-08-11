@@ -117,6 +117,16 @@ class UpdateMetricsNode(DocumentProcessingNodeBase):
             total_diagrams = diagram_processing_result.get("total_diagrams", 0)
             has_diagrams = total_diagrams > 0
             
+            # Paragraph information
+            paragraphs = state.get("paragraphs", [])
+            total_paragraphs = len(paragraphs)
+            has_paragraphs = total_paragraphs > 0
+            
+            # Get paragraph metrics from processing_metrics if available
+            processing_metrics = state.get("processing_metrics", {})
+            avg_paragraph_length = processing_metrics.get("avg_paragraph_len", 0.0)
+            paragraph_reuse_hit = processing_metrics.get("reuse_hit", False)
+            
             # Determine primary text extraction method
             extraction_methods = text_extraction_result.extraction_methods or []
             primary_method = extraction_methods[0] if extraction_methods else "unknown"
@@ -129,6 +139,8 @@ class UpdateMetricsNode(DocumentProcessingNodeBase):
                 "total_text_length": total_text_length,
                 "has_diagrams": has_diagrams,
                 "diagram_count": total_diagrams,
+                "paragraph_count": total_paragraphs,
+                "has_paragraphs": has_paragraphs,
                 "extraction_confidence": avg_confidence,
                 "overall_quality_score": avg_confidence,  # Use confidence as quality proxy
                 "text_extraction_method": primary_method,
@@ -136,6 +148,11 @@ class UpdateMetricsNode(DocumentProcessingNodeBase):
                 "processing_results": {
                     "text_extraction": text_extraction_result,
                     "diagram_processing": diagram_processing_result,
+                    "paragraph_processing": {
+                        "paragraphs_count": total_paragraphs,
+                        "avg_paragraph_length": avg_paragraph_length,
+                        "reuse_hit": paragraph_reuse_hit
+                    } if has_paragraphs else None,
                 },
             }
             
@@ -155,7 +172,9 @@ class UpdateMetricsNode(DocumentProcessingNodeBase):
                             "total_pages": total_pages,
                             "total_word_count": total_word_count,
                             "total_diagrams": total_diagrams,
-                            "avg_confidence": avg_confidence
+                            "total_paragraphs": total_paragraphs,
+                            "avg_confidence": avg_confidence,
+                            "avg_paragraph_length": avg_paragraph_length
                         }
                     )
                     self._log_info(f"Recorded step completion for run {run_id}")
@@ -173,7 +192,10 @@ class UpdateMetricsNode(DocumentProcessingNodeBase):
                     "total_word_count": total_word_count,
                     "total_text_length": total_text_length,
                     "total_diagrams": total_diagrams,
+                    "total_paragraphs": total_paragraphs,
                     "avg_confidence": avg_confidence,
+                    "avg_paragraph_length": avg_paragraph_length,
+                    "paragraph_reuse_hit": paragraph_reuse_hit,
                     "primary_method": primary_method,
                     "duration_seconds": duration
                 }

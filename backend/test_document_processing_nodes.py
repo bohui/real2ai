@@ -17,6 +17,8 @@ from app.agents.nodes.document_processing_subflow import (
     MarkProcessingStartedNode,
     BuildSummaryNode,
     ErrorHandlingNode,
+    ParagraphSegmentationNode,
+    SaveParagraphsNode,
 )
 from app.schema.document import ProcessedDocumentSummary
 
@@ -292,6 +294,235 @@ class TestErrorHandlingNode:
         # Assert
         assert "Missing document ID" in result["error"] or result["error"] == "Some error occurred"
         assert result["error_details"] is not None
+
+
+class TestParagraphSegmentationNode:
+    """Test cases for ParagraphSegmentationNode."""
+
+    @pytest.fixture
+    def sample_text_extraction_result(self):
+        """Sample text extraction result for testing."""
+        return {
+            "success": True,
+            "full_text": "This is the first paragraph.\n\nThis is the second paragraph with more content.\n\nA third paragraph here.",
+            "pages": [
+                {
+                    "page_number": 1,
+                    "text": "This is the first paragraph.\n\nThis is the second paragraph",
+                    "words": 12
+                },
+                {
+                    "page_number": 2,
+                    "text": " with more content.\n\nA third paragraph here.",
+                    "words": 8
+                }
+            ],
+            "total_pages": 2,
+            "extraction_methods": ["text"]
+        }
+
+    @pytest.fixture
+    def mock_artifacts_repo(self):
+        """Mock artifacts repository."""
+        return AsyncMock()
+
+    @pytest.fixture
+    def mock_storage_service(self):
+        """Mock storage service."""
+        return AsyncMock()
+
+    @pytest.mark.asyncio
+    async def test_successful_paragraph_segmentation(self, sample_state, sample_text_extraction_result, mock_artifacts_repo, mock_storage_service):
+        """Test successful paragraph segmentation and artifact creation."""
+        # Arrange
+        sample_state["text_extraction_result"] = sample_text_extraction_result
+        sample_state["content_hmac"] = "test_content_hmac"
+        
+        # Mock no existing artifacts
+        mock_artifacts_repo.get_paragraph_artifacts.return_value = []
+        
+        # Mock storage upload
+        mock_storage_service.upload_paragraph_text.return_value = ("test_uri", "test_sha256")
+        
+        # Mock artifact insertion
+        mock_artifact = Mock()
+        mock_artifact.id = uuid.uuid4()
+        mock_artifact.paragraph_index = 0
+        mock_artifact.page_number = 1
+        mock_artifact.paragraph_text_uri = "test_uri"
+        mock_artifact.features = {"page_spans": [], "start_offset": 0, "end_offset": 100}
+        mock_artifacts_repo.insert_paragraph_artifact.return_value = mock_artifact
+        
+        node = ParagraphSegmentationNode()
+        
+        with patch.object(node, 'artifacts_repo', mock_artifacts_repo), \
+             patch.object(node, 'storage_service', mock_storage_service), \
+             patch.object(node, 'paragraphs_enabled', True):
+            # Act
+            result = await node.execute(sample_state)
+            
+            # Assert
+            assert result["error"] is None
+            assert "paragraphs" in result
+            assert "paragraph_artifacts" in result
+            assert len(result["paragraphs"]) > 0
+            assert "processing_metrics" in result
+            assert result["processing_metrics"]["reuse_hit"] is False
+
+    @pytest.mark.asyncio
+    async def test_paragraph_segmentation_with_existing_artifacts(self, sample_state, sample_text_extraction_result, mock_artifacts_repo):
+        """Test paragraph segmentation when artifacts already exist (idempotency)."""
+        # Arrange
+        sample_state["text_extraction_result"] = sample_text_extraction_result
+        sample_state["content_hmac"] = "test_content_hmac"
+        
+        # Mock existing artifacts
+        existing_artifact = Mock()
+        existing_artifact.id = uuid.uuid4()
+        existing_artifact.paragraph_index = 0
+        existing_artifact.page_number = 1
+        existing_artifact.features = {
+            "page_spans": [{"page": 1, "start": 0, "end": 100}],
+            "start_offset": 0,
+            "end_offset": 100
+        }
+        mock_artifacts_repo.get_paragraph_artifacts.return_value = [existing_artifact]
+        
+        node = ParagraphSegmentationNode()
+        
+        with patch.object(node, 'artifacts_repo', mock_artifacts_repo), \
+             patch.object(node, 'paragraphs_enabled', True):
+            # Act
+            result = await node.execute(sample_state)
+            
+            # Assert
+            assert result["error"] is None
+            assert "paragraphs" in result
+            assert "paragraph_artifacts" in result
+            assert result["processing_metrics"]["reuse_hit"] is True
+            assert result["processing_metrics"]["reused_paragraphs_count"] == 1
+
+    @pytest.mark.asyncio
+    async def test_paragraph_segmentation_disabled(self, sample_state, sample_text_extraction_result):
+        """Test paragraph segmentation when feature is disabled."""
+        # Arrange
+        sample_state["text_extraction_result"] = sample_text_extraction_result
+        
+        node = ParagraphSegmentationNode()
+        
+        with patch.object(node, 'paragraphs_enabled', False):
+            # Act
+            result = await node.execute(sample_state)
+            
+            # Assert
+            assert result == sample_state  # No changes
+            assert "paragraphs" not in result
+
+    @pytest.mark.asyncio
+    async def test_paragraph_segmentation_no_text_result(self, sample_state):
+        """Test paragraph segmentation with no text extraction result."""
+        # Arrange - no text_extraction_result
+        node = ParagraphSegmentationNode()
+        
+        with patch.object(node, 'paragraphs_enabled', True):
+            # Act
+            result = await node.execute(sample_state)
+            
+            # Assert
+            assert result == sample_state  # No changes
+
+
+class TestSaveParagraphsNode:
+    """Test cases for SaveParagraphsNode."""
+
+    @pytest.fixture
+    def sample_paragraph_artifacts(self):
+        """Sample paragraph artifacts for testing."""
+        return [
+            {
+                "id": str(uuid.uuid4()),
+                "paragraph_index": 0,
+                "page_number": 1,
+                "text_uri": "test_uri_1",
+                "features": {"page_spans": [{"page": 1, "start": 0, "end": 50}]}
+            },
+            {
+                "id": str(uuid.uuid4()),
+                "paragraph_index": 1,
+                "page_number": 1,
+                "text_uri": "test_uri_2",
+                "features": {"page_spans": [{"page": 1, "start": 50, "end": 100}]}
+            }
+        ]
+
+    @pytest.fixture
+    def mock_user_docs_repo(self):
+        """Mock user docs repository."""
+        return AsyncMock()
+
+    @pytest.mark.asyncio
+    async def test_successful_paragraph_save(self, sample_state, sample_paragraph_artifacts, mock_user_docs_repo):
+        """Test successful saving of paragraph references."""
+        # Arrange
+        sample_state["paragraph_artifacts"] = sample_paragraph_artifacts
+        
+        # Mock successful upserts
+        mock_user_docs_repo.upsert_document_paragraph.return_value = Mock()
+        
+        node = SaveParagraphsNode()
+        
+        with patch.object(node, 'get_user_client') as mock_get_client, \
+             patch('app.agents.nodes.document_processing_subflow.save_paragraphs_node.UserDocsRepository', return_value=mock_user_docs_repo):
+            # Act
+            result = await node.execute(sample_state)
+            
+            # Assert
+            assert result["error"] is None
+            assert "processing_metrics" in result
+            assert result["processing_metrics"]["paragraphs_saved_count"] == 2
+            assert result["processing_metrics"]["paragraph_save_success_rate"] == 1.0
+            
+            # Verify repository calls
+            assert mock_user_docs_repo.upsert_document_paragraph.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_save_paragraphs_no_artifacts(self, sample_state, mock_user_docs_repo):
+        """Test saving paragraphs when no artifacts exist."""
+        # Arrange - no paragraph_artifacts
+        node = SaveParagraphsNode()
+        
+        with patch.object(node, 'get_user_client'):
+            # Act
+            result = await node.execute(sample_state)
+            
+            # Assert
+            assert result == sample_state  # No changes
+
+    @pytest.mark.asyncio
+    async def test_save_paragraphs_missing_document_id(self, sample_paragraph_artifacts, mock_user_docs_repo):
+        """Test saving paragraphs with missing document ID."""
+        # Arrange
+        state = DocumentProcessingState(
+            document_id="",  # Missing document ID
+            use_llm=True,
+            content_hash=None,
+            storage_path=None,
+            file_type=None,
+            text_extraction_result=None,
+            diagram_processing_result=None,
+            processed_summary=None,
+            error=None,
+            error_details=None
+        )
+        state["paragraph_artifacts"] = sample_paragraph_artifacts
+        
+        node = SaveParagraphsNode()
+        
+        # Act
+        result = await node.execute(state)
+        
+        # Assert
+        assert "Document ID required" in result["error"]
 
 
 if __name__ == "__main__":

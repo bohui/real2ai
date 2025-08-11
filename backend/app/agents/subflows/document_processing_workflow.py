@@ -40,6 +40,8 @@ class DocumentProcessingState(TypedDict):
     - content_hash: Content hash for deduplication
     - text_extraction_result: Results from text extraction
     - diagram_processing_result: Results from diagram processing
+    - paragraphs: List[{artifact_id, paragraph_index, page_spans, start_offset, end_offset}]
+    - paragraph_artifacts: List of ParagraphArtifact metadata
 
     Output fields:
     - processed_summary: Final ProcessedDocumentSummary result
@@ -123,6 +125,8 @@ class DocumentProcessingWorkflow:
             AlreadyProcessedCheckNode,
             MarkProcessingStartedNode,
             ExtractTextNode,
+            ParagraphSegmentationNode,
+            SaveParagraphsNode,
             SavePagesNode,
             AggregateDiagramsNode,
             SaveDiagramsNode,
@@ -139,6 +143,8 @@ class DocumentProcessingWorkflow:
         self.extract_text_node = ExtractTextNode(
             use_llm=self.use_llm_document_processing
         )
+        self.paragraph_segmentation_node = ParagraphSegmentationNode()
+        self.save_paragraphs_node = SaveParagraphsNode()
         self.save_pages_node = SavePagesNode()
         self.aggregate_diagrams_node = AggregateDiagramsNode()
         self.save_diagrams_node = SaveDiagramsNode()
@@ -153,6 +159,8 @@ class DocumentProcessingWorkflow:
             "already_processed_check": self.already_processed_check_node,
             "mark_processing_started": self.mark_processing_started_node,
             "extract_text": self.extract_text_node,
+            "paragraph_segmentation": self.paragraph_segmentation_node,
+            "save_paragraphs": self.save_paragraphs_node,
             "save_pages": self.save_pages_node,
             "aggregate_diagrams": self.aggregate_diagrams_node,
             "save_diagrams": self.save_diagrams_node,
@@ -167,6 +175,8 @@ class DocumentProcessingWorkflow:
         workflow.add_node("already_processed_check", self.already_processed_check)
         workflow.add_node("mark_processing_started", self.mark_processing_started)
         workflow.add_node("extract_text", self.extract_text)
+        workflow.add_node("paragraph_segmentation", self.paragraph_segmentation)
+        workflow.add_node("save_paragraphs", self.save_paragraphs)
         workflow.add_node("save_pages", self.save_pages)
         workflow.add_node("aggregate_diagrams", self.aggregate_diagrams)
         workflow.add_node("save_diagrams", self.save_diagrams)
@@ -199,8 +209,12 @@ class DocumentProcessingWorkflow:
         workflow.add_conditional_edges(
             "extract_text",
             self.check_extraction_success,
-            {"success": "save_pages", "error": "error_handling"},
+            {"success": "paragraph_segmentation", "error": "error_handling"},
         )
+
+        # Paragraph processing pipeline
+        workflow.add_edge("paragraph_segmentation", "save_paragraphs")
+        workflow.add_edge("save_paragraphs", "save_pages")
 
         # Success pipeline
         workflow.add_edge("save_pages", "aggregate_diagrams")
@@ -243,6 +257,19 @@ class DocumentProcessingWorkflow:
     ) -> DocumentProcessingState:
         """Extract text from document using appropriate method."""
         return await self.extract_text_node.execute(state)
+
+    @langsmith_trace(name="paragraph_segmentation", run_type="tool")
+    async def paragraph_segmentation(
+        self, state: DocumentProcessingState
+    ) -> DocumentProcessingState:
+        """Segment document text into paragraphs and create artifacts."""
+        return await self.paragraph_segmentation_node.execute(state)
+
+    async def save_paragraphs(
+        self, state: DocumentProcessingState
+    ) -> DocumentProcessingState:
+        """Save user paragraph references to database."""
+        return await self.save_paragraphs_node.execute(state)
 
     async def save_pages(
         self, state: DocumentProcessingState

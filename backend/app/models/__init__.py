@@ -13,18 +13,50 @@ from .supabase_models import (
     Contract,
     ContractAnalysis,
     
-    # Document Processing Models
-    DocumentPage,
-    DocumentEntity,
-    DocumentDiagram,
-    DocumentAnalysis,
+    # Artifact Models
+    TextExtractionArtifact,
+    ArtifactPage,
+    ArtifactDiagram,
+    ArtifactParagraph,
+    
+    # User Document Models
+    UserDocumentPage,
+    UserDocumentDiagram,
+    UserDocumentParagraph,
+    
+    # User Tracking Models
+    UserContractView,
+    UserPropertyView,
+    
+    # Property Models
+    Property,
+    PropertyValuation,
+    PropertyMarketData,
+    PropertyRiskAssessment,
+    ComparableSale,
+    PropertySalesHistory,
+    PropertyRentalHistory,
+    UserSavedProperty,
+    PropertySearch,
+    PropertyReport,
+    PropertyAPIUsage,
+    MarketInsight,
     
     # Supporting Models
-    PropertyData,
     SubscriptionPlan,
     UserSubscription,
     UsageLog,
     AnalysisProgress,
+    AnalysisProgressDetailed,
+    
+    # Task Management Models
+    TaskRegistry,
+    TaskCheckpoint,
+    RecoveryQueue,
+    
+    # History Models  
+    UserContractHistory,
+    UserPropertyHistory,
     
     # Enums
     AustralianState,
@@ -54,18 +86,50 @@ __all__ = [
     "Contract", 
     "ContractAnalysis",
     
-    # Document Processing Models
-    "DocumentPage",
-    "DocumentEntity", 
-    "DocumentDiagram",
-    "DocumentAnalysis",
+    # Artifact Models
+    "TextExtractionArtifact",
+    "ArtifactPage",
+    "ArtifactDiagram",
+    "ArtifactParagraph",
+    
+    # User Document Models
+    "UserDocumentPage",
+    "UserDocumentDiagram",
+    "UserDocumentParagraph",
+    
+    # User Tracking Models
+    "UserContractView",
+    "UserPropertyView",
+    
+    # Property Models
+    "Property",
+    "PropertyValuation",
+    "PropertyMarketData",
+    "PropertyRiskAssessment",
+    "ComparableSale",
+    "PropertySalesHistory", 
+    "PropertyRentalHistory",
+    "UserSavedProperty",
+    "PropertySearch",
+    "PropertyReport",
+    "PropertyAPIUsage",
+    "MarketInsight",
     
     # Supporting Models
-    "PropertyData",
     "SubscriptionPlan",
     "UserSubscription", 
     "UsageLog",
     "AnalysisProgress",
+    "AnalysisProgressDetailed",
+    
+    # Task Management Models
+    "TaskRegistry",
+    "TaskCheckpoint", 
+    "RecoveryQueue",
+    
+    # History Models
+    "UserContractHistory",
+    "UserPropertyHistory",
     
     # Enums
     "AustralianState",

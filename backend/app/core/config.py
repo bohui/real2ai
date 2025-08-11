@@ -127,6 +127,29 @@ class Settings(BaseSettings):
     enhanced_workflow_parsing_timeout: int = 30
     enhanced_workflow_min_doc_quality: float = 0.5
     enhanced_workflow_min_extraction_confidence: float = 0.4
+
+    # Paragraph Processing Settings
+    paragraphs_enabled: bool = True
+    paragraph_algo_version: int = 1
+    paragraph_use_llm: bool = False
+    paragraph_params: Dict[str, Any] = {
+        "min_paragraph_length": 10,
+        "max_paragraph_length": 5000,
+        "normalize_whitespace": True,
+        "fix_hyphenation": True,
+        "use_sentence_boundary": False,
+        "merge_across_pages": True,
+        "paragraph_break_patterns": [
+            r'\n\s*\n',  # Double newline
+            r'\.\s*\n\s*[A-Z]',  # Period followed by newline and capital
+            r':\s*\n',  # Colon followed by newline
+        ],
+        "continuation_patterns": [
+            r'-\s*\n\s*[a-z]',  # Hyphenated word continuation
+            r',\s*\n',  # Comma continuation
+            r'and\s*\n',  # 'and' continuation
+        ]
+    }
     enhanced_workflow_min_parsing_confidence: float = 0.6
     enhanced_workflow_min_overall_confidence: float = 0.7
     enhanced_workflow_validation_step_timeout: int = 10

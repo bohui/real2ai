@@ -812,6 +812,24 @@ class DatabaseSeeder:
                     })
                 )
 
+                # Update document with artifact reference
+                await conn.execute(
+                    """
+                    UPDATE documents 
+                    SET artifact_text_id = (
+                        SELECT id FROM text_extraction_artifacts 
+                        WHERE content_hmac = $2 
+                        AND algorithm_version = $3 
+                        AND params_fingerprint = $4
+                    )
+                    WHERE id = $1
+                    """,
+                    doc["id"],
+                    content_hmac,
+                    algorithm_version,
+                    params_fingerprint
+                )
+
                 # Create sample page artifacts
                 for page_num in range(1, 4):  # 3 pages per document
                     page_id = str(uuid.uuid4())
@@ -842,6 +860,33 @@ class DatabaseSeeder:
                         })
                     )
 
+                # Create sample paragraph artifacts
+                for page_num in range(1, 4):
+                    for para_idx in range(3):  # 3 paragraphs per page
+                        para_id = str(uuid.uuid4())
+                        await conn.execute(
+                            """
+                            INSERT INTO artifact_paragraphs (
+                                id, content_hmac, algorithm_version, params_fingerprint,
+                                page_number, paragraph_index, paragraph_text_uri, paragraph_text_sha256, features
+                            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                            ON CONFLICT (content_hmac, algorithm_version, params_fingerprint, page_number, paragraph_index) DO NOTHING
+                            """,
+                            para_id,
+                            content_hmac,
+                            algorithm_version,
+                            params_fingerprint,
+                            page_num,
+                            para_idx,
+                            f"s3://artifacts/paragraphs/{content_hmac}_p{page_num}_para{para_idx}.txt",
+                            hashlib.sha256(f"paragraph_text_{i}_{page_num}_{para_idx}".encode()).hexdigest(),
+                            json.dumps({
+                                "clause_type": "general" if para_idx == 0 else "specific",
+                                "importance": "high" if para_idx == 1 else "medium",
+                                "risk_indicators": []  
+                            })
+                        )
+
                 # Create user document associations
                 for page_num in range(1, 4):
                     await conn.execute(
@@ -858,7 +903,128 @@ class DatabaseSeeder:
                         content_hmac
                     )
 
+                    # Create paragraph associations
+                    for para_idx in range(3):
+                        await conn.execute(
+                            """
+                            INSERT INTO user_document_paragraphs (
+                                document_id, page_number, paragraph_index, artifact_paragraph_id
+                            )
+                            SELECT $1, $2, $3, id FROM artifact_paragraphs 
+                            WHERE content_hmac = $4 AND page_number = $2 AND paragraph_index = $3
+                            ON CONFLICT DO NOTHING
+                            """,
+                            doc["id"],
+                            page_num,
+                            para_idx,
+                            content_hmac
+                        )
+
                 logger.info(f"Created artifact data for document {doc['original_filename']}")
+
+        finally:
+            await conn.close()
+
+    async def seed_processing_runs(self, documents: List[Dict]):
+        """Create sample document processing runs and steps"""
+        logger.info("Seeding processing runs...")
+
+        conn = await self.get_db_connection()
+        try:
+            for doc in documents[:2]:  # Create processing runs for first 2 documents
+                run_id = str(uuid.uuid4())
+                
+                # Create processing run
+                await conn.execute(
+                    """
+                    INSERT INTO document_processing_runs (
+                        run_id, document_id, user_id, status, last_step
+                    ) VALUES ($1, $2, $3, $4, $5)
+                    ON CONFLICT DO NOTHING
+                    """,
+                    run_id,
+                    doc["id"],
+                    doc["user_id"],
+                    "completed",
+                    "analysis_complete"
+                )
+
+                # Create processing steps
+                steps = [
+                    ("extract_text", "success"),
+                    ("parse_content", "success"),
+                    ("analyze_contract", "success"),
+                    ("generate_report", "success")
+                ]
+
+                for step_name, status in steps:
+                    await conn.execute(
+                        """
+                        INSERT INTO document_processing_steps (
+                            run_id, step_name, status, state_snapshot, completed_at
+                        ) VALUES ($1, $2, $3, $4, $5)
+                        ON CONFLICT DO NOTHING
+                        """,
+                        run_id,
+                        step_name,
+                        status,
+                        json.dumps({
+                            "step": step_name,
+                            "processing_time_ms": 1500 + (hash(step_name) % 500)
+                        }),
+                        datetime.now()
+                    )
+
+                logger.info(f"Created processing run for document {doc['original_filename']}")
+
+        finally:
+            await conn.close()
+
+    async def seed_user_views(self, contracts: List[Dict], properties: List[Dict] = None):
+        """Create sample user tracking views"""
+        logger.info("Seeding user tracking views...")
+
+        conn = await self.get_db_connection()
+        try:
+            # Create contract views
+            for contract in contracts:
+                view_id = str(uuid.uuid4())
+                await conn.execute(
+                    """
+                    INSERT INTO user_contract_views (
+                        id, user_id, content_hash, property_address, source
+                    ) VALUES ($1, $2, $3, $4, $5)
+                    ON CONFLICT DO NOTHING
+                    """,
+                    view_id,
+                    contract["user_id"],
+                    contract["content_hash"],
+                    None,  # property_address - could be populated from property data
+                    "upload"
+                )
+
+            # Create property views if properties provided
+            if properties:
+                for prop in properties:
+                    view_id = str(uuid.uuid4())
+                    # Find a user_id from contracts for this property view
+                    user_id = contracts[0]["user_id"] if contracts else None
+                    if user_id:
+                        await conn.execute(
+                            """
+                            INSERT INTO user_property_views (
+                                id, user_id, property_hash, property_address, source
+                            ) VALUES ($1, $2, $3, $4, $5)
+                            ON CONFLICT DO NOTHING
+                            """,
+                            view_id,
+                            user_id,
+                            prop["property_hash"],
+                            prop["address"],
+                            "search"
+                        )
+
+            logger.info("Created user tracking views")
 
         finally:
             await conn.close()
@@ -871,6 +1037,8 @@ class DatabaseSeeder:
         include_usage_logs=False,
         include_property_data=False,
         include_artifacts=False,
+        include_processing_runs=False,
+        include_user_views=False,
     ):
         """Seed sample data based on provided options"""
         logger.info("🌱 Starting database seeding...")
@@ -909,9 +1077,18 @@ class DatabaseSeeder:
                 await self.seed_usage_logs(demo_users)
                 logger.info("✅ Created usage logs")
 
+            properties = []
             if include_property_data and contracts:
                 properties = await self.seed_property_data(contracts)
                 logger.info(f"✅ Created {len(properties)} properties with market data")
+
+            if include_processing_runs and documents:
+                await self.seed_processing_runs(documents)
+                logger.info("✅ Created sample processing runs")
+
+            if include_user_views and (contracts or properties):
+                await self.seed_user_views(contracts, properties)
+                logger.info("✅ Created sample user tracking views")
 
             logger.info("✅ Database seeding completed successfully!")
 
@@ -943,7 +1120,7 @@ Examples:
     parser.add_argument(
         "--all",
         action="store_true",
-        help="Create all sample data (profiles, documents, contracts, analyses, artifacts, usage logs, property data)",
+        help="Create all sample data (profiles, documents, contracts, analyses, artifacts, usage logs, property data, processing runs, user views)",
     )
 
     parser.add_argument(
@@ -978,6 +1155,18 @@ Examples:
         help="Create sample artifact data (requires --documents)",
     )
 
+    parser.add_argument(
+        "--processing-runs",
+        action="store_true",
+        help="Create sample processing runs (requires --documents)",
+    )
+
+    parser.add_argument(
+        "--user-views",
+        action="store_true",
+        help="Create sample user tracking views (requires --contracts or --property-data)",
+    )
+
     return parser.parse_args()
 
 
@@ -1005,6 +1194,8 @@ async def main():
                 include_artifacts=True,
                 include_usage_logs=True,
                 include_property_data=True,
+                include_processing_runs=True,
+                include_user_views=True,
             )
         else:
             # Only create profiles by default, plus any additional data requested
@@ -1015,6 +1206,8 @@ async def main():
                 include_artifacts=args.artifacts,
                 include_usage_logs=args.usage_logs,
                 include_property_data=args.property_data,
+                include_processing_runs=getattr(args, 'processing_runs', False),
+                include_user_views=getattr(args, 'user_views', False),
             )
 
     except Exception as e:
