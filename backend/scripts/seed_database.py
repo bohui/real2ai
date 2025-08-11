@@ -29,7 +29,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from app.clients.factory import get_supabase_client
 
 # Load environment variables
-load_dotenv()
+load_dotenv(".env.local")
 
 # Configure logging
 logging.basicConfig(
