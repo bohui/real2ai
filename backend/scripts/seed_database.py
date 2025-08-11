@@ -10,6 +10,7 @@ import json
 import logging
 import asyncio
 import argparse
+import hashlib
 from datetime import datetime, timedelta
 from typing import List, Dict, Any
 from pathlib import Path
@@ -369,8 +370,6 @@ class DatabaseSeeder:
                     state = "NSW"  # default
 
                 # Generate content hash for shared contract (simplified for seeding)
-                import hashlib
-
                 content_hash = hashlib.sha256(f"{contract_id}".encode()).hexdigest()
 
                 await conn.execute(
@@ -525,7 +524,7 @@ class DatabaseSeeder:
                     ON CONFLICT (content_hash) DO NOTHING
                 """,
                     analysis_id,
-                    content_hash,
+                    contract["content_hash"],
                     "1.0",
                     "completed",
                     json.dumps(analysis_data["executive_summary"]),
@@ -577,12 +576,14 @@ class DatabaseSeeder:
             await conn.close()
 
     async def seed_property_data(self, contracts: List[Dict]):
-        """Create sample property data"""
+        """Create sample property data using the new properties table structure"""
         logger.info("Seeding property data...")
 
         sample_properties = [
             {
-                "address": "15/45 George Street, Sydney NSW 2000",
+                "address_full": "15/45 George Street, Sydney NSW 2000",
+                "street_number": "45",
+                "street_name": "George Street",
                 "suburb": "Sydney",
                 "state": "NSW",
                 "postcode": "2000",
@@ -592,11 +593,14 @@ class DatabaseSeeder:
                 "car_spaces": 1,
                 "land_size": None,
                 "building_size": 95.0,
-                "purchase_price": 850000.00,
-                "market_value": 875000.00,
+                "latitude": -33.8688,
+                "longitude": 151.2093,
+                "year_built": 2010,
             },
             {
-                "address": "123 Collins Street, Melbourne VIC 3000",
+                "address_full": "123 Collins Street, Melbourne VIC 3000",
+                "street_number": "123",
+                "street_name": "Collins Street",
                 "suburb": "Melbourne",
                 "state": "VIC",
                 "postcode": "3000",
@@ -606,35 +610,42 @@ class DatabaseSeeder:
                 "car_spaces": 0,
                 "land_size": None,
                 "building_size": 150.0,
-                "purchase_price": None,  # Lease
-                "market_value": 650000.00,
+                "latitude": -37.8136,
+                "longitude": 144.9631,
+                "year_built": 1985,
             },
         ]
 
         conn = await self.get_db_connection()
         try:
+            property_ids = []
             for i, prop in enumerate(sample_properties[:2]):
                 if i < len(contracts):
                     contract = contracts[i]
 
                     # Generate property_hash for shared property data
-                    property_address = prop["address"]
+                    property_address = prop["address_full"]
                     property_hash = hashlib.sha256(
                         property_address.lower().encode()
                     ).hexdigest()
 
+                    # Insert into properties table
+                    property_id = str(uuid.uuid4())
                     await conn.execute(
                         """
-                        INSERT INTO property_data (
-                            property_hash, address, suburb, state, postcode,
-                            property_type, bedrooms, bathrooms, car_spaces,
-                            land_size, building_size, purchase_price, market_value,
-                            market_analysis
-                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+                        INSERT INTO properties (
+                            id, property_hash, address_full, street_number, street_name, 
+                            suburb, state, postcode, property_type, bedrooms, bathrooms, 
+                            car_spaces, land_size, building_size, latitude, longitude, year_built,
+                            address_verified, coordinates_verified, data_source
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
                         ON CONFLICT (property_hash) DO NOTHING
                     """,
+                        property_id,
                         property_hash,
-                        prop["address"],
+                        prop["address_full"],
+                        prop["street_number"],
+                        prop["street_name"],
                         prop["suburb"],
                         prop["state"],
                         prop["postcode"],
@@ -644,16 +655,56 @@ class DatabaseSeeder:
                         prop["car_spaces"],
                         prop["land_size"],
                         prop["building_size"],
-                        prop["purchase_price"],
-                        prop["market_value"],
-                        json.dumps(
-                            {
-                                "median_price_suburb": 820000,
-                                "price_growth_12m": 0.08,
-                                "rental_yield": 0.045,
-                                "days_on_market": 32,
-                            }
-                        ),
+                        prop["latitude"],
+                        prop["longitude"],
+                        prop["year_built"],
+                        True,  # address_verified
+                        True,  # coordinates_verified
+                        "seed_data",  # data_source
+                    )
+
+                    # Create sample property valuation
+                    valuation_id = str(uuid.uuid4())
+                    valuation_value = 850000.00 if i == 0 else 650000.00
+                    await conn.execute(
+                        """
+                        INSERT INTO property_valuations (
+                            id, property_id, valuation_source, valuation_type, 
+                            estimated_value, confidence, valuation_date
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+                        ON CONFLICT DO NOTHING
+                    """,
+                        valuation_id,
+                        property_id,
+                        "automated",
+                        "market_estimate",
+                        valuation_value,
+                        0.85,
+                        datetime.now(),
+                    )
+
+                    # Create sample market data
+                    market_data_id = str(uuid.uuid4())
+                    median_price = 820000 if i == 0 else 580000
+                    await conn.execute(
+                        """
+                        INSERT INTO property_market_data (
+                            id, property_id, suburb, state, data_source,
+                            median_price, price_growth_12_month, rental_yield, 
+                            days_on_market, data_date
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                        ON CONFLICT DO NOTHING
+                    """,
+                        market_data_id,
+                        property_id,
+                        prop["suburb"],
+                        prop["state"],
+                        "market_api",
+                        median_price,
+                        8.2,  # 8.2% growth
+                        4.5,  # 4.5% yield
+                        32,   # days on market
+                        datetime.now(),
                     )
 
                     # Create user_property_views entry for user access
@@ -669,7 +720,145 @@ class DatabaseSeeder:
                         "search",
                     )
 
-                    logger.info(f"Created property data for {prop['address']}")
+                    property_ids.append({
+                        "id": property_id,
+                        "property_hash": property_hash,
+                        "address": property_address
+                    })
+
+                    logger.info(f"Created property data for {prop['address_full']}")
+
+            return property_ids
+
+        finally:
+            await conn.close()
+
+    async def seed_analysis_progress(self, contracts: List[Dict]):
+        """Create sample analysis progress records"""
+        logger.info("Seeding analysis progress...")
+
+        conn = await self.get_db_connection()
+        try:
+            for contract in contracts[:2]:  # Create progress for first 2 contracts
+                progress_id = str(uuid.uuid4())
+                
+                # Create a progress record showing completed analysis
+                await conn.execute(
+                    """
+                    INSERT INTO analysis_progress (
+                        id, content_hash, user_id, current_step, progress_percent,
+                        step_description, status, metadata
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                    ON CONFLICT (content_hash, user_id) DO UPDATE SET
+                        current_step = EXCLUDED.current_step,
+                        progress_percent = EXCLUDED.progress_percent,
+                        step_description = EXCLUDED.step_description,
+                        status = EXCLUDED.status,
+                        metadata = EXCLUDED.metadata
+                    """,
+                    progress_id,
+                    contract["content_hash"],
+                    contract["user_id"],
+                    "completed",
+                    100,
+                    "Contract analysis completed successfully",
+                    "completed",
+                    json.dumps({
+                        "contract_type": contract.get("contract_type", "unknown"),
+                        "analysis_type": "full_analysis",
+                        "processing_time": 15.7
+                    })
+                )
+
+                logger.info(f"Created analysis progress for contract {contract['content_hash'][:8]}...")
+
+        finally:
+            await conn.close()
+
+    async def seed_artifact_data(self, documents: List[Dict]):
+        """Create sample artifact data for content-addressed caching system"""
+        logger.info("Seeding artifact data...")
+
+        conn = await self.get_db_connection()
+        try:
+            for i, doc in enumerate(documents[:2]):  # Create artifacts for first 2 documents
+                # Generate content HMAC for artifact system (simplified for demo)
+                content_hmac = hashlib.sha256(f"document_content_{i}".encode()).hexdigest()
+                algorithm_version = 1
+                params_fingerprint = hashlib.sha256("default_params".encode()).hexdigest()
+
+                # Create text extraction artifact
+                artifact_id = str(uuid.uuid4())
+                await conn.execute(
+                    """
+                    INSERT INTO text_extraction_artifacts (
+                        id, content_hmac, algorithm_version, params_fingerprint,
+                        full_text_uri, full_text_sha256, total_pages, total_words, methods
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                    ON CONFLICT (content_hmac, algorithm_version, params_fingerprint) DO NOTHING
+                    """,
+                    artifact_id,
+                    content_hmac,
+                    algorithm_version,
+                    params_fingerprint,
+                    f"s3://artifacts/text/{content_hmac}.txt",
+                    hashlib.sha256(f"full_text_{i}".encode()).hexdigest(),
+                    5 + i,  # page count
+                    1200 + (i * 300),  # word count
+                    json.dumps({
+                        "extraction_method": "mupdf_primary",
+                        "ocr_fallback": False,
+                        "confidence": 0.95
+                    })
+                )
+
+                # Create sample page artifacts
+                for page_num in range(1, 4):  # 3 pages per document
+                    page_id = str(uuid.uuid4())
+                    await conn.execute(
+                        """
+                        INSERT INTO artifact_pages (
+                            id, content_hmac, algorithm_version, params_fingerprint,
+                            page_number, page_text_uri, page_text_sha256, layout, metrics
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                        ON CONFLICT (content_hmac, algorithm_version, params_fingerprint, page_number) DO NOTHING
+                        """,
+                        page_id,
+                        content_hmac,
+                        algorithm_version,
+                        params_fingerprint,
+                        page_num,
+                        f"s3://artifacts/pages/{content_hmac}_p{page_num}.txt",
+                        hashlib.sha256(f"page_text_{i}_{page_num}".encode()).hexdigest(),
+                        json.dumps({
+                            "bounding_box": {"x": 0, "y": 0, "width": 595, "height": 842},
+                            "text_regions": 3,
+                            "confidence": 0.92
+                        }),
+                        json.dumps({
+                            "word_count": 180 + (page_num * 20),
+                            "line_count": 25 + page_num,
+                            "extraction_time_ms": 150 + (page_num * 10)
+                        })
+                    )
+
+                # Create user document associations
+                for page_num in range(1, 4):
+                    await conn.execute(
+                        """
+                        INSERT INTO user_document_pages (
+                            document_id, page_number, artifact_page_id
+                        ) 
+                        SELECT $1, $2, id FROM artifact_pages 
+                        WHERE content_hmac = $3 AND page_number = $2
+                        ON CONFLICT DO NOTHING
+                        """,
+                        doc["id"],
+                        page_num,
+                        content_hmac
+                    )
+
+                logger.info(f"Created artifact data for document {doc['original_filename']}")
 
         finally:
             await conn.close()
@@ -681,6 +870,7 @@ class DatabaseSeeder:
         include_analyses=False,
         include_usage_logs=False,
         include_property_data=False,
+        include_artifacts=False,
     ):
         """Seed sample data based on provided options"""
         logger.info("🌱 Starting database seeding...")
@@ -698,6 +888,11 @@ class DatabaseSeeder:
                 documents = await self.seed_sample_documents(demo_users)
                 logger.info(f"✅ Created {len(documents)} sample documents")
 
+                # Create artifact data if requested
+                if include_artifacts:
+                    await self.seed_artifact_data(documents)
+                    logger.info("✅ Created sample artifact data")
+
             if include_contracts and documents:
                 contracts = await self.seed_sample_contracts(documents)
                 logger.info(f"✅ Created {len(contracts)} sample contracts")
@@ -705,14 +900,18 @@ class DatabaseSeeder:
             if include_analyses and contracts:
                 await self.seed_sample_analyses(contracts)
                 logger.info("✅ Created sample analyses")
+                
+                # Also create analysis progress records
+                await self.seed_analysis_progress(contracts)
+                logger.info("✅ Created analysis progress records")
 
             if include_usage_logs:
                 await self.seed_usage_logs(demo_users)
                 logger.info("✅ Created usage logs")
 
             if include_property_data and contracts:
-                await self.seed_property_data(contracts)
-                logger.info("✅ Created property data")
+                properties = await self.seed_property_data(contracts)
+                logger.info(f"✅ Created {len(properties)} properties with market data")
 
             logger.info("✅ Database seeding completed successfully!")
 
@@ -744,7 +943,7 @@ Examples:
     parser.add_argument(
         "--all",
         action="store_true",
-        help="Create all sample data (profiles, documents, contracts, analyses, usage logs, property data)",
+        help="Create all sample data (profiles, documents, contracts, analyses, artifacts, usage logs, property data)",
     )
 
     parser.add_argument(
@@ -769,8 +968,14 @@ Examples:
 
     parser.add_argument(
         "--property-data",
-        action="store_true",
+        action="store_true", 
         help="Create sample property data (requires --contracts)",
+    )
+
+    parser.add_argument(
+        "--artifacts",
+        action="store_true",
+        help="Create sample artifact data (requires --documents)",
     )
 
     return parser.parse_args()
@@ -797,6 +1002,7 @@ async def main():
                 include_documents=True,
                 include_contracts=True,
                 include_analyses=True,
+                include_artifacts=True,
                 include_usage_logs=True,
                 include_property_data=True,
             )
@@ -806,6 +1012,7 @@ async def main():
                 include_documents=args.documents,
                 include_contracts=args.contracts,
                 include_analyses=args.analyses,
+                include_artifacts=args.artifacts,
                 include_usage_logs=args.usage_logs,
                 include_property_data=args.property_data,
             )

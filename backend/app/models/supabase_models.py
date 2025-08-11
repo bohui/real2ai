@@ -169,7 +169,7 @@ class TimestampedBaseModel(BaseModel):
         # Allow population by field name (for database results)
         "populate_by_name": True,
         # Enable JSON serialization
-        "json_encoders": {datetime: lambda v: v.isoformat() if v else None}
+        "json_encoders": {datetime: lambda v: v.isoformat() if v else None},
     }
 
 
@@ -191,9 +191,7 @@ class Profile(TimestampedBaseModel):
     onboarding_completed_at: Optional[datetime] = None
     onboarding_preferences: Dict[str, Any] = Field(default_factory=dict)
 
-    model_config = {
-        "from_attributes": True  # For SQLAlchemy compatibility
-    }
+    model_config = {"from_attributes": True}  # For SQLAlchemy compatibility
 
 
 class Document(TimestampedBaseModel):
@@ -238,6 +236,11 @@ class Document(TimestampedBaseModel):
     processing_errors: Optional[Dict[str, Any]] = None
     processing_notes: Optional[str] = None
 
+    # Artifact reference (added via ALTER TABLE in migration)
+    artifact_text_id: Optional[UUID] = Field(
+        None, description="Reference to text extraction artifact"
+    )
+
 
 class Contract(TimestampedBaseModel):
     """Contracts table for contract metadata (shared resource using content_hash)"""
@@ -270,13 +273,21 @@ class ContractAnalysis(TimestampedBaseModel):
     compliance_check: Dict[str, Any] = Field(default_factory=dict)
     recommendations: List[Dict[str, Any]] = Field(default_factory=list)
 
-    # Metrics
-    risk_score: float = Field(default=0.0, ge=0.0, le=10.0)
-    overall_risk_score: float = Field(default=0.0, ge=0.0, le=10.0)
-    confidence_score: float = Field(default=0.0, ge=0.0, le=1.0)
-    confidence_level: float = Field(default=0.0, ge=0.0, le=1.0)
-    processing_time: float = Field(default=0.0, ge=0.0)
-    processing_time_seconds: float = Field(default=0.0, ge=0.0)
+    # Metrics (using Decimal to match DB DECIMAL types)
+    risk_score: Decimal = Field(
+        default=Decimal("0.0"), ge=Decimal("0.0"), le=Decimal("10.0")
+    )
+    overall_risk_score: Decimal = Field(
+        default=Decimal("0.0"), ge=Decimal("0.0"), le=Decimal("10.0")
+    )
+    confidence_score: Decimal = Field(
+        default=Decimal("0.0"), ge=Decimal("0.0"), le=Decimal("1.0")
+    )
+    confidence_level: Decimal = Field(
+        default=Decimal("0.0"), ge=Decimal("0.0"), le=Decimal("1.0")
+    )
+    processing_time: Decimal = Field(default=Decimal("0.0"), ge=Decimal("0.0"))
+    processing_time_seconds: Decimal = Field(default=Decimal("0.0"), ge=Decimal("0.0"))
 
     # Metadata
     analysis_metadata: Dict[str, Any] = Field(default_factory=dict)
@@ -285,137 +296,105 @@ class ContractAnalysis(TimestampedBaseModel):
     analysis_timestamp: Optional[datetime] = None
 
 
-class DocumentPage(TimestampedBaseModel):
-    """Document pages table for page-level analysis"""
+# Artifact Models (Content-Addressed Cache System)
+class TextExtractionArtifact(BaseModel):
+    """Text extraction artifacts for content-addressed caching"""
 
-    id: UUID = Field(..., description="Page UUID")
-    document_id: UUID = Field(..., description="Reference to documents.id")
-    content_hash: Optional[str] = Field(
-        None, description="SHA-256 hash of document content for caching"
+    id: UUID = Field(..., description="Artifact UUID")
+    content_hmac: str = Field(
+        ..., description="Content HMAC for content-addressed storage"
     )
-    page_number: int = Field(..., ge=1)
-
-    # Content analysis
-    content_summary: Optional[str] = None
-    text_content: Optional[str] = None
-    text_length: int = Field(default=0, ge=0)
-    word_count: int = Field(default=0, ge=0)
-
-    # Content classification
-    content_types: List[str] = Field(default_factory=list)
-    primary_content_type: ContentType = ContentType.EMPTY
-
-    # Quality metrics
-    extraction_confidence: float = Field(default=0.0, ge=0.0, le=1.0)
-    content_quality_score: float = Field(default=0.0, ge=0.0, le=1.0)
-
-    # Layout analysis
-    has_header: bool = False
-    has_footer: bool = False
-    has_signatures: bool = False
-    has_handwriting: bool = False
-    has_diagrams: bool = False
-    has_tables: bool = False
-
-    # Processing metadata
-    processed_at: Optional[datetime] = None
-    processing_method: Optional[str] = Field(None, max_length=100)
-
-
-class DocumentEntity(TimestampedBaseModel):
-    """Document entities table for extracted entities"""
-
-    id: UUID = Field(..., description="Entity UUID")
-    content_hash: str = Field(
-        ..., description="SHA-256 hash of document content for caching"
+    algorithm_version: int = Field(..., description="Algorithm version used")
+    params_fingerprint: str = Field(..., description="Parameter fingerprint")
+    full_text_uri: str = Field(..., description="URI to full text storage")
+    full_text_sha256: str = Field(..., description="SHA256 hash of full text")
+    total_pages: int = Field(..., description="Total number of pages")
+    total_words: int = Field(..., description="Total word count")
+    methods: Dict[str, Any] = Field(..., description="Extraction methods used")
+    timings: Optional[Dict[str, Any]] = Field(
+        None, description="Processing timing information"
     )
-    page_id: Optional[UUID] = Field(None, description="Reference to document_pages.id")
-    page_number: int = Field(..., ge=1)
-
-    # Entity data
-    entity_type: EntityType
-    entity_value: str
-    normalized_value: Optional[str] = None
-
-    # Context and quality
-    context: Optional[str] = None
-    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
-    extraction_method: Optional[str] = Field(None, max_length=100)
-
-    # Location metadata
-    position_data: Optional[Dict[str, Any]] = None
-
-    # Processing metadata
-    extracted_at: Optional[datetime] = None
+    created_at: Optional[datetime] = Field(None, description="Creation timestamp")
 
 
-class DocumentDiagram(TimestampedBaseModel):
-    """Document diagrams table for diagram analysis"""
+class ArtifactPage(BaseModel):
+    """Page-level artifacts for content-addressed caching"""
 
-    id: UUID = Field(..., description="Diagram UUID")
-    document_id: UUID = Field(..., description="Reference to documents.id")
-    content_hash: Optional[str] = Field(
-        None, description="SHA-256 hash of document content for caching"
+    id: UUID = Field(..., description="Page artifact UUID")
+    content_hmac: str = Field(..., description="Content HMAC")
+    algorithm_version: int = Field(..., description="Algorithm version")
+    params_fingerprint: str = Field(..., description="Parameter fingerprint")
+    page_number: int = Field(..., description="Page number")
+    page_text_uri: str = Field(..., description="URI to page text storage")
+    page_text_sha256: str = Field(..., description="SHA256 hash of page text")
+    layout: Optional[Dict[str, Any]] = Field(
+        None, description="Page layout information"
     )
-    page_id: Optional[UUID] = Field(None, description="Reference to document_pages.id")
-    page_number: int = Field(..., ge=1)
-
-    # Classification
-    diagram_type: DiagramType = DiagramType.UNKNOWN
-    classification_confidence: float = Field(default=0.0, ge=0.0, le=1.0)
-
-    # Storage and processing
-    extracted_image_path: Optional[str] = Field(None, max_length=1024)
-    basic_analysis_completed: bool = False
-    detailed_analysis_completed: bool = False
-
-    # Analysis results
-    basic_analysis: Optional[Dict[str, Any]] = None
-
-    # Quality metrics
-    image_quality_score: float = Field(default=0.0, ge=0.0, le=1.0)
-    clarity_score: float = Field(default=0.0, ge=0.0, le=1.0)
-
-    # Metadata
-    detected_at: Optional[datetime] = None
-    basic_analysis_at: Optional[datetime] = None
+    metrics: Optional[Dict[str, Any]] = Field(None, description="Page metrics")
+    created_at: Optional[datetime] = Field(None, description="Creation timestamp")
 
 
-class DocumentAnalysis(TimestampedBaseModel):
-    """Document analyses table for comprehensive document analysis"""
+class ArtifactDiagram(BaseModel):
+    """Diagram artifacts for content-addressed caching"""
 
-    id: UUID = Field(..., description="Analysis UUID")
+    id: UUID = Field(..., description="Diagram artifact UUID")
+    content_hmac: str = Field(..., description="Content HMAC")
+    algorithm_version: int = Field(..., description="Algorithm version")
+    params_fingerprint: str = Field(..., description="Parameter fingerprint")
+    page_number: int = Field(..., description="Page number")
+    diagram_key: str = Field(..., description="Diagram identifier key")
+    diagram_meta: Dict[str, Any] = Field(..., description="Diagram metadata")
+    created_at: Optional[datetime] = Field(None, description="Creation timestamp")
+
+
+class ArtifactParagraph(BaseModel):
+    """Paragraph artifacts for content-addressed caching"""
+
+    id: UUID = Field(..., description="Paragraph artifact UUID")
+    content_hmac: str = Field(..., description="Content HMAC")
+    algorithm_version: int = Field(..., description="Algorithm version")
+    params_fingerprint: str = Field(..., description="Parameter fingerprint")
+    page_number: int = Field(..., description="Page number")
+    paragraph_index: int = Field(..., description="Paragraph index within page")
+    paragraph_text_uri: str = Field(..., description="URI to paragraph text storage")
+    paragraph_text_sha256: str = Field(..., description="SHA256 hash of paragraph text")
+    features: Optional[Dict[str, Any]] = Field(None, description="Paragraph features")
+    created_at: Optional[datetime] = Field(None, description="Creation timestamp")
+
+
+# User-Document Association Models
+class UserDocumentPage(TimestampedBaseModel):
+    """User-specific document page associations"""
+
     document_id: UUID = Field(..., description="Reference to documents.id")
+    page_number: int = Field(..., description="Page number")
+    artifact_page_id: UUID = Field(..., description="Reference to artifact_pages.id")
+    annotations: Optional[Dict[str, Any]] = Field(None, description="User annotations")
+    flags: Optional[Dict[str, Any]] = Field(None, description="User flags")
 
-    # Analysis metadata
-    analysis_type: str = Field(default="contract_analysis", max_length=100)
-    analysis_version: str = Field(default="v1.0", max_length=50)
-    started_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
 
-    # Analysis status
-    status: str = Field(default="pending", max_length=50)
-    progress_percentage: int = Field(default=0, ge=0, le=100)
-    current_step: Optional[str] = Field(None, max_length=100)
+class UserDocumentDiagram(TimestampedBaseModel):
+    """User-specific document diagram associations"""
 
-    # Results
-    detailed_entities: Optional[Dict[str, Any]] = None
-    diagram_analyses: Optional[Dict[str, Any]] = None
-    compliance_results: Optional[Dict[str, Any]] = None
-    risk_assessment: Optional[Dict[str, Any]] = None
-    recommendations: Optional[Dict[str, Any]] = None
+    document_id: UUID = Field(..., description="Reference to documents.id")
+    page_number: int = Field(..., description="Page number")
+    diagram_key: str = Field(..., description="Diagram identifier")
+    artifact_diagram_id: UUID = Field(
+        ..., description="Reference to artifact_diagrams.id"
+    )
+    annotations: Optional[Dict[str, Any]] = Field(None, description="User annotations")
 
-    # Quality and confidence
-    overall_confidence: float = Field(default=0.0, ge=0.0, le=1.0)
-    analysis_quality_score: float = Field(default=0.0, ge=0.0, le=1.0)
 
-    # Processing metadata
-    processing_time_seconds: float = Field(default=0.0, ge=0.0)
-    langgraph_workflow_id: Optional[str] = Field(None, max_length=255)
+class UserDocumentParagraph(TimestampedBaseModel):
+    """User-specific document paragraph associations"""
 
-    # Errors and issues
-    analysis_errors: Optional[Dict[str, Any]] = None
-    analysis_warnings: Optional[Dict[str, Any]] = None
+    document_id: UUID = Field(..., description="Reference to documents.id")
+    page_number: int = Field(..., description="Page number")
+    paragraph_index: int = Field(..., description="Paragraph index")
+    artifact_paragraph_id: UUID = Field(
+        ..., description="Reference to artifact_paragraphs.id"
+    )
+    annotations: Optional[Dict[str, Any]] = Field(None, description="User annotations")
 
 
 class UsageLog(TimestampedBaseModel):
@@ -431,42 +410,33 @@ class UsageLog(TimestampedBaseModel):
     timestamp: Optional[datetime] = None
 
     # Override field name for this model since it uses 'timestamp' instead of 'created_at'
-    model_config = {
-        "fields": {"created_at": "timestamp"}
-    }
+    model_config = {"fields": {"created_at": "timestamp"}}
 
 
-class PropertyData(TimestampedBaseModel):
-    """Property data table for enhanced property analysis"""
+# User Tracking Models
+class UserContractView(TimestampedBaseModel):
+    """User contract view tracking for RLS and access history"""
 
-    id: UUID = Field(..., description="Property data UUID")
-    property_hash: str = Field(
-        ..., description="Hash of normalized address for caching"
+    id: UUID = Field(..., description="View record UUID")
+    user_id: UUID = Field(..., description="Reference to profiles.id")
+    content_hash: str = Field(..., description="Contract content hash")
+    property_address: Optional[str] = Field(None, description="Property address")
+    analysis_id: Optional[UUID] = Field(None, description="Analysis ID if applicable")
+    viewed_at: datetime = Field(..., description="When user viewed this contract")
+    source: ViewSource = Field(..., description="How user accessed this contract")
+
+
+class UserPropertyView(TimestampedBaseModel):
+    """User property view tracking for RLS and search history"""
+
+    id: UUID = Field(..., description="View record UUID")
+    user_id: UUID = Field(..., description="Reference to profiles.id")
+    property_hash: str = Field(..., description="Property hash for identification")
+    property_address: str = Field(..., description="Property address")
+    source: ViewSource = Field(
+        default=ViewSource.SEARCH, description="How user found this property"
     )
-
-    # Property details
-    address: str = Field(..., max_length=255)
-    suburb: Optional[str] = Field(None, max_length=100)
-    state: Optional[AustralianState] = None
-    postcode: Optional[str] = Field(None, max_length=10)
-    property_type: Optional[str] = Field(None, max_length=50)
-
-    # Property features
-    bedrooms: Optional[int] = Field(None, ge=0)
-    bathrooms: Optional[int] = Field(None, ge=0)
-    car_spaces: Optional[int] = Field(None, ge=0)
-    land_size: Optional[float] = Field(None, ge=0)
-    building_size: Optional[float] = Field(None, ge=0)
-
-    # Financial data
-    purchase_price: Optional[float] = Field(None, ge=0)
-    market_value: Optional[float] = Field(None, ge=0)
-
-    # Analysis data
-    market_analysis: Dict[str, Any] = Field(default_factory=dict)
-    property_insights: Dict[str, Any] = Field(default_factory=dict)
-    analysis_result: Optional[Dict[str, Any]] = None
-    processing_time: Optional[float] = None
+    viewed_at: datetime = Field(..., description="When user viewed this property")
 
 
 class SubscriptionPlan(BaseModel):
@@ -509,8 +479,7 @@ class AnalysisProgress(TimestampedBaseModel):
     """Analysis progress tracking for real-time updates"""
 
     id: UUID = Field(..., description="Progress UUID")
-    contract_id: UUID = Field(..., description="Reference to contracts.id")
-    analysis_id: UUID = Field(..., description="Reference to contract_analyses.id")
+    content_hash: str = Field(..., description="Content hash identifying the contract")
     user_id: UUID = Field(..., description="Reference to profiles.id")
 
     # Progress tracking
@@ -532,11 +501,13 @@ class AnalysisProgress(TimestampedBaseModel):
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
-# Property Intelligence Models
 class Property(TimestampedBaseModel):
     """Properties table for Australian property data"""
 
     id: UUID = Field(..., description="Property UUID")
+    property_hash: Optional[str] = Field(
+        None, description="Hash of normalized address for caching"
+    )
     address_full: str = Field(..., max_length=500, description="Complete address")
     street_number: Optional[str] = Field(None, max_length=20)
     street_name: Optional[str] = Field(None, max_length=200)
@@ -756,9 +727,7 @@ class PropertyAPIUsage(TimestampedBaseModel):
     timestamp: datetime
 
     # Override field name for this model since it uses 'timestamp' instead of 'created_at'
-    model_config = {
-        "fields": {"created_at": "timestamp"}
-    }
+    model_config = {"fields": {"created_at": "timestamp"}}
 
 
 class MarketInsight(TimestampedBaseModel):
@@ -806,9 +775,7 @@ class AnalysisProgressDetailed(BaseModel):
     file_type: str
     processing_status: str
 
-    model_config = {
-        "from_attributes": True
-    }
+    model_config = {"from_attributes": True}
 
 
 # Task Recovery System Models
@@ -914,9 +881,7 @@ class UserContractHistory(BaseModel):
     file_type: Optional[str] = None
     file_size: Optional[int] = None
 
-    model_config = {
-        "from_attributes": True
-    }
+    model_config = {"from_attributes": True}
 
 
 class UserPropertyHistory(BaseModel):
@@ -935,9 +900,7 @@ class UserPropertyHistory(BaseModel):
     analysis_result: Optional[Dict[str, Any]] = None
     access_count: Optional[int] = None
 
-    model_config = {
-        "from_attributes": True
-    }
+    model_config = {"from_attributes": True}
 
 
 # Helper functions for model operations

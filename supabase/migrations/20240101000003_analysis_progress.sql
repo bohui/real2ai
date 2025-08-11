@@ -20,3 +20,11 @@ CREATE TABLE analysis_progress (
     CONSTRAINT valid_progress_percent CHECK (progress_percent BETWEEN 0 AND 100)
 );
 
+-- Indexes for analysis_progress
+CREATE INDEX idx_analysis_progress_content_hash ON analysis_progress(content_hash);
+CREATE INDEX idx_analysis_progress_user_id ON analysis_progress(user_id);
+CREATE INDEX idx_analysis_progress_status ON analysis_progress(status);
+CREATE INDEX idx_analysis_progress_created_at ON analysis_progress(created_at);
+CREATE INDEX idx_analysis_progress_active ON analysis_progress(content_hash, user_id, updated_at) 
+WHERE status = 'in_progress';
+

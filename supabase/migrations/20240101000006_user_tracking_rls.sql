@@ -32,22 +32,9 @@ CREATE INDEX idx_user_property_views_property_hash ON user_property_views(proper
 CREATE INDEX idx_user_contract_views_user_id ON user_contract_views(user_id);
 CREATE INDEX idx_user_contract_views_content_hash ON user_contract_views(content_hash);
 
-GRANT ALL ON document_pages TO authenticated;
-GRANT ALL ON document_entities TO authenticated;
-GRANT ALL ON document_diagrams TO authenticated;
-GRANT ALL ON document_analyses TO authenticated;
-
-ALTER TABLE contracts DISABLE ROW LEVEL SECURITY;
-ALTER TABLE contract_analyses DISABLE ROW LEVEL SECURITY;
-ALTER TABLE document_pages DISABLE ROW LEVEL SECURITY;
-ALTER TABLE document_entities DISABLE ROW LEVEL SECURITY;
-ALTER TABLE property_data DISABLE ROW LEVEL SECURITY;
 
 COMMENT ON TABLE user_property_views IS 'User''s property search history with RLS for privacy';
 COMMENT ON TABLE user_contract_views IS 'User''s contract analysis history with RLS for privacy';
 COMMENT ON TABLE contracts IS 'Contract metadata - shared resource, RLS disabled, accessed by content_hash';
 COMMENT ON TABLE contract_analyses IS 'Contract analysis results - shared resource, RLS disabled, accessed by content_hash';
-COMMENT ON TABLE document_pages IS 'Individual page metadata and content from document processing (shared)';
-COMMENT ON TABLE document_entities IS 'Basic entities extracted from documents (shared)';
-COMMENT ON TABLE property_data IS 'Property analysis data - shared resource, RLS disabled, accessed by property_hash';
 

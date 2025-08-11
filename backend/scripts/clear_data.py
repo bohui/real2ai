@@ -41,21 +41,45 @@ logger = logging.getLogger(__name__)
 DEFAULT_TABLE_ORDER: List[str] = [
     # Views and progress records referencing contracts/property
     "user_contract_views",
-    "user_property_views",
+    "user_property_views", 
     "analysis_progress",
     # Contract analysis data that depends on contracts/content_hash
     "contract_analyses",
-    # Document-derived tables that depend on documents
+    # User-scoped document processing tables (depend on documents)
+    "user_document_paragraphs",
+    "user_document_diagrams", 
+    "user_document_pages",
+    # Legacy document-derived tables (may still exist in some databases)
     "document_analyses",
     "document_diagrams",
-    "document_entities",
+    "document_entities", 
     "document_pages",
-    # Task registry (independent; kept before parents just in case)
+    # Task registry and checkpoints
+    "task_checkpoints",
     "task_registry",
-    # Parents last
-    "contract_analyses",  # kept once above; harmless if repeated in TRUNCATE set
+    # Property system tables (children first, then parents)
+    "user_saved_properties",
+    "property_searches", 
+    "property_reports",
+    "property_api_usage",
+    "market_insights",
+    "property_valuations",
+    "property_market_data", 
+    "property_risk_assessments",
+    "comparable_sales",
+    "property_sales_history",
+    "property_rental_history",
+    # Parent tables
+    "properties",
     "contracts",
-    "documents",
+    "documents", 
+    # Shared artifact tables (content-addressed cache - no foreign keys)
+    "artifact_paragraphs",
+    "artifact_diagrams",
+    "artifact_pages", 
+    "text_extraction_artifacts",
+    # Other shared tables
+    "usage_logs",
 ]
 
 
