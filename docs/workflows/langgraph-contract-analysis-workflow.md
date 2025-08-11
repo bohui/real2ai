@@ -3,6 +3,31 @@
 ## Overview
 
 This document provides comprehensive documentation of the Real2.AI LangGraph-based Australian contract analysis workflow. The system demonstrates sophisticated integration of Large Language Models (GPT-4, Gemini) with domain-specific Australian property law tools, advanced state management, and multi-layered validation systems.
+### Paragraph-aware document processing (new)
+
+- The document processing subflow now segments text into paragraph artifacts after text extraction and before page save:
+  - Nodes: `extract_text -> paragraph_segmentation -> save_paragraphs -> save_pages`
+  - State additions: `paragraphs`, `paragraph_artifacts`, `paragraph_params_fingerprint`
+  - Idempotency: paragraph artifacts are reused by key `(content_hmac, paragraph_algo_version, paragraph_params_fingerprint)`
+
+- Analysis input strategy:
+  - Prefer paragraph chunks for retrieval-grounded prompts and citations; fallback to `full_text` for global tasks (e.g., summaries)
+  - Paragraph artifact `features` include: `page_spans` (per-page offsets), `start_offset`, `end_offset`, `offsets_normalized: true`, `document_paragraph_index`
+
+- Data model and security:
+  - Shared (service-role): `artifact_paragraphs`
+  - User-scoped (RLS): `user_document_paragraphs` with conflict on `(document_id, page_number, paragraph_index)`, rows reference `artifact_paragraphs.id`
+  - Cross-user reuse via content addressing; user annotations stored on `user_document_paragraphs`
+
+- Configuration:
+  - `paragraphs_enabled`, `paragraph_algo_version`, `paragraph_params`, `paragraph_use_llm` in `app/core/config.py`
+
+- Telemetry:
+  - Processing metrics include `paragraphs_count`, `avg_paragraph_len`, `paragraph_artifact_created_count`, `paragraph_artifact_reuse_count`, `reuse_ratio`
+
+- Error handling behavior:
+  - If paragraph segmentation is skipped or yields none, downstream nodes continue using page artifacts and `full_text`; no hard failure is raised
+
 
 **Architecture Highlights:**
 - **LLM Integration**: GPT-4 and Gemini 2.5 with intelligent fallback strategies
