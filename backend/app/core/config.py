@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     supabase_anon_key: str
     supabase_service_key: str
     database_url: Optional[str] = None
-    
+
     # Repository and Connection Pool Settings
     db_use_repositories: bool = True
     db_pool_mode: str = "shared"  # "shared" or "per_user"
@@ -56,13 +56,15 @@ class Settings(BaseSettings):
     jwt_secret_key: Optional[str] = None
     jwt_algorithm: str = "HS256"
     jwt_expiration_hours: int = 1  # Changed from 24 to 1 hour to match Supabase
-    
+
     # Token Coordination Settings
-    backend_token_ttl_buffer_minutes: int = 5  # Backend tokens expire 5 min before Supabase
+    backend_token_ttl_buffer_minutes: int = (
+        5  # Backend tokens expire 5 min before Supabase
+    )
     token_refresh_threshold_minutes: int = 10  # Refresh when 10 min or less remaining
     auto_refresh_enabled: bool = True  # Enable proactive token refresh
     supabase_access_token_ttl_minutes: int = 60  # Standard Supabase access token TTL
-    
+
     # Auth strategy
     use_backend_tokens: bool = (
         True  # If true, issue backend API tokens and keep Supabase tokens server-side
@@ -149,15 +151,15 @@ class Settings(BaseSettings):
         "use_sentence_boundary": False,
         "merge_across_pages": True,
         "paragraph_break_patterns": [
-            r'\n\s*\n',  # Double newline
-            r'\.\s*\n\s*[A-Z]',  # Period followed by newline and capital
-            r':\s*\n',  # Colon followed by newline
+            r"\n\s*\n",  # Double newline
+            r"\.\s*\n\s*[A-Z]",  # Period followed by newline and capital
+            r":\s*\n",  # Colon followed by newline
         ],
         "continuation_patterns": [
-            r'-\s*\n\s*[a-z]',  # Hyphenated word continuation
-            r',\s*\n',  # Comma continuation
-            r'and\s*\n',  # 'and' continuation
-        ]
+            r"-\s*\n\s*[a-z]",  # Hyphenated word continuation
+            r",\s*\n",  # Comma continuation
+            r"and\s*\n",  # 'and' continuation
+        ],
     }
     enhanced_workflow_min_parsing_confidence: float = 0.6
     enhanced_workflow_min_overall_confidence: float = 0.7

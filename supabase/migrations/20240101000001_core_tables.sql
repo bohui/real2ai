@@ -53,6 +53,7 @@ ALTER TABLE documents ADD COLUMN IF NOT EXISTS artifact_text_id UUID;
 CREATE TABLE contracts (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     content_hash TEXT UNIQUE NOT NULL,
+    metadata JSONB DEFAULT '{}',
     contract_type contract_type NOT NULL DEFAULT 'purchase_agreement',
     australian_state australian_state NOT NULL DEFAULT 'NSW',
     contract_terms JSONB DEFAULT '{}',
