@@ -22,6 +22,7 @@ from app.schema.contract import (
     ContractAnalysisResponse,
 )
 from app.clients.supabase.client import SupabaseClient
+from app.services.repositories.analyses_repository import AnalysesRepository
 
 logger = logging.getLogger(__name__)
 
@@ -692,50 +693,30 @@ async def _create_analysis_record_with_cache(
     user_id: str,
     content_hash: Optional[str] = None,
 ) -> str:
-    """Create analysis record with cache integration using upsert to handle duplicates."""
+    """Create analysis record with cache integration using repository pattern."""
     if not content_hash:
         raise ValueError("content_hash is required for analysis record creation")
 
     try:
-        # Use the new upsert function to handle duplicate content_hash gracefully
-        result = await db_client.database.execute_rpc(
-            "upsert_contract_analysis",
-            {
-                "p_content_hash": content_hash,
-                "p_agent_version": "1.0",
-                "p_status": "pending",
-                "p_analysis_result": {},
-                "p_error_message": None,
-            },
+        # Use AnalysesRepository for shared analyses
+        analyses_repo = AnalysesRepository(use_service_role=True)
+        
+        analysis = await analyses_repo.upsert_analysis(
+            content_hash=content_hash,
+            agent_version="1.0",
+            status="pending",
+            result={},
         )
 
-        if not result:
-            raise ValueError("Failed to create analysis record via upsert")
+        if not analysis.id:
+            raise ValueError("Failed to create analysis record via repository")
 
-        return result
+        logger.info(f"Repository: Created analysis record: {analysis.id}")
+        return str(analysis.id)
 
     except Exception as e:
-        logger.error(f"Upsert failed for content_hash {content_hash}: {str(e)}")
-        # Fallback to direct insert with conflict handling
-        analysis_data = {
-            "content_hash": content_hash,
-            "agent_version": "1.0",
-            "status": "pending",
-        }
-
-        try:
-            analysis_result = await db_client.database.upsert(
-                "contract_analyses", analysis_data, conflict_columns=["content_hash"]
-            )
-
-            if not analysis_result:
-                raise ValueError("Failed to create analysis record via upsert fallback")
-
-            return analysis_result["id"]
-
-        except Exception as fallback_error:
-            logger.error(f"Fallback upsert also failed: {str(fallback_error)}")
-            raise ValueError("Failed to create analysis record")
+        logger.error(f"Analysis repository upsert failed for content_hash {content_hash}: {str(e)}")
+        raise ValueError(f"Failed to create analysis record: {str(e)}")
 
 
 @retry_api_call(max_attempts=2)
@@ -928,34 +909,38 @@ async def get_contract_analysis(
                 status_code=403, detail="You don't have access to this contract"
             )
 
-        # Get analysis results using content_hash
-        result = await db_client.database.select(
-            "contract_analyses", columns="*", filters={"content_hash": content_hash}
-        )
+        # Get analysis results using AnalysesRepository
+        analyses_repo = AnalysesRepository(use_service_role=True)
+        analysis = await analyses_repo.get_analysis_by_content_hash(content_hash)
 
-        if not result.get("data"):
+        if not analysis:
             raise HTTPException(status_code=404, detail="Analysis not found")
 
-        analysis = result["data"][0]
+        # Extract data from analysis result
+        analysis_result = analysis.result or {}
+        risk_score = None
+        if analysis_result.get("risk_assessment", {}).get("overall_risk_score"):
+            risk_score = analysis_result["risk_assessment"]["overall_risk_score"]
+        elif analysis_result.get("executive_summary", {}).get("overall_risk_score"):
+            risk_score = analysis_result["executive_summary"]["overall_risk_score"]
 
         # Enhanced response with cache information
         response = {
             "contract_id": contract_id,
-            "analysis_status": analysis["status"],
-            "analysis_result": analysis.get("analysis_result", {}),
-            "risk_score": analysis.get("risk_score"),
-            "processing_time": analysis.get("processing_time"),
-            "created_at": analysis["created_at"],
+            "analysis_status": analysis.status,
+            "analysis_result": analysis_result,
+            "risk_score": risk_score,
+            "processing_time": None,  # Not stored in analyses table
+            "created_at": analysis.created_at.isoformat() if analysis.created_at else None,
         }
 
         # Add cache information if available
-        metadata = analysis.get("analysis_metadata", {})
-        if metadata.get("cached_from"):
+        if analysis_result.get("cached_from"):
             response["cached"] = True
-            response["cache_source"] = metadata["cached_from"]
+            response["cache_source"] = analysis_result["cached_from"]
 
         logger.info(
-            f"get_contract_analysis success: user_id={user.id}, contract_id={contract_id}, status={analysis['status']}"
+            f"get_contract_analysis success: user_id={user.id}, contract_id={contract_id}, status={analysis.status}"
         )
         return response
 

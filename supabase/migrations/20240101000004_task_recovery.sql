@@ -135,17 +135,16 @@ BEGIN
     CASE task_record.task_name
         WHEN 'comprehensive_document_analysis' THEN
             -- Check if analysis already completed via content_hash
-            SELECT ca.*, ca.id as analysis_id INTO analysis_record 
-            FROM contract_analyses ca
-            WHERE ca.task_registry_id = task_registry_uuid
-            OR (ca.content_hash IS NOT NULL AND ca.content_hash = (task_record.task_kwargs->>'analysis_options')::JSONB->>'content_hash');
+            SELECT a.*, a.id as analysis_id INTO analysis_record 
+            FROM analyses a
+            WHERE a.content_hash IS NOT NULL AND a.content_hash = (task_record.task_kwargs->>'analysis_options')::JSONB->>'content_hash';
             
             IF FOUND AND analysis_record.status = 'completed' THEN
                 validation_result := jsonb_build_object(
                     'valid', false,
                     'reason', 'already_completed',
                     'analysis_id', analysis_record.analysis_id,
-                    'completed_at', analysis_record.updated_at
+                    'completed_at', analysis_record.completed_at
                 );
             ELSE
                 validation_result := jsonb_build_object('valid', true);

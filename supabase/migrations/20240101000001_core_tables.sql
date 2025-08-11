@@ -63,29 +63,24 @@ CREATE TABLE contracts (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
-CREATE TABLE contract_analyses (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    content_hash TEXT UNIQUE NOT NULL,
-    agent_version TEXT NOT NULL DEFAULT '1.0',
-    status analysis_status NOT NULL DEFAULT 'pending',
-    analysis_result JSONB DEFAULT '{}',
-    executive_summary JSONB DEFAULT '{}',
-    risk_assessment JSONB DEFAULT '{}',
-    compliance_check JSONB DEFAULT '{}',
-    recommendations JSONB DEFAULT '[]',
-    risk_score DECIMAL(3,2) DEFAULT 0.0 CHECK (risk_score >= 0.0 AND risk_score <= 10.0),
-    overall_risk_score DECIMAL(3,2) DEFAULT 0.0 CHECK (overall_risk_score >= 0.0 AND overall_risk_score <= 10.0),
-    confidence_score DECIMAL(3,2) DEFAULT 0.0 CHECK (confidence_score >= 0.0 AND confidence_score <= 1.0),
-    confidence_level DECIMAL(3,2) DEFAULT 0.0 CHECK (confidence_level >= 0.0 AND confidence_level <= 1.0),
-    processing_time DECIMAL(10,3) DEFAULT 0.0,
-    processing_time_seconds DECIMAL(10,3) DEFAULT 0.0,
-    analysis_metadata JSONB DEFAULT '{}',
-    error_details JSONB DEFAULT '{}',
-    error_message TEXT,
-    processing_completed_at TIMESTAMP WITH TIME ZONE,
-    analysis_timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+-- Create analyses table for tracking analysis operations
+-- This table stores analysis operations that can be shared across users
+CREATE TABLE analyses (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    content_hash VARCHAR(64) NOT NULL,
+    agent_version VARCHAR(50) NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'pending',
+    result JSONB,
+    error_details JSONB,
+    started_at TIMESTAMP WITH TIME ZONE,
+    completed_at TIMESTAMP WITH TIME ZONE,
+    user_id UUID REFERENCES profiles(id),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL,
+    
+    -- Create unique constraint on content_hash and agent_version
+    -- This allows the upsert pattern in the repository
+    UNIQUE(content_hash, agent_version)
 );
 
 CREATE TABLE usage_logs (
@@ -139,7 +134,7 @@ CREATE TABLE user_subscriptions (
 
 -- RLS Configuration
 ALTER TABLE contracts ENABLE ROW LEVEL SECURITY;
-ALTER TABLE contract_analyses ENABLE ROW LEVEL SECURITY;
+ALTER TABLE analyses ENABLE ROW LEVEL SECURITY;
 
 -- Enable RLS on user-specific tables
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
@@ -217,18 +212,32 @@ CREATE POLICY "read_if_user_has_hash"
         )
     );
 
-CREATE POLICY "read_if_user_has_hash"
-    ON contract_analyses FOR SELECT
-    USING (
-        -- Service role can access all contract analyses
-        auth.jwt() ->> 'role' = 'service_role'
-        OR
-        -- Users can access analyses they have access to through documents
-        EXISTS (
-            SELECT 1 FROM documents d
-            WHERE d.user_id = auth.uid()
-              AND d.content_hash = contract_analyses.content_hash
-        )
+-- Analyses policies
+-- Policy: Users can see analyses they created or analyses without user_id (shared)
+CREATE POLICY "Users can view own analyses or shared analyses" ON analyses
+    FOR SELECT USING (
+        user_id IS NULL OR 
+        user_id = (current_setting('request.jwt.claim.sub'))::uuid
+    );
+
+-- Policy: Users can insert analyses 
+CREATE POLICY "Users can create analyses" ON analyses
+    FOR INSERT WITH CHECK (
+        user_id IS NULL OR 
+        user_id = (current_setting('request.jwt.claim.sub'))::uuid
+    );
+
+-- Policy: Users can update their own analyses or shared analyses
+CREATE POLICY "Users can update own analyses or shared analyses" ON analyses
+    FOR UPDATE USING (
+        user_id IS NULL OR 
+        user_id = (current_setting('request.jwt.claim.sub'))::uuid
+    );
+
+-- Policy: Users can delete their own analyses
+CREATE POLICY "Users can delete own analyses" ON analyses
+    FOR DELETE USING (
+        user_id = (current_setting('request.jwt.claim.sub'))::uuid
     );
 
 -- Create security definer functions for admin operations
@@ -248,16 +257,13 @@ BEGIN
 
     SELECT json_build_object(
         'total_documents', COUNT(d.id),
-        'total_analyses', COUNT(ca.id),
+        'total_analyses', COUNT(a.id),
         'credits_used', COALESCE(SUM(ul.credits_used), 0),
-        'avg_risk_score', COALESCE(AVG(ca.overall_risk_score), 0),
-        'last_activity', MAX(GREATEST(d.created_at, ca.created_at))
+        'last_activity', MAX(GREATEST(d.created_at, a.created_at))
     ) INTO result
     FROM profiles p
     LEFT JOIN documents d ON p.id = d.user_id
-    LEFT JOIN contract_analyses ca ON ca.content_hash IN (
-        SELECT content_hash FROM documents WHERE user_id = p.id
-    )
+    LEFT JOIN analyses a ON a.user_id = p.id
     LEFT JOIN usage_logs ul ON p.id = ul.user_id
     WHERE p.id = target_user_id
     GROUP BY p.id;
@@ -391,7 +397,6 @@ BEGIN
         'total_documents', COALESCE(doc_stats.total_documents, 0),
         'total_analyses', COALESCE(analysis_stats.total_analyses, 0),
         'completed_analyses', COALESCE(analysis_stats.completed_analyses, 0),
-        'avg_risk_score', COALESCE(analysis_stats.avg_risk_score, 0),
         'credits_used_this_month', COALESCE(usage_stats.credits_used_this_month, 0),
         'last_analysis_date', analysis_stats.last_analysis_date,
         'subscription_status', p.subscription_status,
@@ -411,15 +416,11 @@ BEGIN
             user_id,
             COUNT(*) as total_analyses,
             COUNT(*) FILTER (WHERE status = 'completed') as completed_analyses,
-            AVG(overall_risk_score) FILTER (WHERE status = 'completed') as avg_risk_score,
-            MAX(analysis_timestamp) FILTER (WHERE status = 'completed') as last_analysis_date
-        FROM contract_analyses
-        WHERE content_hash IN (
-            SELECT content_hash FROM documents WHERE user_id = user_uuid
-        )
-        -- group by a synthetic key to allow aggregate only result
-        GROUP BY 1
-    ) analysis_stats ON TRUE
+            MAX(created_at) FILTER (WHERE status = 'completed') as last_analysis_date
+        FROM analyses
+        WHERE user_id = user_uuid
+        GROUP BY user_id
+    ) analysis_stats ON p.id = analysis_stats.user_id
     LEFT JOIN (
         SELECT 
             user_id,
@@ -435,119 +436,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Function to handle upsert for contract_analyses (prevents duplicate key errors)
-CREATE OR REPLACE FUNCTION upsert_contract_analysis(
-    p_content_hash TEXT,
-    p_agent_version TEXT DEFAULT '1.0',
-    p_status analysis_status DEFAULT 'pending',
-    p_analysis_result JSONB DEFAULT '{}',
-    p_error_message TEXT DEFAULT NULL
-) RETURNS UUID AS $$
-DECLARE
-    v_analysis_id UUID;
-BEGIN
-    -- Try to insert new record
-    INSERT INTO contract_analyses (
-        content_hash,
-        agent_version,
-        status,
-        analysis_result,
-        error_message,
-        analysis_timestamp,
-        created_at,
-        updated_at
-    ) VALUES (
-        p_content_hash,
-        p_agent_version,
-        p_status,
-        p_analysis_result,
-        p_error_message,
-        NOW(),
-        NOW(),
-        NOW()
-    ) ON CONFLICT (content_hash) DO UPDATE SET
-        status = EXCLUDED.status,
-        analysis_result = EXCLUDED.analysis_result,
-        error_message = EXCLUDED.error_message,
-        updated_at = NOW()
-    RETURNING id INTO v_analysis_id;
-    
-    RETURN v_analysis_id;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Function to safely retry analysis
-CREATE OR REPLACE FUNCTION retry_contract_analysis(
-    p_content_hash TEXT,
-    p_user_id UUID
-) RETURNS UUID AS $$
-DECLARE
-    v_analysis_id UUID;
-    v_existing_status analysis_status;
-BEGIN
-    -- Check if analysis already exists
-    SELECT id, status INTO v_analysis_id, v_existing_status
-    FROM contract_analyses
-    WHERE content_hash = p_content_hash;
-    
-    -- If analysis exists and failed or was cancelled, reset it for retry
-    -- Note: Successfully completed analyses should NOT be retried
-    IF v_analysis_id IS NOT NULL AND v_existing_status IN ('failed', 'cancelled') THEN
-        UPDATE contract_analyses
-        SET 
-            status = 'pending',
-            error_message = NULL,
-            analysis_result = '{}',
-            executive_summary = NULL,
-            risk_assessment = NULL,
-            compliance_check = NULL,
-            recommendations = NULL,
-            risk_score = 0,
-            overall_risk_score = 0,
-            processing_time = NULL,
-            processing_completed_at = NULL,
-            updated_at = NOW()
-        WHERE id = v_analysis_id;
-    -- If analysis doesn't exist, create new one
-    ELSIF v_analysis_id IS NULL THEN
-        v_analysis_id := upsert_contract_analysis(p_content_hash);
-    -- If analysis exists and is completed, don't retry - return the existing ID
-    ELSIF v_existing_status = 'completed' THEN
-        -- Analysis already completed successfully, no retry needed
-        -- Return existing analysis_id without modification
-        NULL; -- No action needed
-    END IF;
-    
-    RETURN v_analysis_id;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- Add comments for documentation
-COMMENT ON FUNCTION upsert_contract_analysis IS 'Upsert function for contract analyses to handle duplicate content_hash';
-COMMENT ON FUNCTION retry_contract_analysis IS 'Safely retry analysis by checking existing status - only retries failed/cancelled analyses, not completed ones';
-
--- Safely cancel user's analysis without mutating shared rows
--- Scopes cancellation to user-owned progress; avoids direct writes to shared contract_analyses
-CREATE OR REPLACE FUNCTION cancel_user_contract_analysis(
-    p_content_hash TEXT,
-    p_user_id UUID
-)
-RETURNS VOID AS $$
-BEGIN
-    -- Cancel any in-progress user-scoped analysis progress rows
-    UPDATE analysis_progress
-    SET status = 'cancelled',
-        error_message = 'Analysis cancelled by user'
-    WHERE content_hash = p_content_hash
-      AND user_id = p_user_id
-      AND status = 'in_progress';
-
-    -- Do NOT mutate shared contract_analyses here to prevent cross-user impact
-    -- Optionally, we could insert an audit log if needed.
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
-COMMENT ON FUNCTION cancel_user_contract_analysis(TEXT, UUID) IS 'Cancel user-scoped analysis progress; leaves shared contract_analyses untouched.';
 -- Trigger to automatically create profile on user signup
 CREATE TRIGGER on_auth_user_created
     AFTER INSERT ON auth.users
@@ -566,8 +455,8 @@ CREATE TRIGGER update_contracts_updated_at
     BEFORE UPDATE ON contracts 
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-CREATE TRIGGER update_contract_analyses_updated_at 
-    BEFORE UPDATE ON contract_analyses 
+CREATE TRIGGER update_analyses_updated_at 
+    BEFORE UPDATE ON analyses 
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 
@@ -576,14 +465,14 @@ CREATE TRIGGER update_user_subscriptions_updated_at
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- Revoke direct access to shared tables and grant selective access
-REVOKE ALL ON TABLE public.contract_analyses FROM anon;
-REVOKE ALL ON TABLE public.contract_analyses FROM authenticated;
 REVOKE ALL ON TABLE public.contracts FROM anon;
 REVOKE ALL ON TABLE public.contracts FROM authenticated;
 
+-- Grant permissions to authenticated users
+GRANT SELECT, INSERT, UPDATE, DELETE ON analyses TO authenticated;
+
 -- Grant SELECT to authenticated so RLS policies can apply
 GRANT SELECT ON TABLE public.contracts TO authenticated;
-GRANT SELECT ON TABLE public.contract_analyses TO authenticated;
 GRANT SELECT ON TABLE public.subscription_plans TO anon, authenticated;
 
 -- Indexes for core tables
@@ -605,10 +494,21 @@ CREATE INDEX idx_documents_user_status ON documents(user_id, processing_status);
 CREATE INDEX idx_contracts_content_hash ON contracts(content_hash);
 CREATE INDEX idx_contracts_type_state ON contracts(contract_type, australian_state);
 
-CREATE INDEX idx_contract_analyses_content_hash ON contract_analyses(content_hash);
-CREATE INDEX idx_contract_analyses_status ON contract_analyses(status);
-CREATE INDEX idx_contract_analyses_timestamp ON contract_analyses(analysis_timestamp DESC);
-CREATE INDEX idx_contract_analyses_risk_score ON contract_analyses(overall_risk_score);
+-- Create indexes for better performance on analyses table
+CREATE INDEX idx_analyses_content_hash ON analyses(content_hash);
+CREATE INDEX idx_analyses_status ON analyses(status);
+CREATE INDEX idx_analyses_user_id ON analyses(user_id);
+CREATE INDEX idx_analyses_created_at ON analyses(created_at);
+CREATE INDEX idx_analyses_agent_version ON analyses(agent_version);
+
+-- Add comments for analyses table
+COMMENT ON TABLE analyses IS 'Stores analysis operations with caching support based on content hash and agent version';
+COMMENT ON COLUMN analyses.content_hash IS 'SHA-256 hash of the analyzed content for deduplication';
+COMMENT ON COLUMN analyses.agent_version IS 'Version of the analysis agent used';
+COMMENT ON COLUMN analyses.status IS 'Current status: pending, in_progress, completed, failed';
+COMMENT ON COLUMN analyses.result IS 'Analysis result in JSON format';
+COMMENT ON COLUMN analyses.error_details IS 'Error details if analysis failed';
+COMMENT ON COLUMN analyses.user_id IS 'User who initiated analysis, null for shared analyses';
 
 CREATE INDEX idx_usage_logs_user_id ON usage_logs(user_id);
 CREATE INDEX idx_usage_logs_timestamp ON usage_logs(timestamp DESC);

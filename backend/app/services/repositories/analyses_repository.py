@@ -71,85 +71,84 @@ class AnalysesRepository:
         Returns:
             Analysis: Existing or newly created analysis
         """
+        # Build dynamic query based on provided parameters
+        set_clauses = [
+            "status = EXCLUDED.status",
+            "updated_at = now()"
+        ]
+        insert_columns = [
+            "content_hash", "agent_version", "status"
+        ]
+        insert_values = ["$1", "$2", "$3"]
+        params = [content_hash, agent_version, status]
+        param_count = 3
+
+        if result is not None:
+            param_count += 1
+            insert_columns.append("result")
+            insert_values.append(f"${param_count}")
+            set_clauses.append(f"result = EXCLUDED.result")
+            params.append(result)
+
+        if error_details is not None:
+            param_count += 1
+            insert_columns.append("error_details")
+            insert_values.append(f"${param_count}")
+            set_clauses.append(f"error_details = EXCLUDED.error_details")
+            params.append(error_details)
+
+        if started_at is not None:
+            param_count += 1
+            insert_columns.append("started_at")
+            insert_values.append(f"${param_count}")
+            set_clauses.append(f"started_at = COALESCE(analyses.started_at, EXCLUDED.started_at)")
+            params.append(started_at)
+
+        if completed_at is not None:
+            param_count += 1
+            insert_columns.append("completed_at")
+            insert_values.append(f"${param_count}")
+            set_clauses.append(f"completed_at = EXCLUDED.completed_at")
+            params.append(completed_at)
+
+        # Add user_id if not using service role
+        if not self.use_service_role:
+            param_count += 1
+            insert_columns.append("user_id")
+            insert_values.append(f"COALESCE(${param_count}::uuid, (current_setting('request.jwt.claim.sub'))::uuid)")
+            params.append(self.user_id)
+
+        query = f"""
+            INSERT INTO analyses (
+                {', '.join(insert_columns)}
+            ) VALUES ({', '.join(insert_values)})
+            ON CONFLICT (content_hash, agent_version) DO UPDATE SET
+                {', '.join(set_clauses)}
+            RETURNING id, content_hash, agent_version, status, result, 
+                     error_details, started_at, completed_at, user_id,
+                     created_at, updated_at
+        """
+
         if self.use_service_role:
-            connection_manager = get_service_role_connection
+            async with get_service_role_connection() as conn:
+                row = await conn.fetchrow(query, *params)
         else:
-            connection_manager = get_user_connection
+            async with get_user_connection(self.user_id) as conn:
+                row = await conn.fetchrow(query, *params)
 
-        async with connection_manager(self.user_id) as conn:
-            # Build dynamic query based on provided parameters
-            set_clauses = [
-                "status = EXCLUDED.status",
-                "updated_at = now()"
-            ]
-            insert_columns = [
-                "content_hash", "agent_version", "status"
-            ]
-            insert_values = ["$1", "$2", "$3"]
-            params = [content_hash, agent_version, status]
-            param_count = 3
-
-            if result is not None:
-                param_count += 1
-                insert_columns.append("result")
-                insert_values.append(f"${param_count}")
-                set_clauses.append(f"result = EXCLUDED.result")
-                params.append(result)
-
-            if error_details is not None:
-                param_count += 1
-                insert_columns.append("error_details")
-                insert_values.append(f"${param_count}")
-                set_clauses.append(f"error_details = EXCLUDED.error_details")
-                params.append(error_details)
-
-            if started_at is not None:
-                param_count += 1
-                insert_columns.append("started_at")
-                insert_values.append(f"${param_count}")
-                set_clauses.append(f"started_at = COALESCE(analyses.started_at, EXCLUDED.started_at)")
-                params.append(started_at)
-
-            if completed_at is not None:
-                param_count += 1
-                insert_columns.append("completed_at")
-                insert_values.append(f"${param_count}")
-                set_clauses.append(f"completed_at = EXCLUDED.completed_at")
-                params.append(completed_at)
-
-            # Add user_id if not using service role
-            if not self.use_service_role:
-                param_count += 1
-                insert_columns.append("user_id")
-                insert_values.append(f"COALESCE(${param_count}::uuid, (current_setting('request.jwt.claim.sub'))::uuid)")
-                params.append(self.user_id)
-
-            query = f"""
-                INSERT INTO analyses (
-                    {', '.join(insert_columns)}
-                ) VALUES ({', '.join(insert_values)})
-                ON CONFLICT (content_hash, agent_version) DO UPDATE SET
-                    {', '.join(set_clauses)}
-                RETURNING id, content_hash, agent_version, status, result, 
-                         error_details, started_at, completed_at, user_id,
-                         created_at, updated_at
-            """
-
-            row = await conn.fetchrow(query, *params)
-
-            return Analysis(
-                id=row['id'],
-                content_hash=row['content_hash'],
-                agent_version=row['agent_version'],
-                status=row['status'],
-                result=row['result'],
-                error_details=row['error_details'],
-                started_at=row['started_at'],
-                completed_at=row['completed_at'],
-                user_id=row['user_id'],
-                created_at=row['created_at'],
-                updated_at=row['updated_at']
-            )
+        return Analysis(
+            id=row['id'],
+            content_hash=row['content_hash'],
+            agent_version=row['agent_version'],
+            status=row['status'],
+            result=row['result'],
+            error_details=row['error_details'],
+            started_at=row['started_at'],
+            completed_at=row['completed_at'],
+            user_id=row['user_id'],
+            created_at=row['created_at'],
+            updated_at=row['updated_at']
+        )
 
     async def get_analysis_by_content_hash(
         self,
@@ -166,52 +165,51 @@ class AnalysesRepository:
         Returns:
             Analysis or None if not found
         """
-        if self.use_service_role:
-            connection_manager = get_service_role_connection
+        if agent_version:
+            query = f"""
+                SELECT id, content_hash, agent_version, status, result, 
+                       error_details, started_at, completed_at, user_id,
+                       created_at, updated_at
+                FROM analyses
+                WHERE content_hash = $1 AND agent_version = $2
+            """
+            params = [content_hash, agent_version]
         else:
-            connection_manager = get_user_connection
+            # Get latest analysis for this content hash
+            query = f"""
+                SELECT id, content_hash, agent_version, status, result, 
+                       error_details, started_at, completed_at, user_id,
+                       created_at, updated_at
+                FROM analyses
+                WHERE content_hash = $1
+                ORDER BY created_at DESC
+                LIMIT 1
+            """
+            params = [content_hash]
 
-        async with connection_manager(self.user_id) as conn:
-            if agent_version:
-                query = """
-                    SELECT id, content_hash, agent_version, status, result, 
-                           error_details, started_at, completed_at, user_id,
-                           created_at, updated_at
-                    FROM analyses
-                    WHERE content_hash = $1 AND agent_version = $2
-                """
-                params = [content_hash, agent_version]
-            else:
-                # Get latest analysis for this content hash
-                query = """
-                    SELECT id, content_hash, agent_version, status, result, 
-                           error_details, started_at, completed_at, user_id,
-                           created_at, updated_at
-                    FROM analyses
-                    WHERE content_hash = $1
-                    ORDER BY created_at DESC
-                    LIMIT 1
-                """
-                params = [content_hash]
+        if self.use_service_role:
+            async with get_service_role_connection() as conn:
+                row = await conn.fetchrow(query, *params)
+        else:
+            async with get_user_connection(self.user_id) as conn:
+                row = await conn.fetchrow(query, *params)
 
-            row = await conn.fetchrow(query, *params)
+        if not row:
+            return None
 
-            if not row:
-                return None
-
-            return Analysis(
-                id=row['id'],
-                content_hash=row['content_hash'],
-                agent_version=row['agent_version'],
-                status=row['status'],
-                result=row['result'],
-                error_details=row['error_details'],
-                started_at=row['started_at'],
-                completed_at=row['completed_at'],
-                user_id=row['user_id'],
-                created_at=row['created_at'],
-                updated_at=row['updated_at']
-            )
+        return Analysis(
+            id=row['id'],
+            content_hash=row['content_hash'],
+            agent_version=row['agent_version'],
+            status=row['status'],
+            result=row['result'],
+            error_details=row['error_details'],
+            started_at=row['started_at'],
+            completed_at=row['completed_at'],
+            user_id=row['user_id'],
+            created_at=row['created_at'],
+            updated_at=row['updated_at']
+        )
 
     async def get_analysis_by_id(self, analysis_id: UUID) -> Optional[Analysis]:
         """
@@ -223,39 +221,37 @@ class AnalysesRepository:
         Returns:
             Analysis or None if not found
         """
+        query = f"""
+            SELECT id, content_hash, agent_version, status, result, 
+                   error_details, started_at, completed_at, user_id,
+                   created_at, updated_at
+            FROM analyses
+            WHERE id = $1
+        """
+
         if self.use_service_role:
-            connection_manager = get_service_role_connection
+            async with get_service_role_connection() as conn:
+                row = await conn.fetchrow(query, analysis_id)
         else:
-            connection_manager = get_user_connection
+            async with get_user_connection(self.user_id) as conn:
+                row = await conn.fetchrow(query, analysis_id)
 
-        async with connection_manager(self.user_id) as conn:
-            row = await conn.fetchrow(
-                """
-                SELECT id, content_hash, agent_version, status, result, 
-                       error_details, started_at, completed_at, user_id,
-                       created_at, updated_at
-                FROM analyses
-                WHERE id = $1
-                """,
-                analysis_id
-            )
+        if not row:
+            return None
 
-            if not row:
-                return None
-
-            return Analysis(
-                id=row['id'],
-                content_hash=row['content_hash'],
-                agent_version=row['agent_version'],
-                status=row['status'],
-                result=row['result'],
-                error_details=row['error_details'],
-                started_at=row['started_at'],
-                completed_at=row['completed_at'],
-                user_id=row['user_id'],
-                created_at=row['created_at'],
-                updated_at=row['updated_at']
-            )
+        return Analysis(
+            id=row['id'],
+            content_hash=row['content_hash'],
+            agent_version=row['agent_version'],
+            status=row['status'],
+            result=row['result'],
+            error_details=row['error_details'],
+            started_at=row['started_at'],
+            completed_at=row['completed_at'],
+            user_id=row['user_id'],
+            created_at=row['created_at'],
+            updated_at=row['updated_at']
+        )
 
     async def update_analysis_status(
         self,
@@ -278,44 +274,44 @@ class AnalysesRepository:
         Returns:
             True if update successful, False otherwise
         """
-        if self.use_service_role:
-            connection_manager = get_service_role_connection
-        else:
-            connection_manager = get_user_connection
+        # Build dynamic query based on provided parameters
+        set_clauses = ["status = $1", "updated_at = now()"]
+        params = [status]
+        param_count = 1
 
-        async with connection_manager(self.user_id) as conn:
-            # Build dynamic query based on provided parameters
-            set_clauses = ["status = $1", "updated_at = now()"]
-            params = [status]
-            param_count = 1
-
-            if result is not None:
-                param_count += 1
-                set_clauses.append(f"result = ${param_count}")
-                params.append(result)
-
-            if error_details is not None:
-                param_count += 1
-                set_clauses.append(f"error_details = ${param_count}")
-                params.append(error_details)
-
-            if completed_at is not None:
-                param_count += 1
-                set_clauses.append(f"completed_at = ${param_count}")
-                params.append(completed_at)
-
-            # Add WHERE clause parameters
+        if result is not None:
             param_count += 1
-            params.append(analysis_id)
+            set_clauses.append(f"result = ${param_count}")
+            params.append(result)
 
-            query = f"""
-                UPDATE analyses 
-                SET {', '.join(set_clauses)}
-                WHERE id = ${param_count}
-            """
+        if error_details is not None:
+            param_count += 1
+            set_clauses.append(f"error_details = ${param_count}")
+            params.append(error_details)
 
-            result = await conn.execute(query, *params)
-            return result.split()[-1] == '1'
+        if completed_at is not None:
+            param_count += 1
+            set_clauses.append(f"completed_at = ${param_count}")
+            params.append(completed_at)
+
+        # Add WHERE clause parameters
+        param_count += 1
+        params.append(analysis_id)
+
+        query = f"""
+            UPDATE analyses 
+            SET {', '.join(set_clauses)}
+            WHERE id = ${param_count}
+        """
+
+        if self.use_service_role:
+            async with get_service_role_connection() as conn:
+                result = await conn.execute(query, *params)
+        else:
+            async with get_user_connection(self.user_id) as conn:
+                result = await conn.execute(query, *params)
+        
+        return result.split()[-1] == '1'
 
     async def list_analyses_by_status(
         self,
@@ -334,43 +330,39 @@ class AnalysesRepository:
         Returns:
             List of Analysis objects
         """
+        query = f"""
+            SELECT id, content_hash, agent_version, status, result, 
+                   error_details, started_at, completed_at, user_id,
+                   created_at, updated_at
+            FROM analyses
+            WHERE status = $1
+            ORDER BY created_at DESC
+            LIMIT $2 OFFSET $3
+        """
+
         if self.use_service_role:
-            connection_manager = get_service_role_connection
+            async with get_service_role_connection() as conn:
+                rows = await conn.fetch(query, status, limit, offset)
         else:
-            connection_manager = get_user_connection
+            async with get_user_connection(self.user_id) as conn:
+                rows = await conn.fetch(query, status, limit, offset)
 
-        async with connection_manager(self.user_id) as conn:
-            rows = await conn.fetch(
-                """
-                SELECT id, content_hash, agent_version, status, result, 
-                       error_details, started_at, completed_at, user_id,
-                       created_at, updated_at
-                FROM analyses
-                WHERE status = $1
-                ORDER BY created_at DESC
-                LIMIT $2 OFFSET $3
-                """,
-                status,
-                limit,
-                offset
+        return [
+            Analysis(
+                id=row['id'],
+                content_hash=row['content_hash'],
+                agent_version=row['agent_version'],
+                status=row['status'],
+                result=row['result'],
+                error_details=row['error_details'],
+                started_at=row['started_at'],
+                completed_at=row['completed_at'],
+                user_id=row['user_id'],
+                created_at=row['created_at'],
+                updated_at=row['updated_at']
             )
-
-            return [
-                Analysis(
-                    id=row['id'],
-                    content_hash=row['content_hash'],
-                    agent_version=row['agent_version'],
-                    status=row['status'],
-                    result=row['result'],
-                    error_details=row['error_details'],
-                    started_at=row['started_at'],
-                    completed_at=row['completed_at'],
-                    user_id=row['user_id'],
-                    created_at=row['created_at'],
-                    updated_at=row['updated_at']
-                )
-                for row in rows
-            ]
+            for row in rows
+        ]
 
     async def list_analyses_by_agent_version(
         self,
@@ -389,43 +381,39 @@ class AnalysesRepository:
         Returns:
             List of Analysis objects
         """
+        query = f"""
+            SELECT id, content_hash, agent_version, status, result, 
+                   error_details, started_at, completed_at, user_id,
+                   created_at, updated_at
+            FROM analyses
+            WHERE agent_version = $1
+            ORDER BY created_at DESC
+            LIMIT $2 OFFSET $3
+        """
+
         if self.use_service_role:
-            connection_manager = get_service_role_connection
+            async with get_service_role_connection() as conn:
+                rows = await conn.fetch(query, agent_version, limit, offset)
         else:
-            connection_manager = get_user_connection
+            async with get_user_connection(self.user_id) as conn:
+                rows = await conn.fetch(query, agent_version, limit, offset)
 
-        async with connection_manager(self.user_id) as conn:
-            rows = await conn.fetch(
-                """
-                SELECT id, content_hash, agent_version, status, result, 
-                       error_details, started_at, completed_at, user_id,
-                       created_at, updated_at
-                FROM analyses
-                WHERE agent_version = $1
-                ORDER BY created_at DESC
-                LIMIT $2 OFFSET $3
-                """,
-                agent_version,
-                limit,
-                offset
+        return [
+            Analysis(
+                id=row['id'],
+                content_hash=row['content_hash'],
+                agent_version=row['agent_version'],
+                status=row['status'],
+                result=row['result'],
+                error_details=row['error_details'],
+                started_at=row['started_at'],
+                completed_at=row['completed_at'],
+                user_id=row['user_id'],
+                created_at=row['created_at'],
+                updated_at=row['updated_at']
             )
-
-            return [
-                Analysis(
-                    id=row['id'],
-                    content_hash=row['content_hash'],
-                    agent_version=row['agent_version'],
-                    status=row['status'],
-                    result=row['result'],
-                    error_details=row['error_details'],
-                    started_at=row['started_at'],
-                    completed_at=row['completed_at'],
-                    user_id=row['user_id'],
-                    created_at=row['created_at'],
-                    updated_at=row['updated_at']
-                )
-                for row in rows
-            ]
+            for row in rows
+        ]
 
     async def delete_analysis(self, analysis_id: UUID) -> bool:
         """
@@ -437,17 +425,16 @@ class AnalysesRepository:
         Returns:
             True if deletion successful, False otherwise
         """
-        if self.use_service_role:
-            connection_manager = get_service_role_connection
-        else:
-            connection_manager = get_user_connection
+        query = "DELETE FROM analyses WHERE id = $1"
 
-        async with connection_manager(self.user_id) as conn:
-            result = await conn.execute(
-                "DELETE FROM analyses WHERE id = $1",
-                analysis_id
-            )
-            return result.split()[-1] == '1'
+        if self.use_service_role:
+            async with get_service_role_connection() as conn:
+                result = await conn.execute(query, analysis_id)
+        else:
+            async with get_user_connection(self.user_id) as conn:
+                result = await conn.execute(query, analysis_id)
+        
+        return result.split()[-1] == '1'
 
     async def get_analysis_stats(self) -> Dict[str, Any]:
         """
@@ -456,37 +443,33 @@ class AnalysesRepository:
         Returns:
             Dictionary with analysis statistics
         """
+        total_query = "SELECT COUNT(*) as total FROM analyses"
+        status_query = f"""
+            SELECT status, COUNT(*) as count
+            FROM analyses
+            GROUP BY status
+            ORDER BY count DESC
+        """
+        agent_query = """
+            SELECT agent_version, COUNT(*) as count
+            FROM analyses
+            GROUP BY agent_version
+            ORDER BY count DESC
+        """
+
         if self.use_service_role:
-            connection_manager = get_service_role_connection
+            async with get_service_role_connection() as conn:
+                total_row = await conn.fetchrow(total_query)
+                status_rows = await conn.fetch(status_query)
+                agent_rows = await conn.fetch(agent_query)
         else:
-            connection_manager = get_user_connection
+            async with get_user_connection(self.user_id) as conn:
+                total_row = await conn.fetchrow(total_query)
+                status_rows = await conn.fetch(status_query)
+                agent_rows = await conn.fetch(agent_query)
 
-        async with connection_manager(self.user_id) as conn:
-            # Get total count and count by status
-            total_row = await conn.fetchrow(
-                "SELECT COUNT(*) as total FROM analyses"
-            )
-            
-            status_rows = await conn.fetch(
-                """
-                SELECT status, COUNT(*) as count
-                FROM analyses
-                GROUP BY status
-                ORDER BY count DESC
-                """
-            )
-            
-            agent_rows = await conn.fetch(
-                """
-                SELECT agent_version, COUNT(*) as count
-                FROM analyses
-                GROUP BY agent_version
-                ORDER BY count DESC
-                """
-            )
-
-            return {
-                'total_analyses': total_row['total'],
-                'by_status': {row['status']: row['count'] for row in status_rows},
-                'by_agent_version': {row['agent_version']: row['count'] for row in agent_rows}
-            }
+        return {
+            'total_analyses': total_row['total'],
+            'by_status': {row['status']: row['count'] for row in status_rows},
+            'by_agent_version': {row['agent_version']: row['count'] for row in agent_rows}
+        }

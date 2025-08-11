@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { logger } from "@/utils/logger";
 import { persist } from "zustand/middleware";
 import { User, UserLoginRequest, UserRegistrationRequest } from "@/types";
 import { apiService } from "@/services/api";
@@ -145,9 +146,7 @@ export const useAuthStore = create<AuthState>()(
             set({ isLoading: false });
           } catch (error) {
             // Token is likely expired, clear auth state
-            console.log(
-              "Token validation failed during initialization, logging out",
-            );
+            logger.debug("Token validation failed during initialization, logging out");
             get().logout();
             set({ isLoading: false });
           }

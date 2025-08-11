@@ -937,28 +937,6 @@ Focus on accuracy and completeness. Extract all visible text content."""
             "average_word_length": round(average_word_length, 2),
         }
 
-    # Comparison method to show the difference
-    async def extract_image_semantics_legacy(
-        self,
-        file_content: bytes,
-        file_type: str,
-        filename: str,
-        image_type: Optional[ImageType] = None,
-        contract_context: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
-        """
-        Legacy method without parser integration (for comparison)
-
-        Problems with this approach:
-        1. Manual JSON instructions in template
-        2. Manual parsing with error-prone string manipulation
-        3. No validation of output structure
-        4. Inconsistent error handling
-        5. Schema duplication (Pydantic model + template instructions)
-        """
-        # ... legacy implementation would go here
-        # This demonstrates the old way without parser integration
-        pass
 
 
 # Usage example and migration guide

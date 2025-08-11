@@ -416,33 +416,3 @@ async def fetchrow_raw_sql(query: str, *args, user_id: Optional[UUID] = None) ->
         async with get_service_role_connection() as connection:
             return await connection.fetchrow(query, *args)
 
-
-# Legacy compatibility functions (deprecated)
-async def release_connection(
-    connection: asyncpg.Connection, pool: Optional[asyncpg.Pool] = None
-):
-    """
-    Legacy connection release function (deprecated).
-
-    IMPORTANT: This function should not be used. Use context managers instead.
-    If you must use it, pass the pool to properly release the connection.
-
-    Args:
-        connection: Connection to release
-        pool: Optional pool to release to (if not provided, connection is closed)
-
-    Note: Closing pooled connections defeats pooling and causes performance issues.
-    Always use context managers (async with get_user_connection()) instead.
-    """
-    logger.warning("release_connection() is deprecated. Use context managers instead.")
-
-    if connection and not connection.is_closed():
-        if pool:
-            # Properly release to pool
-            await pool.release(connection)
-        else:
-            # Fallback: close connection (bad for pooling!)
-            logger.error(
-                "Closing connection instead of releasing to pool - this hurts performance!"
-            )
-            await connection.close()

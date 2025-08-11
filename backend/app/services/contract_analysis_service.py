@@ -1162,51 +1162,19 @@ async def ensure_contract(
     """
     settings = get_settings()
 
-    # Check if repositories are enabled
-    if settings.db_use_repositories:
-        contracts_repo = ContractsRepository()
-
-        try:
-            contract = await contracts_repo.upsert_contract_by_content_hash(
-                content_hash=content_hash,
-                contract_type=contract_type,
-                australian_state=australian_state,
-            )
-            logger.info(f"Repository: Upserted contract record: {contract.id}")
-            return str(contract.id)
-        except Exception as repo_error:
-            logger.error(f"Repository contract upsert failed: {repo_error}")
-            raise ValueError("Failed to create or fetch contract record")
-
-    # Legacy fallback (deprecated)
-    logger.warning("Using deprecated PostgREST path for contract operations")
-    contract_data = {
-        "content_hash": content_hash,
-        "contract_type": contract_type,
-        "australian_state": australian_state,
-    }
+    contracts_repo = ContractsRepository()
 
     try:
-        upserted = await service_client.database.upsert(
-            "contracts", contract_data, conflict_columns=["content_hash"]
+        contract = await contracts_repo.upsert_contract_by_content_hash(
+            content_hash=content_hash,
+            contract_type=contract_type,
+            australian_state=australian_state,
         )
-        if not upserted or not upserted.get("id"):
-            raise ValueError("Upsert returned no record")
-        contract_id = upserted["id"]
-        logger.info(f"Legacy: Upserted contract record: {contract_id}")
-        return contract_id
-    except Exception as upsert_error:
-        logger.warning(
-            f"Contract upsert failed ({upsert_error}); attempting to fetch existing by content_hash"
-        )
-        existing = await service_client.database.select(
-            "contracts", columns="id", filters={"content_hash": content_hash}, limit=1
-        )
-        if not existing.get("data"):
-            raise ValueError("Failed to create or fetch contract record")
-        contract_id = existing["data"][0]["id"]
-        logger.info(f"Legacy: Found existing contract record: {contract_id}")
-        return contract_id
+        logger.info(f"Repository: Upserted contract record: {contract.id}")
+        return str(contract.id)
+    except Exception as repo_error:
+        logger.error(f"Repository contract upsert failed: {repo_error}")
+        raise ValueError("Failed to create or fetch contract record")
 
 
 async def upsert_contract_analysis(
@@ -1216,61 +1184,26 @@ async def upsert_contract_analysis(
     agent_version: str = "1.0",
 ) -> str:
     """
-    Create or update a contract_analyses row for the content hash.
+    Create or update an analysis row for the content hash.
 
-    MIGRATED: Now uses AnalysesRepository with user or shared connection.
-    Uses repository pattern for better maintainability and RLS enforcement.
+    Uses AnalysesRepository with service role connection for shared analyses.
     Returns the analysis id.
     """
-    settings = get_settings()
+    # Use shared analyses repository for contract analyses
+    analyses_repo = AnalysesRepository(use_service_role=True)
 
-    # Check if repositories are enabled
-    if settings.db_use_repositories:
-        # Use shared analyses repository for contract analyses
-        analyses_repo = AnalysesRepository(use_service_role=True)
-
-        try:
-            analysis = await analyses_repo.upsert_analysis(
-                content_hash=content_hash,
-                agent_version=agent_version,
-                status="pending",
-                result={},
-            )
-            logger.info(f"Repository: Upserted contract analysis: {analysis.id}")
-            return str(analysis.id)
-        except Exception as repo_error:
-            logger.error(f"Repository analysis upsert failed: {repo_error}")
-            raise ValueError("Failed to create analysis record")
-
-    # Legacy fallback (deprecated)
-    logger.warning("Using deprecated PostgREST path for analysis operations")
     try:
-        analysis_id = await user_client.database.execute_rpc(
-            "upsert_contract_analysis",
-            {
-                "p_content_hash": content_hash,
-                "p_agent_version": agent_version,
-                "p_status": "pending",
-                "p_analysis_result": {},
-                "p_error_message": None,
-            },
+        analysis = await analyses_repo.upsert_analysis(
+            content_hash=content_hash,
+            agent_version=agent_version,
+            status="pending",
+            result={},
         )
-        if not analysis_id:
-            raise ValueError("Failed to create analysis record via upsert")
-        return analysis_id
-    except Exception as e:
-        logger.error(f"Upsert RPC failed for content_hash {content_hash}: {str(e)}")
-        analysis_data = {
-            "content_hash": content_hash,
-            "agent_version": agent_version,
-            "status": "pending",
-        }
-        analysis_result = await user_client.database.upsert(
-            "contract_analyses", analysis_data, conflict_columns=["content_hash"]
-        )
-        if not analysis_result:
-            raise ValueError("Failed to create analysis record via upsert fallback")
-        return analysis_result["id"]
+        logger.info(f"Repository: Upserted contract analysis: {analysis.id}")
+        return str(analysis.id)
+    except Exception as repo_error:
+        logger.error(f"Repository analysis upsert failed: {repo_error}")
+        raise ValueError("Failed to create analysis record")
 
 
 # Service factory function

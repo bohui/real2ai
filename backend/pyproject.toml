@@ -94,10 +94,16 @@ docs = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+# Test discovery
+testpaths = ["tests", "."]
 python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+# Ignore patterns for collection (files/directories to skip)
+# Note: collect_ignore only works in pytest.ini, not pyproject.toml
+# Use --ignore CLI option or move these to pytest.ini if needed
+
+# Test execution options
 addopts = [
     "-v",
     "--tb=short",
@@ -110,21 +116,28 @@ addopts = [
     "--cov-fail-under=80",
     "--durations=10",
     "--maxfail=3",
+    "--disable-warnings",
 ]
+
+# CI options (activate with --ci flag or environment variable)
+# For CI environments, add: -n auto --dist=loadfile --maxfail=5 --durations=20
 markers = [
-    "unit: Unit tests - fast, isolated",
+    "unit: Unit tests - fast, isolated components",
     "integration: Integration tests - external dependencies",
-    "e2e: End-to-end tests - full system",
-    "slow: Slow running tests (>1s)",
-    "auth: Authentication and authorization tests",
+    "e2e: End-to-end tests - full system workflows",
+    "slow: Slow running tests (>1s execution time)",
+    "auth: Authentication and authorization functionality",
     "api: API endpoint tests",
     "database: Database interaction tests",
-    "ai: AI/ML model tests",
-    "contract: Contract analysis tests",
+    "ai: AI/ML model integration tests",
+    "contract: Contract analysis workflow tests",
+    "security: Security vulnerability tests",
+    "performance: Performance benchmark tests"
 ]
 filterwarnings = [
     "ignore::UserWarning",
     "ignore::DeprecationWarning",
+    "ignore::pytest.PytestUnraisableExceptionWarning"
 ]
 
 [tool.coverage.run]

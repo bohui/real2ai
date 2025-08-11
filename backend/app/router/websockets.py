@@ -15,6 +15,7 @@ from app.core.error_handler import handle_api_error, create_error_context, Error
 from app.clients.factory import get_service_supabase_client
 from enum import Enum
 from app.services.backend_token_service import BackendTokenService
+from app.services.repositories.analyses_repository import AnalysesRepository
 
 
 class CacheStatus(str, Enum):
@@ -155,16 +156,11 @@ async def check_document_cache_status(document_id: str, user_id: str) -> Dict[st
         contract = contract_result["data"][0]
         contract_id = contract["id"]
 
-        # Check analysis status using user's authenticated client
-        analysis_result = await user_client.database.select(
-            "contract_analyses",
-            columns="*",
-            filters={"content_hash": content_hash},
-            order_by="created_at DESC",
-            limit=1,
-        )
+        # Check analysis status using AnalysesRepository
+        analyses_repo = AnalysesRepository(use_service_role=True)
+        analysis = await analyses_repo.get_analysis_by_content_hash(content_hash)
 
-        if not analysis_result.get("data"):
+        if not analysis:
             # Contract exists but no analysis - should not happen but handle gracefully
             logger.warning(
                 f"Contract {contract_id} exists but no analysis found - treating as MISS"
@@ -178,8 +174,7 @@ async def check_document_cache_status(document_id: str, user_id: str) -> Dict[st
                 "message": "Existing contract found but no analysis - will start analysis",
             }
 
-        analysis = analysis_result["data"][0]
-        analysis_status = analysis["status"]
+        analysis_status = analysis.status
 
         if analysis_status == "completed":
             # CACHE HIT COMPLETE - Results ready!
@@ -191,9 +186,9 @@ async def check_document_cache_status(document_id: str, user_id: str) -> Dict[st
                 "document_id": document_id,
                 "content_hash": content_hash,
                 "contract_id": contract_id,
-                "analysis_id": analysis["id"],
-                "analysis_result": analysis.get("analysis_result", {}),
-                "processing_time": analysis.get("processing_time"),
+                "analysis_id": str(analysis.id),
+                "analysis_result": analysis.result or {},
+                "processing_time": None,  # Field not available in analyses table
                 "retry_available": False,
                 "message": "Analysis complete - results available instantly!",
             }
@@ -230,7 +225,7 @@ async def check_document_cache_status(document_id: str, user_id: str) -> Dict[st
                 "document_id": document_id,
                 "content_hash": content_hash,
                 "contract_id": contract_id,
-                "analysis_id": analysis["id"],
+                "analysis_id": str(analysis.id),
                 "progress": progress_info,
                 "retry_available": False,
                 "message": "Analysis in progress - joining existing process",
@@ -246,8 +241,8 @@ async def check_document_cache_status(document_id: str, user_id: str) -> Dict[st
                 "document_id": document_id,
                 "content_hash": content_hash,
                 "contract_id": contract_id,
-                "analysis_id": analysis["id"],
-                "error_message": analysis.get("error_message", "Analysis failed"),
+                "analysis_id": str(analysis.id),
+                "error_message": (analysis.error_details or {}).get("message", "Analysis failed"),
                 "retry_available": True,
                 "message": "Previous analysis failed - retry available",
             }
@@ -835,14 +830,11 @@ async def handle_retry_analysis_request(
         content_hash = contract_result["data"][0]["content_hash"]
 
         # Check current analysis status before attempting retry
-        analysis_status_result = await user_client.database.select(
-            "contract_analyses",
-            columns="status",
-            filters={"content_hash": content_hash},
-        )
+        analyses_repo = AnalysesRepository(use_service_role=True)
+        analysis = await analyses_repo.get_analysis_by_content_hash(content_hash)
 
-        if analysis_status_result.get("data"):
-            current_status = analysis_status_result["data"][0]["status"]
+        if analysis:
+            current_status = analysis.status
             if current_status == "completed":
                 # Analysis already completed successfully, no retry needed
                 await websocket_manager.send_personal_message(
@@ -1014,28 +1006,22 @@ async def handle_status_request(
                 },
             }
         else:
-            # Fallback to contract_analyses table (shared resource - RLS enforced)
+            # Fallback to analyses repository (shared resource - RLS enforced)
             # Since the user has access to documents with this content_hash, they should be able to access analyses
-            analysis_result = await user_client.database.select(
-                "contract_analyses",
-                columns="*",
-                filters={"content_hash": content_hash},
-                order_by="created_at DESC",
-                limit=1,
-            )
+            analyses_repo = AnalysesRepository(use_service_role=True)
+            analysis = await analyses_repo.get_analysis_by_content_hash(content_hash)
 
-            if analysis_result.get("data"):
-                analysis = analysis_result["data"][0]
+            if analysis:
                 status_message = {
                     "event_type": "status_update",
                     "timestamp": datetime.now(UTC).isoformat(),
                     "data": {
                         "contract_id": contract_id,
-                        "status": analysis["status"],
+                        "status": analysis.status,
                         "progress_percent": get_progress_from_status(
-                            analysis["status"]
+                            analysis.status
                         ),
-                        "last_updated": analysis["updated_at"],
+                        "last_updated": analysis.updated_at.isoformat() if analysis.updated_at else None,
                     },
                 }
             else:
@@ -1111,16 +1097,22 @@ async def handle_cancellation_request(
                 {"status": "cancelled", "error_message": "Analysis cancelled by user"},
             )
 
-        # Update analysis records via safe RPC that scopes to user's context
+        # Update analysis records using AnalysesRepository
         try:
-            await user_client.database.execute_rpc(
-                "cancel_user_contract_analysis",
-                {"p_content_hash": content_hash, "p_user_id": user_id},
-            )
-        except Exception:
-            # Fallback: don't mutate shared rows directly; rely on progress state
+            analyses_repo = AnalysesRepository(use_service_role=True)
+            analysis = await analyses_repo.get_analysis_by_content_hash(content_hash)
+            
+            if analysis:
+                await analyses_repo.update_analysis_status(
+                    analysis.id,
+                    status="cancelled",
+                    error_details={"cancelled_by_user": user_id}
+                )
+                logger.info(f"Cancelled analysis {analysis.id} for user {user_id}")
+        except Exception as e:
+            logger.warning(f"Failed to update analysis status during cancel: {e}")
             logger.info(
-                "Skip direct update to shared contract_analyses rows during cancel"
+                "Skip direct update to shared analyses rows during cancel"
             )
 
         # Try to cancel the Celery task if we can find it
@@ -1230,12 +1222,16 @@ async def _dispatch_analysis_task(
                 australian_state=document.get("australian_state", "NSW"),
             )
 
-        # Create analysis record using centralized service helper (handles RPC + fallback)
-        from app.services.contract_analysis_service import upsert_contract_analysis
-
-        analysis_id = await upsert_contract_analysis(
-            user_client, content_hash=content_hash, agent_version="1.0"
+        # Create analysis record using AnalysesRepository
+        analyses_repo = AnalysesRepository(use_service_role=True)
+        
+        analysis = await analyses_repo.upsert_analysis(
+            content_hash=content_hash,
+            agent_version="1.0",
+            status="pending",
+            result={}
         )
+        analysis_id = str(analysis.id)
         logger.info(f"Created new analysis record: {analysis_id}")
 
         # Import and dispatch the comprehensive analysis task

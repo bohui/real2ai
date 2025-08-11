@@ -24,7 +24,7 @@ class TestContractAnalysis:
                 return mock_documents_table
             elif table_name == "contracts":
                 return mock_contracts_table
-            elif table_name == "contract_analyses":
+            elif table_name == "analyses":
                 return mock_analyses_table
             return MagicMock()
         
@@ -135,7 +135,7 @@ class TestContractAnalysis:
                 return mock_documents_table
             elif table_name == "contracts":
                 return mock_contracts_table
-            elif table_name == "contract_analyses":
+            elif table_name == "analyses":
                 return mock_analyses_table
             return MagicMock()
         
@@ -183,7 +183,7 @@ class TestGetContractAnalysis:
         
         # Set up the return values for each table
         def get_table(table_name):
-            if table_name == "contract_analyses":
+            if table_name == "analyses":
                 return mock_analyses_table
             elif table_name == "contracts":
                 return mock_contracts_table

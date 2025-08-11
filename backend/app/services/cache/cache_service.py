@@ -11,6 +11,7 @@ from datetime import datetime
 from app.clients.supabase.client import SupabaseClient
 from app.core.auth_context import AuthContext
 from app.clients.factory import get_service_supabase_client
+from app.services.repositories.analyses_repository import AnalysesRepository
 
 logger = logging.getLogger(__name__)
 
@@ -78,33 +79,30 @@ class CacheService:
         self._ensure_initialized()
 
         try:
-            # Check contract_analyses table directly (RLS disabled for caching)
-            # This enables cross-user cache sharing
-            analysis_result = await self.db_client.database.select(
-                "contract_analyses",
-                columns="*",
-                filters={"content_hash": content_hash, "status": "completed"},
-                order_by="created_at DESC",
-                limit=1,
+            # Check analyses table using repository (enables cross-user cache sharing)
+            analyses_repo = AnalysesRepository(use_service_role=True)
+            analysis = await analyses_repo.get_analysis_by_content_hash(
+                content_hash, 
+                status="completed"
             )
 
-            if analysis_result.get("data"):
-                analysis = analysis_result["data"][0]
+            if analysis:
                 logger.info(
                     f"Cache hit for content_hash: {content_hash} (direct source)"
                 )
 
                 # Return the analysis result in the expected format
+                result_data = analysis.result or {}
                 return {
-                    "analysis_result": analysis.get("analysis_result", {}),
-                    "risk_score": analysis.get("risk_score"),
-                    "overall_risk_score": analysis.get("overall_risk_score"),
-                    "confidence_score": analysis.get("confidence_score"),
-                    "processing_time": analysis.get("processing_time"),
-                    "property_address": analysis.get("property_address"),
-                    "contract_type": analysis.get("contract_type"),
-                    "cached_from_user_id": analysis.get("user_id"),  # Track source user
-                    "cached_at": analysis.get("created_at"),
+                    "analysis_result": result_data,
+                    "risk_score": result_data.get("risk_assessment", {}).get("overall_risk_score"),
+                    "overall_risk_score": result_data.get("risk_assessment", {}).get("overall_risk_score"),
+                    "confidence_score": result_data.get("confidence_score"),
+                    "processing_time": None,  # Not stored in analyses table
+                    "property_address": result_data.get("property_address"),
+                    "contract_type": result_data.get("contract_type"),
+                    "cached_from_user_id": str(analysis.user_id) if analysis.user_id else None,
+                    "cached_at": analysis.created_at.isoformat() if analysis.created_at else None,
                 }
 
             logger.debug(f"No cache entry found for content_hash: {content_hash}")
@@ -136,7 +134,7 @@ class CacheService:
         self._ensure_initialized()
 
         try:
-            # No longer need to cache - analysis is already stored in contract_analyses table
+            # No longer need to cache - analysis is already stored in analyses table
             # Just log the cache operation for monitoring
             logger.info(
                 f"Contract analysis already stored in source table for hash: {content_hash}"
@@ -450,12 +448,9 @@ class CacheService:
         self._ensure_initialized()
 
         try:
-            # Get contract analysis stats from source table
-            contract_stats = await self.db_client.database.select(
-                "contract_analyses",
-                columns="COUNT(*) as total, AVG(processing_time) as avg_processing_time",
-                filters={"status": "completed"},
-            )
+            # Get analyses stats from repository
+            analyses_repo = AnalysesRepository(use_service_role=True)
+            analyses_stats = await analyses_repo.get_analysis_stats()
 
             # Get property data stats from source table
             property_stats = await self.db_client.database.select(
@@ -464,19 +459,9 @@ class CacheService:
             )
 
             return {
-                "contract_analyses": {
-                    "total": (
-                        contract_stats.get("data", [{}])[0].get("total", 0)
-                        if contract_stats.get("data")
-                        else 0
-                    ),
-                    "avg_processing_time": (
-                        contract_stats.get("data", [{}])[0].get(
-                            "avg_processing_time", 0
-                        )
-                        if contract_stats.get("data")
-                        else 0
-                    ),
+                "analyses": {
+                    "total": analyses_stats.get("total_analyses", 0),
+                    "avg_processing_time": 0,  # Not stored in analyses table
                 },
                 "property_data": {
                     "total": (
@@ -499,7 +484,7 @@ class CacheService:
         except Exception as e:
             logger.error(f"Error getting cache stats: {str(e)}")
             return {
-                "contract_analyses": {"total": 0, "avg_processing_time": 0},
+                "analyses": {"total": 0, "avg_processing_time": 0},
                 "property_data": {"total": 0, "avg_processing_time": 0},
                 "cache_type": "direct_source_access",
                 "architecture": "simplified_no_cache_tables",

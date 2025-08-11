@@ -103,7 +103,7 @@ class PerformanceOptimizationDeployer:
             logger.error(f"❌ SQL optimization file: FAILED - {str(e)}")
         
         # Check 3: Required tables exist
-        required_tables = ['contracts', 'contract_analyses', 'user_contract_views', 'documents']
+        required_tables = ['contracts', 'analyses', 'user_contract_views', 'documents']
         try:
             tables_exist = True
             for table in required_tables:
@@ -205,8 +205,8 @@ class PerformanceOptimizationDeployer:
                 # Query 3: contracts
                 await self.db_client.table("contracts").select("id, content_hash").limit(1).execute()
                 
-                # Query 4: contract_analyses
-                await self.db_client.table("contract_analyses").select("id, status").limit(1).execute()
+                # Query 4: analyses
+                await self.db_client.table("analyses").select("id, status").limit(1).execute()
                 
                 end_time = time.perf_counter()
                 times.append((end_time - start_time) * 1000)
@@ -225,7 +225,7 @@ class PerformanceOptimizationDeployer:
             start_time = time.perf_counter()
             
             try:
-                await self.db_client.table("contract_analyses").select("*").order("created_at", desc=True).limit(5).execute()
+                await self.db_client.table("analyses").select("*").order("created_at", desc=True).limit(5).execute()
                 end_time = time.perf_counter()
                 times.append((end_time - start_time) * 1000)
             except Exception as e:
@@ -310,8 +310,8 @@ class PerformanceOptimizationDeployer:
             "idx_user_contract_views_user_content",
             "idx_documents_user_content_hash",
             "idx_contracts_id_content_hash",
-            "idx_contract_analyses_content_status_created",
-            "idx_contract_analyses_content_updated"
+            "idx_analyses_content_status_created",
+            "idx_analyses_content_updated"
         ]
         
         try:
@@ -501,11 +501,11 @@ class PerformanceOptimizationDeployer:
                 "idx_user_contract_views_user_content",
                 "idx_documents_user_content_hash",
                 "idx_contracts_id_content_hash",
-                "idx_contract_analyses_content_status_created",
-                "idx_contract_analyses_content_updated",
+                "idx_analyses_content_status_created",
+                "idx_analyses_content_updated",
                 "idx_documents_user_status",
                 "idx_contracts_content_hash_unique",
-                "idx_contract_analyses_agent_status"
+                "idx_analyses_agent_status"
             ]
             
             for index_name in indexes_to_drop:

@@ -9,10 +9,10 @@ from typing import Dict, Any, List
 
 from supabase import create_client, Client
 from app.models.supabase_models import (
-    Profile, Document, Contract, ContractAnalysis,
+    Profile, Document, Contract, Analysis,
     DocumentPage, DocumentEntity, DocumentDiagram,
     SupabaseModelManager, AustralianState, UserType,
-    DocumentStatus, ContractType, AnalysisStatus
+    DocumentStatus, ContractType
 )
 
 # Initialize Supabase client
@@ -140,96 +140,101 @@ class TimestampExamples:
         
         return updated_document
     
-    async def create_contract_analysis_example(
-        self, contract_id: UUID, user_id: UUID
+    async def create_analysis_example(
+        self, content_hash: str, user_id: UUID
     ) -> Dict[str, Any]:
-        """Example: Creating contract analysis - timestamps managed automatically"""
+        """Example: Creating analysis - timestamps managed automatically"""
         
         analysis_data = {
             "id": uuid4(),
-            "contract_id": contract_id,
-            "user_id": user_id,
+            "content_hash": content_hash,
             "agent_version": "2.0",
-            "status": AnalysisStatus.PROCESSING.value,
-            "analysis_result": {},
-            "executive_summary": {
-                "overall_risk_score": 0.0,
-                "confidence_level": 0.0,
-                "key_findings": []
+            "status": "processing",
+            "result": {
+                "executive_summary": {
+                    "overall_risk_score": 0.0,
+                    "confidence_level": 0.0,
+                    "key_findings": []
+                },
+                "risk_assessment": {},
+                "compliance_check": {},
+                "recommendations": [],
+                "analysis_metadata": {
+                    "model_version": "gpt-4",
+                    "processing_priority": "standard"
+                }
             },
-            "risk_assessment": {},
-            "compliance_check": {},
-            "recommendations": [],
-            "analysis_metadata": {
-                "model_version": "gpt-4",
-                "processing_priority": "standard"
-            }
+            "user_id": user_id
         }
         
         created_analysis = await self.manager.create_record(
-            "contract_analyses", ContractAnalysis, **analysis_data
+            "analyses", Analysis, **analysis_data
         )
         
-        print(f"✅ Contract analysis created:")
+        print(f"✅ Analysis created:")
         print(f"   ID: {created_analysis['id']}")
         print(f"   Status: {created_analysis['status']}")
         print(f"   Created at: {created_analysis['created_at']}")
         
         return created_analysis
     
-    async def complete_contract_analysis_example(
+    async def complete_analysis_example(
         self, analysis_id: str
     ) -> Dict[str, Any]:
-        """Example: Completing contract analysis - updated_at handled automatically"""
+        """Example: Completing analysis - updated_at handled automatically"""
         
         completion_data = {
-            "status": AnalysisStatus.COMPLETED.value,
-            "analysis_result": {
+            "status": "completed",
+            "result": {
                 "contract_terms_extracted": 47,
                 "risk_factors_identified": 8,
-                "compliance_issues": 2
-            },
-            "executive_summary": {
+                "compliance_issues": 2,
+                "executive_summary": {
+                    "overall_risk_score": 6.5,
+                    "confidence_level": 0.89,
+                    "key_findings": [
+                        "Settlement period is 42 days",
+                        "No cooling-off period waiver",
+                        "Property sold as-is"
+                    ]
+                },
+                "risk_assessment": {
+                    "high_risk_factors": 2,
+                    "medium_risk_factors": 4,
+                    "low_risk_factors": 2
+                },
+                "compliance_check": {
+                    "nsw_compliance": True,
+                    "disclosure_requirements_met": True,
+                    "cooling_off_compliant": True
+                },
+                "recommendations": [
+                    {
+                        "priority": "high",
+                        "category": "legal",
+                        "recommendation": "Consider building and pest inspection",
+                        "action_required": True
+                    }
+                ],
                 "overall_risk_score": 6.5,
                 "confidence_level": 0.89,
-                "key_findings": [
-                    "Settlement period is 42 days",
-                    "No cooling-off period waiver",
-                    "Property sold as-is"
-                ]
+                "processing_time_seconds": 127.5,
+                "analysis_timestamp": datetime.utcnow().isoformat()
             },
-            "risk_assessment": {
-                "high_risk_factors": 2,
-                "medium_risk_factors": 4,
-                "low_risk_factors": 2
-            },
-            "compliance_check": {
-                "nsw_compliance": True,
-                "disclosure_requirements_met": True,
-                "cooling_off_compliant": True
-            },
-            "recommendations": [
-                {
-                    "priority": "high",
-                    "category": "legal",
-                    "recommendation": "Consider building and pest inspection",
-                    "action_required": True
-                }
-            ],
-            "overall_risk_score": 6.5,
-            "confidence_level": 0.89,
-            "processing_time_seconds": 127.5,
-            "analysis_timestamp": datetime.utcnow()
+            "completed_at": datetime.utcnow()
         }
         
         completed_analysis = await self.manager.update_record(
-            "contract_analyses", analysis_id, ContractAnalysis, **completion_data
+            "analyses", analysis_id, Analysis, **completion_data
         )
         
-        print(f"✅ Contract analysis completed:")
-        print(f"   Risk Score: {completed_analysis['overall_risk_score']}")
-        print(f"   Confidence: {completed_analysis['confidence_level']}")
-        print(f"   Processing Time: {completed_analysis['processing_time_seconds']}s")
+        result_data = completed_analysis.get('result', {})
+        executive_summary = result_data.get('executive_summary', {})
+        
+        print(f"✅ Analysis completed:")
+        print(f"   Risk Score: {executive_summary.get('overall_risk_score', 0)}")
+        print(f"   Confidence: {executive_summary.get('confidence_level', 0)}")
+        print(f"   Processing Time: {result_data.get('processing_time_seconds', 0)}s")
         print(f"   Updated at: {completed_analysis['updated_at']}")  # Auto-updated by trigger
         
         return completed_analysis

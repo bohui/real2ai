@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from contextlib import asynccontextmanager
 
 from typing import TYPE_CHECKING
+from app.services.repositories.analyses_repository import AnalysesRepository
 
 # Avoid importing heavy client modules at runtime to prevent circular imports
 # and optional dependency issues. Only import for type checking.
@@ -138,7 +139,7 @@ class DatabaseOptimizer:
         1. user_contract_views access check
         2. documents access check
         3. contracts existence check
-        4. contract_analyses status check
+        4. analyses status check
 
         With a single optimized database function call that uses JOINs and indexes.
 
@@ -312,19 +313,20 @@ class DatabaseOptimizer:
                         access_source="access_denied",
                     )
 
-                # Query 4: contract_analyses
-                result = (
-                    db_client.table("contract_analyses")
-                    .select(
-                        "id, status, created_at, updated_at, processing_time, error_message, analysis_metadata"
-                    )
-                    .eq("content_hash", content_hash)
-                    .order("created_at", desc=True)
-                    .limit(1)
-                    .execute()
-                )
-
-                analysis_data = result.data[0] if result.data else {}
+                # Query 4: analyses using repository
+                analyses_repo = AnalysesRepository(use_service_role=True)
+                analysis = await analyses_repo.get_analysis_by_content_hash(content_hash)
+                
+                analysis_data = {}
+                if analysis:
+                    analysis_data = {
+                        "id": str(analysis.id),
+                        "status": analysis.status,
+                        "created_at": analysis.created_at.isoformat() if analysis.created_at else None,
+                        "updated_at": analysis.updated_at.isoformat() if analysis.updated_at else None,
+                        "error_message": analysis.error_details.get("error_message") if analysis.error_details else None,
+                        "analysis_metadata": analysis.result,
+                    }
 
                 set_metrics(len(user_content_hashes), False)
 

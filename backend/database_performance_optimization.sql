@@ -36,16 +36,16 @@ WHERE content_hash IS NOT NULL;
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_contracts_id_content_hash
 ON contracts(id, content_hash);
 
--- Index 4: contract_analyses - Analysis lookup by content hash with status
+-- Index 4: analyses - Analysis lookup by content hash with status
 -- Critical for analysis status checks with ordering
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_contract_analyses_content_status_created
-ON contract_analyses(content_hash, status, created_at DESC)
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_analyses_content_status_created
+ON analyses(content_hash, status, created_at DESC)
 WHERE status IN ('pending', 'processing', 'completed');
 
--- Index 5: contract_analyses - Content hash with updated timestamp
+-- Index 5: analyses - Content hash with updated timestamp
 -- Optimizes the ORDER BY created_at DESC pattern
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_contract_analyses_content_updated
-ON contract_analyses(content_hash, updated_at DESC);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_analyses_content_updated
+ON analyses(content_hash, updated_at DESC);
 
 -- =============================================================================
 -- ADDITIONAL PERFORMANCE INDEXES
@@ -62,9 +62,9 @@ WHERE processing_status IN ('uploaded', 'processing', 'completed', 'failed');
 CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS idx_contracts_content_hash_unique
 ON contracts(content_hash);
 
--- Index 8: contract_analyses - Agent version with status for cache queries
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_contract_analyses_agent_status
-ON contract_analyses(agent_version, status, content_hash);
+-- Index 8: analyses - Agent version with status for cache queries
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_analyses_agent_status
+ON analyses(agent_version, status, content_hash);
 
 -- =============================================================================
 -- OPTIMIZED QUERY FUNCTIONS
@@ -125,10 +125,10 @@ BEGIN
         ca.analysis_metadata
     FROM contract_info ci
     LEFT JOIN user_content_hashes uch ON ci.content_hash = uch.content_hash
-    LEFT JOIN contract_analyses ca ON ci.content_hash = ca.content_hash
+    LEFT JOIN analyses ca ON ci.content_hash = ca.content_hash
         AND ca.created_at = (
             SELECT MAX(created_at) 
-            FROM contract_analyses ca2 
+            FROM analyses ca2 
             WHERE ca2.content_hash = ci.content_hash
         )
     LIMIT 1;
@@ -188,7 +188,7 @@ SELECT
 FROM pg_stat_statements 
 WHERE query ILIKE '%contract%' 
    OR query ILIKE '%user_contract_views%'
-   OR query ILIKE '%contract_analyses%'
+   OR query ILIKE '%analyses%'
 ORDER BY mean_exec_time DESC;
 
 -- View 2: Index usage statistics
@@ -205,7 +205,7 @@ SELECT
         ELSE 0
     END AS avg_tuples_per_scan
 FROM pg_stat_user_indexes
-WHERE tablename IN ('contracts', 'contract_analyses', 'user_contract_views', 'documents')
+WHERE tablename IN ('contracts', 'analyses', 'user_contract_views', 'documents')
 ORDER BY idx_scan DESC;
 
 -- View 3: Table performance metrics
@@ -226,7 +226,7 @@ SELECT
         ELSE 0
     END AS index_usage_percent
 FROM pg_stat_user_tables
-WHERE tablename IN ('contracts', 'contract_analyses', 'user_contract_views', 'documents')
+WHERE tablename IN ('contracts', 'analyses', 'user_contract_views', 'documents')
 ORDER BY seq_scan DESC;
 
 -- =============================================================================
@@ -242,7 +242,7 @@ BEGIN
     
     -- Reset table and index statistics
     SELECT pg_stat_reset_single_table_counters('contracts'::regclass);
-    SELECT pg_stat_reset_single_table_counters('contract_analyses'::regclass);
+    SELECT pg_stat_reset_single_table_counters('analyses'::regclass);
     SELECT pg_stat_reset_single_table_counters('user_contract_views'::regclass);
     SELECT pg_stat_reset_single_table_counters('documents'::regclass);
     
@@ -324,7 +324,7 @@ RETURNS TEXT LANGUAGE plpgsql AS $$
 BEGIN
     -- Update table statistics for better query planning
     ANALYZE contracts;
-    ANALYZE contract_analyses;
+    ANALYZE analyses;
     ANALYZE user_contract_views;
     ANALYZE documents;
     
@@ -347,7 +347,7 @@ BEGIN
     WHERE indexname LIKE 'idx_user_contract_views_%'
        OR indexname LIKE 'idx_documents_%'
        OR indexname LIKE 'idx_contracts_%'
-       OR indexname LIKE 'idx_contract_analyses_%';
+       OR indexname LIKE 'idx_analyses_%';
     
     IF index_count >= expected_count THEN
         RAISE NOTICE '✅ SUCCESS: % performance indexes created successfully', index_count;

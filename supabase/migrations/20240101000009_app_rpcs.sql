@@ -58,7 +58,7 @@ AS $$
   SELECT jsonb_build_object(
     'total_documents', (SELECT COUNT(*) FROM public.documents),
     'total_contracts', (SELECT COUNT(*) FROM public.contracts),
-    'total_analyses', (SELECT COUNT(*) FROM public.contract_analyses)
+    'total_analyses', (SELECT COUNT(*) FROM public.analyses)
   );
 $$;
 
@@ -73,7 +73,7 @@ AS $$
   SELECT jsonb_build_object(
     'generated_at', NOW(),
     'documents', (SELECT COUNT(*) FROM public.documents),
-    'analyses', (SELECT COUNT(*) FROM public.contract_analyses)
+    'analyses', (SELECT COUNT(*) FROM public.analyses)
   );
 $$;
 
@@ -127,8 +127,14 @@ BEGIN
     p_content_hash, 'analysis_complete'
   ) RETURNING id INTO v_doc_id;
 
-  -- Upsert analysis row and capture id
-  v_analysis_id := public.upsert_contract_analysis(p_content_hash);
+  -- Get existing analysis or create a placeholder
+  SELECT id INTO v_analysis_id FROM public.analyses WHERE content_hash = p_content_hash LIMIT 1;
+  
+  IF v_analysis_id IS NULL THEN
+    INSERT INTO public.analyses (content_hash, agent_version, status)
+    VALUES (p_content_hash, '1.0', 'pending')
+    RETURNING id INTO v_analysis_id;
+  END IF;
 
   -- Record a user view for history
   INSERT INTO public.user_contract_views (user_id, content_hash, property_address, analysis_id)
@@ -213,9 +219,9 @@ AS $$
     SELECT v.content_hash FROM public.user_contract_views v WHERE v.user_id = p_user_id
   ),
   latest_analysis AS (
-    SELECT ca.* FROM public.contract_analyses ca
-    JOIN contract_row cr ON cr.content_hash = ca.content_hash
-    ORDER BY ca.created_at DESC
+    SELECT a.* FROM public.analyses a
+    JOIN contract_row cr ON cr.content_hash = a.content_hash
+    ORDER BY a.created_at DESC
     LIMIT 1
   )
   SELECT 
@@ -227,9 +233,9 @@ AS $$
     la.status::text AS analysis_status,
     la.created_at AS analysis_created_at,
     la.updated_at AS analysis_updated_at,
-    la.processing_time AS processing_time,
-    la.error_message,
-    la.analysis_metadata
+    NULL::DECIMAL AS processing_time,
+    (la.error_details->>'message') AS error_message,
+    la.error_details AS analysis_metadata
   FROM contract_row cr
   LEFT JOIN latest_analysis la ON TRUE;
 $$;
@@ -271,9 +277,9 @@ AS $$
          ca.updated_at AS analysis_updated_at
   FROM contracts_for_user c
   LEFT JOIN LATERAL (
-    SELECT * FROM public.contract_analyses ca
-    WHERE ca.content_hash = c.content_hash
-    ORDER BY ca.created_at DESC
+    SELECT * FROM public.analyses a
+    WHERE a.content_hash = c.content_hash
+    ORDER BY a.created_at DESC
     LIMIT 1
   ) ca ON TRUE;
 $$;

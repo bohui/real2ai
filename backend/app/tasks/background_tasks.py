@@ -27,6 +27,7 @@ from app.services.communication.websocket_service import WebSocketEvents
 from app.services.communication.websocket_singleton import websocket_manager
 from app.services.communication.redis_pubsub import publish_progress_sync
 from app.core.task_recovery import CheckpointData
+from app.repositories.analyses_repository import AnalysesRepository
 
 logger = logging.getLogger(__name__)
 
@@ -456,23 +457,15 @@ async def comprehensive_document_analysis(
 
             # (Already updated results_caching above with coarse milestone)
 
-            # Save analysis results using service role client for shared table access
-            service_client = await get_service_supabase_client()
-
-            analysis_update = {
-                "status": "completed",
-                "analysis_result": analysis_result,  # Use service response analysis_results
-                "risk_score": analysis_result.get("risk_assessment", {}).get(
-                    "overall_risk_score", 0.0
-                ),
-                "processing_time": getattr(analysis_response, "processing_time", 0)
-                or 0,
-                "processing_completed_at": datetime.now(timezone.utc).isoformat(),
-            }
-
-            # Persist results using service role client (shared table write)
-            await service_client.database.update(
-                "contract_analyses", analysis_id, analysis_update
+            # Save analysis results using AnalysesRepository
+            analyses_repo = AnalysesRepository(use_service_role=True)
+            
+            # Update analysis with results
+            await analyses_repo.update_analysis_status(
+                analysis_id,
+                status="completed",
+                result=analysis_result,
+                completed_at=datetime.now(timezone.utc)
             )
 
             # Step 9: Complete (95-100%)
@@ -556,16 +549,13 @@ async def comprehensive_document_analysis(
                     error_message=str(e),
                 )
 
-            # Update analysis record with error
-            service_client = await get_service_supabase_client()
-            await service_client.database.update(
-                "contract_analyses",
+            # Update analysis record with error using AnalysesRepository
+            analyses_repo = AnalysesRepository(use_service_role=True)
+            await analyses_repo.update_analysis_status(
                 analysis_id,
-                {
-                    "status": "failed",
-                    "error_message": str(e),
-                    "processing_completed_at": datetime.now(timezone.utc).isoformat(),
-                },
+                status="failed",
+                error_details={"error_message": str(e)},
+                completed_at=datetime.now(timezone.utc)
             )
         except Exception as update_error:
             logger.error(f"Failed to update error status: {str(update_error)}")

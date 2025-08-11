@@ -72,8 +72,8 @@ async def get_cache_stats(
         stats = await cache_service.get_cache_stats()
 
         # Map service keys to frontend-expected structure
-        contracts_total = stats.get("contract_analyses", {}).get("total", 0)
-        contracts_avg = stats.get("contract_analyses", {}).get("avg_processing_time", 0)
+        contracts_total = stats.get("analyses", {}).get("total", 0)
+        contracts_avg = stats.get("analyses", {}).get("avg_processing_time", 0)
         properties_total = stats.get("property_data", {}).get("total", 0)
         properties_avg = stats.get("property_data", {}).get("avg_processing_time", 0)
 
@@ -129,9 +129,9 @@ async def get_cache_health(
         # Compute real-time stats (validates DB path)
         stats = await cache_service.get_cache_stats()
 
-        contracts_total = stats.get("contract_analyses", {}).get("total", 0)
+        contracts_total = stats.get("analyses", {}).get("total", 0)
         properties_total = stats.get("property_data", {}).get("total", 0)
-        contracts_avg = stats.get("contract_analyses", {}).get("avg_processing_time", 0)
+        contracts_avg = stats.get("analyses", {}).get("avg_processing_time", 0)
         properties_avg = stats.get("property_data", {}).get("avg_processing_time", 0)
 
         # Basic consistency signals

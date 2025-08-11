@@ -44,7 +44,7 @@ DEFAULT_TABLE_ORDER: List[str] = [
     "user_property_views", 
     "analysis_progress",
     # Contract analysis data that depends on contracts/content_hash
-    "contract_analyses",
+    "analyses",
     # User-scoped document processing tables (depend on documents)
     "user_document_paragraphs",
     "user_document_diagrams", 

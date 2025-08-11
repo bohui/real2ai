@@ -16,6 +16,7 @@ from app.clients.factory import get_service_supabase_client
 from app.core.task_recovery import TaskState, RecoveryMethod, RecoverableTask
 from app.core.celery import celery_app
 from app.tasks import background_tasks
+from app.services.repositories.analyses_repository import AnalysesRepository
 
 logger = logging.getLogger(__name__)
 
@@ -362,15 +363,22 @@ class ValidationOnlyStrategy(RecoveryStrategy):
                 content_hash = analysis_options.get("content_hash")
 
                 if content_hash:
-                    analysis_result = await client.database.read(
-                        "contract_analyses",
-                        filters={"content_hash": content_hash, "status": "completed"},
+                    # Check if analysis completed using AnalysesRepository
+                    analyses_repo = AnalysesRepository(use_service_role=True)
+                    analysis = await analyses_repo.get_analysis_by_content_hash(
+                        content_hash, status="completed"
                     )
 
-                    if analysis_result:
+                    if analysis:
                         return {
                             "is_complete": True,
-                            "result_data": analysis_result[0],
+                            "result_data": {
+                                "id": str(analysis.id),
+                                "content_hash": analysis.content_hash,
+                                "status": analysis.status,
+                                "result": analysis.result,
+                                "created_at": analysis.created_at.isoformat() if analysis.created_at else None,
+                            },
                             "estimated_time_saved": 1800,  # 30 minutes
                         }
 

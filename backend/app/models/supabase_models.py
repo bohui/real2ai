@@ -141,11 +141,6 @@ class EntityType(str, Enum):
     PROPERTY_DETAILS = "property_details"
 
 
-class AnalysisStatus(str, Enum):
-    PENDING = "pending"
-    PROCESSING = "processing"
-    COMPLETED = "completed"
-    FAILED = "failed"
 
 
 # Base Model with Automatic Timestamps
@@ -256,44 +251,20 @@ class Contract(TimestampedBaseModel):
     property_address: Optional[str] = None
 
 
-class ContractAnalysis(TimestampedBaseModel):
-    """Contract analyses table for AI analysis results (shared resource using content_hash)"""
+class Analysis(TimestampedBaseModel):
+    """Analysis table for tracking analysis operations with flexible scoping"""
 
     id: UUID = Field(..., description="Analysis UUID")
     content_hash: str = Field(
         ..., description="SHA-256 hash of document content for caching"
     )
-    agent_version: str = "1.0"
-    status: AnalysisStatus = AnalysisStatus.PENDING
-
-    # Analysis results structure
-    analysis_result: Dict[str, Any] = Field(default_factory=dict)
-    executive_summary: Dict[str, Any] = Field(default_factory=dict)
-    risk_assessment: Dict[str, Any] = Field(default_factory=dict)
-    compliance_check: Dict[str, Any] = Field(default_factory=dict)
-    recommendations: List[Dict[str, Any]] = Field(default_factory=list)
-
-    # Metrics (using Decimal to match DB DECIMAL types)
-    risk_score: Decimal = Field(
-        default=Decimal("0.0"), ge=Decimal("0.0"), le=Decimal("10.0")
-    )
-    overall_risk_score: Decimal = Field(
-        default=Decimal("0.0"), ge=Decimal("0.0"), le=Decimal("10.0")
-    )
-    confidence_score: Decimal = Field(
-        default=Decimal("0.0"), ge=Decimal("0.0"), le=Decimal("1.0")
-    )
-    confidence_level: Decimal = Field(
-        default=Decimal("0.0"), ge=Decimal("0.0"), le=Decimal("1.0")
-    )
-    processing_time: Decimal = Field(default=Decimal("0.0"), ge=Decimal("0.0"))
-    processing_time_seconds: Decimal = Field(default=Decimal("0.0"), ge=Decimal("0.0"))
-
-    # Metadata
-    analysis_metadata: Dict[str, Any] = Field(default_factory=dict)
-    error_details: Optional[Dict[str, Any]] = None
-    error_message: Optional[str] = None
-    analysis_timestamp: Optional[datetime] = None
+    agent_version: str = Field(default="1.0", max_length=50)
+    status: str = Field(default="pending", max_length=20)
+    result: Optional[Dict[str, Any]] = Field(None, description="Analysis result in JSON format")
+    error_details: Optional[Dict[str, Any]] = Field(None, description="Error details if analysis failed")
+    started_at: Optional[datetime] = Field(None, description="Analysis start time")
+    completed_at: Optional[datetime] = Field(None, description="Analysis completion time")
+    user_id: Optional[UUID] = Field(None, description="User who initiated analysis, null for shared analyses")
 
 
 # Artifact Models (Content-Addressed Cache System)
@@ -760,11 +731,10 @@ class AnalysisProgressDetailed(BaseModel):
     status: str
     error_message: Optional[str] = None
 
-    # From contract_analyses
-    analysis_status: AnalysisStatus
+    # From analyses
+    analysis_status: str
     agent_version: str
-    overall_risk_score: float
-    confidence_score: float
+    result: Optional[Dict[str, Any]] = None
 
     # From contracts
     contract_type: ContractType
@@ -868,13 +838,11 @@ class UserContractHistory(BaseModel):
     source: ViewSource
     created_at: Optional[datetime] = None
 
-    # From contract_analyses
-    analysis_result: Optional[Dict[str, Any]] = None
-    risk_score: Optional[float] = None
-    overall_risk_score: Optional[float] = None
-    confidence_score: Optional[float] = None
-    analysis_status: Optional[AnalysisStatus] = None
-    analysis_timestamp: Optional[datetime] = None
+    # From analyses
+    result: Optional[Dict[str, Any]] = None
+    analysis_status: Optional[str] = None
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
 
     # From documents
     original_filename: Optional[str] = None

@@ -10,6 +10,7 @@ import {
   WebSocketService,
   wsConnectionManager,
 } from "@/services/api";
+import { logger } from "@/utils/logger";
 
 // Normalize backend step keys to match frontend UI step keys
 const normalizeStepKey = (step: string): string => {
@@ -107,7 +108,7 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
   recentAnalyses: [],
 
   uploadDocument: async (file: File, contractType: string, state: string) => {
-    console.log("🚀 Starting upload process...", {
+    logger.upload("Starting upload process", {
       filename: file.name,
       contractType,
       state,
@@ -122,7 +123,7 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
     try {
       // Listen for upload progress
       const handleProgress = (event: any) => {
-        console.log("📊 Upload progress:", event.detail.progress);
+        logger.upload("Upload progress", { progress: event.detail.progress });
         set({ uploadProgress: event.detail.progress });
       };
       window.addEventListener(
@@ -130,18 +131,18 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
         handleProgress as EventListener,
       );
 
-      console.log("📤 Uploading document...");
+      logger.upload("Uploading document");
       const response = await apiService.uploadDocument(
         file,
         contractType,
         state,
       );
-      console.log("✅ Upload API response:", response);
+      logger.upload("Upload API response received", { documentId: response.document_id });
 
       // Get document details
-      console.log("📄 Fetching document details...");
+      logger.debug("Fetching document details");
       const document = await apiService.getDocument(response.document_id);
-      console.log("✅ Document details fetched:", document);
+      logger.debug("Document details fetched", { documentId: document.id });
 
       set({
         currentDocument: document,
@@ -155,9 +156,8 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
       );
 
       // 🎆 KEY CHANGE: Connect WebSocket IMMEDIATELY after upload
-      console.log("🔌 Connecting WebSocket immediately after upload...");
-      console.log("📋 Document ID for WebSocket:", response.document_id);
-      console.log("🔍 Current store state before WebSocket connection:", {
+      logger.websocket("Connecting WebSocket immediately after upload", {
+        documentId: response.document_id,
         currentDocumentId: get().currentDocumentId,
         wsService: get().wsService ? "exists" : "null",
         isConnected: get().wsService?.isWebSocketConnected() || false,
@@ -165,8 +165,7 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
 
       try {
         await get().connectDocumentWebSocket(response.document_id);
-        console.log("✅ WebSocket connected successfully after upload");
-        console.log("🔍 Store state after WebSocket connection:", {
+        logger.websocket("WebSocket connected successfully after upload", {
           currentDocumentId: get().currentDocumentId,
           wsService: get().wsService ? "exists" : "null",
           isConnected: get().wsService?.isWebSocketConnected() || false,
@@ -211,7 +210,7 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
     contractType: string,
     state: string,
   ) => {
-    console.log("🏠 Preparing contract and WebSocket connection...", {
+    logger.info("Preparing contract and WebSocket connection", {
       documentId,
       contractType,
       state,
@@ -219,22 +218,20 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
 
     try {
       // Call the prepare contract endpoint to get contract_id
-      console.log("📄 Creating contract record...");
+      logger.debug("Creating contract record");
       const response = await apiService.prepareContract({
         document_id: documentId,
         contract_type: contractType,
         australian_state: state,
       });
 
-      console.log("✅ Contract prepared successfully:", response);
+      logger.info("Contract prepared successfully", { contractId: response.contract_id });
 
       // Connect WebSocket immediately with the contract_id
-      console.log("🔌 Connecting WebSocket for real-time updates...");
+      logger.websocket("Connecting WebSocket for real-time updates");
       await get().connectWebSocket(response.contract_id);
 
-      console.log(
-        `✅ Contract prepared and WebSocket connected for contract ${response.contract_id}`,
-      );
+      logger.info("Contract prepared and WebSocket connected", { contractId: response.contract_id });
       return response.contract_id;
     } catch (error: unknown) {
       console.error(
@@ -253,10 +250,8 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
   connectDocumentWebSocket: async (documentId: string) => {
     const state = get();
 
-    console.log(
-      `🔌 Attempting to connect WebSocket for document: ${documentId}`,
-    );
-    console.log("🔍 Initial state check:", {
+    logger.websocket(`Attempting to connect WebSocket for document`, {
+      documentId,
       currentDocumentId: state.currentDocumentId,
       wsService: state.wsService ? "exists" : "null",
       isConnected: state.wsService?.isWebSocketConnected() || false,
@@ -265,7 +260,7 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
     // Validate document ID
     if (!documentId || documentId.trim() === "") {
       const error = "Document ID is required for WebSocket connection";
-      console.error(`❌ ${error}`);
+      logger.error(error);
       throw new Error(error);
     }
 
@@ -274,12 +269,12 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
       state.currentDocumentId === documentId &&
       state.wsService?.isWebSocketConnected()
     ) {
-      console.log(`✅ Already connected to document ${documentId}`);
+      logger.websocket(`Already connected to document`, { documentId });
       return;
     }
 
     // Disconnect existing connection
-    console.log("🧽 Disconnecting any existing WebSocket connection...");
+    logger.websocket("Disconnecting any existing WebSocket connection (connectDocumentWebSocket)");
     get().disconnectWebSocket();
 
     // Use connection manager to prevent duplicate connections

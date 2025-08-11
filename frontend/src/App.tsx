@@ -5,6 +5,7 @@ import {
   Route,
   Navigate,
 } from "react-router-dom";
+import { logger } from "@/utils/logger";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 
@@ -165,7 +166,7 @@ const App: React.FC = () => {
         primary_contract_types: preferences.primaryContractTypes,
       });
 
-      console.log("Onboarding completed:", result.message);
+      logger.info("Onboarding completed", { message: result.message });
       setShowOnboarding(false);
 
       // Update the user's onboarding status in the auth store to keep it in sync with backend
@@ -178,7 +179,7 @@ const App: React.FC = () => {
 
       // If user was already onboarded, don't show again
       if (result.skip_onboarding) {
-        console.log("User already completed onboarding");
+        logger.debug("User already completed onboarding");
       }
     } catch (error) {
       console.error("Failed to complete onboarding:", error);
@@ -199,7 +200,7 @@ const App: React.FC = () => {
 
       const result = await apiService.completeOnboarding(defaultPreferences);
 
-      console.log("Onboarding skipped:", result.message);
+      logger.info("Onboarding skipped", { message: result.message });
       setShowOnboarding(false);
 
       // Update the user's onboarding status in the auth store to keep it in sync with backend

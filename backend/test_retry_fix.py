@@ -32,7 +32,7 @@ async def test_retry_mechanism():
         
         # Insert a completed analysis with all fields populated
         await conn.execute("""
-            INSERT INTO contract_analyses (
+            INSERT INTO analyses (
                 id, content_hash, status, analysis_result, 
                 executive_summary, risk_assessment, compliance_check,
                 recommendations, risk_score, overall_risk_score,
@@ -71,7 +71,7 @@ async def test_retry_mechanism():
             SELECT status, analysis_result, executive_summary, risk_assessment,
                    compliance_check, recommendations, risk_score, overall_risk_score,
                    processing_time, processing_completed_at
-            FROM contract_analyses 
+            FROM analyses 
             WHERE content_hash = $1
         """, test_hash)
         
@@ -98,7 +98,7 @@ async def test_retry_mechanism():
         
         # Update to failed status
         await conn.execute("""
-            UPDATE contract_analyses 
+            UPDATE analyses 
             SET status = 'failed', error_message = 'Test failure'
             WHERE content_hash = $1
         """, test_hash)
@@ -116,7 +116,7 @@ async def test_retry_mechanism():
             SELECT status, analysis_result, executive_summary, risk_assessment,
                    compliance_check, recommendations, risk_score, overall_risk_score,
                    processing_time, processing_completed_at, error_message
-            FROM contract_analyses 
+            FROM analyses 
             WHERE content_hash = $1
         """, test_hash)
         
@@ -146,7 +146,7 @@ async def test_retry_mechanism():
                 test2_passed = False
         
         # Cleanup test data
-        await conn.execute("DELETE FROM contract_analyses WHERE content_hash = $1", test_hash)
+        await conn.execute("DELETE FROM analyses WHERE content_hash = $1", test_hash)
         print("🧹 Cleaned up test data")
         
         all_passed = test1_passed and test2_passed

@@ -67,7 +67,7 @@ class PerformanceTester:
                 await self.db_client.table("user_contract_views").select("content_hash").limit(10).execute()
                 await self.db_client.table("documents").select("content_hash").limit(10).execute()
                 await self.db_client.table("contracts").select("id, content_hash").limit(10).execute()
-                await self.db_client.table("contract_analyses").select("id, status").limit(10).execute()
+                await self.db_client.table("analyses").select("id, status").limit(10).execute()
                 
                 end_time = time.perf_counter()
                 results["user_access_validation"].append((end_time - start_time) * 1000)
@@ -87,7 +87,7 @@ class PerformanceTester:
             # Test 3: Analysis status lookup
             start_time = time.perf_counter()
             try:
-                await self.db_client.table("contract_analyses").select("*").order("created_at", desc=True).limit(5).execute()
+                await self.db_client.table("analyses").select("*").order("created_at", desc=True).limit(5).execute()
                 end_time = time.perf_counter()
                 results["analysis_status"].append((end_time - start_time) * 1000)
             except Exception as e:

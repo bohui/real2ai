@@ -535,26 +535,29 @@ class DatabaseSeeder:
                 analysis_data = sample_analyses[i % len(sample_analyses)]
 
                 analysis_id = str(uuid.uuid4())
+                # Combine all analysis data into a single result JSON
+                result_data = {
+                    "executive_summary": analysis_data["executive_summary"],
+                    "risk_assessment": analysis_data["risk_assessment"],
+                    "compliance_check": analysis_data["compliance_check"],
+                    "recommendations": analysis_data.get("recommendations", []),
+                    "overall_risk_score": analysis_data["executive_summary"]["overall_risk_score"],
+                    "confidence_level": analysis_data["executive_summary"]["confidence_level"]
+                }
+                
                 await conn.execute(
                     """
-                    INSERT INTO contract_analyses (
-                        id, content_hash, agent_version, status, 
-                        executive_summary, risk_assessment, compliance_check, recommendations,
-                        overall_risk_score, confidence_level, processing_time_seconds
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-                    ON CONFLICT (content_hash) DO NOTHING
+                    INSERT INTO analyses (
+                        id, content_hash, agent_version, status, result, completed_at
+                    ) VALUES ($1, $2, $3, $4, $5, $6)
+                    ON CONFLICT (content_hash, agent_version) DO NOTHING
                 """,
                     analysis_id,
                     contract["content_hash"],
                     "1.0",
                     "completed",
-                    json.dumps(analysis_data["executive_summary"]),
-                    json.dumps(analysis_data["risk_assessment"]),
-                    json.dumps(analysis_data["compliance_check"]),
-                    json.dumps(analysis_data.get("recommendations", [])),
-                    analysis_data["executive_summary"]["overall_risk_score"],
-                    analysis_data["executive_summary"]["confidence_level"],
-                    15.7,  # Sample processing time
+                    json.dumps(result_data),
+                    datetime.now()
                 )
 
                 logger.info(

@@ -36,5 +36,5 @@ CREATE INDEX idx_user_contract_views_content_hash ON user_contract_views(content
 COMMENT ON TABLE user_property_views IS 'User''s property search history with RLS for privacy';
 COMMENT ON TABLE user_contract_views IS 'User''s contract analysis history with RLS for privacy';
 COMMENT ON TABLE contracts IS 'Contract metadata - shared resource, RLS disabled, accessed by content_hash';
-COMMENT ON TABLE contract_analyses IS 'Contract analysis results - shared resource, RLS disabled, accessed by content_hash';
+COMMENT ON TABLE analyses IS 'Analysis results - flexible scoping, RLS enabled, accessed by content_hash and user_id';
 

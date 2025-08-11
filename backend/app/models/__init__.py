@@ -11,7 +11,7 @@ from .supabase_models import (
     Profile,
     Document, 
     Contract,
-    ContractAnalysis,
+    Analysis,
     
     # Artifact Models
     TextExtractionArtifact,
@@ -67,7 +67,6 @@ from .supabase_models import (
     ContentType,
     DiagramType,
     EntityType,
-    AnalysisStatus,
     
     # Base Classes and Helpers
     TimestampedBaseModel,
@@ -84,7 +83,7 @@ __all__ = [
     "Profile",
     "Document",
     "Contract", 
-    "ContractAnalysis",
+    "Analysis",
     
     # Artifact Models
     "TextExtractionArtifact",
@@ -141,7 +140,6 @@ __all__ = [
     "ContentType",
     "DiagramType", 
     "EntityType",
-    "AnalysisStatus",
     
     # Base Classes and Helpers
     "TimestampedBaseModel",
