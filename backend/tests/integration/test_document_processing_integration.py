@@ -20,11 +20,11 @@ from pathlib import Path
 from app.services.document_service import DocumentService
 from app.services.ai.gemini_ocr_service import GeminiOCRService
 from app.services.ai.semantic_analysis_service import SemanticAnalysisService
-from app.models.supabase_models import Document, DocumentPage, DocumentEntity
+from app.models.supabase_models import Document
 from app.schema.enums import ProcessingStatus
 from app.prompts.schema.entity_extraction_schema import AustralianState, ContractType
 from app.clients.supabase.client import SupabaseClient
-from app.core.auth_context import AuthContext, User
+from app.core.auth_context import AuthContext
 
 
 @pytest.fixture
