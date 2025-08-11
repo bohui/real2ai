@@ -17,6 +17,7 @@ celery_app = Celery(
     include=[
         "app.tasks.ocr_tasks",
         "app.tasks.background_tasks",
+        "app.tasks.user_aware_tasks",
         "app.tasks.cleanup_tasks",
     ],
 )

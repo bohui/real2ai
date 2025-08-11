@@ -30,6 +30,15 @@ class Settings(BaseSettings):
     supabase_anon_key: str
     supabase_service_key: str
     database_url: Optional[str] = None
+    
+    # Repository and Connection Pool Settings
+    db_use_repositories: bool = True
+    db_pool_mode: str = "shared"  # "shared" or "per_user"
+    db_user_pool_min_size: int = 1
+    db_user_pool_max_size: int = 4
+    db_max_active_user_pools: int = 50
+    db_user_pool_idle_ttl_seconds: int = 300
+    db_pool_eviction_policy: str = "LRU"
 
     # AI Services
     openai_api_key: str

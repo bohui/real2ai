@@ -34,6 +34,8 @@ from app.services.communication.websocket_service import (
     WebSocketEvents,
 )
 from app.clients.supabase.client import SupabaseClient
+from app.services.repositories import ContractsRepository, AnalysesRepository
+from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -745,7 +747,7 @@ class ContractAnalysisService:
                     28,
                     "Processing document and extracting text content",
                 )
-                return await super().process_document(state)
+                return super().process_document(state)
 
             async def extract_contract_terms(self, state):
                 if self._should_skip("extract_terms"):
@@ -762,7 +764,7 @@ class ContractAnalysisService:
                     42,
                     "Extracting key contract terms using Australian tools",
                 )
-                return await super().extract_contract_terms(state)
+                return super().extract_contract_terms(state)
 
             async def analyze_australian_compliance(self, state):
                 if self._should_skip("analyze_compliance"):
@@ -779,7 +781,7 @@ class ContractAnalysisService:
                     57,
                     "Analyzing compliance with Australian property laws",
                 )
-                return await super().analyze_australian_compliance(state)
+                return super().analyze_australian_compliance(state)
 
             async def assess_contract_risks(self, state):
                 if self._should_skip("assess_risks"):
@@ -794,7 +796,7 @@ class ContractAnalysisService:
                 self._schedule_persist(
                     "assess_risks", 71, "Assessing contract risks and potential issues"
                 )
-                return await super().assess_contract_risks(state)
+                return super().assess_contract_risks(state)
 
             async def generate_recommendations(self, state):
                 if self._should_skip("generate_recommendations"):
@@ -811,7 +813,7 @@ class ContractAnalysisService:
                     85,
                     "Generating actionable recommendations",
                 )
-                return await super().generate_recommendations(state)
+                return super().generate_recommendations(state)
 
             async def compile_analysis_report(self, state):
                 if self._should_skip("compile_report"):
@@ -1145,17 +1147,39 @@ class ContractAnalysisService:
 
 # Database helpers colocated with analysis service to keep status logic centralized
 async def ensure_contract(
-    service_client: SupabaseClient,
+    service_client: SupabaseClient,  # Kept for backward compatibility but not used
     *,
     content_hash: str,
     contract_type: str,
     australian_state: str,
 ) -> str:
-    """Create or fetch a contract row for a given content hash.
+    """
+    Create or fetch a contract row for a given content hash.
 
-    Uses service role client (shared resource). Operation is idempotent.
+    MIGRATED: Now uses ContractsRepository with service role connection.
+    Uses repository pattern for better maintainability and RLS enforcement.
     Returns the contract id.
     """
+    settings = get_settings()
+
+    # Check if repositories are enabled
+    if settings.db_use_repositories:
+        contracts_repo = ContractsRepository()
+
+        try:
+            contract = await contracts_repo.upsert_contract_by_content_hash(
+                content_hash=content_hash,
+                contract_type=contract_type,
+                australian_state=australian_state,
+            )
+            logger.info(f"Repository: Upserted contract record: {contract.id}")
+            return str(contract.id)
+        except Exception as repo_error:
+            logger.error(f"Repository contract upsert failed: {repo_error}")
+            raise ValueError("Failed to create or fetch contract record")
+
+    # Legacy fallback (deprecated)
+    logger.warning("Using deprecated PostgREST path for contract operations")
     contract_data = {
         "content_hash": content_hash,
         "contract_type": contract_type,
@@ -1169,7 +1193,7 @@ async def ensure_contract(
         if not upserted or not upserted.get("id"):
             raise ValueError("Upsert returned no record")
         contract_id = upserted["id"]
-        logger.info(f"Upserted contract record: {contract_id}")
+        logger.info(f"Legacy: Upserted contract record: {contract_id}")
         return contract_id
     except Exception as upsert_error:
         logger.warning(
@@ -1181,22 +1205,45 @@ async def ensure_contract(
         if not existing.get("data"):
             raise ValueError("Failed to create or fetch contract record")
         contract_id = existing["data"][0]["id"]
-        logger.info(f"Found existing contract record: {contract_id}")
+        logger.info(f"Legacy: Found existing contract record: {contract_id}")
         return contract_id
 
 
 async def upsert_contract_analysis(
-    user_client: SupabaseClient,
+    user_client: SupabaseClient,  # Kept for backward compatibility but not used
     *,
     content_hash: str,
     agent_version: str = "1.0",
 ) -> str:
-    """Create or update a contract_analyses row for the content hash.
+    """
+    Create or update a contract_analyses row for the content hash.
 
-    Uses user client (RLS disabled on shared analysis table); prefers
-    RPC upsert and falls back to normal upsert on conflict.
+    MIGRATED: Now uses AnalysesRepository with user or shared connection.
+    Uses repository pattern for better maintainability and RLS enforcement.
     Returns the analysis id.
     """
+    settings = get_settings()
+
+    # Check if repositories are enabled
+    if settings.db_use_repositories:
+        # Use shared analyses repository for contract analyses
+        analyses_repo = AnalysesRepository(use_service_role=True)
+
+        try:
+            analysis = await analyses_repo.upsert_analysis(
+                content_hash=content_hash,
+                agent_version=agent_version,
+                status="pending",
+                result={},
+            )
+            logger.info(f"Repository: Upserted contract analysis: {analysis.id}")
+            return str(analysis.id)
+        except Exception as repo_error:
+            logger.error(f"Repository analysis upsert failed: {repo_error}")
+            raise ValueError("Failed to create analysis record")
+
+    # Legacy fallback (deprecated)
+    logger.warning("Using deprecated PostgREST path for analysis operations")
     try:
         analysis_id = await user_client.database.execute_rpc(
             "upsert_contract_analysis",

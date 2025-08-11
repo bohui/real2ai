@@ -1,5 +1,8 @@
 """
-Repository for shared document processing artifacts
+Repository for shared document processing artifacts (FIXED VERSION)
+
+This version properly uses context managers for connection management
+instead of storing connections, preventing pool misuse.
 """
 
 import asyncio
@@ -73,22 +76,23 @@ class ParagraphArtifact:
 
 
 class ArtifactsRepository:
-    """Repository for managing shared document processing artifacts"""
+    """
+    Repository for managing shared document processing artifacts.
+    
+    FIXED: Now uses proper context managers for all database operations
+    instead of storing connections. This ensures connections are properly
+    released back to the pool instead of being closed.
+    """
 
     def __init__(self):
-        self._connection = None
-
-    async def _get_connection(self) -> asyncpg.Connection:
-        """Get service role database connection"""
-        if self._connection is None:
-            self._connection = await get_service_role_connection()
-        return self._connection
-
-    async def close(self):
-        """Close database connection"""
-        if self._connection:
-            await self._connection.close()
-            self._connection = None
+        """
+        Initialize artifacts repository.
+        
+        Note: No stored connection! Each method uses its own context manager
+        for proper connection pool management.
+        """
+        # No stored connection! Each method uses its own context manager
+        pass
 
     # ================================
     # TEXT EXTRACTION ARTIFACTS
@@ -119,35 +123,35 @@ class ArtifactsRepository:
         if not validate_params_fingerprint(params_fingerprint):
             raise ValueError(f"Invalid params fingerprint: {params_fingerprint}")
 
-        conn = await self._get_connection()
-        
-        row = await conn.fetchrow(
-            """
-            SELECT id, content_hmac, algorithm_version, params_fingerprint,
-                   full_text_uri, full_text_sha256, total_pages, total_words,
-                   methods, timings, created_at
-            FROM text_extraction_artifacts
-            WHERE content_hmac = $1 AND algorithm_version = $2 AND params_fingerprint = $3
-            """,
-            content_hmac, algorithm_version, params_fingerprint
-        )
-        
-        if row is None:
-            return None
+        # Use context manager for proper connection management
+        async with get_service_role_connection() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT id, content_hmac, algorithm_version, params_fingerprint,
+                       full_text_uri, full_text_sha256, total_pages, total_words,
+                       methods, timings, created_at
+                FROM text_extraction_artifacts
+                WHERE content_hmac = $1 AND algorithm_version = $2 AND params_fingerprint = $3
+                """,
+                content_hmac, algorithm_version, params_fingerprint
+            )
             
-        return TextExtractionArtifact(
-            id=row['id'],
-            content_hmac=row['content_hmac'],
-            algorithm_version=row['algorithm_version'],
-            params_fingerprint=row['params_fingerprint'],
-            full_text_uri=row['full_text_uri'],
-            full_text_sha256=row['full_text_sha256'],
-            total_pages=row['total_pages'],
-            total_words=row['total_words'],
-            methods=row['methods'],
-            timings=row['timings'],
-            created_at=row['created_at']
-        )
+            if row is None:
+                return None
+                
+            return TextExtractionArtifact(
+                id=row['id'],
+                content_hmac=row['content_hmac'],
+                algorithm_version=row['algorithm_version'],
+                params_fingerprint=row['params_fingerprint'],
+                full_text_uri=row['full_text_uri'],
+                full_text_sha256=row['full_text_sha256'],
+                total_pages=row['total_pages'],
+                total_words=row['total_words'],
+                methods=row['methods'],
+                timings=row['timings'],
+                created_at=row['created_at']
+            )
 
     async def insert_text_artifact(
         self,
@@ -186,57 +190,57 @@ class ArtifactsRepository:
         if not validate_params_fingerprint(params_fingerprint):
             raise ValueError(f"Invalid params fingerprint: {params_fingerprint}")
 
-        conn = await self._get_connection()
-        
-        # Use advisory lock to prevent stampedes on first compute
-        lock_key = hash(content_hmac) & 0x7FFFFFFF  # Positive 32-bit integer
-        
-        async with conn.transaction():
-            await conn.execute("SELECT pg_advisory_xact_lock($1)", lock_key)
+        # Use context manager for proper connection management
+        async with get_service_role_connection() as conn:
+            # Use advisory lock to prevent stampedes on first compute
+            lock_key = hash(content_hmac) & 0x7FFFFFFF  # Positive 32-bit integer
             
-            # Try insert first
-            await conn.execute(
-                """
-                INSERT INTO text_extraction_artifacts (
+            async with conn.transaction():
+                await conn.execute("SELECT pg_advisory_xact_lock($1)", lock_key)
+                
+                # Try insert first
+                await conn.execute(
+                    """
+                    INSERT INTO text_extraction_artifacts (
+                        content_hmac, algorithm_version, params_fingerprint,
+                        full_text_uri, full_text_sha256, total_pages, total_words,
+                        methods, timings
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                    ON CONFLICT (content_hmac, algorithm_version, params_fingerprint) DO NOTHING
+                    """,
                     content_hmac, algorithm_version, params_fingerprint,
                     full_text_uri, full_text_sha256, total_pages, total_words,
                     methods, timings
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-                ON CONFLICT (content_hmac, algorithm_version, params_fingerprint) DO NOTHING
-                """,
-                content_hmac, algorithm_version, params_fingerprint,
-                full_text_uri, full_text_sha256, total_pages, total_words,
-                methods, timings
-            )
-            
-            # Then SELECT to get the artifact (whether newly inserted or existing)
-            row = await conn.fetchrow(
-                """
-                SELECT id, content_hmac, algorithm_version, params_fingerprint,
-                       full_text_uri, full_text_sha256, total_pages, total_words,
-                       methods, timings, created_at
-                FROM text_extraction_artifacts
-                WHERE content_hmac = $1 AND algorithm_version = $2 AND params_fingerprint = $3
-                """,
-                content_hmac, algorithm_version, params_fingerprint
-            )
-            
-            if row is None:
-                raise RuntimeError("Failed to insert or retrieve text extraction artifact")
+                )
                 
-            return TextExtractionArtifact(
-                id=row['id'],
-                content_hmac=row['content_hmac'],
-                algorithm_version=row['algorithm_version'],
-                params_fingerprint=row['params_fingerprint'],
-                full_text_uri=row['full_text_uri'],
-                full_text_sha256=row['full_text_sha256'],
-                total_pages=row['total_pages'],
-                total_words=row['total_words'],
-                methods=row['methods'],
-                timings=row['timings'],
-                created_at=row['created_at']
-            )
+                # Then SELECT to get the artifact (whether newly inserted or existing)
+                row = await conn.fetchrow(
+                    """
+                    SELECT id, content_hmac, algorithm_version, params_fingerprint,
+                           full_text_uri, full_text_sha256, total_pages, total_words,
+                           methods, timings, created_at
+                    FROM text_extraction_artifacts
+                    WHERE content_hmac = $1 AND algorithm_version = $2 AND params_fingerprint = $3
+                    """,
+                    content_hmac, algorithm_version, params_fingerprint
+                )
+                
+                if row is None:
+                    raise RuntimeError("Failed to insert or retrieve text extraction artifact")
+                    
+                return TextExtractionArtifact(
+                    id=row['id'],
+                    content_hmac=row['content_hmac'],
+                    algorithm_version=row['algorithm_version'],
+                    params_fingerprint=row['params_fingerprint'],
+                    full_text_uri=row['full_text_uri'],
+                    full_text_sha256=row['full_text_sha256'],
+                    total_pages=row['total_pages'],
+                    total_words=row['total_words'],
+                    methods=row['methods'],
+                    timings=row['timings'],
+                    created_at=row['created_at']
+                )
 
     # ================================
     # PAGE ARTIFACTS
@@ -264,35 +268,34 @@ class ArtifactsRepository:
         if not validate_params_fingerprint(params_fingerprint):
             raise ValueError(f"Invalid params fingerprint: {params_fingerprint}")
 
-        conn = await self._get_connection()
-        
-        rows = await conn.fetch(
-            """
-            SELECT id, content_hmac, algorithm_version, params_fingerprint,
-                   page_number, page_text_uri, page_text_sha256,
-                   layout, metrics, created_at
-            FROM artifact_pages
-            WHERE content_hmac = $1 AND algorithm_version = $2 AND params_fingerprint = $3
-            ORDER BY page_number
-            """,
-            content_hmac, algorithm_version, params_fingerprint
-        )
-        
-        return [
-            PageArtifact(
-                id=row['id'],
-                content_hmac=row['content_hmac'],
-                algorithm_version=row['algorithm_version'],
-                params_fingerprint=row['params_fingerprint'],
-                page_number=row['page_number'],
-                page_text_uri=row['page_text_uri'],
-                page_text_sha256=row['page_text_sha256'],
-                layout=row['layout'],
-                metrics=row['metrics'],
-                created_at=row['created_at']
+        async with get_service_role_connection() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT id, content_hmac, algorithm_version, params_fingerprint,
+                       page_number, page_text_uri, page_text_sha256,
+                       layout, metrics, created_at
+                FROM artifact_pages
+                WHERE content_hmac = $1 AND algorithm_version = $2 AND params_fingerprint = $3
+                ORDER BY page_number
+                """,
+                content_hmac, algorithm_version, params_fingerprint
             )
-            for row in rows
-        ]
+            
+            return [
+                PageArtifact(
+                    id=row['id'],
+                    content_hmac=row['content_hmac'],
+                    algorithm_version=row['algorithm_version'],
+                    params_fingerprint=row['params_fingerprint'],
+                    page_number=row['page_number'],
+                    page_text_uri=row['page_text_uri'],
+                    page_text_sha256=row['page_text_sha256'],
+                    layout=row['layout'],
+                    metrics=row['metrics'],
+                    created_at=row['created_at']
+                )
+                for row in rows
+            ]
 
     async def insert_page_artifact(
         self,
@@ -326,49 +329,48 @@ class ArtifactsRepository:
         if not validate_params_fingerprint(params_fingerprint):
             raise ValueError(f"Invalid params fingerprint: {params_fingerprint}")
 
-        conn = await self._get_connection()
-        
-        # Try insert first
-        await conn.execute(
-            """
-            INSERT INTO artifact_pages (
+        async with get_service_role_connection() as conn:
+            # Try insert first
+            await conn.execute(
+                """
+                INSERT INTO artifact_pages (
+                    content_hmac, algorithm_version, params_fingerprint,
+                    page_number, page_text_uri, page_text_sha256, layout, metrics
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                ON CONFLICT (content_hmac, algorithm_version, params_fingerprint, page_number) DO NOTHING
+                """,
                 content_hmac, algorithm_version, params_fingerprint,
                 page_number, page_text_uri, page_text_sha256, layout, metrics
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-            ON CONFLICT (content_hmac, algorithm_version, params_fingerprint, page_number) DO NOTHING
-            """,
-            content_hmac, algorithm_version, params_fingerprint,
-            page_number, page_text_uri, page_text_sha256, layout, metrics
-        )
-        
-        # Then SELECT to get the artifact
-        row = await conn.fetchrow(
-            """
-            SELECT id, content_hmac, algorithm_version, params_fingerprint,
-                   page_number, page_text_uri, page_text_sha256,
-                   layout, metrics, created_at
-            FROM artifact_pages
-            WHERE content_hmac = $1 AND algorithm_version = $2 AND params_fingerprint = $3
-                  AND page_number = $4
-            """,
-            content_hmac, algorithm_version, params_fingerprint, page_number
-        )
-        
-        if row is None:
-            raise RuntimeError(f"Failed to insert or retrieve page artifact for page {page_number}")
+            )
             
-        return PageArtifact(
-            id=row['id'],
-            content_hmac=row['content_hmac'],
-            algorithm_version=row['algorithm_version'],
-            params_fingerprint=row['params_fingerprint'],
-            page_number=row['page_number'],
-            page_text_uri=row['page_text_uri'],
-            page_text_sha256=row['page_text_sha256'],
-            layout=row['layout'],
-            metrics=row['metrics'],
-            created_at=row['created_at']
-        )
+            # Then SELECT to get the artifact
+            row = await conn.fetchrow(
+                """
+                SELECT id, content_hmac, algorithm_version, params_fingerprint,
+                       page_number, page_text_uri, page_text_sha256,
+                       layout, metrics, created_at
+                FROM artifact_pages
+                WHERE content_hmac = $1 AND algorithm_version = $2 AND params_fingerprint = $3
+                      AND page_number = $4
+                """,
+                content_hmac, algorithm_version, params_fingerprint, page_number
+            )
+            
+            if row is None:
+                raise RuntimeError(f"Failed to insert or retrieve page artifact for page {page_number}")
+                
+            return PageArtifact(
+                id=row['id'],
+                content_hmac=row['content_hmac'],
+                algorithm_version=row['algorithm_version'],
+                params_fingerprint=row['params_fingerprint'],
+                page_number=row['page_number'],
+                page_text_uri=row['page_text_uri'],
+                page_text_sha256=row['page_text_sha256'],
+                layout=row['layout'],
+                metrics=row['metrics'],
+                created_at=row['created_at']
+            )
 
     # ================================
     # DIAGRAM ARTIFACTS
@@ -386,32 +388,31 @@ class ArtifactsRepository:
         if not validate_params_fingerprint(params_fingerprint):
             raise ValueError(f"Invalid params fingerprint: {params_fingerprint}")
 
-        conn = await self._get_connection()
-        
-        rows = await conn.fetch(
-            """
-            SELECT id, content_hmac, algorithm_version, params_fingerprint,
-                   page_number, diagram_key, diagram_meta, created_at
-            FROM artifact_diagrams
-            WHERE content_hmac = $1 AND algorithm_version = $2 AND params_fingerprint = $3
-            ORDER BY page_number, diagram_key
-            """,
-            content_hmac, algorithm_version, params_fingerprint
-        )
-        
-        return [
-            DiagramArtifact(
-                id=row['id'],
-                content_hmac=row['content_hmac'],
-                algorithm_version=row['algorithm_version'],
-                params_fingerprint=row['params_fingerprint'],
-                page_number=row['page_number'],
-                diagram_key=row['diagram_key'],
-                diagram_meta=row['diagram_meta'],
-                created_at=row['created_at']
+        async with get_service_role_connection() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT id, content_hmac, algorithm_version, params_fingerprint,
+                       page_number, diagram_key, diagram_meta, created_at
+                FROM artifact_diagrams
+                WHERE content_hmac = $1 AND algorithm_version = $2 AND params_fingerprint = $3
+                ORDER BY page_number, diagram_key
+                """,
+                content_hmac, algorithm_version, params_fingerprint
             )
-            for row in rows
-        ]
+            
+            return [
+                DiagramArtifact(
+                    id=row['id'],
+                    content_hmac=row['content_hmac'],
+                    algorithm_version=row['algorithm_version'],
+                    params_fingerprint=row['params_fingerprint'],
+                    page_number=row['page_number'],
+                    diagram_key=row['diagram_key'],
+                    diagram_meta=row['diagram_meta'],
+                    created_at=row['created_at']
+                )
+                for row in rows
+            ]
 
     async def insert_diagram_artifact(
         self,
@@ -428,47 +429,46 @@ class ArtifactsRepository:
         if not validate_params_fingerprint(params_fingerprint):
             raise ValueError(f"Invalid params fingerprint: {params_fingerprint}")
 
-        conn = await self._get_connection()
-        
-        # Try insert first
-        await conn.execute(
-            """
-            INSERT INTO artifact_diagrams (
+        async with get_service_role_connection() as conn:
+            # Try insert first
+            await conn.execute(
+                """
+                INSERT INTO artifact_diagrams (
+                    content_hmac, algorithm_version, params_fingerprint,
+                    page_number, diagram_key, diagram_meta
+                ) VALUES ($1, $2, $3, $4, $5, $6)
+                ON CONFLICT (content_hmac, algorithm_version, params_fingerprint, page_number, diagram_key) 
+                DO NOTHING
+                """,
                 content_hmac, algorithm_version, params_fingerprint,
                 page_number, diagram_key, diagram_meta
-            ) VALUES ($1, $2, $3, $4, $5, $6)
-            ON CONFLICT (content_hmac, algorithm_version, params_fingerprint, page_number, diagram_key) 
-            DO NOTHING
-            """,
-            content_hmac, algorithm_version, params_fingerprint,
-            page_number, diagram_key, diagram_meta
-        )
-        
-        # Then SELECT to get the artifact
-        row = await conn.fetchrow(
-            """
-            SELECT id, content_hmac, algorithm_version, params_fingerprint,
-                   page_number, diagram_key, diagram_meta, created_at
-            FROM artifact_diagrams
-            WHERE content_hmac = $1 AND algorithm_version = $2 AND params_fingerprint = $3
-                  AND page_number = $4 AND diagram_key = $5
-            """,
-            content_hmac, algorithm_version, params_fingerprint, page_number, diagram_key
-        )
-        
-        if row is None:
-            raise RuntimeError(f"Failed to insert or retrieve diagram artifact {diagram_key}")
+            )
             
-        return DiagramArtifact(
-            id=row['id'],
-            content_hmac=row['content_hmac'],
-            algorithm_version=row['algorithm_version'],
-            params_fingerprint=row['params_fingerprint'],
-            page_number=row['page_number'],
-            diagram_key=row['diagram_key'],
-            diagram_meta=row['diagram_meta'],
-            created_at=row['created_at']
-        )
+            # Then SELECT to get the artifact
+            row = await conn.fetchrow(
+                """
+                SELECT id, content_hmac, algorithm_version, params_fingerprint,
+                       page_number, diagram_key, diagram_meta, created_at
+                FROM artifact_diagrams
+                WHERE content_hmac = $1 AND algorithm_version = $2 AND params_fingerprint = $3
+                      AND page_number = $4 AND diagram_key = $5
+                """,
+                content_hmac, algorithm_version, params_fingerprint, page_number, diagram_key
+            )
+            
+            if row is None:
+                raise RuntimeError(f"Failed to insert or retrieve diagram artifact {diagram_key}")
+                
+            return DiagramArtifact(
+                id=row['id'],
+                content_hmac=row['content_hmac'],
+                algorithm_version=row['algorithm_version'],
+                params_fingerprint=row['params_fingerprint'],
+                page_number=row['page_number'],
+                diagram_key=row['diagram_key'],
+                diagram_meta=row['diagram_meta'],
+                created_at=row['created_at']
+            )
 
     # ================================
     # PARAGRAPH ARTIFACTS (OPTIONAL)
@@ -486,35 +486,34 @@ class ArtifactsRepository:
         if not validate_params_fingerprint(params_fingerprint):
             raise ValueError(f"Invalid params fingerprint: {params_fingerprint}")
 
-        conn = await self._get_connection()
-        
-        rows = await conn.fetch(
-            """
-            SELECT id, content_hmac, algorithm_version, params_fingerprint,
-                   page_number, paragraph_index, paragraph_text_uri, paragraph_text_sha256,
-                   features, created_at
-            FROM artifact_paragraphs
-            WHERE content_hmac = $1 AND algorithm_version = $2 AND params_fingerprint = $3
-            ORDER BY page_number, paragraph_index
-            """,
-            content_hmac, algorithm_version, params_fingerprint
-        )
-        
-        return [
-            ParagraphArtifact(
-                id=row['id'],
-                content_hmac=row['content_hmac'],
-                algorithm_version=row['algorithm_version'],
-                params_fingerprint=row['params_fingerprint'],
-                page_number=row['page_number'],
-                paragraph_index=row['paragraph_index'],
-                paragraph_text_uri=row['paragraph_text_uri'],
-                paragraph_text_sha256=row['paragraph_text_sha256'],
-                features=row['features'],
-                created_at=row['created_at']
+        async with get_service_role_connection() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT id, content_hmac, algorithm_version, params_fingerprint,
+                       page_number, paragraph_index, paragraph_text_uri, paragraph_text_sha256,
+                       features, created_at
+                FROM artifact_paragraphs
+                WHERE content_hmac = $1 AND algorithm_version = $2 AND params_fingerprint = $3
+                ORDER BY page_number, paragraph_index
+                """,
+                content_hmac, algorithm_version, params_fingerprint
             )
-            for row in rows
-        ]
+            
+            return [
+                ParagraphArtifact(
+                    id=row['id'],
+                    content_hmac=row['content_hmac'],
+                    algorithm_version=row['algorithm_version'],
+                    params_fingerprint=row['params_fingerprint'],
+                    page_number=row['page_number'],
+                    paragraph_index=row['paragraph_index'],
+                    paragraph_text_uri=row['paragraph_text_uri'],
+                    paragraph_text_sha256=row['paragraph_text_sha256'],
+                    features=row['features'],
+                    created_at=row['created_at']
+                )
+                for row in rows
+            ]
 
     async def insert_paragraph_artifact(
         self,
@@ -533,55 +532,54 @@ class ArtifactsRepository:
         if not validate_params_fingerprint(params_fingerprint):
             raise ValueError(f"Invalid params fingerprint: {params_fingerprint}")
 
-        conn = await self._get_connection()
-        
-        # Use advisory lock to prevent stampedes on first compute
-        lock_key = hash(f"{content_hmac}:{params_fingerprint}") & 0x7FFFFFFF  # Positive 32-bit integer
-        
-        async with conn.transaction():
-            await conn.execute("SELECT pg_advisory_xact_lock($1)", lock_key)
+        async with get_service_role_connection() as conn:
+            # Use advisory lock to prevent stampedes on first compute
+            lock_key = hash(f"{content_hmac}:{params_fingerprint}") & 0x7FFFFFFF  # Positive 32-bit integer
             
-            # Try insert first
-            await conn.execute(
-                """
-                INSERT INTO artifact_paragraphs (
+            async with conn.transaction():
+                await conn.execute("SELECT pg_advisory_xact_lock($1)", lock_key)
+                
+                # Try insert first
+                await conn.execute(
+                    """
+                    INSERT INTO artifact_paragraphs (
+                        content_hmac, algorithm_version, params_fingerprint,
+                        page_number, paragraph_index, paragraph_text_uri, 
+                        paragraph_text_sha256, features
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                    ON CONFLICT (content_hmac, algorithm_version, params_fingerprint, page_number, paragraph_index) 
+                    DO NOTHING
+                    """,
                     content_hmac, algorithm_version, params_fingerprint,
-                    page_number, paragraph_index, paragraph_text_uri, 
+                    page_number, paragraph_index, paragraph_text_uri,
                     paragraph_text_sha256, features
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-                ON CONFLICT (content_hmac, algorithm_version, params_fingerprint, page_number, paragraph_index) 
-                DO NOTHING
-                """,
-                content_hmac, algorithm_version, params_fingerprint,
-                page_number, paragraph_index, paragraph_text_uri,
-                paragraph_text_sha256, features
-            )
+                )
+                
+                # Then SELECT to get the artifact (whether newly inserted or existing)
+                row = await conn.fetchrow(
+                    """
+                    SELECT id, content_hmac, algorithm_version, params_fingerprint,
+                           page_number, paragraph_index, paragraph_text_uri, paragraph_text_sha256,
+                           features, created_at
+                    FROM artifact_paragraphs
+                    WHERE content_hmac = $1 AND algorithm_version = $2 AND params_fingerprint = $3
+                          AND page_number = $4 AND paragraph_index = $5
+                    """,
+                    content_hmac, algorithm_version, params_fingerprint, page_number, paragraph_index
+                )
             
-            # Then SELECT to get the artifact (whether newly inserted or existing)
-            row = await conn.fetchrow(
-                """
-                SELECT id, content_hmac, algorithm_version, params_fingerprint,
-                       page_number, paragraph_index, paragraph_text_uri, paragraph_text_sha256,
-                       features, created_at
-                FROM artifact_paragraphs
-                WHERE content_hmac = $1 AND algorithm_version = $2 AND params_fingerprint = $3
-                      AND page_number = $4 AND paragraph_index = $5
-                """,
-                content_hmac, algorithm_version, params_fingerprint, page_number, paragraph_index
+            if row is None:
+                raise RuntimeError(f"Failed to insert or retrieve paragraph artifact {paragraph_index}")
+                
+            return ParagraphArtifact(
+                id=row['id'],
+                content_hmac=row['content_hmac'],
+                algorithm_version=row['algorithm_version'],
+                params_fingerprint=row['params_fingerprint'],
+                page_number=row['page_number'],
+                paragraph_index=row['paragraph_index'],
+                paragraph_text_uri=row['paragraph_text_uri'],
+                paragraph_text_sha256=row['paragraph_text_sha256'],
+                features=row['features'],
+                created_at=row['created_at']
             )
-        
-        if row is None:
-            raise RuntimeError(f"Failed to insert or retrieve paragraph artifact {paragraph_index}")
-            
-        return ParagraphArtifact(
-            id=row['id'],
-            content_hmac=row['content_hmac'],
-            algorithm_version=row['algorithm_version'],
-            params_fingerprint=row['params_fingerprint'],
-            page_number=row['page_number'],
-            paragraph_index=row['paragraph_index'],
-            paragraph_text_uri=row['paragraph_text_uri'],
-            paragraph_text_sha256=row['paragraph_text_sha256'],
-            features=row['features'],
-            created_at=row['created_at']
-        )

@@ -12,8 +12,6 @@ import logging
 import time
 from typing import Dict, Any, Optional
 from datetime import datetime, UTC
-
-from celery import Celery
 from app.core.task_context import user_aware_task, task_manager, get_task_store
 from app.core.auth_context import AuthContext
 from app.services.document_service import DocumentService
@@ -23,7 +21,7 @@ from app.agents.subflows.document_processing_workflow import DocumentProcessingW
 logger = logging.getLogger(__name__)
 
 # Assume celery app is configured elsewhere
-from app.celery_app import celery_app
+from app.core.celery import celery_app
 
 
 # @celery_app.task(bind=True)
@@ -524,7 +522,7 @@ async def launch_document_processing(
 
         # Launch task with user context
         task_result = await task_manager.launch_user_task(
-            process_user_document_background, task_id, document_id, user_id
+            run_document_processing_subflow, task_id, document_id, user_id
         )
 
         logger.info(
@@ -537,32 +535,33 @@ async def launch_document_processing(
         raise
 
 
-async def launch_batch_processing(
-    document_ids: list[str],
-    user_id: str,
-    batch_options: Optional[Dict[str, Any]] = None,
-) -> str:
-    """Launch batch processing task with user context."""
-    try:
-        task_id = f"batch_{user_id}_{int(time.time())}"
-
-        task_result = await task_manager.launch_user_task(
-            batch_process_documents_background,
-            task_id,
-            document_ids,
-            user_id,
-            batch_options,
-        )
-
-        logger.info(
-            f"Launched batch processing task {task_result.id} for user {user_id}, "
-            f"{len(document_ids)} documents"
-        )
-        return task_result.id
-
-    except Exception as e:
-        logger.error(f"Failed to launch batch processing task: {e}")
-        raise
+# async def launch_batch_processing(
+#     document_ids: list[str],
+#     user_id: str,
+#     batch_options: Optional[Dict[str, Any]] = None,
+# ) -> str:
+#     """Launch batch processing task with user context."""
+#     try:
+#         task_id = f"batch_{user_id}_{int(time.time())}"
+##         Note: batch task is currently not implemented; keeping example disabled.
+#         # task_result = await task_manager.launch_user_task(
+#         #     batch_process_documents_background,
+#         #     task_id,
+#         #     document_ids,
+#         #     user_id,
+#         #     batch_options,
+#         # )
+#
+#         # logger.info(
+#         #     f"Launched batch processing task {task_result.id} for user {user_id}, "
+#         #     f"{len(document_ids)} documents"
+#         # )
+#         # return task_result.id
+#         raise NotImplementedError("Batch processing task is not available")
+#
+#     except Exception as e:
+#         logger.error(f"Failed to launch batch processing task: {e}")
+#         raise
 
 
 # System-level tasks (no user context needed)

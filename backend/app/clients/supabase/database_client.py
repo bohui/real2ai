@@ -1,5 +1,11 @@
 """
 Supabase database client implementation.
+
+DEPRECATED: This PostgREST-based database client is deprecated in favor of 
+the repository pattern with direct asyncpg connections. New code should use 
+repository classes from app.services.repositories.
+
+Use DB_USE_REPOSITORIES=False to temporarily re-enable legacy behavior.
 """
 
 import logging
@@ -102,9 +108,21 @@ def is_jwt_expired_error(error: Exception) -> bool:
 
 
 class SupabaseDatabaseClient(DatabaseOperations):
-    """Supabase database operations client."""
+    """
+    Supabase database operations client.
+    
+    DEPRECATED: This PostgREST-based client is deprecated in favor of 
+    repository pattern with asyncpg. Use repository classes instead.
+    """
 
     def __init__(self, supabase_client: Client, config: SupabaseClientConfig):
+        import warnings
+        warnings.warn(
+            "SupabaseDatabaseClient is deprecated. Use repository pattern with asyncpg instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
+        
         self.supabase_client = supabase_client
         self.config = config
         self.client_name = "SupabaseDatabaseClient"

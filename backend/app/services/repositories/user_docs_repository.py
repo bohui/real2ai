@@ -1,5 +1,8 @@
 """
-Repository for user-scoped document processing data
+Repository for user-scoped document processing data (FIXED VERSION)
+
+This version properly uses context managers for connection management
+instead of storing connections, preventing pool misuse.
 """
 
 from typing import Dict, List, Optional, Any
@@ -48,23 +51,26 @@ class DocumentParagraph:
 
 
 class UserDocsRepository:
-    """Repository for user-scoped document processing data"""
+    """
+    Repository for user-scoped document processing data.
+    
+    FIXED: Now uses proper context managers for all database operations
+    instead of storing connections. This ensures connections are properly
+    released back to the pool instead of being closed.
+    """
 
     def __init__(self, user_id: UUID):
+        """
+        Initialize user docs repository.
+        
+        Args:
+            user_id: User ID for scoped operations
+            
+        Note: No stored connection! Each method uses its own context manager
+        for proper connection pool management.
+        """
         self.user_id = user_id
-        self._connection = None
-
-    async def _get_connection(self) -> asyncpg.Connection:
-        """Get user database connection"""
-        if self._connection is None:
-            self._connection = await get_user_connection(self.user_id)
-        return self._connection
-
-    async def close(self):
-        """Close database connection"""
-        if self._connection:
-            await self._connection.close()
-            self._connection = None
+        # No stored connection! Each method uses its own context manager
 
     # ================================
     # DOCUMENT METADATA UPDATES
@@ -89,20 +95,20 @@ class UserDocsRepository:
         Returns:
             True if update successful, False otherwise
         """
-        conn = await self._get_connection()
-        
-        result = await conn.execute(
-            """
-            UPDATE documents 
-            SET artifact_text_id = $1,
-                total_pages = COALESCE($2, total_pages),
-                total_word_count = COALESCE($3, total_word_count)
-            WHERE id = $4 AND user_id = $5
-            """,
-            artifact_text_id, total_pages, total_word_count, document_id, self.user_id
-        )
-        
-        return result.split()[-1] == '1'  # Check if exactly one row was updated
+        # Use context manager for proper connection management
+        async with get_user_connection(self.user_id) as conn:
+            result = await conn.execute(
+                """
+                UPDATE documents 
+                SET artifact_text_id = $1,
+                    total_pages = COALESCE($2, total_pages),
+                    total_word_count = COALESCE($3, total_word_count)
+                WHERE id = $4 AND user_id = $5
+                """,
+                artifact_text_id, total_pages, total_word_count, document_id, self.user_id
+            )
+            
+            return result.split()[-1] == '1'  # Check if exactly one row was updated
 
     async def update_document_processing_status(
         self,
@@ -125,42 +131,41 @@ class UserDocsRepository:
         Returns:
             True if update successful, False otherwise
         """
-        conn = await self._get_connection()
-        
-        # Build dynamic query based on provided parameters
-        set_clauses = ["processing_status = $1"]
-        params = [processing_status]
-        param_count = 1
-        
-        if processing_started_at is not None:
-            param_count += 1
-            set_clauses.append(f"processing_started_at = COALESCE(processing_started_at, ${param_count})")
-            params.append(processing_started_at)
+        async with get_user_connection(self.user_id) as conn:
+            # Build dynamic query based on provided parameters
+            set_clauses = ["processing_status = $1"]
+            params = [processing_status]
+            param_count = 1
             
-        if processing_completed_at is not None:
+            if processing_started_at is not None:
+                param_count += 1
+                set_clauses.append(f"processing_started_at = COALESCE(processing_started_at, ${param_count})")
+                params.append(processing_started_at)
+                
+            if processing_completed_at is not None:
+                param_count += 1
+                set_clauses.append(f"processing_completed_at = ${param_count}")
+                params.append(processing_completed_at)
+                
+            if processing_errors is not None:
+                param_count += 1
+                set_clauses.append(f"processing_errors = ${param_count}")
+                params.append(processing_errors)
+                
+            # Add WHERE clause parameters
             param_count += 1
-            set_clauses.append(f"processing_completed_at = ${param_count}")
-            params.append(processing_completed_at)
-            
-        if processing_errors is not None:
+            params.append(document_id)
             param_count += 1
-            set_clauses.append(f"processing_errors = ${param_count}")
-            params.append(processing_errors)
+            params.append(self.user_id)
             
-        # Add WHERE clause parameters
-        param_count += 1
-        params.append(document_id)
-        param_count += 1
-        params.append(self.user_id)
-        
-        query = f"""
-            UPDATE documents 
-            SET {', '.join(set_clauses)}
-            WHERE id = ${param_count - 1} AND user_id = ${param_count}
-        """
-        
-        result = await conn.execute(query, *params)
-        return result.split()[-1] == '1'
+            query = f"""
+                UPDATE documents 
+                SET {', '.join(set_clauses)}
+                WHERE id = ${param_count - 1} AND user_id = ${param_count}
+            """
+            
+            result = await conn.execute(query, *params)
+            return result.split()[-1] == '1'
 
     # ================================
     # DOCUMENT PAGES
@@ -187,52 +192,25 @@ class UserDocsRepository:
         Returns:
             DocumentPage (existing or newly created)
         """
-        conn = await self._get_connection()
-        
-        # Use ON CONFLICT to handle upserts - don't overwrite existing annotations
-        row = await conn.fetchrow(
-            """
-            INSERT INTO user_document_pages (
+        async with get_user_connection(self.user_id) as conn:
+            # Use ON CONFLICT to handle upserts - don't overwrite existing annotations
+            row = await conn.fetchrow(
+                """
+                INSERT INTO user_document_pages (
+                    document_id, page_number, artifact_page_id, annotations, flags
+                ) VALUES ($1, $2, $3, $4, $5)
+                ON CONFLICT (document_id, page_number) DO UPDATE SET
+                    artifact_page_id = EXCLUDED.artifact_page_id,
+                    annotations = COALESCE(user_document_pages.annotations, EXCLUDED.annotations),
+                    flags = COALESCE(user_document_pages.flags, EXCLUDED.flags),
+                    updated_at = now()
+                RETURNING document_id, page_number, artifact_page_id, 
+                          annotations, flags, created_at, updated_at
+                """,
                 document_id, page_number, artifact_page_id, annotations, flags
-            ) VALUES ($1, $2, $3, $4, $5)
-            ON CONFLICT (document_id, page_number) DO UPDATE SET
-                artifact_page_id = EXCLUDED.artifact_page_id,
-                annotations = COALESCE(user_document_pages.annotations, EXCLUDED.annotations),
-                flags = COALESCE(user_document_pages.flags, EXCLUDED.flags),
-                updated_at = now()
-            RETURNING document_id, page_number, artifact_page_id, 
-                      annotations, flags, created_at, updated_at
-            """,
-            document_id, page_number, artifact_page_id, annotations, flags
-        )
-        
-        return DocumentPage(
-            document_id=row['document_id'],
-            page_number=row['page_number'],
-            artifact_page_id=row['artifact_page_id'],
-            annotations=row['annotations'],
-            flags=row['flags'],
-            created_at=row['created_at'],
-            updated_at=row['updated_at']
-        )
-
-    async def get_document_pages(self, document_id: UUID) -> List[DocumentPage]:
-        """Get all pages for a document."""
-        conn = await self._get_connection()
-        
-        rows = await conn.fetch(
-            """
-            SELECT document_id, page_number, artifact_page_id,
-                   annotations, flags, created_at, updated_at
-            FROM user_document_pages
-            WHERE document_id = $1
-            ORDER BY page_number
-            """,
-            document_id
-        )
-        
-        return [
-            DocumentPage(
+            )
+            
+            return DocumentPage(
                 document_id=row['document_id'],
                 page_number=row['page_number'],
                 artifact_page_id=row['artifact_page_id'],
@@ -241,8 +219,33 @@ class UserDocsRepository:
                 created_at=row['created_at'],
                 updated_at=row['updated_at']
             )
-            for row in rows
-        ]
+
+    async def get_document_pages(self, document_id: UUID) -> List[DocumentPage]:
+        """Get all pages for a document."""
+        async with get_user_connection(self.user_id) as conn:
+            rows = await conn.fetch(
+                """
+                SELECT document_id, page_number, artifact_page_id,
+                       annotations, flags, created_at, updated_at
+                FROM user_document_pages
+                WHERE document_id = $1
+                ORDER BY page_number
+                """,
+                document_id
+            )
+            
+            return [
+                DocumentPage(
+                    document_id=row['document_id'],
+                    page_number=row['page_number'],
+                    artifact_page_id=row['artifact_page_id'],
+                    annotations=row['annotations'],
+                    flags=row['flags'],
+                    created_at=row['created_at'],
+                    updated_at=row['updated_at']
+                )
+                for row in rows
+            ]
 
     # ================================
     # DOCUMENT DIAGRAMS
@@ -269,50 +272,23 @@ class UserDocsRepository:
         Returns:
             DocumentDiagram (existing or newly created)
         """
-        conn = await self._get_connection()
-        
-        row = await conn.fetchrow(
-            """
-            INSERT INTO user_document_diagrams (
+        async with get_user_connection(self.user_id) as conn:
+            row = await conn.fetchrow(
+                """
+                INSERT INTO user_document_diagrams (
+                    document_id, page_number, diagram_key, artifact_diagram_id, annotations
+                ) VALUES ($1, $2, $3, $4, $5)
+                ON CONFLICT (document_id, page_number, diagram_key) DO UPDATE SET
+                    artifact_diagram_id = EXCLUDED.artifact_diagram_id,
+                    annotations = COALESCE(user_document_diagrams.annotations, EXCLUDED.annotations),
+                    updated_at = now()
+                RETURNING document_id, page_number, diagram_key, artifact_diagram_id,
+                          annotations, created_at, updated_at
+                """,
                 document_id, page_number, diagram_key, artifact_diagram_id, annotations
-            ) VALUES ($1, $2, $3, $4, $5)
-            ON CONFLICT (document_id, page_number, diagram_key) DO UPDATE SET
-                artifact_diagram_id = EXCLUDED.artifact_diagram_id,
-                annotations = COALESCE(user_document_diagrams.annotations, EXCLUDED.annotations),
-                updated_at = now()
-            RETURNING document_id, page_number, diagram_key, artifact_diagram_id,
-                      annotations, created_at, updated_at
-            """,
-            document_id, page_number, diagram_key, artifact_diagram_id, annotations
-        )
-        
-        return DocumentDiagram(
-            document_id=row['document_id'],
-            page_number=row['page_number'],
-            diagram_key=row['diagram_key'],
-            artifact_diagram_id=row['artifact_diagram_id'],
-            annotations=row['annotations'],
-            created_at=row['created_at'],
-            updated_at=row['updated_at']
-        )
-
-    async def get_document_diagrams(self, document_id: UUID) -> List[DocumentDiagram]:
-        """Get all diagrams for a document."""
-        conn = await self._get_connection()
-        
-        rows = await conn.fetch(
-            """
-            SELECT document_id, page_number, diagram_key, artifact_diagram_id,
-                   annotations, created_at, updated_at
-            FROM user_document_diagrams
-            WHERE document_id = $1
-            ORDER BY page_number, diagram_key
-            """,
-            document_id
-        )
-        
-        return [
-            DocumentDiagram(
+            )
+            
+            return DocumentDiagram(
                 document_id=row['document_id'],
                 page_number=row['page_number'],
                 diagram_key=row['diagram_key'],
@@ -321,8 +297,33 @@ class UserDocsRepository:
                 created_at=row['created_at'],
                 updated_at=row['updated_at']
             )
-            for row in rows
-        ]
+
+    async def get_document_diagrams(self, document_id: UUID) -> List[DocumentDiagram]:
+        """Get all diagrams for a document."""
+        async with get_user_connection(self.user_id) as conn:
+            rows = await conn.fetch(
+                """
+                SELECT document_id, page_number, diagram_key, artifact_diagram_id,
+                       annotations, created_at, updated_at
+                FROM user_document_diagrams
+                WHERE document_id = $1
+                ORDER BY page_number, diagram_key
+                """,
+                document_id
+            )
+            
+            return [
+                DocumentDiagram(
+                    document_id=row['document_id'],
+                    page_number=row['page_number'],
+                    diagram_key=row['diagram_key'],
+                    artifact_diagram_id=row['artifact_diagram_id'],
+                    annotations=row['annotations'],
+                    created_at=row['created_at'],
+                    updated_at=row['updated_at']
+                )
+                for row in rows
+            ]
 
     # ================================
     # DOCUMENT PARAGRAPHS (OPTIONAL)
@@ -349,50 +350,23 @@ class UserDocsRepository:
         Returns:
             DocumentParagraph (existing or newly created)
         """
-        conn = await self._get_connection()
-        
-        row = await conn.fetchrow(
-            """
-            INSERT INTO user_document_paragraphs (
+        async with get_user_connection(self.user_id) as conn:
+            row = await conn.fetchrow(
+                """
+                INSERT INTO user_document_paragraphs (
+                    document_id, page_number, paragraph_index, artifact_paragraph_id, annotations
+                ) VALUES ($1, $2, $3, $4, $5)
+                ON CONFLICT (document_id, page_number, paragraph_index) DO UPDATE SET
+                    artifact_paragraph_id = EXCLUDED.artifact_paragraph_id,
+                    annotations = COALESCE(user_document_paragraphs.annotations, EXCLUDED.annotations),
+                    updated_at = now()
+                RETURNING document_id, page_number, paragraph_index, artifact_paragraph_id,
+                          annotations, created_at, updated_at
+                """,
                 document_id, page_number, paragraph_index, artifact_paragraph_id, annotations
-            ) VALUES ($1, $2, $3, $4, $5)
-            ON CONFLICT (document_id, page_number, paragraph_index) DO UPDATE SET
-                artifact_paragraph_id = EXCLUDED.artifact_paragraph_id,
-                annotations = COALESCE(user_document_paragraphs.annotations, EXCLUDED.annotations),
-                updated_at = now()
-            RETURNING document_id, page_number, paragraph_index, artifact_paragraph_id,
-                      annotations, created_at, updated_at
-            """,
-            document_id, page_number, paragraph_index, artifact_paragraph_id, annotations
-        )
-        
-        return DocumentParagraph(
-            document_id=row['document_id'],
-            page_number=row['page_number'],
-            paragraph_index=row['paragraph_index'],
-            artifact_paragraph_id=row['artifact_paragraph_id'],
-            annotations=row['annotations'],
-            created_at=row['created_at'],
-            updated_at=row['updated_at']
-        )
-
-    async def get_document_paragraphs(self, document_id: UUID) -> List[DocumentParagraph]:
-        """Get all paragraphs for a document."""
-        conn = await self._get_connection()
-        
-        rows = await conn.fetch(
-            """
-            SELECT document_id, page_number, paragraph_index, artifact_paragraph_id,
-                   annotations, created_at, updated_at
-            FROM user_document_paragraphs
-            WHERE document_id = $1
-            ORDER BY page_number, paragraph_index
-            """,
-            document_id
-        )
-        
-        return [
-            DocumentParagraph(
+            )
+            
+            return DocumentParagraph(
                 document_id=row['document_id'],
                 page_number=row['page_number'],
                 paragraph_index=row['paragraph_index'],
@@ -401,8 +375,33 @@ class UserDocsRepository:
                 created_at=row['created_at'],
                 updated_at=row['updated_at']
             )
-            for row in rows
-        ]
+
+    async def get_document_paragraphs(self, document_id: UUID) -> List[DocumentParagraph]:
+        """Get all paragraphs for a document."""
+        async with get_user_connection(self.user_id) as conn:
+            rows = await conn.fetch(
+                """
+                SELECT document_id, page_number, paragraph_index, artifact_paragraph_id,
+                       annotations, created_at, updated_at
+                FROM user_document_paragraphs
+                WHERE document_id = $1
+                ORDER BY page_number, paragraph_index
+                """,
+                document_id
+            )
+            
+            return [
+                DocumentParagraph(
+                    document_id=row['document_id'],
+                    page_number=row['page_number'],
+                    paragraph_index=row['paragraph_index'],
+                    artifact_paragraph_id=row['artifact_paragraph_id'],
+                    annotations=row['annotations'],
+                    created_at=row['created_at'],
+                    updated_at=row['updated_at']
+                )
+                for row in rows
+            ]
 
     # ================================
     # BATCH OPERATIONS
@@ -459,51 +458,50 @@ class UserDocsRepository:
         if not paragraph_data:
             return []
         
-        conn = await self._get_connection()
-        
-        # Prepare data for batch insert - match individual upsert pattern
-        insert_values = []
-        for para in paragraph_data:
-            insert_values.append((
-                document_id,
-                para['page_number'],
-                para['paragraph_index'], 
-                para['artifact_paragraph_id'],
-                para.get('annotations')
-            ))
-        
-        # Batch upsert with UNNEST - match individual upsert SQL pattern
-        rows = await conn.fetch(
-            """
-            INSERT INTO user_document_paragraphs (
-                document_id, page_number, paragraph_index, artifact_paragraph_id, annotations
+        async with get_user_connection(self.user_id) as conn:
+            # Prepare data for batch insert - match individual upsert pattern
+            insert_values = []
+            for para in paragraph_data:
+                insert_values.append((
+                    document_id,
+                    para['page_number'],
+                    para['paragraph_index'], 
+                    para['artifact_paragraph_id'],
+                    para.get('annotations')
+                ))
+            
+            # Batch upsert with UNNEST - match individual upsert SQL pattern
+            rows = await conn.fetch(
+                """
+                INSERT INTO user_document_paragraphs (
+                    document_id, page_number, paragraph_index, artifact_paragraph_id, annotations
+                )
+                SELECT * FROM UNNEST($1::uuid[], $2::int[], $3::int[], $4::uuid[], $5::jsonb[])
+                ON CONFLICT (document_id, page_number, paragraph_index) DO UPDATE SET
+                    artifact_paragraph_id = EXCLUDED.artifact_paragraph_id,
+                    annotations = COALESCE(user_document_paragraphs.annotations, EXCLUDED.annotations),
+                    updated_at = now()
+                RETURNING document_id, page_number, paragraph_index, artifact_paragraph_id,
+                          annotations, created_at, updated_at
+                """,
+                [v[0] for v in insert_values],  # document_ids
+                [v[1] for v in insert_values],  # page_numbers
+                [v[2] for v in insert_values],  # paragraph_indices
+                [v[3] for v in insert_values],  # artifact_paragraph_ids
+                [v[4] for v in insert_values]   # annotations
             )
-            SELECT * FROM UNNEST($1::uuid[], $2::int[], $3::int[], $4::uuid[], $5::jsonb[])
-            ON CONFLICT (document_id, page_number, paragraph_index) DO UPDATE SET
-                artifact_paragraph_id = EXCLUDED.artifact_paragraph_id,
-                annotations = COALESCE(user_document_paragraphs.annotations, EXCLUDED.annotations),
-                updated_at = now()
-            RETURNING document_id, page_number, paragraph_index, artifact_paragraph_id,
-                      annotations, created_at, updated_at
-            """,
-            [v[0] for v in insert_values],  # document_ids
-            [v[1] for v in insert_values],  # page_numbers
-            [v[2] for v in insert_values],  # paragraph_indices
-            [v[3] for v in insert_values],  # artifact_paragraph_ids
-            [v[4] for v in insert_values]   # annotations
-        )
-        
-        return [
-            DocumentParagraph(
-                document_id=row['document_id'],
-                page_number=row['page_number'],
-                paragraph_index=row['paragraph_index'],
-                artifact_paragraph_id=row['artifact_paragraph_id'],
-                annotations=row['annotations'],
-                created_at=row['created_at'],
-                updated_at=row['updated_at']
-            ) for row in rows
-        ]
+            
+            return [
+                DocumentParagraph(
+                    document_id=row['document_id'],
+                    page_number=row['page_number'],
+                    paragraph_index=row['paragraph_index'],
+                    artifact_paragraph_id=row['artifact_paragraph_id'],
+                    annotations=row['annotations'],
+                    created_at=row['created_at'],
+                    updated_at=row['updated_at']
+                ) for row in rows
+            ]
 
     async def batch_upsert_document_diagrams(
         self,
