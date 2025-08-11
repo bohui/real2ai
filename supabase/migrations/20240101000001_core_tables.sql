@@ -136,14 +136,15 @@ CREATE TABLE user_subscriptions (
 
 
 -- RLS Configuration
-ALTER TABLE contracts DISABLE ROW LEVEL SECURITY;
-ALTER TABLE contract_analyses DISABLE ROW LEVEL SECURITY;
+ALTER TABLE contracts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE contract_analyses ENABLE ROW LEVEL SECURITY;
 
 -- Enable RLS on user-specific tables
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE documents ENABLE ROW LEVEL SECURITY;
 ALTER TABLE usage_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_subscriptions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE subscription_plans ENABLE ROW LEVEL SECURITY;
 
 -- Profiles policies
 CREATE POLICY "Users can view own profile" 
@@ -196,6 +197,7 @@ CREATE POLICY "Service can manage subscriptions"
 -- Subscription plans are publicly readable (no RLS needed)
 CREATE POLICY "Anyone can view active subscription plans" 
     ON subscription_plans FOR SELECT 
+    TO anon, authenticated
     USING (active = true);
 
 -- Possession-gated SELECT policies for shared tables
@@ -231,7 +233,7 @@ CREATE POLICY "read_if_user_has_hash"
 CREATE OR REPLACE FUNCTION get_user_analytics(target_user_id UUID)
 RETURNS JSON
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, pg_temp
 LANGUAGE plpgsql
 AS $$
 DECLARE
@@ -251,7 +253,9 @@ BEGIN
     ) INTO result
     FROM profiles p
     LEFT JOIN documents d ON p.id = d.user_id
-    LEFT JOIN contract_analyses ca ON p.id = ca.user_id
+    LEFT JOIN contract_analyses ca ON ca.content_hash IN (
+        SELECT content_hash FROM documents WHERE user_id = p.id
+    )
     LEFT JOIN usage_logs ul ON p.id = ul.user_id
     WHERE p.id = target_user_id
     GROUP BY p.id;
@@ -268,7 +272,7 @@ CREATE OR REPLACE FUNCTION update_user_credits(
 )
 RETURNS INTEGER
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, pg_temp
 LANGUAGE plpgsql
 AS $$
 DECLARE
@@ -315,7 +319,7 @@ CREATE OR REPLACE FUNCTION check_user_credits(
 )
 RETURNS BOOLEAN
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, pg_temp
 LANGUAGE plpgsql
 AS $$
 DECLARE
@@ -356,7 +360,7 @@ COMMENT ON FUNCTION update_updated_at_column() IS
 CREATE OR REPLACE FUNCTION handle_new_user()
 RETURNS TRIGGER
 LANGUAGE plpgsql
-SECURITY definer set search_path = ''
+SECURITY DEFINER SET search_path = public, pg_temp
 AS $$
 BEGIN
     INSERT INTO public.profiles (id, email, full_name)
@@ -369,6 +373,179 @@ BEGIN
 END;
 $$;
 
+
+-- Function to get user statistics
+CREATE OR REPLACE FUNCTION get_user_statistics(user_uuid UUID)
+RETURNS JSONB AS $$
+DECLARE
+    stats JSONB;
+BEGIN
+    -- Only allow users to get their own stats or service role
+    IF auth.uid() != user_uuid AND auth.jwt() ->> 'role' != 'service_role' THEN
+        RAISE EXCEPTION 'Access denied';
+    END IF;
+
+    SELECT jsonb_build_object(
+        'total_documents', COALESCE(doc_stats.total_documents, 0),
+        'total_analyses', COALESCE(analysis_stats.total_analyses, 0),
+        'completed_analyses', COALESCE(analysis_stats.completed_analyses, 0),
+        'avg_risk_score', COALESCE(analysis_stats.avg_risk_score, 0),
+        'credits_used_this_month', COALESCE(usage_stats.credits_used_this_month, 0),
+        'last_analysis_date', analysis_stats.last_analysis_date,
+        'subscription_status', p.subscription_status,
+        'credits_remaining', p.credits_remaining
+    ) INTO stats
+    FROM public.profiles p
+    LEFT JOIN (
+        SELECT 
+            user_id,
+            COUNT(*) as total_documents
+        FROM documents
+        WHERE user_id = user_uuid
+        GROUP BY user_id
+    ) doc_stats ON p.id = doc_stats.user_id
+    LEFT JOIN (
+        SELECT 
+            user_id,
+            COUNT(*) as total_analyses,
+            COUNT(*) FILTER (WHERE status = 'completed') as completed_analyses,
+            AVG(overall_risk_score) FILTER (WHERE status = 'completed') as avg_risk_score,
+            MAX(analysis_timestamp) FILTER (WHERE status = 'completed') as last_analysis_date
+        FROM contract_analyses
+        WHERE content_hash IN (
+            SELECT content_hash FROM documents WHERE user_id = user_uuid
+        )
+        -- group by a synthetic key to allow aggregate only result
+        GROUP BY 1
+    ) analysis_stats ON TRUE
+    LEFT JOIN (
+        SELECT 
+            user_id,
+            SUM(credits_used) as credits_used_this_month
+        FROM usage_logs
+        WHERE user_id = user_uuid
+        AND timestamp >= date_trunc('month', CURRENT_DATE)
+        GROUP BY user_id
+    ) usage_stats ON p.id = usage_stats.user_id
+    WHERE p.id = user_uuid;
+
+    RETURN stats;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Function to handle upsert for contract_analyses (prevents duplicate key errors)
+CREATE OR REPLACE FUNCTION upsert_contract_analysis(
+    p_content_hash TEXT,
+    p_agent_version TEXT DEFAULT '1.0',
+    p_status analysis_status DEFAULT 'pending',
+    p_analysis_result JSONB DEFAULT '{}',
+    p_error_message TEXT DEFAULT NULL
+) RETURNS UUID AS $$
+DECLARE
+    v_analysis_id UUID;
+BEGIN
+    -- Try to insert new record
+    INSERT INTO contract_analyses (
+        content_hash,
+        agent_version,
+        status,
+        analysis_result,
+        error_message,
+        analysis_timestamp,
+        created_at,
+        updated_at
+    ) VALUES (
+        p_content_hash,
+        p_agent_version,
+        p_status,
+        p_analysis_result,
+        p_error_message,
+        NOW(),
+        NOW(),
+        NOW()
+    ) ON CONFLICT (content_hash) DO UPDATE SET
+        status = EXCLUDED.status,
+        analysis_result = EXCLUDED.analysis_result,
+        error_message = EXCLUDED.error_message,
+        updated_at = NOW()
+    RETURNING id INTO v_analysis_id;
+    
+    RETURN v_analysis_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Function to safely retry analysis
+CREATE OR REPLACE FUNCTION retry_contract_analysis(
+    p_content_hash TEXT,
+    p_user_id UUID
+) RETURNS UUID AS $$
+DECLARE
+    v_analysis_id UUID;
+    v_existing_status analysis_status;
+BEGIN
+    -- Check if analysis already exists
+    SELECT id, status INTO v_analysis_id, v_existing_status
+    FROM contract_analyses
+    WHERE content_hash = p_content_hash;
+    
+    -- If analysis exists and failed or was cancelled, reset it for retry
+    -- Note: Successfully completed analyses should NOT be retried
+    IF v_analysis_id IS NOT NULL AND v_existing_status IN ('failed', 'cancelled') THEN
+        UPDATE contract_analyses
+        SET 
+            status = 'pending',
+            error_message = NULL,
+            analysis_result = '{}',
+            executive_summary = NULL,
+            risk_assessment = NULL,
+            compliance_check = NULL,
+            recommendations = NULL,
+            risk_score = 0,
+            overall_risk_score = 0,
+            processing_time = NULL,
+            processing_completed_at = NULL,
+            updated_at = NOW()
+        WHERE id = v_analysis_id;
+    -- If analysis doesn't exist, create new one
+    ELSIF v_analysis_id IS NULL THEN
+        v_analysis_id := upsert_contract_analysis(p_content_hash);
+    -- If analysis exists and is completed, don't retry - return the existing ID
+    ELSIF v_existing_status = 'completed' THEN
+        -- Analysis already completed successfully, no retry needed
+        -- Return existing analysis_id without modification
+        NULL; -- No action needed
+    END IF;
+    
+    RETURN v_analysis_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Add comments for documentation
+COMMENT ON FUNCTION upsert_contract_analysis IS 'Upsert function for contract analyses to handle duplicate content_hash';
+COMMENT ON FUNCTION retry_contract_analysis IS 'Safely retry analysis by checking existing status - only retries failed/cancelled analyses, not completed ones';
+
+-- Safely cancel user's analysis without mutating shared rows
+-- Scopes cancellation to user-owned progress; avoids direct writes to shared contract_analyses
+CREATE OR REPLACE FUNCTION cancel_user_contract_analysis(
+    p_content_hash TEXT,
+    p_user_id UUID
+)
+RETURNS VOID AS $$
+BEGIN
+    -- Cancel any in-progress user-scoped analysis progress rows
+    UPDATE analysis_progress
+    SET status = 'cancelled',
+        error_message = 'Analysis cancelled by user'
+    WHERE content_hash = p_content_hash
+      AND user_id = p_user_id
+      AND status = 'in_progress';
+
+    -- Do NOT mutate shared contract_analyses here to prevent cross-user impact
+    -- Optionally, we could insert an audit log if needed.
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+COMMENT ON FUNCTION cancel_user_contract_analysis(TEXT, UUID) IS 'Cancel user-scoped analysis progress; leaves shared contract_analyses untouched.';
 -- Trigger to automatically create profile on user signup
 CREATE TRIGGER on_auth_user_created
     AFTER INSERT ON auth.users
@@ -405,6 +582,7 @@ REVOKE ALL ON TABLE public.contracts FROM authenticated;
 -- Grant SELECT to authenticated so RLS policies can apply
 GRANT SELECT ON TABLE public.contracts TO authenticated;
 GRANT SELECT ON TABLE public.contract_analyses TO authenticated;
+GRANT SELECT ON TABLE public.subscription_plans TO anon, authenticated;
 
 -- Indexes for core tables
 CREATE INDEX idx_profiles_email ON profiles(email);
