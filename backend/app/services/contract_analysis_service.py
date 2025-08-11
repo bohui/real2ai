@@ -13,8 +13,8 @@ from app.core.config import (
     validate_workflow_configuration,
     EnhancedWorkflowConfig,
 )
-from app.core.prompts import PromptManager, get_prompt_manager
-from app.models.contract_state import create_initial_state, RealEstateAgentState
+from app.core.prompts import PromptManager
+from app.models.contract_state import RealEstateAgentState
 from app.schema.enums import AustralianState, ProcessingStatus
 from app.schema import (
     ContractAnalysisServiceResponse,
@@ -338,7 +338,7 @@ class ContractAnalysisService:
                 await self.websocket_manager.send_message(
                     session_id,
                     WebSocketEvents.analysis_failed(
-                        session_id,
+                        contract_id,
                         f"Analysis service error: {str(e)}",
                         retry_available=True,
                     ),
@@ -507,7 +507,7 @@ class ContractAnalysisService:
         response = ContractAnalysisServiceResponse(
             success=(
                 final_state.get("parsing_status") == ProcessingStatus.COMPLETED
-                or not final_state.get("error_state")
+                and not final_state.get("error_state")
             ),
             session_id=final_state.get("session_id"),
             analysis_timestamp=datetime.now(timezone.utc),
@@ -720,6 +720,14 @@ class ContractAnalysisService:
                 self._schedule_persist(
                     "validate_input", 14, "Validating document and input parameters"
                 )
+                # Mark status as processing when first step begins
+                try:
+                    if self.contract_id in self.parent_service.active_analyses:
+                        self.parent_service.active_analyses[self.contract_id][
+                            "status"
+                        ] = "processing"
+                except Exception:
+                    pass
                 return super().validate_input(state)
 
             async def process_document(self, state):
@@ -825,6 +833,7 @@ class ContractAnalysisService:
             self,
             openai_api_key=self.openai_api_key,
             model_name=self.model_name,
+            openai_api_base=self.openai_api_base,
         )
 
         # Execute the workflow
