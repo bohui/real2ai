@@ -99,45 +99,7 @@ class AnalysisRecord(TypedDict):
     updated_at: str
 
 
-class UserNotificationData(TypedDict):
-    """User notification structure."""
-
-    id: str
-    user_id: str
-    title: str
-    message: str
-    type: str
-    acknowledged: bool
-    created_at: str
-
-
 # API Response Types
-class AnalysisStatusResponse(TypedDict):
-    """Response for analysis status endpoint."""
-
-    contract_id: str
-    analysis_id: str
-    status: str
-    progress: int
-    processing_time: float
-    created_at: str
-    updated_at: str
-    estimated_completion: Optional[str]
-    status_message: str
-    next_update_in_seconds: Optional[int]
-    cached: Optional[bool]
-    cache_source: Optional[str]
-
-
-class AnalysisProgressInfo(TypedDict):
-    """Analysis progress calculation result."""
-
-    progress: int
-    status_message: str
-    estimated_completion: Optional[str]
-    next_update_in_seconds: Optional[int]
-
-
 class ContractAnalysisResultResponse(TypedDict):
     """Response for contract analysis results."""
 
@@ -151,26 +113,12 @@ class ContractAnalysisResultResponse(TypedDict):
     cache_source: Optional[str]
 
 
-class NotificationsResponse(TypedDict):
-    """Response for user notifications."""
-
-    notifications: List[UserNotificationData]
-    total_count: int
-    unread_count: int
-
-
 class DeleteContractResponse(TypedDict):
     """Response for contract deletion."""
 
     message: str
     contract_id: str
     analyses_deleted: int
-
-
-class NotificationDismissResponse(TypedDict):
-    """Response for notification dismissal."""
-
-    message: str
 
 
 # Background Task Types
@@ -193,7 +141,6 @@ Date: 2025-08-10
 UserAuthenticatedClient = SupabaseClient
 SystemClient = SupabaseClient
 
-logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/contracts", tags=["contracts"])
 
 
@@ -286,7 +233,7 @@ async def start_contract_analysis(
                 logger.error(
                     f"Document access denied: {document_id} for user {user.id}. "
                     f"This could mean: 1) Document doesn't exist, 2) Document belongs to another user, "
-                    f"3) User session has expired. Use /api/contracts/debug/document/{document_id} to troubleshoot."
+                    f"3) User session has expired."
                 )
                 raise ValueError(
                     f"Document access denied. Document {document_id} either doesn't exist or doesn't belong to your account. "
@@ -364,6 +311,10 @@ async def start_contract_analysis(
 
         # NORMAL PROCESSING PATH (Cache miss or cache disabled)
 
+        # Ensure we have a content_hash for downstream records
+        if not content_hash:
+            content_hash = await _generate_document_content_hash(document)
+
         # Create contract record with user context (RLS enforced)
         contract_id = await _create_contract_record_with_cache(
             user_client, document_id, document, user, content_hash
@@ -418,6 +369,25 @@ async def start_contract_analysis(
 
         # Use enhanced error handler
         raise handle_api_error(e, context, ErrorCategory.CONTRACT_ANALYSIS)
+
+
+@router.post("/analyze-enhanced", response_model=ContractAnalysisResponse)
+async def start_contract_analysis_enhanced(
+    background_tasks: BackgroundTasks,
+    request: Dict[str, Any] = Body(...),
+    user: User = Depends(get_current_user),
+    document_service: DocumentService = Depends(get_user_document_service),
+    cache_service: CacheService = Depends(get_cache_service),
+) -> ContractAnalysisResponse:
+    """
+    Enhanced contract analysis endpoint (alias for backward compatibility).
+
+    This is a thin alias that calls start_contract_analysis with the same arguments.
+    Added for compatibility with frontend cacheService.startEnhancedContractAnalysis.
+    """
+    return await start_contract_analysis(
+        background_tasks, request, user, document_service, cache_service
+    )
 
 
 @router.get("/history")
@@ -860,359 +830,6 @@ async def _generate_document_content_hash(document: DocumentRecord) -> Optional[
         return None
 
 
-@router.get("/performance-report")
-async def get_database_performance_report(
-    user: User = Depends(get_current_user),
-) -> Dict[str, Any]:
-    """Get database performance report for contract operations.
-
-    Returns performance metrics including:
-    - Query execution times
-    - Cache hit ratios
-    - Optimization status
-    - Performance recommendations
-    """
-
-    context = create_error_context(
-        user_id=str(user.id), operation="get_database_performance_report"
-    )
-
-    try:
-        # Get authenticated client
-        db_client = await AuthContext.get_authenticated_client(require_auth=True)
-        await _initialize_database_client(db_client)
-
-        # Get optimizer instance and performance data
-        optimizer = get_database_optimizer()
-        session_metrics = optimizer.get_session_metrics()
-
-        # Get database performance report
-        db_report = await optimizer.get_performance_report(db_client)
-
-        return {
-            "session_metrics": session_metrics,
-            "database_report": db_report,
-            "optimization_status": {
-                "optimized_queries_enabled": True,
-                "composite_indexes_active": True,
-                "performance_monitoring_active": True,
-                "target_response_time_ms": 100,
-                "optimization_version": "1.0",
-            },
-            "generated_at": datetime.utcnow().isoformat(),
-        }
-
-    except Exception as e:
-        raise handle_api_error(e, context, ErrorCategory.DATABASE)
-
-
-@router.get("/{contract_id}/status")
-async def get_analysis_status(
-    contract_id: str,
-    user: User = Depends(get_current_user),
-    cache_service: CacheService = Depends(get_cache_service),
-) -> AnalysisStatusResponse:
-    """Get contract analysis status with cache information."""
-
-    context = create_error_context(
-        user_id=str(user.id), contract_id=contract_id, operation="get_analysis_status"
-    )
-
-    try:
-        # Validate contract ID format
-        if not contract_id or not contract_id.strip():
-            raise ValueError("Contract ID is required")
-
-        # Get authenticated client
-        db_client = await AuthContext.get_authenticated_client(require_auth=True)
-
-        # Initialize database client with retry
-        await _initialize_database_client(db_client)
-
-        # Get analysis status with retry and validation
-        analysis = await _get_analysis_status_with_validation(
-            db_client, contract_id, user.id
-        )
-
-        # Calculate progress with enhanced information
-        progress_info = _calculate_analysis_progress(analysis)
-
-        # Check if this was a cached analysis
-        cached_indicator = analysis.get("analysis_metadata", {}).get("cached_from")
-
-        response = {
-            "contract_id": contract_id,
-            "analysis_id": analysis["id"],
-            "status": analysis["status"],
-            "progress": progress_info["progress"],
-            "processing_time": analysis.get("processing_time", 0),
-            "created_at": analysis["created_at"],
-            "updated_at": analysis["updated_at"],
-            "estimated_completion": progress_info["estimated_completion"],
-            "status_message": progress_info["status_message"],
-            "next_update_in_seconds": progress_info.get("next_update_in_seconds"),
-        }
-
-        # Add cache information if available
-        if cached_indicator:
-            response["cached"] = True
-            response["cache_source"] = cached_indicator
-
-        return response
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise handle_api_error(e, context, ErrorCategory.DATABASE)
-
-
-@retry_database_operation(max_attempts=3)
-async def _get_analysis_status_with_validation(
-    db_client: UserAuthenticatedClient, contract_id: str, user_id: str
-) -> AnalysisRecord:
-    """Get analysis status with validation using optimized query (75% faster).
-
-    PERFORMANCE OPTIMIZATION:
-    - Original: 4 separate queries (200-500ms)
-    - Optimized: 1 consolidated query with JOINs (<100ms)
-    - Uses composite indexes for optimal performance
-    """
-
-    # Use the optimized database query that replaces 4 separate queries
-    optimizer = get_database_optimizer()
-
-    try:
-        access_result = await optimizer.get_user_contract_access_optimized(
-            db_client=db_client,
-            user_id=user_id,
-            contract_id=contract_id,
-            use_cache=True,
-        )
-
-        # Log performance metrics
-        if access_result.performance_metrics:
-            metrics = access_result.performance_metrics
-            logger.info(
-                f"Optimized query performance: {metrics.execution_time_ms:.1f}ms "
-                f"(target: <100ms, cached: {metrics.cache_hit})"
-            )
-
-        # Validate access
-        if not access_result.has_access:
-            if access_result.access_source == "contract_not_found":
-                raise ValueError("Contract not found")
-            elif access_result.access_source == "none":
-                raise ValueError("You don't have access to any contracts")
-            else:
-                raise ValueError("You don't have access to this contract")
-
-        # Validate analysis exists
-        if not access_result.analysis_id:
-            raise ValueError("Analysis not found for this contract")
-
-        # Convert to AnalysisRecord format
-        return {
-            "id": access_result.analysis_id,
-            "status": access_result.analysis_status,
-            "created_at": access_result.analysis_created_at,
-            "updated_at": access_result.analysis_updated_at,
-            "processing_time": access_result.processing_time,
-            "error_message": access_result.error_message,
-            "analysis_metadata": access_result.analysis_metadata or {},
-        }
-
-    except ValueError:
-        # Re-raise validation errors
-        raise
-    except Exception as e:
-        logger.error(f"Optimized query failed, using fallback: {str(e)}")
-
-        # The optimizer automatically handles fallback to original pattern
-        # This should not normally happen if indexes are properly created
-        access_result = await optimizer.get_user_contract_access_optimized(
-            db_client=db_client,
-            user_id=user_id,
-            contract_id=contract_id,
-            use_cache=False,  # Disable cache for fallback
-        )
-
-        if not access_result.has_access or not access_result.analysis_id:
-            raise ValueError("Contract access validation failed")
-
-        return {
-            "id": access_result.analysis_id,
-            "status": access_result.analysis_status,
-            "created_at": access_result.analysis_created_at,
-            "updated_at": access_result.analysis_updated_at,
-            "processing_time": access_result.processing_time,
-            "error_message": access_result.error_message,
-            "analysis_metadata": access_result.analysis_metadata or {},
-        }
-
-
-def _calculate_analysis_progress(analysis: AnalysisRecord) -> AnalysisProgressInfo:
-    """Calculate detailed progress information"""
-
-    status = analysis["status"]
-
-    # Enhanced progress mapping with more granular updates
-    progress_mapping = {
-        "pending": {
-            "progress": 0,
-            "status_message": "Your contract analysis is queued and will start shortly",
-            "estimated_completion": "2-5 minutes",
-            "next_update_in_seconds": 30,
-        },
-        "queued": {
-            "progress": 5,
-            "status_message": "Analysis has been queued and will begin processing soon",
-            "estimated_completion": "2-5 minutes",
-            "next_update_in_seconds": 15,
-        },
-        "processing": {
-            "progress": 50,
-            "status_message": "Our AI is analyzing your contract - this may take a few minutes",
-            "estimated_completion": "1-3 minutes",
-            "next_update_in_seconds": 10,
-        },
-        "completed": {
-            "progress": 100,
-            "status_message": "Analysis complete! You can now view your results",
-            "estimated_completion": None,
-            "next_update_in_seconds": None,
-        },
-        "failed": {
-            "progress": 0,
-            "status_message": "Analysis failed. Please try again or contact support",
-            "estimated_completion": None,
-            "next_update_in_seconds": None,
-        },
-        "cancelled": {
-            "progress": 0,
-            "status_message": "Analysis was cancelled",
-            "estimated_completion": None,
-            "next_update_in_seconds": None,
-        },
-    }
-
-    return progress_mapping.get(
-        status,
-        {
-            "progress": 0,
-            "status_message": "Analysis status unknown",
-            "estimated_completion": None,
-            "next_update_in_seconds": 30,
-        },
-    )
-
-
-@router.get("/{contract_id}/progress")
-async def get_analysis_progress(
-    contract_id: str,
-    user: User = Depends(get_current_user),
-) -> Dict[str, Any]:
-    """
-    Get detailed analysis progress with real-time updates.
-
-    This endpoint provides granular progress information including:
-    - Current processing step
-    - Progress percentage
-    - Step description
-    - Estimated completion time
-    - Error messages (if any)
-    """
-
-    context = create_error_context(
-        user_id=str(user.id), contract_id=contract_id, operation="get_analysis_progress"
-    )
-
-    try:
-        # Get authenticated client
-        db_client = await AuthContext.get_authenticated_client(require_auth=True)
-
-        # First get the contract to get its content_hash
-        contract_result = await db_client.database.select(
-            "contracts", columns="id, content_hash", filters={"id": contract_id}
-        )
-
-        if not contract_result.get("data"):
-            raise ValueError("Contract not found")
-
-        content_hash = contract_result["data"][0]["content_hash"]
-
-        # Verify user access via user_contract_views
-        access_result = await db_client.database.select(
-            "user_contract_views",
-            columns="id",
-            filters={"content_hash": content_hash, "user_id": str(user.id)},
-        )
-
-        if not access_result.get("data"):
-            raise ValueError("You don't have access to this contract")
-
-        # Get progress record from analysis_progress table using content_hash
-        progress_result = await db_client.database.select(
-            "analysis_progress",
-            columns="*",
-            filters={"content_hash": content_hash, "user_id": str(user.id)},
-        )
-
-        # Get analysis status as fallback using content_hash
-        analysis_result = await db_client.database.select(
-            "contract_analyses",
-            columns="id, status, created_at, updated_at, processing_time",
-            filters={"content_hash": content_hash},
-        )
-
-        if not analysis_result.get("data"):
-            raise HTTPException(status_code=404, detail="Analysis not found")
-
-        analysis = analysis_result["data"][0]
-
-        # If we have detailed progress, use that
-        if progress_result.get("data"):
-            progress = progress_result["data"][0]
-            return {
-                "contract_id": contract_id,
-                "analysis_id": progress["analysis_id"],
-                "progress": progress["progress_percent"],
-                "current_step": progress["current_step"],
-                "step_description": progress["step_description"],
-                "status": progress["status"],
-                "estimated_completion_minutes": progress.get(
-                    "estimated_completion_minutes"
-                ),
-                "step_started_at": progress["step_started_at"],
-                "total_elapsed_seconds": progress.get("total_elapsed_seconds", 0),
-                "error_message": progress.get("error_message"),
-                "last_updated": progress.get("updated_at"),
-                "has_detailed_progress": True,
-            }
-
-        # Fallback to basic progress calculation from analysis status
-        else:
-            progress_info = _calculate_analysis_progress(analysis)
-            return {
-                "contract_id": contract_id,
-                "analysis_id": analysis["id"],
-                "progress": progress_info["progress"],
-                "current_step": analysis["status"],
-                "step_description": progress_info["status_message"],
-                "status": analysis["status"],
-                "estimated_completion_minutes": None,
-                "step_started_at": analysis["created_at"],
-                "total_elapsed_seconds": 0,
-                "error_message": None,
-                "last_updated": analysis["updated_at"],
-                "has_detailed_progress": False,
-            }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise handle_api_error(e, context, ErrorCategory.DATABASE)
-
-
 @router.get("/{contract_id}/analysis")
 async def get_contract_analysis(
     contract_id: str,
@@ -1242,39 +859,35 @@ async def get_contract_analysis(
             logger.info("AuthContext token check failed (non-fatal)")
 
         # First check if user has access to this contract through user_contract_views
-        access_result = (
-            db_client.table("user_contract_views")
-            .select("content_hash")
-            .eq("user_id", user.id)
-            .execute()
+        access_result = await db_client.database.select(
+            "user_contract_views",
+            columns="content_hash",
+            filters={"user_id": str(user.id)},
         )
 
         user_content_hashes = []
-        if access_result.data:
+        if access_result.get("data"):
             logger.info(
-                f"user_contract_views rows for user {user.id}: {len(access_result.data)}"
+                f"user_contract_views rows for user {user.id}: {len(access_result['data'])}"
             )
             user_content_hashes = [
                 view["content_hash"]
-                for view in access_result.data
+                for view in access_result["data"]
                 if view.get("content_hash")
             ]
 
         # Also check documents table for additional access
-        doc_access_result = (
-            db_client.table("documents")
-            .select("content_hash")
-            .eq("user_id", user.id)
-            .execute()
+        doc_access_result = await db_client.database.select(
+            "documents", columns="content_hash", filters={"user_id": str(user.id)}
         )
 
-        if doc_access_result.data:
+        if doc_access_result.get("data"):
             logger.info(
-                f"documents rows for user {user.id}: {len(doc_access_result.data)}"
+                f"documents rows for user {user.id}: {len(doc_access_result['data'])}"
             )
             doc_content_hashes = [
                 doc["content_hash"]
-                for doc in doc_access_result.data
+                for doc in doc_access_result["data"]
                 if doc.get("content_hash")
             ]
             user_content_hashes.extend(doc_content_hashes)
@@ -1294,14 +907,14 @@ async def get_contract_analysis(
         user_content_hashes = list(set(user_content_hashes))
 
         # Get contract by ID to get its content_hash
-        contract_result = (
-            db_client.table("contracts").select("*").eq("id", contract_id).execute()
+        contract_result = await db_client.database.select(
+            "contracts", columns="*", filters={"id": contract_id}
         )
 
-        if not contract_result.data:
+        if not contract_result.get("data"):
             raise HTTPException(status_code=404, detail="Contract not found")
 
-        contract = contract_result.data[0]
+        contract = contract_result["data"][0]
         content_hash = contract["content_hash"]
         logger.info(
             f"Contract resolved: contract_id={contract_id}, content_hash={content_hash}"
@@ -1320,17 +933,14 @@ async def get_contract_analysis(
             )
 
         # Get analysis results using content_hash
-        result = (
-            db_client.table("contract_analyses")
-            .select("*")
-            .eq("content_hash", content_hash)
-            .execute()
+        result = await db_client.database.select(
+            "contract_analyses", columns="*", filters={"content_hash": content_hash}
         )
 
-        if not result.data:
+        if not result.get("data"):
             raise HTTPException(status_code=404, detail="Analysis not found")
 
-        analysis = result.data[0]
+        analysis = result["data"][0]
 
         # Enhanced response with cache information
         response = {
@@ -1361,46 +971,68 @@ async def get_contract_analysis(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.get("/{contract_id}/report", response_model=ContractAnalysisResultResponse)
+@router.get("/{contract_id}/report")
 async def get_contract_analysis_report(
     contract_id: str,
+    format: str = Query("json", description="Report format: json or pdf"),
     user: User = Depends(get_current_user),
-) -> ContractAnalysisResultResponse:
-    """Get contract analysis report data"""
-    return await get_contract_analysis(contract_id, user)
+) -> Dict[str, Any]:
+    """Get contract analysis report with download URL for PDF format.
 
-
-@router.get("/{contract_id}/report/pdf")
-async def download_contract_pdf_report(
-    contract_id: str,
-    user: User = Depends(get_current_user),
-):
-    """Download contract analysis report as PDF"""
+    Returns:
+        - For format=json: Analysis data
+        - For format=pdf: Signed download URL
+    """
+    context = create_error_context(
+        user_id=str(user.id),
+        contract_id=contract_id,
+        operation="get_contract_analysis_report",
+    )
 
     try:
-        # Get authenticated client
-        db_client = await AuthContext.get_authenticated_client(require_auth=True)
-
-        # Get analysis data
+        # Get analysis data first
         analysis_data = await get_contract_analysis(contract_id, user)
 
-        # Generate PDF report (would implement with reportlab or similar)
-        from app.tasks.background_tasks import generate_pdf_report
+        if format == "pdf":
+            # Generate PDF and upload to storage, return signed URL
+            from app.tasks.background_tasks import generate_pdf_report
+            from app.core.auth_context import AuthContext
+            import uuid
 
-        pdf_content = await generate_pdf_report(analysis_data)
+            # Get authenticated client for storage operations
+            db_client = await AuthContext.get_authenticated_client(require_auth=True)
 
-        # Return the actual PDF content
-        return Response(
-            content=pdf_content,
-            media_type="application/pdf",
-            headers={
-                "Content-Disposition": f"attachment; filename=contract_{contract_id}_report.pdf"
-            },
-        )
+            # Generate PDF content
+            pdf_content = await generate_pdf_report(analysis_data)
+
+            # Create storage path
+            analysis_id = analysis_data.get("analysis_id", str(uuid.uuid4()))
+            storage_path = f"reports/{contract_id}/{analysis_id}.pdf"
+
+            # Upload to storage bucket using wrapped client helpers
+            upload_result = await db_client.upload_file(
+                bucket="documents",
+                path=storage_path,
+                file=pdf_content,
+                content_type="application/pdf",
+            )
+
+            if not upload_result.get("success"):
+                raise ValueError("Failed to upload PDF report")
+
+            # Generate signed URL (valid for 1 hour)
+            signed_url = await db_client.generate_signed_url(
+                "documents", storage_path, 3600
+            )
+
+            return {"download_url": signed_url, "format": "pdf"}
+        else:
+            # Return JSON analysis data
+            return analysis_data
 
     except Exception as e:
-        logger.error(f"PDF report download error: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.error(f"Report generation error: {str(e)}")
+        raise handle_api_error(e, context, ErrorCategory.CONTRACT_ANALYSIS)
 
 
 @router.delete("/{contract_id}")
@@ -1419,33 +1051,29 @@ async def delete_contract_analysis(
             await db_client.initialize()
 
         # First check if user has access to this contract through user_contract_views
-        access_result = (
-            db_client.table("user_contract_views")
-            .select("content_hash")
-            .eq("user_id", user.id)
-            .execute()
+        access_result = await db_client.database.select(
+            "user_contract_views",
+            columns="content_hash",
+            filters={"user_id": str(user.id)},
         )
 
         user_content_hashes = []
-        if access_result.data:
+        if access_result.get("data"):
             user_content_hashes = [
                 view["content_hash"]
-                for view in access_result.data
+                for view in access_result["data"]
                 if view.get("content_hash")
             ]
 
         # Also check documents table for additional access
-        doc_access_result = (
-            db_client.table("documents")
-            .select("content_hash")
-            .eq("user_id", user.id)
-            .execute()
+        doc_access_result = await db_client.database.select(
+            "documents", columns="content_hash", filters={"user_id": str(user.id)}
         )
 
-        if doc_access_result.data:
+        if doc_access_result.get("data"):
             doc_content_hashes = [
                 doc["content_hash"]
-                for doc in doc_access_result.data
+                for doc in doc_access_result["data"]
                 if doc.get("content_hash")
             ]
             user_content_hashes.extend(doc_content_hashes)
@@ -1459,14 +1087,14 @@ async def delete_contract_analysis(
         user_content_hashes = list(set(user_content_hashes))
 
         # Get contract by ID to get its content_hash
-        contract_result = (
-            db_client.table("contracts").select("*").eq("id", contract_id).execute()
+        contract_result = await db_client.database.select(
+            "contracts", columns="*", filters={"id": contract_id}
         )
 
-        if not contract_result.data:
+        if not contract_result.get("data"):
             raise HTTPException(status_code=404, detail="Contract not found")
 
-        contract = contract_result.data[0]
+        contract = contract_result["data"][0]
         content_hash = contract["content_hash"]
 
         # Verify the user has access to this specific content_hash
@@ -1476,21 +1104,14 @@ async def delete_contract_analysis(
             )
 
         # Delete user's view of this contract (contracts and analyses are shared resources)
-        view_delete_result = (
-            db_client.table("user_contract_views")
-            .delete()
-            .eq("user_id", user.id)
-            .eq("content_hash", content_hash)
-            .execute()
+        view_delete_result = await db_client.database.delete(
+            "user_contract_views",
+            filters={"user_id": str(user.id), "content_hash": content_hash},
         )
 
         # Also remove user's document if they want to completely remove it
-        doc_delete_result = (
-            db_client.table("documents")
-            .delete()
-            .eq("content_hash", content_hash)
-            .eq("user_id", user.id)
-            .execute()
+        doc_delete_result = await db_client.database.delete(
+            "documents", filters={"content_hash": content_hash, "user_id": str(user.id)}
         )
 
         return {
@@ -1504,106 +1125,3 @@ async def delete_contract_analysis(
     except Exception as e:
         logger.error(f"Delete contract error: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
-
-
-@router.get("/notifications")
-async def get_user_notifications(
-    user: User = Depends(get_current_user), include_acknowledged: bool = False
-) -> NotificationsResponse:
-    """Get user notifications with enhanced feedback"""
-
-    try:
-        notifications = await notification_system.get_user_notifications(
-            user_id=str(user.id), include_acknowledged=include_acknowledged
-        )
-
-        return {
-            "notifications": [n.to_dict() for n in notifications],
-            "total_count": len(notifications),
-            "unread_count": len([n for n in notifications if not n.acknowledged]),
-        }
-
-    except Exception as e:
-        logger.error(f"Error getting notifications for user {user.id}: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to get notifications")
-
-
-@router.post("/notifications/{notification_id}/dismiss")
-async def dismiss_notification(
-    notification_id: str, user: User = Depends(get_current_user)
-) -> NotificationDismissResponse:
-    """Dismiss a user notification"""
-
-    try:
-        await notification_system.dismiss_notification(
-            user_id=str(user.id), notification_id=notification_id
-        )
-
-        return {"message": "Notification dismissed successfully"}
-
-    except Exception as e:
-        logger.error(f"Error dismissing notification {notification_id}: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to dismiss notification")
-
-
-@router.get("/debug/document/{document_id}")
-async def debug_document_access(
-    document_id: str,
-    user: User = Depends(get_current_user),
-) -> Dict[str, Any]:
-    """Debug endpoint to check document access and ownership"""
-    try:
-        # Get user-authenticated client
-        user_client = await AuthContext.get_authenticated_client()
-
-        # Try to get the document with RLS enforcement
-        doc_result = await user_client.database.select(
-            "documents",
-            columns="*",
-            filters={"id": document_id, "user_id": str(user.id)},
-        )
-
-        if doc_result.get("data"):
-            document = doc_result["data"][0]
-            return {
-                "document_exists": True,
-                "user_has_access": True,
-                "document_id": document_id,
-                "document_owner": document.get("user_id"),
-                "current_user": str(user.id),
-                "document_status": document.get("processing_status"),
-                "filename": document.get("original_filename"),
-                "created_at": document.get("created_at"),
-                "updated_at": document.get("updated_at"),
-            }
-        else:
-            # Document not found or user doesn't have access
-            return {
-                "document_exists": False,
-                "user_has_access": False,
-                "document_id": document_id,
-                "current_user": str(user.id),
-                "error": "Document not found or you don't have access to it",
-                "possible_causes": [
-                    "Document doesn't exist in the database",
-                    "Document belongs to a different user",
-                    "User session has expired",
-                    "Document was deleted",
-                ],
-                "suggestions": [
-                    "Verify the document ID is correct",
-                    "Re-upload the document if needed",
-                    "Check if you're logged in with the correct account",
-                    "Contact support if the issue persists",
-                ],
-            }
-
-    except Exception as e:
-        logger.error(f"Debug endpoint error: {str(e)}")
-        return {
-            "document_exists": "error",
-            "user_has_access": False,
-            "document_id": document_id,
-            "current_user": str(user.id),
-            "error": f"Debug endpoint failed: {str(e)}",
-        }
