@@ -26,142 +26,142 @@ logger = logging.getLogger(__name__)
 from app.celery_app import celery_app
 
 
-@celery_app.task(bind=True)
-@user_aware_task
-async def process_user_document_background(
-    self, document_id: str, user_id: str
-) -> Dict[str, Any]:
-    """
-    Process document in background with maintained user context.
+# @celery_app.task(bind=True)
+# @user_aware_task
+# async def process_user_document_background(
+#     self, document_id: str, user_id: str
+# ) -> Dict[str, Any]:
+#     """
+#     Process document in background with maintained user context.
 
-    This task maintains the user authentication context throughout execution,
-    ensuring all database operations respect RLS policies.
+#     This task maintains the user authentication context throughout execution,
+#     ensuring all database operations respect RLS policies.
 
-    Args:
-        document_id: ID of document to process
-        user_id: User ID (for validation against context)
+#     Args:
+#         document_id: ID of document to process
+#         user_id: User ID (for validation against context)
 
-    Returns:
-        Processing result dictionary
-    """
-    task_start = datetime.now(UTC)
+#     Returns:
+#         Processing result dictionary
+#     """
+#     task_start = datetime.now(UTC)
 
-    try:
-        # Verify user context matches expected user
-        context_user_id = AuthContext.get_user_id()
-        if context_user_id != user_id:
-            raise ValueError(
-                f"User context mismatch: expected {user_id}, got {context_user_id}"
-            )
+#     try:
+#         # Verify user context matches expected user
+#         context_user_id = AuthContext.get_user_id()
+#         if context_user_id != user_id:
+#             raise ValueError(
+#                 f"User context mismatch: expected {user_id}, got {context_user_id}"
+#             )
 
-        logger.info(
-            f"Starting document processing for user {user_id}, document {document_id}"
-        )
+#         logger.info(
+#             f"Starting document processing for user {user_id}, document {document_id}"
+#         )
 
-        # Initialize document service (will use restored user context)
-        document_service = DocumentService(use_llm_document_processing=True)
-        await document_service.initialize()
+#         # Initialize document service (will use restored user context)
+#         document_service = DocumentService(use_llm_document_processing=True)
+#         await document_service.initialize()
 
-        # Update task progress
-        self.update_state(
-            state="PROCESSING",
-            meta={
-                "status": "Document processing started",
-                "progress": 10,
-                "user_id": user_id,
-                "document_id": document_id,
-            },
-        )
+#         # Update task progress
+#         self.update_state(
+#             state="PROCESSING",
+#             meta={
+#                 "status": "Document processing started",
+#                 "progress": 10,
+#                 "user_id": user_id,
+#                 "document_id": document_id,
+#             },
+#         )
 
-        # Process document using new subflow (for backward compatibility)
-        # Note: This will be migrated to use the subflow directly
-        processing_result = await document_service.process_document_by_id(
-            document_id=document_id
-        )
+#         # Process document using new subflow (for backward compatibility)
+#         # Note: This will be migrated to use the subflow directly
+#         processing_result = await document_service.process_document_by_id(
+#             document_id=document_id
+#         )
 
-        # Update progress
-        self.update_state(
-            state="PROCESSING",
-            meta={
-                "status": "Text extraction completed",
-                "progress": 50,
-                "extraction_confidence": processing_result.get("confidence", 0),
-            },
-        )
+#         # Update progress
+#         self.update_state(
+#             state="PROCESSING",
+#             meta={
+#                 "status": "Text extraction completed",
+#                 "progress": 50,
+#                 "extraction_confidence": processing_result.get("confidence", 0),
+#             },
+#         )
 
-        # Perform additional analysis if needed
-        if processing_result.get("success"):
-            analysis_result = await document_service.analyze_extracted_content(
-                document_id=document_id,
-                extracted_text=processing_result.get("text", ""),
-            )
+#         # Perform additional analysis if needed
+#         if processing_result.get("success"):
+#             analysis_result = await document_service.analyze_extracted_content(
+#                 document_id=document_id,
+#                 extracted_text=processing_result.get("text", ""),
+#             )
 
-            # Update progress
-            self.update_state(
-                state="PROCESSING",
-                meta={
-                    "status": "Analysis completed",
-                    "progress": 90,
-                    "entities_found": analysis_result.get("entity_count", 0),
-                },
-            )
+#             # Update progress
+#             self.update_state(
+#                 state="PROCESSING",
+#                 meta={
+#                     "status": "Analysis completed",
+#                     "progress": 90,
+#                     "entities_found": analysis_result.get("entity_count", 0),
+#                 },
+#             )
 
-        # Finalize processing
-        processing_time = (datetime.now(UTC) - task_start).total_seconds()
+#         # Finalize processing
+#         processing_time = (datetime.now(UTC) - task_start).total_seconds()
 
-        final_result = {
-            "success": True,
-            "document_id": document_id,
-            "user_id": user_id,
-            "processing_time": processing_time,
-            "task_id": self.request.id,
-            "completed_at": datetime.now(UTC).isoformat(),
-            **processing_result,
-        }
+#         final_result = {
+#             "success": True,
+#             "document_id": document_id,
+#             "user_id": user_id,
+#             "processing_time": processing_time,
+#             "task_id": self.request.id,
+#             "completed_at": datetime.now(UTC).isoformat(),
+#             **processing_result,
+#         }
 
-        logger.info(
-            f"Document processing completed for user {user_id}, "
-            f"document {document_id} in {processing_time:.2f}s"
-        )
+#         logger.info(
+#             f"Document processing completed for user {user_id}, "
+#             f"document {document_id} in {processing_time:.2f}s"
+#         )
 
-        return final_result
+#         return final_result
 
-    except Exception as e:
-        processing_time = (datetime.now(UTC) - task_start).total_seconds()
+#     except Exception as e:
+#         processing_time = (datetime.now(UTC) - task_start).total_seconds()
 
-        logger.error(
-            f"Document processing failed for user {user_id}, document {document_id}: {e}",
-            exc_info=True,
-        )
+#         logger.error(
+#             f"Document processing failed for user {user_id}, document {document_id}: {e}",
+#             exc_info=True,
+#         )
 
-        # Update document status to failed (user context maintained)
-        try:
-            document_service = DocumentService(use_llm_document_processing=True)
-            await document_service.initialize()
-            await document_service.mark_document_failed(
-                document_id=document_id,
-                error_details={
-                    "error": str(e),
-                    "task_id": self.request.id,
-                    "processing_time": processing_time,
-                    "failed_at": datetime.now(UTC).isoformat(),
-                },
-            )
-        except Exception as update_error:
-            logger.error(f"Failed to update document status: {update_error}")
+#         # Update document status to failed (user context maintained)
+#         try:
+#             document_service = DocumentService(use_llm_document_processing=True)
+#             await document_service.initialize()
+#             await document_service.mark_document_failed(
+#                 document_id=document_id,
+#                 error_details={
+#                     "error": str(e),
+#                     "task_id": self.request.id,
+#                     "processing_time": processing_time,
+#                     "failed_at": datetime.now(UTC).isoformat(),
+#                 },
+#             )
+#         except Exception as update_error:
+#             logger.error(f"Failed to update document status: {update_error}")
 
-        # Return error result
-        raise Exception(f"Document processing failed: {str(e)}")
+#         # Return error result
+#         raise Exception(f"Document processing failed: {str(e)}")
 
 
 @celery_app.task(bind=True)
 @user_aware_task
 async def run_document_processing_subflow(
-    self, 
-    document_id: str, 
-    user_id: str, 
+    self,
+    document_id: str,
+    user_id: str,
     use_llm: bool = True,
-    content_hash: Optional[str] = None
+    content_hash: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Run DocumentProcessingWorkflow subflow with user context.
@@ -206,13 +206,12 @@ async def run_document_processing_subflow(
 
         # Initialize and run document processing workflow
         workflow = DocumentProcessingWorkflow(
-            use_llm_document_processing=use_llm,
-            storage_bucket="documents"
+            use_llm_document_processing=use_llm, storage_bucket="documents"
         )
 
         # Update progress
         self.update_state(
-            state="PROCESSING", 
+            state="PROCESSING",
             meta={
                 "status": "Document processing workflow started",
                 "progress": 10,
@@ -221,30 +220,30 @@ async def run_document_processing_subflow(
 
         # Run the workflow
         result = await workflow.process_document(
-            document_id=document_id,
-            use_llm=use_llm,
-            content_hash=content_hash
+            document_id=document_id, use_llm=use_llm, content_hash=content_hash
         )
 
         # Update progress based on result type
-        if result.success if hasattr(result, 'success') else False:
+        if result.success if hasattr(result, "success") else False:
             self.update_state(
                 state="PROCESSING",
                 meta={
                     "status": "Document processing completed successfully",
                     "progress": 90,
-                    "extraction_method": getattr(result, 'extraction_method', 'unknown'),
-                    "total_pages": getattr(result, 'total_pages', 0),
-                    "character_count": getattr(result, 'character_count', 0),
+                    "extraction_method": getattr(
+                        result, "extraction_method", "unknown"
+                    ),
+                    "total_pages": getattr(result, "total_pages", 0),
+                    "character_count": getattr(result, "character_count", 0),
                 },
             )
         else:
             self.update_state(
-                state="PROCESSING", 
+                state="PROCESSING",
                 meta={
-                    "status": "Document processing failed", 
+                    "status": "Document processing failed",
                     "progress": 50,
-                    "error": getattr(result, 'error', 'Unknown error'),
+                    "error": getattr(result, "error", "Unknown error"),
                 },
             )
 
@@ -252,7 +251,7 @@ async def run_document_processing_subflow(
         processing_time = (datetime.now(UTC) - task_start).total_seconds()
 
         final_result = {
-            "success": result.success if hasattr(result, 'success') else False,
+            "success": result.success if hasattr(result, "success") else False,
             "document_id": document_id,
             "user_id": user_id,
             "processing_time": processing_time,
@@ -282,13 +281,13 @@ async def run_document_processing_subflow(
         try:
             document_service = DocumentService()
             await document_service.initialize()
-            
+
             # Import here to avoid circular import
             from app.models.supabase_models import ProcessingStatus
-            
+
             # Get user client for database update
             user_client = await AuthContext.get_authenticated_client(isolated=True)
-            
+
             await user_client.database.update(
                 "documents",
                 document_id,
@@ -302,121 +301,123 @@ async def run_document_processing_subflow(
                         "workflow_type": "document_processing_subflow",
                     },
                     "processing_completed_at": datetime.now(UTC),
-                }
+                },
             )
         except Exception as update_error:
-            logger.error(f"Failed to update document status after subflow error: {update_error}")
+            logger.error(
+                f"Failed to update document status after subflow error: {update_error}"
+            )
 
         # Return error result
         raise Exception(f"Document processing subflow failed: {str(e)}")
 
 
-@celery_app.task(bind=True)
-@user_aware_task
-async def batch_process_documents_background(
-    self,
-    document_ids: list[str],
-    user_id: str,
-    batch_options: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
-    """
-    Process multiple documents in batch with user context.
+# @celery_app.task(bind=True)
+# @user_aware_task
+# async def batch_process_documents_background(
+#     self,
+#     document_ids: list[str],
+#     user_id: str,
+#     batch_options: Optional[Dict[str, Any]] = None,
+# ) -> Dict[str, Any]:
+#     """
+#     Process multiple documents in batch with user context.
 
-    Demonstrates how to handle batch operations while maintaining
-    user authentication context throughout.
-    """
-    batch_start = datetime.now(UTC)
-    batch_options = batch_options or {}
+#     Demonstrates how to handle batch operations while maintaining
+#     user authentication context throughout.
+#     """
+#     batch_start = datetime.now(UTC)
+#     batch_options = batch_options or {}
 
-    try:
-        # Verify user context
-        context_user_id = AuthContext.get_user_id()
-        if context_user_id != user_id:
-            raise ValueError(
-                f"User context mismatch: expected {user_id}, got {context_user_id}"
-            )
+#     try:
+#         # Verify user context
+#         context_user_id = AuthContext.get_user_id()
+#         if context_user_id != user_id:
+#             raise ValueError(
+#                 f"User context mismatch: expected {user_id}, got {context_user_id}"
+#             )
 
-        logger.info(
-            f"Starting batch processing for user {user_id}, "
-            f"{len(document_ids)} documents"
-        )
+#         logger.info(
+#             f"Starting batch processing for user {user_id}, "
+#             f"{len(document_ids)} documents"
+#         )
 
-        # Initialize services
-        document_service = DocumentService(use_llm_document_processing=True)
-        await document_service.initialize()
+#         # Initialize services
+#         document_service = DocumentService(use_llm_document_processing=True)
+#         await document_service.initialize()
 
-        results = []
-        completed_count = 0
+#         results = []
+#         completed_count = 0
 
-        for i, document_id in enumerate(document_ids):
-            try:
-                # Update batch progress
-                progress = int((i / len(document_ids)) * 100)
-                self.update_state(
-                    state="PROCESSING",
-                    meta={
-                        "status": f"Processing document {i+1} of {len(document_ids)}",
-                        "progress": progress,
-                        "current_document": document_id,
-                        "completed_count": completed_count,
-                    },
-                )
+#         for i, document_id in enumerate(document_ids):
+#             try:
+#                 # Update batch progress
+#                 progress = int((i / len(document_ids)) * 100)
+#                 self.update_state(
+#                     state="PROCESSING",
+#                     meta={
+#                         "status": f"Processing document {i+1} of {len(document_ids)}",
+#                         "progress": progress,
+#                         "current_document": document_id,
+#                         "completed_count": completed_count,
+#                     },
+#                 )
 
-                # Process individual document
-                doc_result = await document_service.process_document_internal(
-                    document_id=document_id,
-                    user_id=user_id,
-                    processing_options=batch_options,
-                )
+#                 # Process individual document
+#                 doc_result = await document_service.process_document_internal(
+#                     document_id=document_id,
+#                     user_id=user_id,
+#                     processing_options=batch_options,
+#                 )
 
-                results.append(
-                    {
-                        "document_id": document_id,
-                        "success": doc_result.get("success", False),
-                        "result": doc_result,
-                    }
-                )
+#                 results.append(
+#                     {
+#                         "document_id": document_id,
+#                         "success": doc_result.get("success", False),
+#                         "result": doc_result,
+#                     }
+#                 )
 
-                if doc_result.get("success"):
-                    completed_count += 1
+#                 if doc_result.get("success"):
+#                     completed_count += 1
 
-            except Exception as doc_error:
-                logger.error(f"Failed to process document {document_id}: {doc_error}")
-                results.append(
-                    {
-                        "document_id": document_id,
-                        "success": False,
-                        "error": str(doc_error),
-                    }
-                )
+#             except Exception as doc_error:
+#                 logger.error(f"Failed to process document {document_id}: {doc_error}")
+#                 results.append(
+#                     {
+#                         "document_id": document_id,
+#                         "success": False,
+#                         "error": str(doc_error),
+#                     }
+#                 )
 
-        # Calculate batch statistics
-        batch_time = (datetime.now(UTC) - batch_start).total_seconds()
-        success_rate = completed_count / len(document_ids) if document_ids else 0
+#         # Calculate batch statistics
+#         batch_time = (datetime.now(UTC) - batch_start).total_seconds()
+#         success_rate = completed_count / len(document_ids) if document_ids else 0
 
-        batch_result = {
-            "success": True,
-            "batch_id": f"batch_{user_id}_{int(time.time())}",
-            "user_id": user_id,
-            "total_documents": len(document_ids),
-            "completed_documents": completed_count,
-            "success_rate": success_rate,
-            "batch_time": batch_time,
-            "results": results,
-            "completed_at": datetime.now(UTC).isoformat(),
-        }
+#         batch_result = {
+#             "success": True,
+#             "batch_id": f"batch_{user_id}_{int(time.time())}",
+#             "user_id": user_id,
+#             "total_documents": len(document_ids),
+#             "completed_documents": completed_count,
+#             "success_rate": success_rate,
+#             "batch_time": batch_time,
+#             "results": results,
+#             "completed_at": datetime.now(UTC).isoformat(),
+#         }
 
-        logger.info(
-            f"Batch processing completed for user {user_id}: "
-            f"{completed_count}/{len(document_ids)} documents processed "
-            f"({success_rate:.1%} success rate) in {batch_time:.2f}s"
-        )
+#         logger.info(
+#             f"Batch processing completed for user {user_id}: "
+#             f"{completed_count}/{len(document_ids)} documents processed "
+#             f"({success_rate:.1%} success rate) in {batch_time:.2f}s"
+#         )
 
-        return batch_result
+#         return batch_result
 
-    except Exception as e:
-        logger.error(f"Batch processing failed for user {user_id}: {e}", exc_info=True)
-        raise Exception(f"Batch processing failed: {str(e)}")
+#     except Exception as e:
+#         logger.error(f"Batch processing failed for user {user_id}: {e}", exc_info=True)
+#         raise Exception(f"Batch processing failed: {str(e)}")
 
 
 @celery_app.task(bind=True)

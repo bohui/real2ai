@@ -8,9 +8,12 @@ the processing_started_at timestamp and updating status to PROCESSING.
 from typing import Dict, Any
 from datetime import datetime, timezone
 
-from app.models.supabase_models import ProcessingStatus
+from app.models import ProcessingStatus
 from app.agents.subflows.document_processing_workflow import DocumentProcessingState
 from .base_node import DocumentProcessingNodeBase
+from app.services.repositories.user_docs_repository import UserDocsRepository
+from app.services.repositories.runs_repository import RunsRepository, RunStatus
+import uuid
 
 
 class MarkProcessingStartedNode(DocumentProcessingNodeBase):
@@ -28,6 +31,15 @@ class MarkProcessingStartedNode(DocumentProcessingNodeBase):
     
     def __init__(self):
         super().__init__("mark_processing_started")
+        self.user_docs_repo = None
+        self.runs_repo = None
+
+    async def initialize(self, user_id):
+        """Initialize repositories with user context"""
+        if not self.user_docs_repo:
+            self.user_docs_repo = UserDocsRepository(user_id)
+        if not self.runs_repo:
+            self.runs_repo = RunsRepository(user_id)
     
     async def execute(self, state: DocumentProcessingState) -> DocumentProcessingState:
         """
@@ -71,6 +83,25 @@ class MarkProcessingStartedNode(DocumentProcessingNodeBase):
                 document_id,
                 update_data
             )
+            
+            # Start a new processing run if not already started
+            run_id = state.get("run_id")
+            if not run_id and self.runs_repo:
+                try:
+                    new_run = await self.runs_repo.start_run(
+                        document_id=uuid.UUID(document_id),
+                        run_type="document_processing",
+                        run_input={
+                            "document_id": document_id,
+                            "processing_started_at": processing_started_at.isoformat()
+                        }
+                    )
+                    # Store run_id in state for subsequent nodes
+                    state = state.copy()
+                    state["run_id"] = str(new_run.id)
+                    self._log_info(f"Started new processing run {new_run.id}")
+                except Exception as e:
+                    self._log_warning(f"Failed to start processing run: {e}")
             
             duration = (datetime.now(timezone.utc) - start_time).total_seconds()
             self._record_success(duration)

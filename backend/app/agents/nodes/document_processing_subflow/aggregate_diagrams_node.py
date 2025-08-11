@@ -10,6 +10,9 @@ from datetime import datetime, timezone
 
 from app.agents.subflows.document_processing_workflow import DocumentProcessingState
 from .base_node import DocumentProcessingNodeBase
+from app.services.repositories.artifacts_repository import ArtifactsRepository
+from app.services.repositories.runs_repository import RunsRepository
+import uuid
 
 
 class AggregateDiagramsNode(DocumentProcessingNodeBase):
@@ -27,6 +30,15 @@ class AggregateDiagramsNode(DocumentProcessingNodeBase):
     
     def __init__(self):
         super().__init__("aggregate_diagrams")
+        self.artifacts_repo = None
+        self.runs_repo = None
+
+    async def initialize(self, user_id=None):
+        """Initialize repositories"""
+        if not self.artifacts_repo:
+            self.artifacts_repo = ArtifactsRepository()
+        if user_id and not self.runs_repo:
+            self.runs_repo = RunsRepository(user_id)
     
     async def execute(self, state: DocumentProcessingState) -> DocumentProcessingState:
         """
@@ -74,6 +86,25 @@ class AggregateDiagramsNode(DocumentProcessingNodeBase):
                 }
             )
             
+            # Get user context and initialize repos for progress tracking
+            user_context = await self.get_user_context()
+            await self.initialize(uuid.UUID(user_context.user_id))
+            
+            # Record step start in runs tracking
+            run_id = state.get("run_id")
+            if run_id and self.runs_repo:
+                try:
+                    await self.runs_repo.start_step(
+                        run_id=uuid.UUID(run_id),
+                        step_name="aggregate_diagrams",
+                        step_input={
+                            "document_id": document_id,
+                            "total_pages": len(text_extraction_result.pages) if text_extraction_result.pages else 0
+                        }
+                    )
+                except Exception as e:
+                    self._log_warning(f"Failed to record step start: {e}")
+            
             # Aggregate diagram detection results directly without DocumentService dependency
             diagram_processing_result = self._aggregate_diagram_detections(text_extraction_result)
             
@@ -83,6 +114,22 @@ class AggregateDiagramsNode(DocumentProcessingNodeBase):
             
             duration = (datetime.now(timezone.utc) - start_time).total_seconds()
             self._record_success(duration)
+            
+            # Record step completion in runs tracking
+            if run_id and self.runs_repo:
+                try:
+                    await self.runs_repo.complete_step(
+                        run_id=uuid.UUID(run_id),
+                        step_name="aggregate_diagrams",
+                        step_status="completed",
+                        step_output={
+                            "total_diagrams": diagram_processing_result.get("total_diagrams", 0),
+                            "diagram_pages": len(diagram_processing_result.get("diagram_pages", [])),
+                            "diagram_types": list(diagram_processing_result.get("diagram_types", {}).keys())
+                        }
+                    )
+                except Exception as e:
+                    self._log_warning(f"Failed to record step completion: {e}")
             
             self._log_info(
                 f"Successfully aggregated diagram detections for document {document_id}",

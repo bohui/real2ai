@@ -11,3 +11,4 @@
 # Developer environment
 - backend: use uv in backend/.venv
 - frontend: use pnpm in frontend 
+- supabase: migration in project root folder

@@ -68,6 +68,11 @@ class Settings(BaseSettings):
     # Task Context Encryption
     task_encryption_key: Optional[str] = None
 
+    # Document Processing Artifacts
+    document_hmac_secret: Optional[str] = None
+    artifacts_algorithm_version: int = 1
+    enable_artifacts: bool = False
+
     # File Storage
     max_file_size: int = 52428800  # 50MB
     allowed_file_types: str = "pdf,doc,docx,png,jpg,jpeg,webp,gif,bmp,tiff"

@@ -1,8 +1,8 @@
 """
-SavePagesNode - Persist page-level analysis results to database
+SavePagesNode - Persist page-level analysis results with artifact references
 
-This node migrates the _save_document_pages method from DocumentService
-to persist page-level text extraction and analysis results.
+This node persists page-level text extraction and analysis results using
+the artifact system for content-addressed storage and user-scoped references.
 """
 
 import uuid
@@ -11,16 +11,19 @@ from datetime import datetime, timezone
 
 from app.agents.subflows.document_processing_workflow import DocumentProcessingState
 from .base_node import DocumentProcessingNodeBase
+from app.services.repositories.user_docs_repository import UserDocsRepository
+from app.services.repositories.artifacts_repository import ArtifactsRepository
 
 
 class SavePagesNode(DocumentProcessingNodeBase):
     """
-    Node responsible for saving page-level analysis results to database.
+    Node responsible for saving page-level analysis results with artifact references.
     
     This node:
-    1. Takes text extraction results from state
-    2. Persists page-level data to document_pages table
+    1. Takes text extraction results and artifact metadata from state
+    2. Maps artifact page IDs to user document pages using upserts
     3. Maintains user authentication context for RLS enforcement
+    4. Handles idempotent operations for retry safety
     
     State Updates:
     - No state changes (database operation only)
@@ -28,13 +31,34 @@ class SavePagesNode(DocumentProcessingNodeBase):
     
     def __init__(self):
         super().__init__("save_pages")
+        self.user_docs_repo = None
+        self.artifacts_repo = None
+
+    async def initialize(self, user_id):
+        """Initialize repositories with user context"""
+        if not self.user_docs_repo:
+            self.user_docs_repo = UserDocsRepository(user_id)
+        if not self.artifacts_repo:
+            self.artifacts_repo = ArtifactsRepository()
+
+    async def cleanup(self):
+        """Clean up repository connections"""
+        if self.user_docs_repo:
+            await self.user_docs_repo.close()
+            self.user_docs_repo = None
+        if self.artifacts_repo:
+            await self.artifacts_repo.close()
+            self.artifacts_repo = None
     
     async def execute(self, state: DocumentProcessingState) -> DocumentProcessingState:
         """
-        Save page-level analysis results to database.
+        Save page-level analysis results with artifact references.
+        
+        This method implements idempotent page upserts that map artifact page IDs
+        to user document pages without storing raw text content.
         
         Args:
-            state: Current processing state with text_extraction_result
+            state: Current processing state with artifact metadata
             
         Returns:
             Updated state (no changes, database updated)
@@ -45,7 +69,9 @@ class SavePagesNode(DocumentProcessingNodeBase):
         try:
             # Validate required state
             document_id = state.get("document_id")
-            content_hash = state.get("content_hash")
+            content_hmac = state.get("content_hmac")
+            algorithm_version = state.get("algorithm_version")
+            params_fingerprint = state.get("params_fingerprint")
             text_extraction_result = state.get("text_extraction_result")
             
             if not document_id:
@@ -67,6 +93,19 @@ class SavePagesNode(DocumentProcessingNodeBase):
                         "extraction_success": text_extraction_result.success if text_extraction_result else False
                     }
                 )
+
+            if not all([content_hmac, algorithm_version is not None, params_fingerprint]):
+                return self._handle_error(
+                    state,
+                    ValueError("Missing artifact metadata"),
+                    "Artifact metadata required for page mapping",
+                    {
+                        "document_id": document_id,
+                        "has_content_hmac": bool(content_hmac),
+                        "has_algorithm_version": algorithm_version is not None,
+                        "has_params_fingerprint": bool(params_fingerprint)
+                    }
+                )
             
             pages = text_extraction_result.pages
             if not pages:
@@ -75,53 +114,69 @@ class SavePagesNode(DocumentProcessingNodeBase):
                 self._record_success(duration)
                 return state
             
+            # Get user ID for repository initialization
+            user_context = await self.get_user_context()
+            user_id = uuid.UUID(user_context.user_id)
+            
+            # Initialize repositories
+            await self.initialize(user_id)
+            
             self._log_info(
-                f"Saving {len(pages)} pages for document {document_id}",
+                f"Saving {len(pages)} pages for document {document_id} using artifact mapping",
                 extra={
                     "document_id": document_id,
                     "page_count": len(pages),
-                    "has_content_hash": bool(content_hash)
+                    "content_hmac": content_hmac,
+                    "algorithm_version": algorithm_version,
+                    "params_fingerprint": params_fingerprint[:12]
                 }
             )
             
-            # Get user-authenticated client
-            user_client = await self.get_user_client()
+            # Get page artifacts for mapping
+            page_artifacts = await self.artifacts_repo.get_page_artifacts(
+                content_hmac, algorithm_version, params_fingerprint
+            )
             
-            # Save each page to database
+            # Create artifact ID mapping by page number
+            artifact_map = {artifact.page_number: artifact.id for artifact in page_artifacts}
+            
+            # Upsert document pages with artifact references
             pages_saved = 0
+            document_uuid = uuid.UUID(document_id)
+            
             for page in pages:
-                page_analysis = page.content_analysis
-                layout_features = page_analysis.layout_features
-                quality_indicators = page_analysis.quality_indicators
+                artifact_page_id = artifact_map.get(page.page_number)
+                if not artifact_page_id:
+                    self._log_warning(f"No artifact found for page {page.page_number}, skipping")
+                    continue
                 
-                page_data = {
-                    "id": str(uuid.uuid4()),
-                    "document_id": document_id,
-                    "content_hash": content_hash,
-                    "page_number": page.page_number,
-                    # Content analysis
-                    "text_content": page.text_content,
-                    "text_length": page.text_length,
-                    "word_count": page.word_count,
-                    # Content classification
-                    "content_types": page_analysis.content_types,
-                    "primary_content_type": page_analysis.primary_type,
-                    # Quality metrics
-                    "extraction_confidence": page.confidence,
-                    "content_quality_score": quality_indicators.structure_score,
-                    # Layout analysis
-                    "has_header": layout_features.has_header,
-                    "has_footer": layout_features.has_footer,
-                    "has_signatures": layout_features.has_signatures,
-                    "has_diagrams": layout_features.has_diagrams,
-                    "has_tables": layout_features.has_tables,
-                    # Processing metadata
-                    "processed_at": datetime.now(timezone.utc),
-                    "processing_method": page.extraction_method or "unknown",
+                # Build user annotations from page analysis
+                page_analysis = page.content_analysis
+                annotations = {}
+                if page_analysis:
+                    annotations = {
+                        "content_types": page_analysis.content_types,
+                        "primary_content_type": page_analysis.primary_type,
+                        "extraction_confidence": page.confidence,
+                        "extraction_method": page.extraction_method,
+                        "quality_indicators": page_analysis.quality_indicators.__dict__ if page_analysis.quality_indicators else None,
+                    }
+                
+                # Flags for processing state
+                flags = {
+                    "processed_at": datetime.now(timezone.utc).isoformat(),
+                    "processing_version": algorithm_version,
                 }
                 
-                # Save page record with user context
-                await user_client.database.create("document_pages", page_data)
+                # Upsert document page with artifact reference
+                await self.user_docs_repo.upsert_document_page(
+                    document_id=document_uuid,
+                    page_number=page.page_number,
+                    artifact_page_id=artifact_page_id,
+                    annotations=annotations,
+                    flags=flags
+                )
+                
                 pages_saved += 1
             
             duration = (datetime.now(timezone.utc) - start_time).total_seconds()
@@ -132,7 +187,8 @@ class SavePagesNode(DocumentProcessingNodeBase):
                 extra={
                     "document_id": document_id,
                     "pages_saved": pages_saved,
-                    "duration_seconds": duration
+                    "duration_seconds": duration,
+                    "artifact_mapping": len(artifact_map),
                 }
             )
             
@@ -145,8 +201,8 @@ class SavePagesNode(DocumentProcessingNodeBase):
                 f"Failed to save document pages: {str(e)}",
                 {
                     "document_id": state.get("document_id"),
-                    "operation": "database_create",
-                    "table": "document_pages",
-                    "page_count": len(state.get("text_extraction_result", {}).get("pages", [])) if state.get("text_extraction_result") else 0
+                    "operation": "upsert_document_page",
+                    "page_count": len(state.get("text_extraction_result", {}).get("pages", [])) if state.get("text_extraction_result") else 0,
+                    "content_hmac": state.get("content_hmac"),
                 }
             )

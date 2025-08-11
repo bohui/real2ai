@@ -285,3 +285,6 @@ END $$;
 
 COMMENT ON POLICY "read_if_user_has_hash" ON public.contract_analyses IS 'Allow reading derived analysis only if the user has possession (document or view) for the same content hash';
 COMMENT ON POLICY "read_if_user_has_hash" ON public.contracts IS 'Allow reading contract rows only if the user has possession (document or view) for the same content hash';
+
+-- Note: Artifact security policies moved to 20240101000014_artifact_security_policies.sql
+-- to ensure they run after artifact tables are created

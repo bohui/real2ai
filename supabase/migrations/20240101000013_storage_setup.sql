@@ -4,7 +4,7 @@
 -- SECURITY NOTE: Uses user-specific RLS policies to ensure users can only access their own files.
 -- Files are stored in user_id/filename paths and policies verify auth.uid() matches the folder.
 
--- Create storage bucket for documents
+-- Create storagmig
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 VALUES (
     'documents',

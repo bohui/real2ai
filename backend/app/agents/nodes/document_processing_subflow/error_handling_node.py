@@ -8,7 +8,7 @@ updating the document status to FAILED and storing error details.
 from typing import Dict, Any
 from datetime import datetime, timezone
 
-from app.models.supabase_models import ProcessingStatus
+from app.models import ProcessingStatus
 from app.agents.subflows.document_processing_workflow import DocumentProcessingState
 from .base_node import DocumentProcessingNodeBase
 

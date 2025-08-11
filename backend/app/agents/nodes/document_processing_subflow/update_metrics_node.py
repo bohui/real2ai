@@ -10,6 +10,8 @@ from datetime import datetime, timezone
 
 from app.agents.subflows.document_processing_workflow import DocumentProcessingState
 from .base_node import DocumentProcessingNodeBase
+from app.services.repositories.runs_repository import RunsRepository
+import uuid
 
 
 class UpdateMetricsNode(DocumentProcessingNodeBase):
@@ -27,6 +29,12 @@ class UpdateMetricsNode(DocumentProcessingNodeBase):
     
     def __init__(self):
         super().__init__("update_metrics")
+        self.runs_repo = None
+
+    async def initialize(self, user_id):
+        """Initialize runs repository with user context"""
+        if not self.runs_repo:
+            self.runs_repo = RunsRepository(user_id)
     
     async def execute(self, state: DocumentProcessingState) -> DocumentProcessingState:
         """
@@ -88,6 +96,10 @@ class UpdateMetricsNode(DocumentProcessingNodeBase):
                 }
             )
             
+            # Get user context and initialize repos
+            user_context = await self.get_user_context()
+            await self.initialize(uuid.UUID(user_context.user_id))
+            
             # Get user-authenticated client
             user_client = await self.get_user_client()
             
@@ -129,6 +141,26 @@ class UpdateMetricsNode(DocumentProcessingNodeBase):
             
             # Update document record
             await user_client.database.update("documents", document_id, update_data)
+            
+            # Record final step completion in runs tracking
+            run_id = state.get("run_id")
+            if run_id and self.runs_repo:
+                try:
+                    await self.runs_repo.complete_step(
+                        run_id=uuid.UUID(run_id),
+                        step_name="update_metrics",
+                        step_status="completed",
+                        step_output={
+                            "metrics_updated": True,
+                            "total_pages": total_pages,
+                            "total_word_count": total_word_count,
+                            "total_diagrams": total_diagrams,
+                            "avg_confidence": avg_confidence
+                        }
+                    )
+                    self._log_info(f"Recorded step completion for run {run_id}")
+                except Exception as e:
+                    self._log_warning(f"Failed to record step completion: {e}")
             
             duration = (datetime.now(timezone.utc) - start_time).total_seconds()
             self._record_success(duration)
