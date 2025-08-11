@@ -60,18 +60,45 @@ class DocumentProcessingNode(BaseNode):
                     state, "document_processing_failed", error=error_msg
                 )
 
-            # Initialize document service
+            # Use the new document processing subflow via Celery task
             use_llm = self.use_llm_config.get("document_processing", True)
             
-            from app.services.document_service import DocumentService
+            # Import the task here to avoid circular imports
+            from app.tasks.user_aware_tasks import run_document_processing_subflow
+            from app.core.auth_context import AuthContext
+            
+            # Get current user ID for task context
+            user_id = AuthContext.get_user_id()
+            if not user_id:
+                return self._handle_node_error(
+                    state,
+                    ValueError("User authentication required"),
+                    "User authentication context required for document processing",
+                    {"document_id": document_id, "use_llm": use_llm}
+                )
 
-            doc_service = DocumentService(
-                use_llm_document_processing=use_llm
+            # Launch document processing subflow task
+            task_result = run_document_processing_subflow.apply_async(
+                args=[document_id, user_id, use_llm],
+                kwargs={}
             )
-            await doc_service.initialize()
-
-            # Process document
-            summary = await doc_service.process_document_by_id(document_id=document_id)
+            
+            # Wait for task completion (with timeout)
+            try:
+                result = task_result.get(timeout=300)  # 5 minute timeout
+                summary = result.get("result")
+            except Exception as task_error:
+                return self._handle_node_error(
+                    state,
+                    task_error,
+                    f"Document processing task failed: {str(task_error)}",
+                    {
+                        "document_id": document_id,
+                        "task_id": task_result.id,
+                        "use_llm": use_llm,
+                        "operation": "subflow_task"
+                    }
+                )
 
             if not summary or not summary.get("success"):
                 error_msg = (

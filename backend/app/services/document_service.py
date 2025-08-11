@@ -829,40 +829,45 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
     ) -> ProcessedDocumentSummary | ProcessingErrorResponse:
         """Process an already-uploaded document by id.
 
-        - Loads document record to determine storage_path, file_type, and content_hash
-        - Delegates to comprehensive extraction and persistence helpers
-        - Returns a concise summary suitable for workflow state
+        MIGRATED: Now delegates to DocumentProcessingWorkflow subflow for processing.
+        This method is kept for backward compatibility with existing callers.
+        
+        - Uses new DocumentProcessingWorkflow subflow
+        - Maintains same return signature for compatibility
+        - Preserves user authentication context
         """
-        # Fetch document record (user context - RLS enforced)
-        user_client = await self.get_user_client()
-        doc_result = await user_client.database.select(
-            "documents", columns="*", filters={"id": document_id}
-        )
-        if not doc_result.get("data"):
+        try:
+            # Import here to avoid circular imports
+            from app.agents.subflows.document_processing_workflow import DocumentProcessingWorkflow
+            
+            # Initialize the document processing workflow
+            workflow = DocumentProcessingWorkflow(
+                use_llm_document_processing=self.use_llm_document_processing,
+                storage_bucket="documents"
+            )
+            
+            # Process document using the workflow
+            result = await workflow.process_document(
+                document_id=document_id,
+                use_llm=self.use_llm_document_processing,
+                content_hash=None  # Let workflow fetch from database
+            )
+            
+            return result
+            
+        except Exception as e:
+            logger.error(
+                f"Document processing by ID failed for {document_id}: {e}",
+                exc_info=True
+            )
+            
             return ProcessingErrorResponse(
                 success=False,
-                error="Document not found or access denied",
+                error=f"Document processing failed: {str(e)}",
                 processing_time=0.0,
                 processing_timestamp=datetime.now(timezone.utc).isoformat(),
+                details={"document_id": document_id, "service_method": "process_document_by_id"}
             )
-
-        document = doc_result["data"][0]
-        storage_path = document.get("storage_path")
-        file_type = document.get("file_type")
-        content_hash = document.get("content_hash")
-
-        # If already processed, return summary without reprocessing
-        summary = await self.get_processed_document_summary(document_id=document_id)
-        if summary:
-            return summary
-
-        # Delegate to existing helpers to process and persist
-        return await self.process_existing_document(
-            document_id=document_id,
-            storage_path=storage_path,
-            file_type=file_type,
-            content_hash=content_hash,
-        )
 
     async def process_existing_document(
         self,
@@ -874,12 +879,21 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
     ) -> ProcessedDocumentSummary | ProcessingErrorResponse:
         """Process an already-uploaded document by id and persist results.
 
-        - Uses service flag use_llm_document_processing to enable/disable OCR/LLM path
-        - Returns a concise summary suitable for workflow state
+        DEPRECATED: This method is deprecated in favor of the DocumentProcessingWorkflow subflow.
+        It is maintained for backward compatibility but will delegate to the subflow.
+        
+        - Now delegates to DocumentProcessingWorkflow subflow
+        - Maintains same return signature for compatibility
         """
-
-        # Mark processing started
-        await self._set_processing_started(document_id)
+        # Issue deprecation warning
+        warnings.warn(
+            "process_existing_document is deprecated. Use DocumentProcessingWorkflow subflow directly.",
+            DeprecationWarning,
+            stacklevel=2
+        )
+        
+        # Delegate to the new subflow via process_document_by_id
+        return await self.process_document_by_id(document_id=document_id)
 
         # Extract text
         text_extraction_result = await self._extract_text_with_comprehensive_analysis(

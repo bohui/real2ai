@@ -18,6 +18,7 @@ from app.core.task_context import user_aware_task, task_manager, get_task_store
 from app.core.auth_context import AuthContext
 from app.services.document_service import DocumentService
 from app.services.base.user_aware_service import UserAwareService
+from app.agents.subflows.document_processing_workflow import DocumentProcessingWorkflow
 
 logger = logging.getLogger(__name__)
 
@@ -72,9 +73,10 @@ async def process_user_document_background(
             },
         )
 
-        # Process document - all operations use user context automatically
-        processing_result = await document_service.process_document_internal(
-            document_id=document_id, user_id=user_id  # For validation
+        # Process document using new subflow (for backward compatibility)
+        # Note: This will be migrated to use the subflow directly
+        processing_result = await document_service.process_document_by_id(
+            document_id=document_id
         )
 
         # Update progress
@@ -150,6 +152,163 @@ async def process_user_document_background(
 
         # Return error result
         raise Exception(f"Document processing failed: {str(e)}")
+
+
+@celery_app.task(bind=True)
+@user_aware_task
+async def run_document_processing_subflow(
+    self, 
+    document_id: str, 
+    user_id: str, 
+    use_llm: bool = True,
+    content_hash: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Run DocumentProcessingWorkflow subflow with user context.
+
+    This task runs the new DocumentProcessingWorkflow subflow while maintaining
+    user authentication context for RLS enforcement.
+
+    Args:
+        document_id: ID of document to process
+        user_id: User ID (for validation against context)
+        use_llm: Whether to use LLM for enhanced OCR/analysis
+        content_hash: Content hash override (optional)
+
+    Returns:
+        Processing result dictionary with ProcessedDocumentSummary or error
+    """
+    task_start = datetime.now(UTC)
+
+    try:
+        # Verify user context matches expected user
+        context_user_id = AuthContext.get_user_id()
+        if context_user_id != user_id:
+            raise ValueError(
+                f"User context mismatch: expected {user_id}, got {context_user_id}"
+            )
+
+        logger.info(
+            f"Starting document processing subflow for user {user_id}, document {document_id}"
+        )
+
+        # Update task progress
+        self.update_state(
+            state="PROCESSING",
+            meta={
+                "status": "Initializing document processing subflow",
+                "progress": 5,
+                "user_id": user_id,
+                "document_id": document_id,
+                "use_llm": use_llm,
+            },
+        )
+
+        # Initialize and run document processing workflow
+        workflow = DocumentProcessingWorkflow(
+            use_llm_document_processing=use_llm,
+            storage_bucket="documents"
+        )
+
+        # Update progress
+        self.update_state(
+            state="PROCESSING", 
+            meta={
+                "status": "Document processing workflow started",
+                "progress": 10,
+            },
+        )
+
+        # Run the workflow
+        result = await workflow.process_document(
+            document_id=document_id,
+            use_llm=use_llm,
+            content_hash=content_hash
+        )
+
+        # Update progress based on result type
+        if result.success if hasattr(result, 'success') else False:
+            self.update_state(
+                state="PROCESSING",
+                meta={
+                    "status": "Document processing completed successfully",
+                    "progress": 90,
+                    "extraction_method": getattr(result, 'extraction_method', 'unknown'),
+                    "total_pages": getattr(result, 'total_pages', 0),
+                    "character_count": getattr(result, 'character_count', 0),
+                },
+            )
+        else:
+            self.update_state(
+                state="PROCESSING", 
+                meta={
+                    "status": "Document processing failed", 
+                    "progress": 50,
+                    "error": getattr(result, 'error', 'Unknown error'),
+                },
+            )
+
+        # Finalize processing
+        processing_time = (datetime.now(UTC) - task_start).total_seconds()
+
+        final_result = {
+            "success": result.success if hasattr(result, 'success') else False,
+            "document_id": document_id,
+            "user_id": user_id,
+            "processing_time": processing_time,
+            "task_id": self.request.id,
+            "completed_at": datetime.now(UTC).isoformat(),
+            "workflow_type": "document_processing_subflow",
+            "use_llm": use_llm,
+            "result": result,
+        }
+
+        logger.info(
+            f"Document processing subflow completed for user {user_id}, "
+            f"document {document_id} in {processing_time:.2f}s"
+        )
+
+        return final_result
+
+    except Exception as e:
+        processing_time = (datetime.now(UTC) - task_start).total_seconds()
+
+        logger.error(
+            f"Document processing subflow failed for user {user_id}, document {document_id}: {e}",
+            exc_info=True,
+        )
+
+        # Try to mark document as failed (if we can get user context)
+        try:
+            document_service = DocumentService()
+            await document_service.initialize()
+            
+            # Import here to avoid circular import
+            from app.models.supabase_models import ProcessingStatus
+            
+            # Get user client for database update
+            user_client = await AuthContext.get_authenticated_client(isolated=True)
+            
+            await user_client.database.update(
+                "documents",
+                document_id,
+                {
+                    "processing_status": ProcessingStatus.FAILED.value,
+                    "processing_errors": {
+                        "error": str(e),
+                        "task_id": self.request.id,
+                        "processing_time": processing_time,
+                        "failed_at": datetime.now(UTC).isoformat(),
+                        "workflow_type": "document_processing_subflow",
+                    },
+                    "processing_completed_at": datetime.now(UTC),
+                }
+            )
+        except Exception as update_error:
+            logger.error(f"Failed to update document status after subflow error: {update_error}")
+
+        # Return error result
+        raise Exception(f"Document processing subflow failed: {str(e)}")
 
 
 @celery_app.task(bind=True)

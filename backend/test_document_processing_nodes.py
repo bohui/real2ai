@@ -1,0 +1,299 @@
+"""
+Unit Tests for Document Processing Subflow Nodes
+
+This module contains unit tests for the DocumentProcessingWorkflow subflow nodes.
+Tests use fixtures for Supabase client interactions and mock external dependencies.
+"""
+
+import pytest
+import uuid
+from unittest.mock import AsyncMock, Mock, patch
+from datetime import datetime, timezone
+
+from app.agents.subflows.document_processing_workflow import DocumentProcessingState
+from app.agents.nodes.document_processing_subflow import (
+    FetchDocumentRecordNode,
+    AlreadyProcessedCheckNode,
+    MarkProcessingStartedNode,
+    BuildSummaryNode,
+    ErrorHandlingNode,
+)
+from app.schema.document import ProcessedDocumentSummary
+
+
+@pytest.fixture
+def mock_user_client():
+    """Mock authenticated user client."""
+    client = AsyncMock()
+    client.database = AsyncMock()
+    return client
+
+
+@pytest.fixture
+def sample_document_id():
+    """Sample document ID for testing."""
+    return str(uuid.uuid4())
+
+
+@pytest.fixture
+def sample_state():
+    """Sample document processing state."""
+    return DocumentProcessingState(
+        document_id=str(uuid.uuid4()),
+        use_llm=True,
+        content_hash=None,
+        storage_path=None,
+        file_type=None,
+        text_extraction_result=None,
+        diagram_processing_result=None,
+        processed_summary=None,
+        error=None,
+        error_details=None
+    )
+
+
+class TestFetchDocumentRecordNode:
+    """Test cases for FetchDocumentRecordNode."""
+    
+    @pytest.mark.asyncio
+    async def test_successful_fetch(self, sample_state, mock_user_client):
+        """Test successful document metadata fetch."""
+        # Arrange
+        document_data = {
+            "id": sample_state["document_id"],
+            "storage_path": "documents/test.pdf",
+            "file_type": "application/pdf",
+            "content_hash": "test_hash_123",
+            "processing_status": "pending",
+            "original_filename": "test_document.pdf"
+        }
+        
+        mock_user_client.database.select.return_value = {
+            "data": [document_data]
+        }
+        
+        node = FetchDocumentRecordNode()
+        
+        with patch.object(node, 'get_user_client', return_value=mock_user_client):
+            # Act
+            result = await node.execute(sample_state)
+            
+            # Assert
+            assert result["storage_path"] == "documents/test.pdf"
+            assert result["file_type"] == "application/pdf" 
+            assert result["content_hash"] == "test_hash_123"
+            assert result["error"] is None
+            
+            # Verify database call
+            mock_user_client.database.select.assert_called_once_with(
+                "documents",
+                columns="id, storage_path, file_type, content_hash, processing_status, original_filename",
+                filters={"id": sample_state["document_id"]}
+            )
+    
+    @pytest.mark.asyncio
+    async def test_document_not_found(self, sample_state, mock_user_client):
+        """Test handling when document is not found."""
+        # Arrange
+        mock_user_client.database.select.return_value = {"data": []}
+        
+        node = FetchDocumentRecordNode()
+        
+        with patch.object(node, 'get_user_client', return_value=mock_user_client):
+            # Act
+            result = await node.execute(sample_state)
+            
+            # Assert
+            assert result["error"] == "Document not found or access denied"
+            assert result["error_details"] is not None
+            assert result["error_details"]["node"] == "fetch_document_record"
+    
+    @pytest.mark.asyncio
+    async def test_missing_document_id(self, mock_user_client):
+        """Test handling when document_id is missing."""
+        # Arrange
+        state = DocumentProcessingState(
+            document_id="",  # Empty document ID
+            use_llm=True,
+            content_hash=None,
+            storage_path=None,
+            file_type=None,
+            text_extraction_result=None,
+            diagram_processing_result=None,
+            processed_summary=None,
+            error=None,
+            error_details=None
+        )
+        
+        node = FetchDocumentRecordNode()
+        
+        with patch.object(node, 'get_user_client', return_value=mock_user_client):
+            # Act
+            result = await node.execute(state)
+            
+            # Assert
+            assert result["error"] == "Document ID is required"
+            assert result["error_details"] is not None
+
+
+class TestAlreadyProcessedCheckNode:
+    """Test cases for AlreadyProcessedCheckNode."""
+    
+    @pytest.mark.asyncio
+    async def test_already_processed_document(self, sample_state):
+        """Test when document is already processed."""
+        # Arrange
+        sample_summary = ProcessedDocumentSummary(
+            success=True,
+            document_id=sample_state["document_id"],
+            australian_state="NSW",
+            full_text="Sample document text",
+            character_count=100,
+            total_word_count=20,
+            total_pages=1,
+            extraction_method="pdf_native",
+            extraction_confidence=0.95,
+            processing_timestamp=datetime.now(timezone.utc).isoformat(),
+            llm_used=True
+        )
+        
+        node = AlreadyProcessedCheckNode()
+        
+        with patch('app.services.document_service.DocumentService') as mock_service:
+            mock_service_instance = AsyncMock()
+            mock_service_instance.get_processed_document_summary.return_value = sample_summary
+            mock_service.return_value = mock_service_instance
+            
+            # Act
+            result = await node.execute(sample_state)
+            
+            # Assert
+            assert result["processed_summary"] == sample_summary
+            assert result["error"] is None
+    
+    @pytest.mark.asyncio
+    async def test_not_processed_document(self, sample_state):
+        """Test when document is not yet processed.""" 
+        # Arrange
+        node = AlreadyProcessedCheckNode()
+        
+        with patch('app.services.document_service.DocumentService') as mock_service:
+            mock_service_instance = AsyncMock()
+            mock_service_instance.get_processed_document_summary.return_value = None
+            mock_service.return_value = mock_service_instance
+            
+            # Act
+            result = await node.execute(sample_state)
+            
+            # Assert
+            assert result["processed_summary"] is None
+            assert result["error"] is None
+
+
+class TestBuildSummaryNode:
+    """Test cases for BuildSummaryNode."""
+    
+    @pytest.mark.asyncio
+    async def test_build_summary_with_existing_summary(self, sample_state):
+        """Test building summary when already exists in state."""
+        # Arrange
+        existing_summary = ProcessedDocumentSummary(
+            success=True,
+            document_id=sample_state["document_id"],
+            australian_state="NSW",
+            full_text="Existing summary",
+            character_count=100,
+            total_word_count=15,
+            total_pages=1,
+            extraction_method="existing",
+            extraction_confidence=0.9,
+            processing_timestamp=datetime.now(timezone.utc).isoformat(),
+            llm_used=True
+        )
+        
+        state_with_summary = sample_state.copy()
+        state_with_summary["processed_summary"] = existing_summary
+        
+        node = BuildSummaryNode()
+        
+        # Act
+        result = await node.execute(state_with_summary)
+        
+        # Assert
+        assert result["processed_summary"] == existing_summary
+        assert result["error"] is None
+    
+    @pytest.mark.asyncio
+    async def test_build_summary_missing_extraction_result(self, sample_state):
+        """Test building summary when text extraction result is missing."""
+        # Arrange
+        node = BuildSummaryNode()
+        
+        # Act
+        result = await node.execute(sample_state)
+        
+        # Assert
+        assert result["error"] == "Cannot build summary without successful text extraction"
+        assert result["error_details"] is not None
+
+
+class TestErrorHandlingNode:
+    """Test cases for ErrorHandlingNode."""
+    
+    @pytest.mark.asyncio
+    async def test_handle_error_with_document_id(self, sample_state, mock_user_client):
+        """Test error handling with valid document ID."""
+        # Arrange
+        error_state = sample_state.copy()
+        error_state["error"] = "Sample processing error"
+        error_state["error_details"] = {
+            "error_type": "ProcessingError",
+            "node": "extract_text"
+        }
+        
+        node = ErrorHandlingNode()
+        
+        with patch.object(node, 'get_user_client', return_value=mock_user_client):
+            # Act
+            result = await node.execute(error_state)
+            
+            # Assert
+            assert result["error"] == "Sample processing error"
+            assert result["error_details"] is not None
+            
+            # Verify database update call
+            mock_user_client.database.update.assert_called_once()
+            update_call = mock_user_client.database.update.call_args
+            assert update_call[0][0] == "documents"  # table name
+            assert update_call[0][1] == sample_state["document_id"]  # document id
+    
+    @pytest.mark.asyncio
+    async def test_handle_error_without_document_id(self):
+        """Test error handling without document ID."""
+        # Arrange
+        state = DocumentProcessingState(
+            document_id="",  # Missing document ID
+            use_llm=True,
+            content_hash=None,
+            storage_path=None,
+            file_type=None,
+            text_extraction_result=None,
+            diagram_processing_result=None,
+            processed_summary=None,
+            error="Some error occurred",
+            error_details=None
+        )
+        
+        node = ErrorHandlingNode()
+        
+        # Act
+        result = await node.execute(state)
+        
+        # Assert
+        assert "Missing document ID" in result["error"] or result["error"] == "Some error occurred"
+        assert result["error_details"] is not None
+
+
+if __name__ == "__main__":
+    # Run tests with pytest
+    pytest.main([__file__, "-v"])
