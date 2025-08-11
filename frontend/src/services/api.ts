@@ -40,7 +40,7 @@ class ApiService {
   private failedQueue: Array<
     { resolve: (value?: any) => void; reject: (error?: any) => void }
   > = [];
-  private tokenRefreshInterval: NodeJS.Timeout | null = null;
+  private tokenRefreshInterval: ReturnType<typeof setInterval> | null = null;
   private tokenExpiryTime: number | null = null;
 
   constructor() {
@@ -67,9 +67,9 @@ class ApiService {
     this.client.interceptors.response.use(
       (response) => {
         // Check for new token in response headers (from backend coordination)
-        const newToken = response.headers['x-new-token'];
+        const newToken = response.headers["x-new-token"];
         if (newToken) {
-          logger.api('Received coordinated token refresh from backend');
+          logger.api("Received coordinated token refresh from backend");
           this.setToken(newToken);
           this.setupTokenRefreshInterval();
         }
@@ -203,20 +203,20 @@ class ApiService {
   private extractTokenExpiry(token: string): number | null {
     try {
       // Decode JWT payload without verification
-      const parts = token.split('.');
+      const parts = token.split(".");
       if (parts.length !== 3) return null;
-      
+
       const payload = JSON.parse(atob(parts[1]));
-      
+
       // For backend tokens, check supa_exp first, then exp
       // This ensures we refresh before the underlying Supabase token expires
       const expiry = payload.supa_exp || payload.exp;
-      
-      if (expiry && typeof expiry === 'number') {
+
+      if (expiry && typeof expiry === "number") {
         return expiry;
       }
     } catch (error) {
-      console.warn('Failed to extract token expiry:', error);
+      console.warn("Failed to extract token expiry:", error);
     }
     return null;
   }
@@ -232,13 +232,13 @@ class ApiService {
 
     // Extract token expiry
     this.tokenExpiryTime = this.extractTokenExpiry(this.token);
-    
+
     if (this.tokenExpiryTime) {
       // Check every minute if token needs refresh
       this.tokenRefreshInterval = setInterval(() => {
         this.checkAndRefreshToken();
       }, 60000); // Check every minute
-      
+
       // Also do an immediate check
       this.checkAndRefreshToken();
     }
@@ -249,35 +249,39 @@ class ApiService {
 
     const now = Math.floor(Date.now() / 1000);
     const timeToExpiry = this.tokenExpiryTime - now;
-    
+
     // Log for debugging
     console.debug(`Token expires in ${timeToExpiry}s`);
-    
+
     // Refresh when 10 minutes or less remaining (configurable)
     const refreshThreshold = 600; // 10 minutes in seconds
-    
+
     if (timeToExpiry <= refreshThreshold && timeToExpiry > 0) {
-      logger.api(`Token expiring soon (${timeToExpiry}s remaining), initiating proactive refresh`);
-      
+      logger.api(
+        `Token expiring soon (${timeToExpiry}s remaining), initiating proactive refresh`,
+      );
+
       try {
         // Only refresh if we have a refresh token or if backend supports token refresh
         if (this.refreshToken) {
           await this.refreshTokens();
-          logger.api('Proactive token refresh successful');
+          logger.api("Proactive token refresh successful");
         } else {
           // For backend tokens without refresh capability, we need to check if
           // the backend can provide a new token via the next API call
-          logger.api('Backend token near expiry, will receive new token on next API call');
+          logger.api(
+            "Backend token near expiry, will receive new token on next API call",
+          );
         }
       } catch (error) {
-        console.warn('Proactive token refresh failed:', error);
+        console.warn("Proactive token refresh failed:", error);
         // The regular 401 interceptor will handle this on the next request
       }
     } else if (timeToExpiry <= 0) {
       // Token already expired
-      console.warn('Token already expired, clearing tokens');
+      console.warn("Token already expired, clearing tokens");
       this.clearTokens();
-      window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+      window.dispatchEvent(new CustomEvent("auth:unauthorized"));
     }
   }
 
@@ -700,7 +704,7 @@ export class WebSocketService {
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
   private reconnectDelay = 1000;
-  private heartbeatInterval: NodeJS.Timeout | null = null;
+  private heartbeatInterval: ReturnType<typeof setInterval> | null = null;
   private isConnecting = false;
   private isConnected = false;
   private contractId: string;
@@ -753,14 +757,14 @@ export class WebSocketService {
       logger.websocket(`WebSocket already connecting/connected`, {
         contractId: this.contractId,
         isConnecting: this.isConnecting,
-        isConnected: this.isConnected
+        isConnected: this.isConnected,
       });
       return Promise.resolve();
     }
 
     logger.websocket(`Attempting to connect WebSocket`, {
       contractId: this.contractId,
-      redactedUrl: this.url.replace(/token=[^&]+/, "token=[REDACTED]")
+      redactedUrl: this.url.replace(/token=[^&]+/, "token=[REDACTED]"),
     });
 
     // Validate URL format
@@ -773,11 +777,15 @@ export class WebSocketService {
     return new Promise((resolve, reject) => {
       try {
         this.isConnecting = true;
-        logger.websocket(`Starting WebSocket connection`, { contractId: this.contractId });
+        logger.websocket(`Starting WebSocket connection`, {
+          contractId: this.contractId,
+        });
 
         // Close existing connection if any
         if (this.ws) {
-          logger.websocket(`Closing existing WebSocket`, { contractId: this.contractId });
+          logger.websocket(`Closing existing WebSocket`, {
+            contractId: this.contractId,
+          });
           this.ws.close(1000, "Reconnecting");
           this.ws = null;
         }
@@ -789,14 +797,18 @@ export class WebSocketService {
 
         logger.websocket(`Creating new WebSocket connection`, {
           contractId: this.contractId,
-          redactedUrl: this.url.replace(/token=[^&]+/, "token=[REDACTED]")
+          redactedUrl: this.url.replace(/token=[^&]+/, "token=[REDACTED]"),
         });
         this.ws = new WebSocket(this.url);
 
         this.ws.onopen = () => {
-          logger.websocket(`WebSocket connected successfully`, { contractId: this.contractId });
-          );
-          logger.websocket(`Connection state updated`, { connecting: false, connected: true });
+          logger.websocket(`WebSocket connected successfully`, {
+            contractId: this.contractId,
+          });
+          logger.websocket(`Connection state updated`, {
+            connecting: false,
+            connected: true,
+          });
           this.reconnectAttempts = 0;
           this.isConnecting = false;
           this.isConnected = true;
@@ -819,7 +831,10 @@ export class WebSocketService {
         };
 
         this.ws.onmessage = (event) => {
-          logger.websocket(`WebSocket message received`, { contractId: this.contractId, data: event.data });
+          logger.websocket(`WebSocket message received`, {
+            contractId: this.contractId,
+            data: event.data,
+          });
           try {
             const message = JSON.parse(event.data);
             logger.websocket(`Parsed WebSocket message`, { message });
@@ -828,7 +843,9 @@ export class WebSocketService {
             const customEvent = new CustomEvent("analysis:update", {
               detail: message,
             });
-            logger.websocket("Dispatching analysis:update event", { customEvent });
+            logger.websocket("Dispatching analysis:update event", {
+              customEvent,
+            });
             window.dispatchEvent(customEvent);
           } catch (error) {
             console.error(
@@ -865,8 +882,9 @@ export class WebSocketService {
             event.code !== 1000 &&
             this.reconnectAttempts < this.maxReconnectAttempts
           ) {
-            logger.websocket(`Attempting to reconnect WebSocket`, { contractId: this.contractId });
-            );
+            logger.websocket(`Attempting to reconnect WebSocket`, {
+              contractId: this.contractId,
+            });
             this.reconnectAttempts++;
             setTimeout(() => {
               this.reconnect();
@@ -897,14 +915,16 @@ export class WebSocketService {
       logger.websocket(`Attempting to reconnect WebSocket`, {
         contractId: this.contractId,
         attempt: this.reconnectAttempts,
-        maxAttempts: this.maxReconnectAttempts
+        maxAttempts: this.maxReconnectAttempts,
       });
       this.connect().catch(console.error);
     }, delay);
   }
 
   disconnect(): void {
-    logger.websocket(`Disconnecting WebSocket`, { contractId: this.contractId });
+    logger.websocket(`Disconnecting WebSocket`, {
+      contractId: this.contractId,
+    });
 
     this.isConnecting = false;
     this.isConnected = false;
@@ -958,7 +978,7 @@ export class WebSocketService {
         const messageStr = JSON.stringify(message);
         logger.websocket(`Sending WebSocket message`, {
           contractId: this.contractId,
-          messageType: (message as any)?.type || "unknown"
+          messageType: (message as any)?.type || "unknown",
         });
         this.ws.send(messageStr);
       } catch (error) {
@@ -1057,19 +1077,25 @@ class WebSocketConnectionManager {
   }
 
   createConnection(documentId: string): WebSocketService {
-    logger.websocket(`Creating WebSocket connection for document`, { documentId });
+    logger.websocket(`Creating WebSocket connection for document`, {
+      documentId,
+    });
 
     // Close existing connection if any
     const existing = this.connections.get(documentId);
     if (existing) {
-      logger.websocket(`Closing existing connection for document`, { documentId });
+      logger.websocket(`Closing existing connection for document`, {
+        documentId,
+      });
       existing.disconnect();
       this.connections.delete(documentId);
     }
 
     const connection = new WebSocketService(documentId);
     this.connections.set(documentId, connection);
-    logger.websocket(`WebSocket connection created and registered`, { documentId });
+    logger.websocket(`WebSocket connection created and registered`, {
+      documentId,
+    });
     return connection;
   }
 
