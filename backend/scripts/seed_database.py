@@ -79,6 +79,14 @@ class DatabaseSeeder:
                 "credits_remaining": 50,
                 "organization": "Real2.AI Demo",
                 "password": "1qa2ws#ED!@",
+                "onboarding_completed": True,
+                "onboarding_completed_at": datetime.now(),
+                "onboarding_preferences": {
+                    "firm_size": "",
+                    "jurisdiction": "nsw",
+                    "practice_area": "property",
+                    "primary_contract_types": [],
+                },
             },
             {
                 "id": str(uuid.uuid4()),
@@ -192,7 +200,10 @@ class DatabaseSeeder:
                                     australian_state = $3,
                                     user_type = $4,
                                     subscription_status = $5,
-                                    credits_remaining = $6
+                                    credits_remaining = $6,
+                                    onboarding_completed = $7,
+                                    onboarding_completed_at = $8,
+                                    onboarding_preferences = $9
                                 WHERE id = $1
                             """,
                                 user["id"],
@@ -201,6 +212,9 @@ class DatabaseSeeder:
                                 user["user_type"],
                                 user["subscription_status"],
                                 user["credits_remaining"],
+                                user.get("onboarding_completed", False),
+                                user.get("onboarding_completed_at"),
+                                json.dumps(user.get("onboarding_preferences", {})),
                             )
                             logger.info(f"Updated demo user profile: {user['email']}")
                             created_users.append(user)
@@ -208,14 +222,18 @@ class DatabaseSeeder:
                             await conn.execute(
                                 """
                                 INSERT INTO profiles (id, email, australian_state, user_type, 
-                                                    subscription_status, credits_remaining)
-                                VALUES ($1, $2, $3, $4, $5, $6)
+                                                    subscription_status, credits_remaining,
+                                                    onboarding_completed, onboarding_completed_at, onboarding_preferences)
+                                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                                 ON CONFLICT (id) DO UPDATE SET
                                     email = EXCLUDED.email,
                                     australian_state = EXCLUDED.australian_state,
                                     user_type = EXCLUDED.user_type,
                                     subscription_status = EXCLUDED.subscription_status,
-                                    credits_remaining = EXCLUDED.credits_remaining
+                                    credits_remaining = EXCLUDED.credits_remaining,
+                                    onboarding_completed = EXCLUDED.onboarding_completed,
+                                    onboarding_completed_at = EXCLUDED.onboarding_completed_at,
+                                    onboarding_preferences = EXCLUDED.onboarding_preferences
                             """,
                                 user["id"],
                                 user["email"],
@@ -223,6 +241,9 @@ class DatabaseSeeder:
                                 user["user_type"],
                                 user["subscription_status"],
                                 user["credits_remaining"],
+                                user.get("onboarding_completed", False),
+                                user.get("onboarding_completed_at"),
+                                json.dumps(user.get("onboarding_preferences", {})),
                             )
 
                             logger.info(f"Created demo user profile: {user['email']}")
@@ -703,7 +724,7 @@ class DatabaseSeeder:
                         median_price,
                         8.2,  # 8.2% growth
                         4.5,  # 4.5% yield
-                        32,   # days on market
+                        32,  # days on market
                         datetime.now(),
                     )
 
@@ -720,11 +741,13 @@ class DatabaseSeeder:
                         "search",
                     )
 
-                    property_ids.append({
-                        "id": property_id,
-                        "property_hash": property_hash,
-                        "address": property_address
-                    })
+                    property_ids.append(
+                        {
+                            "id": property_id,
+                            "property_hash": property_hash,
+                            "address": property_address,
+                        }
+                    )
 
                     logger.info(f"Created property data for {prop['address_full']}")
 
@@ -741,7 +764,7 @@ class DatabaseSeeder:
         try:
             for contract in contracts[:2]:  # Create progress for first 2 contracts
                 progress_id = str(uuid.uuid4())
-                
+
                 # Create a progress record showing completed analysis
                 await conn.execute(
                     """
@@ -763,14 +786,18 @@ class DatabaseSeeder:
                     100,
                     "Contract analysis completed successfully",
                     "completed",
-                    json.dumps({
-                        "contract_type": contract.get("contract_type", "unknown"),
-                        "analysis_type": "full_analysis",
-                        "processing_time": 15.7
-                    })
+                    json.dumps(
+                        {
+                            "contract_type": contract.get("contract_type", "unknown"),
+                            "analysis_type": "full_analysis",
+                            "processing_time": 15.7,
+                        }
+                    ),
                 )
 
-                logger.info(f"Created analysis progress for contract {contract['content_hash'][:8]}...")
+                logger.info(
+                    f"Created analysis progress for contract {contract['content_hash'][:8]}..."
+                )
 
         finally:
             await conn.close()
@@ -781,11 +808,17 @@ class DatabaseSeeder:
 
         conn = await self.get_db_connection()
         try:
-            for i, doc in enumerate(documents[:2]):  # Create artifacts for first 2 documents
+            for i, doc in enumerate(
+                documents[:2]
+            ):  # Create artifacts for first 2 documents
                 # Generate content HMAC for artifact system (simplified for demo)
-                content_hmac = hashlib.sha256(f"document_content_{i}".encode()).hexdigest()
+                content_hmac = hashlib.sha256(
+                    f"document_content_{i}".encode()
+                ).hexdigest()
                 algorithm_version = 1
-                params_fingerprint = hashlib.sha256("default_params".encode()).hexdigest()
+                params_fingerprint = hashlib.sha256(
+                    "default_params".encode()
+                ).hexdigest()
 
                 # Create text extraction artifact
                 artifact_id = str(uuid.uuid4())
@@ -805,11 +838,13 @@ class DatabaseSeeder:
                     hashlib.sha256(f"full_text_{i}".encode()).hexdigest(),
                     5 + i,  # page count
                     1200 + (i * 300),  # word count
-                    json.dumps({
-                        "extraction_method": "mupdf_primary",
-                        "ocr_fallback": False,
-                        "confidence": 0.95
-                    })
+                    json.dumps(
+                        {
+                            "extraction_method": "mupdf_primary",
+                            "ocr_fallback": False,
+                            "confidence": 0.95,
+                        }
+                    ),
                 )
 
                 # Update document with artifact reference
@@ -827,7 +862,7 @@ class DatabaseSeeder:
                     doc["id"],
                     content_hmac,
                     algorithm_version,
-                    params_fingerprint
+                    params_fingerprint,
                 )
 
                 # Create sample page artifacts
@@ -847,17 +882,28 @@ class DatabaseSeeder:
                         params_fingerprint,
                         page_num,
                         f"s3://artifacts/pages/{content_hmac}_p{page_num}.txt",
-                        hashlib.sha256(f"page_text_{i}_{page_num}".encode()).hexdigest(),
-                        json.dumps({
-                            "bounding_box": {"x": 0, "y": 0, "width": 595, "height": 842},
-                            "text_regions": 3,
-                            "confidence": 0.92
-                        }),
-                        json.dumps({
-                            "word_count": 180 + (page_num * 20),
-                            "line_count": 25 + page_num,
-                            "extraction_time_ms": 150 + (page_num * 10)
-                        })
+                        hashlib.sha256(
+                            f"page_text_{i}_{page_num}".encode()
+                        ).hexdigest(),
+                        json.dumps(
+                            {
+                                "bounding_box": {
+                                    "x": 0,
+                                    "y": 0,
+                                    "width": 595,
+                                    "height": 842,
+                                },
+                                "text_regions": 3,
+                                "confidence": 0.92,
+                            }
+                        ),
+                        json.dumps(
+                            {
+                                "word_count": 180 + (page_num * 20),
+                                "line_count": 25 + page_num,
+                                "extraction_time_ms": 150 + (page_num * 10),
+                            }
+                        ),
                     )
 
                 # Create sample paragraph artifacts
@@ -879,12 +925,18 @@ class DatabaseSeeder:
                             page_num,
                             para_idx,
                             f"s3://artifacts/paragraphs/{content_hmac}_p{page_num}_para{para_idx}.txt",
-                            hashlib.sha256(f"paragraph_text_{i}_{page_num}_{para_idx}".encode()).hexdigest(),
-                            json.dumps({
-                                "clause_type": "general" if para_idx == 0 else "specific",
-                                "importance": "high" if para_idx == 1 else "medium",
-                                "risk_indicators": []  
-                            })
+                            hashlib.sha256(
+                                f"paragraph_text_{i}_{page_num}_{para_idx}".encode()
+                            ).hexdigest(),
+                            json.dumps(
+                                {
+                                    "clause_type": (
+                                        "general" if para_idx == 0 else "specific"
+                                    ),
+                                    "importance": "high" if para_idx == 1 else "medium",
+                                    "risk_indicators": [],
+                                }
+                            ),
                         )
 
                 # Create user document associations
@@ -900,7 +952,7 @@ class DatabaseSeeder:
                         """,
                         doc["id"],
                         page_num,
-                        content_hmac
+                        content_hmac,
                     )
 
                     # Create paragraph associations
@@ -917,10 +969,12 @@ class DatabaseSeeder:
                             doc["id"],
                             page_num,
                             para_idx,
-                            content_hmac
+                            content_hmac,
                         )
 
-                logger.info(f"Created artifact data for document {doc['original_filename']}")
+                logger.info(
+                    f"Created artifact data for document {doc['original_filename']}"
+                )
 
         finally:
             await conn.close()
@@ -933,7 +987,7 @@ class DatabaseSeeder:
         try:
             for doc in documents[:2]:  # Create processing runs for first 2 documents
                 run_id = str(uuid.uuid4())
-                
+
                 # Create processing run
                 await conn.execute(
                     """
@@ -946,7 +1000,7 @@ class DatabaseSeeder:
                     doc["id"],
                     doc["user_id"],
                     "completed",
-                    "analysis_complete"
+                    "analysis_complete",
                 )
 
                 # Create processing steps
@@ -954,7 +1008,7 @@ class DatabaseSeeder:
                     ("extract_text", "success"),
                     ("parse_content", "success"),
                     ("analyze_contract", "success"),
-                    ("generate_report", "success")
+                    ("generate_report", "success"),
                 ]
 
                 for step_name, status in steps:
@@ -968,19 +1022,25 @@ class DatabaseSeeder:
                         run_id,
                         step_name,
                         status,
-                        json.dumps({
-                            "step": step_name,
-                            "processing_time_ms": 1500 + (hash(step_name) % 500)
-                        }),
-                        datetime.now()
+                        json.dumps(
+                            {
+                                "step": step_name,
+                                "processing_time_ms": 1500 + (hash(step_name) % 500),
+                            }
+                        ),
+                        datetime.now(),
                     )
 
-                logger.info(f"Created processing run for document {doc['original_filename']}")
+                logger.info(
+                    f"Created processing run for document {doc['original_filename']}"
+                )
 
         finally:
             await conn.close()
 
-    async def seed_user_views(self, contracts: List[Dict], properties: List[Dict] = None):
+    async def seed_user_views(
+        self, contracts: List[Dict], properties: List[Dict] = None
+    ):
         """Create sample user tracking views"""
         logger.info("Seeding user tracking views...")
 
@@ -1000,7 +1060,7 @@ class DatabaseSeeder:
                     contract["user_id"],
                     contract["content_hash"],
                     None,  # property_address - could be populated from property data
-                    "upload"
+                    "upload",
                 )
 
             # Create property views if properties provided
@@ -1021,7 +1081,7 @@ class DatabaseSeeder:
                             user_id,
                             prop["property_hash"],
                             prop["address"],
-                            "search"
+                            "search",
                         )
 
             logger.info("Created user tracking views")
@@ -1068,7 +1128,7 @@ class DatabaseSeeder:
             if include_analyses and contracts:
                 await self.seed_sample_analyses(contracts)
                 logger.info("✅ Created sample analyses")
-                
+
                 # Also create analysis progress records
                 await self.seed_analysis_progress(contracts)
                 logger.info("✅ Created analysis progress records")
@@ -1145,7 +1205,7 @@ Examples:
 
     parser.add_argument(
         "--property-data",
-        action="store_true", 
+        action="store_true",
         help="Create sample property data (requires --contracts)",
     )
 
@@ -1206,8 +1266,8 @@ async def main():
                 include_artifacts=args.artifacts,
                 include_usage_logs=args.usage_logs,
                 include_property_data=args.property_data,
-                include_processing_runs=getattr(args, 'processing_runs', False),
-                include_user_views=getattr(args, 'user_views', False),
+                include_processing_runs=getattr(args, "processing_runs", False),
+                include_user_views=getattr(args, "user_views", False),
             )
 
     except Exception as e:
