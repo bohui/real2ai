@@ -84,15 +84,11 @@ REVOKE ALL ON TABLE artifact_paragraphs FROM authenticated;
 REVOKE ALL ON TABLE artifact_diagrams FROM anon;
 REVOKE ALL ON TABLE artifact_diagrams FROM authenticated;
 
--- Note: Legacy document tables (document_pages, document_diagrams, etc.) 
--- will be dropped in 20240101000015_cleanup_legacy_tables.sql
--- They are replaced by the new artifact system with content-addressed caching
-
 -- Comments for artifact security policies
-COMMENT ON POLICY "Service role only access to text_extraction_artifacts" ON text_extraction_artifacts IS 'Only service role can access text extraction artifacts - they are shared cached data';
-COMMENT ON POLICY "Service role only access to artifact_pages" ON artifact_pages IS 'Only service role can access artifact pages - they are shared cached data';
-COMMENT ON POLICY "Service role only access to artifact_paragraphs" ON artifact_paragraphs IS 'Only service role can access artifact paragraphs - they are shared cached data';
-COMMENT ON POLICY "Service role only access to artifact_diagrams" ON artifact_diagrams IS 'Only service role can access artifact diagrams - they are shared cached data';
+COMMENT ON POLICY "Service role only access to text_extraction_artifacts" ON text_extraction_artifacts IS 'Only service role can access text extraction artifacts - shared cached data for content-addressed storage';
+COMMENT ON POLICY "Service role only access to artifact_pages" ON artifact_pages IS 'Only service role can access artifact pages - shared cached data for content-addressed storage';
+COMMENT ON POLICY "Service role only access to artifact_paragraphs" ON artifact_paragraphs IS 'Only service role can access artifact paragraphs - shared cached data for content-addressed storage';
+COMMENT ON POLICY "Service role only access to artifact_diagrams" ON artifact_diagrams IS 'Only service role can access artifact diagrams - shared cached data for content-addressed storage';
 COMMENT ON POLICY "Users can manage own document pages" ON user_document_pages IS 'Users can manage document pages for their own documents via foreign key relationship';
 COMMENT ON POLICY "Users can manage own document diagrams" ON user_document_diagrams IS 'Users can manage document diagrams for their own documents via foreign key relationship';
 COMMENT ON POLICY "Users can manage own document paragraphs" ON user_document_paragraphs IS 'Users can manage document paragraphs for their own documents via foreign key relationship';
