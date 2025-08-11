@@ -1,7 +1,6 @@
 """WebSocket router with proper ASGI compliance and user-aware architecture"""
 
 import json
-import asyncio
 import logging
 from typing import Dict, Any, Optional
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
@@ -60,9 +59,17 @@ async def check_document_cache_status(document_id: str, user_id: str) -> Dict[st
             raise ValueError(f"Document {document_id} not found or access denied")
 
         document = doc_result["data"][0]
-        content_hash = document.get(
-            "content_hash"
-        ) or _generate_content_hash_from_document(document)
+        content_hash = document.get("content_hash")
+        if not content_hash:
+            logger.info("Document has no content_hash; treating as cache MISS")
+            return {
+                "cache_status": CacheStatus.MISS,
+                "document_id": document_id,
+                "content_hash": None,
+                "contract_id": None,
+                "retry_available": False,
+                "message": "Document has no content_hash yet; analysis will start shortly",
+            }
 
         logger.info(
             f"Checking cache for document {document_id} with content_hash: {content_hash}"
@@ -276,30 +283,6 @@ async def check_document_cache_status(document_id: str, user_id: str) -> Dict[st
         }
 
 
-def _generate_content_hash_from_document(document: Dict[str, Any]) -> str:
-    """
-    Generate content hash from document metadata if not present.
-    """
-    import hashlib
-
-    # Try to get hash from document record first
-    if document.get("content_hash"):
-        return document["content_hash"]
-
-    # If document has processing results with text, hash that
-    processing_results = document.get("processing_results", {})
-    text_extraction = processing_results.get("text_extraction", {})
-    full_text = text_extraction.get("full_text", "")
-
-    if full_text:
-        content_bytes = full_text.encode("utf-8")
-        return hashlib.sha256(content_bytes).hexdigest()
-
-    # Fallback: create hash from document metadata
-    metadata = f"{document.get('original_filename', '')}{document.get('file_size', 0)}{document.get('created_at', '')}"
-    return hashlib.sha256(metadata.encode("utf-8")).hexdigest()
-
-
 @router.websocket("/documents/{document_id}")
 async def document_analysis_websocket(
     websocket: WebSocket,
@@ -318,7 +301,6 @@ async def document_analysis_websocket(
     """
 
     user = None
-    subscription_created = False
 
     try:
         # STEP 1: ALWAYS accept the WebSocket connection first (ASGI requirement)
@@ -422,7 +404,7 @@ async def document_analysis_websocket(
         )
 
         # Bridge Redis pub/sub updates to this session if not already subscribed
-        if document_id not in getattr(redis_pubsub_service, "subscriptions", {}):
+        if document_id not in redis_pubsub_service.subscriptions:
 
             async def _forward_pubsub_message(message: Dict[str, Any]):
                 try:
@@ -435,7 +417,6 @@ async def document_analysis_websocket(
                 await redis_pubsub_service.subscribe_to_progress(
                     document_id, _forward_pubsub_message
                 )
-                subscription_created = True
                 logger.info(
                     f"Redis subscription created for document session {document_id}"
                 )
@@ -444,7 +425,9 @@ async def document_analysis_websocket(
                     f"Could not subscribe to Redis channel for {document_id}: {sub_error}"
                 )
 
-        # Also subscribe to contract_id and content_hash channels to bridge legacy publishers
+        # Also subscribe to contract_id and content_hash channels for legacy compatibility
+        # Legacy bridging: contract_id subscription exists for compatibility and can be removed
+        # once all publishers emit on content_hash channels
         try:
             contract_id = cache_status_result.get("contract_id")
             if contract_id and contract_id not in redis_pubsub_service.subscriptions:
@@ -518,9 +501,6 @@ async def document_analysis_websocket(
 
         # Send document_uploaded notification if this is a recent upload
         try:
-            # Check if document was recently uploaded (within last 5 minutes)
-            from app.services.communication.websocket_service import WebSocketEvents
-
             # Get document details to check upload time
             user_client = await AuthContext.get_authenticated_client()
             doc_result = await user_client.database.select(
@@ -1146,7 +1126,6 @@ async def handle_cancellation_request(
         # Try to cancel the Celery task if we can find it
         try:
             from app.tasks.background_tasks import comprehensive_document_analysis
-            from celery import Celery
 
             # Get all active tasks and try to revoke matching ones
             app = comprehensive_document_analysis.app
@@ -1234,9 +1213,9 @@ async def _dispatch_analysis_task(
             raise ValueError(f"Document {document_id} not found or access denied")
 
         document = doc_result["data"][0]
-
-        # Generate content hash for caching
-        content_hash = await _generate_document_content_hash(document)
+        content_hash = document.get("content_hash")
+        if not content_hash:
+            raise ValueError("Document has no content_hash; cannot dispatch analysis")
 
         # Create or get contract record if not provided
         if not contract_id:
@@ -1313,34 +1292,6 @@ async def _dispatch_analysis_task(
         raise ValueError(f"Analysis dispatch failed: {str(e)}")
 
 
-async def _generate_document_content_hash(document: Dict[str, Any]) -> Optional[str]:
-    """Generate content hash for document."""
-    try:
-        import hashlib
-
-        # Try to get hash from document record first
-        if document.get("content_hash"):
-            return document["content_hash"]
-
-        # If document has processing results with text, hash that
-        processing_results = document.get("processing_results", {})
-        text_extraction = processing_results.get("text_extraction", {})
-        full_text = text_extraction.get("full_text", "")
-
-        if full_text:
-            # Hash the extracted text content
-            content_bytes = full_text.encode("utf-8")
-            return hashlib.sha256(content_bytes).hexdigest()
-
-        # Fallback: create hash from document metadata
-        metadata = f"{document.get('original_filename', '')}{document.get('file_size', 0)}{document.get('created_at', '')}"
-        return hashlib.sha256(metadata.encode("utf-8")).hexdigest()
-
-    except Exception as e:
-        logger.error(f"Error generating content hash: {str(e)}")
-        return None
-
-
 def get_progress_from_status(status: str) -> int:
     """Convert analysis status to progress percentage."""
     status_progress_map = {
@@ -1361,20 +1312,5 @@ async def websocket_health():
         "status": "healthy",
         "active_sessions": websocket_manager.get_session_count(),
         "total_connections": websocket_manager.get_total_connections(),
-        "timestamp": datetime.now(UTC).isoformat(),
-    }
-
-
-# Get connection info for a specific contract
-@router.get("/contracts/{contract_id}/info")
-async def get_contract_connection_info(contract_id: str, user=None):
-    """Get WebSocket connection information for a contract."""
-    if not user:
-        return {"error": "Authentication required"}
-
-    info = websocket_manager.get_session_info(contract_id)
-    return {
-        "contract_id": contract_id,
-        "connection_info": info,
         "timestamp": datetime.now(UTC).isoformat(),
     }
