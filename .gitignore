@@ -82,3 +82,7 @@ real2ai_backend.egg-info/
 
 # secrets
 gcp_key.json
+
+
+backend/app/tasks/background_tasks_not_used.py
+backend/app/services/document_service_not_used.py

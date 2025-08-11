@@ -3,7 +3,7 @@
 import hashlib
 from typing import Dict, List, Optional, Union, TypedDict, Any
 from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, Body, Query
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse
 import logging
 from datetime import datetime
 from uuid import UUID
@@ -17,15 +17,11 @@ from app.core.retry_manager import retry_database_operation, retry_api_call
 from app.core.notification_system import (
     notification_system,
     notify_user_error,
-    notify_user_success,
 )
 from app.schema.contract import (
     ContractAnalysisResponse,
 )
-from app.models.supabase_models import Document, Contract, ContractAnalysis, Profile
-from app.clients.base.interfaces import DatabaseOperations, AuthOperations
 from app.clients.supabase.client import SupabaseClient
-from app.core.database_optimizer import get_database_optimizer, UserAccessResult
 
 logger = logging.getLogger(__name__)
 
