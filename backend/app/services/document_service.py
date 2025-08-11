@@ -1174,453 +1174,453 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
         }
 
     # Complete PDF processing implementation
-    async def _extract_pdf_text_comprehensive(
-        self, file_content: bytes
-    ) -> TextExtractionResult:
-        """Comprehensive PDF text extraction with pymupdf and OCR fallback"""
+    # async def _extract_pdf_text_comprehensive(
+    #     self, file_content: bytes
+    # ) -> TextExtractionResult:
+    #     """Comprehensive PDF text extraction with pymupdf and OCR fallback"""
 
-        try:
-            pdf_document = pymupdf.open(stream=file_content, filetype="pdf")
-            pages = []
-            full_text = ""
-            extraction_methods = []
+    #     try:
+    #         pdf_document = pymupdf.open(stream=file_content, filetype="pdf")
+    #         pages = []
+    #         full_text = ""
+    #         extraction_methods = []
 
-            for page_num in range(len(pdf_document)):
-                page = pdf_document.load_page(page_num)
+    #         for page_num in range(len(pdf_document)):
+    #             page = pdf_document.load_page(page_num)
 
-                # Primary extraction with pymupdf
-                text_content = page.get_text()
-                extraction_method = "pymupdf"
-                confidence = DocumentServiceConstants.OCR_CONFIDENCE_HIGH
+    #             # Primary extraction with pymupdf
+    #             text_content = page.get_text()
+    #             extraction_method = "pymupdf"
+    #             confidence = DocumentServiceConstants.OCR_CONFIDENCE_HIGH
 
-                # OCR fallback for pages with minimal text
-                if (
-                    len(text_content.strip())
-                    < DocumentServiceConstants.MIN_TEXT_LENGTH_FOR_OCR
-                ):
-                    ocr_text = await self._extract_text_with_ocr(
-                        page,
-                        page_num + 1,
-                    )
-                    if len(ocr_text.strip()) > len(text_content.strip()):
-                        text_content = ocr_text
-                        extraction_method = "tesseract_ocr"
-                        confidence = DocumentServiceConstants.OCR_CONFIDENCE_LOW
+    #             # OCR fallback for pages with minimal text
+    #             if (
+    #                 len(text_content.strip())
+    #                 < DocumentServiceConstants.MIN_TEXT_LENGTH_FOR_OCR
+    #             ):
+    #                 ocr_text = await self._extract_text_with_ocr(
+    #                     page,
+    #                     page_num + 1,
+    #                 )
+    #                 if len(ocr_text.strip()) > len(text_content.strip()):
+    #                     text_content = ocr_text
+    #                     extraction_method = "tesseract_ocr"
+    #                     confidence = DocumentServiceConstants.OCR_CONFIDENCE_LOW
 
-                # Advanced OCR with Gemini for complex pages when LLM is enabled
-                if (
-                    self.use_llm_document_processing
-                    and self.gemini_ocr_service
-                    and confidence < DocumentServiceConstants.OCR_CONFIDENCE_THRESHOLD
-                ):
-                    try:
-                        gemini_result = await self._extract_text_with_gemini(
-                            page,
-                            page_num + 1,
-                        )
-                        llm_insights = None
-                        if gemini_result:
-                            # Prefer Gemini text if it improves length
-                            gemini_text = gemini_result.get("text") or ""
-                            if len(gemini_text.strip()) > len(text_content.strip()):
-                                text_content = gemini_text
-                                extraction_method = "gemini_ocr"
-                                confidence = (
-                                    gemini_result.get("confidence")
-                                    or DocumentServiceConstants.OCR_CONFIDENCE_MEDIUM
-                                )
+    #             # Advanced OCR with Gemini for complex pages when LLM is enabled
+    #             if (
+    #                 self.use_llm_document_processing
+    #                 and self.gemini_ocr_service
+    #                 and confidence < DocumentServiceConstants.OCR_CONFIDENCE_THRESHOLD
+    #             ):
+    #                 try:
+    #                     gemini_result = await self._extract_text_with_gemini(
+    #                         page,
+    #                         page_num + 1,
+    #                     )
+    #                     llm_insights = None
+    #                     if gemini_result:
+    #                         # Prefer Gemini text if it improves length
+    #                         gemini_text = gemini_result.get("text") or ""
+    #                         if len(gemini_text.strip()) > len(text_content.strip()):
+    #                             text_content = gemini_text
+    #                             extraction_method = "gemini_ocr"
+    #                             confidence = (
+    #                                 gemini_result.get("confidence")
+    #                                 or DocumentServiceConstants.OCR_CONFIDENCE_MEDIUM
+    #                             )
 
-                            # Capture diagram hints/semantics for downstream analysis
-                            llm_insights = {
-                                "diagram_hint": gemini_result.get("diagram_hint"),
-                                "semantic_analysis": gemini_result.get(
-                                    "semantic_analysis"
-                                ),
-                            }
-                    except Exception as gemini_error:
-                        self.logger.warning(
-                            f"Gemini OCR failed for page {page_num + 1}: {gemini_error}"
-                        )
+    #                         # Capture diagram hints/semantics for downstream analysis
+    #                         llm_insights = {
+    #                             "diagram_hint": gemini_result.get("diagram_hint"),
+    #                             "semantic_analysis": gemini_result.get(
+    #                                 "semantic_analysis"
+    #                             ),
+    #                         }
+    #                 except Exception as gemini_error:
+    #                     self.logger.warning(
+    #                         f"Gemini OCR failed for page {page_num + 1}: {gemini_error}"
+    #                     )
 
-                # Analyze page content (use LLM insights if available)
-                page_analysis = self._analyze_page_content(
-                    text_content, page, llm_insights=locals().get("llm_insights")
-                )
+    #             # Analyze page content (use LLM insights if available)
+    #             page_analysis = self._analyze_page_content(
+    #                 text_content, page, llm_insights=locals().get("llm_insights")
+    #             )
 
-                page_data = {
-                    "page_number": page_num + 1,
-                    "text_content": text_content,
-                    "text_length": len(text_content),
-                    "word_count": (
-                        len(text_content.split())
-                        if text_content
-                        else DocumentServiceConstants.DEFAULT_PAGE_NUMBER
-                    ),
-                    "extraction_method": extraction_method,
-                    "confidence": confidence,
-                    "content_analysis": page_analysis,
-                }
+    #             page_data = {
+    #                 "page_number": page_num + 1,
+    #                 "text_content": text_content,
+    #                 "text_length": len(text_content),
+    #                 "word_count": (
+    #                     len(text_content.split())
+    #                     if text_content
+    #                     else DocumentServiceConstants.DEFAULT_PAGE_NUMBER
+    #                 ),
+    #                 "extraction_method": extraction_method,
+    #                 "confidence": confidence,
+    #                 "content_analysis": page_analysis,
+    #             }
 
-                # Attach LLM-derived diagram hints for later persistence
-                if locals().get("llm_insights") and locals()["llm_insights"].get(
-                    "diagram_hint"
-                ):
-                    page_data["diagram_hint"] = locals()["llm_insights"]["diagram_hint"]
+    #             # Attach LLM-derived diagram hints for later persistence
+    #             if locals().get("llm_insights") and locals()["llm_insights"].get(
+    #                 "diagram_hint"
+    #             ):
+    #                 page_data["diagram_hint"] = locals()["llm_insights"]["diagram_hint"]
 
-                pages.append(page_data)
-                full_text += f"\n--- Page {page_num + 1} ---\n{text_content}"
+    #             pages.append(page_data)
+    #             full_text += f"\n--- Page {page_num + 1} ---\n{text_content}"
 
-                if extraction_method not in extraction_methods:
-                    extraction_methods.append(extraction_method)
+    #             if extraction_method not in extraction_methods:
+    #                 extraction_methods.append(extraction_method)
 
-            pdf_document.close()
+    #         pdf_document.close()
 
-            return TextExtractionResult(
-                success=True,
-                full_text=full_text,
-                pages=[
-                    PageExtraction(
-                        page_number=p.get("page_number", 0),
-                        text_content=p.get("text_content", ""),
-                        text_length=p.get("text_length", 0),
-                        word_count=p.get("word_count", 0),
-                        extraction_method=p.get("extraction_method"),
-                        confidence=p.get("confidence", 0.0),
-                        content_analysis=ContentAnalysisSchema(
-                            **p.get("content_analysis", {})
-                        ),
-                    )
-                    for p in pages
-                ],
-                total_pages=len(pages),
-                extraction_methods=extraction_methods,
-                total_word_count=sum(p["word_count"] for p in pages),
-                overall_confidence=(
-                    sum(p["confidence"] for p in pages) / len(pages)
-                    if pages
-                    else DocumentServiceConstants.DEFAULT_CONFIDENCE
-                ),
-            )
+    #         return TextExtractionResult(
+    #             success=True,
+    #             full_text=full_text,
+    #             pages=[
+    #                 PageExtraction(
+    #                     page_number=p.get("page_number", 0),
+    #                     text_content=p.get("text_content", ""),
+    #                     text_length=p.get("text_length", 0),
+    #                     word_count=p.get("word_count", 0),
+    #                     extraction_method=p.get("extraction_method"),
+    #                     confidence=p.get("confidence", 0.0),
+    #                     content_analysis=ContentAnalysisSchema(
+    #                         **p.get("content_analysis", {})
+    #                     ),
+    #                 )
+    #                 for p in pages
+    #             ],
+    #             total_pages=len(pages),
+    #             extraction_methods=extraction_methods,
+    #             total_word_count=sum(p["word_count"] for p in pages),
+    #             overall_confidence=(
+    #                 sum(p["confidence"] for p in pages) / len(pages)
+    #                 if pages
+    #                 else DocumentServiceConstants.DEFAULT_CONFIDENCE
+    #             ),
+    #         )
 
-        except Exception as e:
-            self.logger.error(f"PDF text extraction failed: {str(e)}")
-            return TextExtractionResult(
-                success=False, error=str(e), full_text="", pages=[]
-            )
+    #     except Exception as e:
+    #         self.logger.error(f"PDF text extraction failed: {str(e)}")
+    #         return TextExtractionResult(
+    #             success=False, error=str(e), full_text="", pages=[]
+    #         )
 
-    async def _extract_text_with_ocr(self, page: pymupdf.Page, page_number: int) -> str:
-        """Extract text using Tesseract OCR with optimized settings"""
-        try:
-            # Render page as high-resolution image
-            matrix = pymupdf.Matrix(
-                DocumentServiceConstants.OCR_ZOOM_FACTOR,
-                DocumentServiceConstants.OCR_ZOOM_FACTOR,
-            )  # 2x zoom for better OCR
-            pix = page.get_pixmap(matrix=matrix)
+    # async def _extract_text_with_ocr(self, page: pymupdf.Page, page_number: int) -> str:
+    #     """Extract text using Tesseract OCR with optimized settings"""
+    #     try:
+    #         # Render page as high-resolution image
+    #         matrix = pymupdf.Matrix(
+    #             DocumentServiceConstants.OCR_ZOOM_FACTOR,
+    #             DocumentServiceConstants.OCR_ZOOM_FACTOR,
+    #         )  # 2x zoom for better OCR
+    #         pix = page.get_pixmap(matrix=matrix)
 
-            # Convert to PIL Image
-            img_data = pix.pil_tobytes(format="PNG")
-            image = Image.open(io.BytesIO(img_data))
+    #         # Convert to PIL Image
+    #         img_data = pix.pil_tobytes(format="PNG")
+    #         image = Image.open(io.BytesIO(img_data))
 
-            # OCR with optimized configuration
-            custom_config = r'--oem 3 --psm 6 -c tessedit_char_whitelist=0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz .,;:!?()[]{}"-'
-            ocr_text = pytesseract.image_to_string(image, config=custom_config)
+    #         # OCR with optimized configuration
+    #         custom_config = r'--oem 3 --psm 6 -c tessedit_char_whitelist=0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz .,;:!?()[]{}"-'
+    #         ocr_text = pytesseract.image_to_string(image, config=custom_config)
 
-            return ocr_text.strip()
+    #         return ocr_text.strip()
 
-        except Exception as e:
-            self.logger.warning(f"Tesseract OCR failed for page {page_number}: {e}")
-            return ""
+    #     except Exception as e:
+    #         self.logger.warning(f"Tesseract OCR failed for page {page_number}: {e}")
+    #         return ""
 
-    async def _extract_text_with_gemini(
-        self, page: pymupdf.Page, page_number: int
-    ) -> Optional[Dict[str, Any]]:
-        """Extract text and diagram insights using Gemini.
+    # async def _extract_text_with_gemini(
+    #     self, page: pymupdf.Page, page_number: int
+    # ) -> Optional[Dict[str, Any]]:
+    #     """Extract text and diagram insights using Gemini.
 
-        Returns a dict with keys:
-        - text: extracted OCR text (str)
-        - confidence: float confidence estimate if available
-        - diagram_hint: { is_diagram: bool, diagram_type: str | None }
-        - semantic_analysis: optional structured semantics payload
-        """
-        if not (self.gemini_client and self.gemini_ocr_service):
-            return None
+    #     Returns a dict with keys:
+    #     - text: extracted OCR text (str)
+    #     - confidence: float confidence estimate if available
+    #     - diagram_hint: { is_diagram: bool, diagram_type: str | None }
+    #     - semantic_analysis: optional structured semantics payload
+    #     """
+    #     if not (self.gemini_client and self.gemini_ocr_service):
+    #         return None
 
-        try:
-            # Render page as image
-            matrix = pymupdf.Matrix(
-                DocumentServiceConstants.OCR_ZOOM_FACTOR,
-                DocumentServiceConstants.OCR_ZOOM_FACTOR,
-            )
-            pix = page.get_pixmap(matrix=matrix)
-            img_data = pix.pil_tobytes(format="PNG")
+    #     try:
+    #         # Render page as image
+    #         matrix = pymupdf.Matrix(
+    #             DocumentServiceConstants.OCR_ZOOM_FACTOR,
+    #             DocumentServiceConstants.OCR_ZOOM_FACTOR,
+    #         )
+    #         pix = page.get_pixmap(matrix=matrix)
+    #         img_data = pix.pil_tobytes(format="PNG")
 
-            filename = f"page_{page_number}.png"
+    #         filename = f"page_{page_number}.png"
 
-            # Single combined lightweight call to OCR service
-            combined = await self.gemini_ocr_service.extract_text_diagram_insight(
-                file_content=img_data,
-                file_type="png",
-                filename=filename,
-                analysis_focus="diagram_detection",
-            )
+    #         # Single combined lightweight call to OCR service
+    #         combined = await self.gemini_ocr_service.extract_text_diagram_insight(
+    #             file_content=img_data,
+    #             file_type="png",
+    #             filename=filename,
+    #             analysis_focus="diagram_detection",
+    #         )
 
-            if not isinstance(combined, dict):
-                return None
+    #         if not isinstance(combined, dict):
+    #             return None
 
-            return {
-                "text": combined.get("text", ""),
-                "confidence": combined.get("confidence", 0.0),
-                "diagram_hint": combined.get("diagram_hint"),
-            }
+    #         return {
+    #             "text": combined.get("text", ""),
+    #             "confidence": combined.get("confidence", 0.0),
+    #             "diagram_hint": combined.get("diagram_hint"),
+    #         }
 
-        except Exception as e:
-            self.logger.warning(
-                f"Gemini OCR/semantics failed for page {page_number}: {e}"
-            )
-            return None
+    #     except Exception as e:
+    #         self.logger.warning(
+    #             f"Gemini OCR/semantics failed for page {page_number}: {e}"
+    #         )
+    #         return None
 
-    def _analyze_page_content(
-        self,
-        text_content: str,
-        page: pymupdf.Page,
-        llm_insights: Optional[Dict[str, Any]] = None,
-    ) -> TextExtractionResult:
-        """Analyze page content for classification and layout features"""
+    # def _analyze_page_content(
+    #     self,
+    #     text_content: str,
+    #     page: pymupdf.Page,
+    #     llm_insights: Optional[Dict[str, Any]] = None,
+    # ) -> TextExtractionResult:
+    #     """Analyze page content for classification and layout features"""
 
-        analysis = {
-            "content_types": [],
-            "primary_type": ContentType.EMPTY.value,
-            "layout_features": {
-                "has_header": False,
-                "has_footer": False,
-                "has_signatures": False,
-                "has_diagrams": False,
-                "has_tables": False,
-            },
-            "quality_indicators": {
-                "text_density": DocumentServiceConstants.DEFAULT_CONFIDENCE,
-                "structure_score": DocumentServiceConstants.DEFAULT_CONFIDENCE,
-                "readability_score": DocumentServiceConstants.DEFAULT_CONFIDENCE,
-            },
-        }
+    #     analysis = {
+    #         "content_types": [],
+    #         "primary_type": ContentType.EMPTY.value,
+    #         "layout_features": {
+    #             "has_header": False,
+    #             "has_footer": False,
+    #             "has_signatures": False,
+    #             "has_diagrams": False,
+    #             "has_tables": False,
+    #         },
+    #         "quality_indicators": {
+    #             "text_density": DocumentServiceConstants.DEFAULT_CONFIDENCE,
+    #             "structure_score": DocumentServiceConstants.DEFAULT_CONFIDENCE,
+    #             "readability_score": DocumentServiceConstants.DEFAULT_CONFIDENCE,
+    #         },
+    #     }
 
-        if (
-            not text_content
-            or len(text_content.strip())
-            < DocumentServiceConstants.MIN_TEXT_CONTENT_LENGTH
-        ):
-            return analysis
+    #     if (
+    #         not text_content
+    #         or len(text_content.strip())
+    #         < DocumentServiceConstants.MIN_TEXT_CONTENT_LENGTH
+    #     ):
+    #         return analysis
 
-        text_lower = text_content.lower()
+    #     text_lower = text_content.lower()
 
-        # Content type detection
-        if (
-            text_content
-            and len(text_content.strip())
-            > DocumentServiceConstants.MIN_TEXT_CONTENT_FOR_ANALYSIS
-        ):
-            analysis["content_types"].append("text")
+    #     # Content type detection
+    #     if (
+    #         text_content
+    #         and len(text_content.strip())
+    #         > DocumentServiceConstants.MIN_TEXT_CONTENT_FOR_ANALYSIS
+    #     ):
+    #         analysis["content_types"].append("text")
 
-        # Table detection
-        if self._detect_table_content(text_content):
-            analysis["content_types"].append("table")
-            analysis["layout_features"]["has_tables"] = True
+    #     # Table detection
+    #     if self._detect_table_content(text_content):
+    #         analysis["content_types"].append("table")
+    #         analysis["layout_features"]["has_tables"] = True
 
-        # Signature detection
-        signature_patterns = [
-            r"\b(signature|signed|date.*signed|initial)\b",
-            r"_+\s*(signature|date)",
-        ]
-        if any(re.search(pattern, text_lower) for pattern in signature_patterns):
-            analysis["content_types"].append("signature")
-            analysis["layout_features"]["has_signatures"] = True
+    #     # Signature detection
+    #     signature_patterns = [
+    #         r"\b(signature|signed|date.*signed|initial)\b",
+    #         r"_+\s*(signature|date)",
+    #     ]
+    #     if any(re.search(pattern, text_lower) for pattern in signature_patterns):
+    #         analysis["content_types"].append("signature")
+    #         analysis["layout_features"]["has_signatures"] = True
 
-        # Diagram detection (prefer LLM hint if available)
-        if self._detect_diagrams_on_page(page, text_content, llm_insights=llm_insights):
-            analysis["content_types"].append("diagram")
-            analysis["layout_features"]["has_diagrams"] = True
+    #     # Diagram detection (prefer LLM hint if available)
+    #     if self._detect_diagrams_on_page(page, text_content, llm_insights=llm_insights):
+    #         analysis["content_types"].append("diagram")
+    #         analysis["layout_features"]["has_diagrams"] = True
 
-            # Carry through diagram type if provided by LLM semantics
-            if llm_insights and llm_insights.get("diagram_hint"):
-                diagram_type = llm_insights["diagram_hint"].get("diagram_type")
-                if diagram_type:
-                    analysis["diagram_type"] = diagram_type
+    #         # Carry through diagram type if provided by LLM semantics
+    #         if llm_insights and llm_insights.get("diagram_hint"):
+    #             diagram_type = llm_insights["diagram_hint"].get("diagram_type")
+    #             if diagram_type:
+    #                 analysis["diagram_type"] = diagram_type
 
-        # Layout feature detection
-        analysis["layout_features"]["has_header"] = self._detect_header_footer(
-            text_content, "header"
-        )
-        analysis["layout_features"]["has_footer"] = self._detect_header_footer(
-            text_content, "footer"
-        )
+    #     # Layout feature detection
+    #     analysis["layout_features"]["has_header"] = self._detect_header_footer(
+    #         text_content, "header"
+    #     )
+    #     analysis["layout_features"]["has_footer"] = self._detect_header_footer(
+    #         text_content, "footer"
+    #     )
 
-        # Determine primary content type
-        analysis["primary_type"] = self._determine_primary_content_type(
-            analysis["content_types"]
-        )
+    #     # Determine primary content type
+    #     analysis["primary_type"] = self._determine_primary_content_type(
+    #         analysis["content_types"]
+    #     )
 
-        # Calculate quality indicators
-        analysis["quality_indicators"] = self._calculate_quality_indicators(
-            text_content
-        )
+    #     # Calculate quality indicators
+    #     analysis["quality_indicators"] = self._calculate_quality_indicators(
+    #         text_content
+    #     )
 
-        return analysis
+    #     return analysis
 
-    def _detect_table_content(self, text: str) -> bool:
-        """Detect table-like content using multiple heuristics"""
-        if not text:
-            return False
+    # def _detect_table_content(self, text: str) -> bool:
+    #     """Detect table-like content using multiple heuristics"""
+    #     if not text:
+    #         return False
 
-        lines = text.split("\n")
+    #     lines = text.split("\n")
 
-        # Check for consistent column separators
-        tab_lines = sum(
-            DocumentServiceConstants.MIN_COMPLEX_SHAPE_ITEMS
-            for line in lines
-            if "\t" in line or "  " in line
-        )
-        tab_ratio = (
-            tab_lines / len(lines)
-            if lines
-            else DocumentServiceConstants.DEFAULT_PAGE_NUMBER
-        )
+    #     # Check for consistent column separators
+    #     tab_lines = sum(
+    #         DocumentServiceConstants.MIN_COMPLEX_SHAPE_ITEMS
+    #         for line in lines
+    #         if "\t" in line or "  " in line
+    #     )
+    #     tab_ratio = (
+    #         tab_lines / len(lines)
+    #         if lines
+    #         else DocumentServiceConstants.DEFAULT_PAGE_NUMBER
+    #     )
 
-        # Check for financial patterns (common in contract tables)
-        currency_lines = sum(
-            DocumentServiceConstants.MIN_COMPLEX_SHAPE_ITEMS
-            for line in lines
-            if re.search(r"\$[\d,]+\.?\d*", line)
-        )
+    #     # Check for financial patterns (common in contract tables)
+    #     currency_lines = sum(
+    #         DocumentServiceConstants.MIN_COMPLEX_SHAPE_ITEMS
+    #         for line in lines
+    #         if re.search(r"\$[\d,]+\.?\d*", line)
+    #     )
 
-        # Check for aligned data patterns
-        aligned_patterns = sum(
-            DocumentServiceConstants.MIN_COMPLEX_SHAPE_ITEMS
-            for line in lines
-            if re.search(
-                r"\s{" + str(DocumentServiceConstants.MIN_SPACES_FOR_ALIGNMENT) + r",}",
-                line,
-            )
-        )
-        alignment_ratio = (
-            aligned_patterns / len(lines)
-            if lines
-            else DocumentServiceConstants.DEFAULT_PAGE_NUMBER
-        )
+    #     # Check for aligned data patterns
+    #     aligned_patterns = sum(
+    #         DocumentServiceConstants.MIN_COMPLEX_SHAPE_ITEMS
+    #         for line in lines
+    #         if re.search(
+    #             r"\s{" + str(DocumentServiceConstants.MIN_SPACES_FOR_ALIGNMENT) + r",}",
+    #             line,
+    #         )
+    #     )
+    #     alignment_ratio = (
+    #         aligned_patterns / len(lines)
+    #         if lines
+    #         else DocumentServiceConstants.DEFAULT_PAGE_NUMBER
+    #     )
 
-        return (
-            tab_ratio > DocumentServiceConstants.TAB_RATIO_FOR_TABLE
-            or currency_lines > DocumentServiceConstants.CURRENCY_LINES_FOR_TABLE
-            or alignment_ratio > DocumentServiceConstants.ALIGNMENT_RATIO_FOR_TABLE
-        )
+    #     return (
+    #         tab_ratio > DocumentServiceConstants.TAB_RATIO_FOR_TABLE
+    #         or currency_lines > DocumentServiceConstants.CURRENCY_LINES_FOR_TABLE
+    #         or alignment_ratio > DocumentServiceConstants.ALIGNMENT_RATIO_FOR_TABLE
+    #     )
 
-    def _detect_diagrams_on_page(
-        self,
-        page: pymupdf.Page,
-        text_content: str,
-        llm_insights: Optional[Dict[str, Any]] = None,
-    ) -> bool:
-        """Optimized diagram detection with text length preconditions"""
+    # def _detect_diagrams_on_page(
+    #     self,
+    #     page: pymupdf.Page,
+    #     text_content: str,
+    #     llm_insights: Optional[Dict[str, Any]] = None,
+    # ) -> bool:
+    #     """Optimized diagram detection with text length preconditions"""
 
-        # Prefer explicit LLM hint if available
-        if llm_insights and llm_insights.get("diagram_hint"):
-            hint = llm_insights["diagram_hint"]
-            if isinstance(hint, dict) and hint.get("is_diagram"):
-                return True
+    #     # Prefer explicit LLM hint if available
+    #     if llm_insights and llm_insights.get("diagram_hint"):
+    #         hint = llm_insights["diagram_hint"]
+    #         if isinstance(hint, dict) and hint.get("is_diagram"):
+    #             return True
 
-        # OPTIMIZATION 1: Text length precondition
-        text_length = (
-            len(text_content)
-            if text_content
-            else DocumentServiceConstants.DEFAULT_PAGE_NUMBER
-        )
+    #     # OPTIMIZATION 1: Text length precondition
+    #     text_length = (
+    #         len(text_content)
+    #         if text_content
+    #         else DocumentServiceConstants.DEFAULT_PAGE_NUMBER
+    #     )
 
-        # Log performance optimization decisions for monitoring
-        if self.logger.isEnabledFor(logging.DEBUG):
-            self.logger.debug(
-                f"Diagram detection: text_length={text_length}, threshold={self.text_heavy_threshold}"
-            )
+    #     # Log performance optimization decisions for monitoring
+    #     if self.logger.isEnabledFor(logging.DEBUG):
+    #         self.logger.debug(
+    #             f"Diagram detection: text_length={text_length}, threshold={self.text_heavy_threshold}"
+    #         )
 
-        # Skip vector analysis for text-heavy pages (likely tables)
-        if text_length > self.text_heavy_threshold:
-            # For long text pages, only check images and keywords
-            image_list = page.get_images()
-            if image_list:
-                return True
+    #     # Skip vector analysis for text-heavy pages (likely tables)
+    #     if text_length > self.text_heavy_threshold:
+    #         # For long text pages, only check images and keywords
+    #         image_list = page.get_images()
+    #         if image_list:
+    #             return True
 
-            # Enhanced keyword check for text-heavy pages
-            if text_content:
-                return self._has_diagram_keywords(text_content, strict_mode=True)
-            return False
+    #         # Enhanced keyword check for text-heavy pages
+    #         if text_content:
+    #             return self._has_diagram_keywords(text_content, strict_mode=True)
+    #         return False
 
-        # Method 1: Check for embedded images (always check)
-        image_list = page.get_images()
-        if image_list:
-            return True
+    #     # Method 1: Check for embedded images (always check)
+    #     image_list = page.get_images()
+    #     if image_list:
+    #         return True
 
-        # OPTIMIZATION 2: Smart vector analysis (only for low-text pages)
-        if text_length < self.low_text_threshold:
-            drawings = page.get_drawings()
-            if drawings:
-                # Filter out table-like vector patterns
-                if self._is_likely_diagram_vectors(drawings, text_content):
-                    return True
-        elif (
-            text_length <= self.text_heavy_threshold
-        ):  # Medium text pages - limited vector check
-            drawings = page.get_drawings()
-            if drawings and len(drawings) <= self.max_vector_count:
-                if self._is_likely_diagram_vectors(drawings, text_content):
-                    return True
+    #     # OPTIMIZATION 2: Smart vector analysis (only for low-text pages)
+    #     if text_length < self.low_text_threshold:
+    #         drawings = page.get_drawings()
+    #         if drawings:
+    #             # Filter out table-like vector patterns
+    #             if self._is_likely_diagram_vectors(drawings, text_content):
+    #                 return True
+    #     elif (
+    #         text_length <= self.text_heavy_threshold
+    #     ):  # Medium text pages - limited vector check
+    #         drawings = page.get_drawings()
+    #         if drawings and len(drawings) <= self.max_vector_count:
+    #             if self._is_likely_diagram_vectors(drawings, text_content):
+    #                 return True
 
-        # Method 3: Enhanced keyword detection
-        if text_content:
-            return self._has_diagram_keywords(text_content, strict_mode=True)
+    #     # Method 3: Enhanced keyword detection
+    #     if text_content:
+    #         return self._has_diagram_keywords(text_content, strict_mode=True)
 
-        return False
+    #     return False
 
-    def _is_likely_diagram_vectors(self, drawings: list, text_content: str) -> bool:
-        """Distinguish diagram vectors from table vectors"""
-        if not drawings:
-            return False
+    # def _is_likely_diagram_vectors(self, drawings: list, text_content: str) -> bool:
+    #     """Distinguish diagram vectors from table vectors"""
+    #     if not drawings:
+    #         return False
 
-        # High vector count suggests tables, not diagrams
-        if len(drawings) > self.table_vector_threshold:
-            return False
+    #     # High vector count suggests tables, not diagrams
+    #     if len(drawings) > self.table_vector_threshold:
+    #         return False
 
-        # Check for drawing complexity patterns (sample first 20 for performance)
-        sample_size = min(DocumentServiceConstants.VECTOR_SAMPLE_SIZE, len(drawings))
-        complex_shapes = DocumentServiceConstants.DEFAULT_PAGE_NUMBER
+    #     # Check for drawing complexity patterns (sample first 20 for performance)
+    #     sample_size = min(DocumentServiceConstants.VECTOR_SAMPLE_SIZE, len(drawings))
+    #     complex_shapes = DocumentServiceConstants.DEFAULT_PAGE_NUMBER
 
-        for drawing in drawings[:sample_size]:
-            # Check for complex drawing items (curves, paths, etc.)
-            items = drawing.get("items", []) if hasattr(drawing, "get") else []
-            if (
-                len(items) > DocumentServiceConstants.MIN_COMPLEX_SHAPE_ITEMS
-            ):  # Complex shape indicator
-                complex_shapes += DocumentServiceConstants.MIN_COMPLEX_SHAPE_ITEMS
+    #     for drawing in drawings[:sample_size]:
+    #         # Check for complex drawing items (curves, paths, etc.)
+    #         items = drawing.get("items", []) if hasattr(drawing, "get") else []
+    #         if (
+    #             len(items) > DocumentServiceConstants.MIN_COMPLEX_SHAPE_ITEMS
+    #         ):  # Complex shape indicator
+    #             complex_shapes += DocumentServiceConstants.MIN_COMPLEX_SHAPE_ITEMS
 
-        # If 30%+ of sampled drawings are complex, likely diagrams
-        complexity_ratio = (
-            complex_shapes / sample_size
-            if sample_size > DocumentServiceConstants.DEFAULT_PAGE_NUMBER
-            else DocumentServiceConstants.DEFAULT_CONFIDENCE
-        )
+    #     # If 30%+ of sampled drawings are complex, likely diagrams
+    #     complexity_ratio = (
+    #         complex_shapes / sample_size
+    #         if sample_size > DocumentServiceConstants.DEFAULT_PAGE_NUMBER
+    #         else DocumentServiceConstants.DEFAULT_CONFIDENCE
+    #     )
 
-        # Additional heuristic: check for geometric patterns vs table patterns
-        if (
-            text_content
-            and complexity_ratio > DocumentServiceConstants.DEFAULT_CONFIDENCE
-        ):
-            # If we have both complex vectors and minimal text, likely a diagram
-            text_to_vector_ratio = len(text_content) / len(drawings)
-            if (
-                text_to_vector_ratio
-                < DocumentServiceConstants.TEXT_TO_VECTOR_RATIO_THRESHOLD
-            ):  # Low text-to-vector ratio
-                return True
+    #     # Additional heuristic: check for geometric patterns vs table patterns
+    #     if (
+    #         text_content
+    #         and complexity_ratio > DocumentServiceConstants.DEFAULT_CONFIDENCE
+    #     ):
+    #         # If we have both complex vectors and minimal text, likely a diagram
+    #         text_to_vector_ratio = len(text_content) / len(drawings)
+    #         if (
+    #             text_to_vector_ratio
+    #             < DocumentServiceConstants.TEXT_TO_VECTOR_RATIO_THRESHOLD
+    #         ):  # Low text-to-vector ratio
+    #             return True
 
-        return complexity_ratio > self.complexity_ratio_threshold
+    #     return complexity_ratio > self.complexity_ratio_threshold
 
     def _has_diagram_keywords(
         self, text_content: str, strict_mode: bool = False

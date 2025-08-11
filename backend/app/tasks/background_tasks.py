@@ -789,12 +789,12 @@ Date: 2025-08-10
 #         raise Exception(f"Document processing failed: {str(e)}")
 
 
-"""
-DEPRECATED: Unused legacy task commented out.
-Reason: superseded by comprehensive_document_analysis. Left in history for reference.
-Original name: analyze_contract_background
-Date: 2025-08-10
-"""
+# """
+# DEPRECATED: Unused legacy task commented out.
+# Reason: superseded by comprehensive_document_analysis. Left in history for reference.
+# Original name: analyze_contract_background
+# Date: 2025-08-10
+# """
 
 # @celery_app.task(
 #     bind=True,
