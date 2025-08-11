@@ -15,18 +15,21 @@ from app.database.connection import get_user_connection
 
 @dataclass
 class UserProfile:
-    """User profile model"""
-    user_id: UUID
+    """User profile model mapped to `profiles` table schema"""
+
+    user_id: UUID  # maps to column `id`
     email: str
     full_name: Optional[str] = None
-    avatar_url: Optional[str] = None
-    phone: Optional[str] = None
-    company: Optional[str] = None
-    role: Optional[str] = None
-    bio: Optional[str] = None
+    phone_number: Optional[str] = None
+    australian_state: Optional[str] = None
+    user_type: Optional[str] = None
+    subscription_status: Optional[str] = None
+    credits_remaining: Optional[int] = None
+    organization: Optional[str] = None
     preferences: Optional[Dict[str, Any]] = None
     onboarding_completed: bool = False
-    onboarding_step: Optional[str] = None
+    onboarding_completed_at: Optional[datetime] = None
+    onboarding_preferences: Optional[Dict[str, Any]] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
@@ -34,6 +37,7 @@ class UserProfile:
 @dataclass
 class ProfileSettings:
     """User settings model"""
+
     user_id: UUID
     notifications_enabled: bool = True
     email_notifications: bool = True
@@ -50,7 +54,7 @@ class ProfileSettings:
 class ProfilesRepository:
     """
     Repository for user profile operations.
-    
+
     Uses proper context managers for all database operations
     to ensure connections are properly released back to the pool.
     """
@@ -58,7 +62,7 @@ class ProfilesRepository:
     def __init__(self, user_id: Optional[UUID] = None):
         """
         Initialize profiles repository.
-        
+
         Args:
             user_id: Optional user ID (uses auth context if not provided)
         """
@@ -68,65 +72,72 @@ class ProfilesRepository:
     # USER PROFILES
     # ================================
 
-    async def get_profile(self, user_id: Optional[UUID] = None) -> Optional[UserProfile]:
+    async def get_profile(
+        self, user_id: Optional[UUID] = None
+    ) -> Optional[UserProfile]:
         """
         Get user profile by ID.
-        
-        Args:
-            user_id: User ID (uses instance user_id if not provided)
-            
-        Returns:
-            UserProfile if found, None otherwise
         """
         target_user_id = user_id or self.user_id
-        
+
         async with get_user_connection(target_user_id) as conn:
             row = await conn.fetchrow(
                 """
-                SELECT user_id, email, full_name, avatar_url, phone, company, role, bio,
-                       preferences, onboarding_completed, onboarding_step,
-                       created_at, updated_at
+                SELECT 
+                    id,
+                    email,
+                    full_name,
+                    phone_number,
+                    australian_state,
+                    user_type,
+                    subscription_status,
+                    credits_remaining,
+                    organization,
+                    preferences,
+                    onboarding_completed,
+                    onboarding_completed_at,
+                    onboarding_preferences,
+                    created_at,
+                    updated_at
                 FROM profiles
-                WHERE user_id = $1
+                WHERE id = $1
                 """,
-                target_user_id
+                target_user_id,
             )
-            
+
             if not row:
                 return None
-                
+
             return UserProfile(
-                user_id=row['user_id'],
-                email=row['email'],
-                full_name=row['full_name'],
-                avatar_url=row['avatar_url'],
-                phone=row['phone'],
-                company=row['company'],
-                role=row['role'],
-                bio=row['bio'],
-                preferences=row['preferences'],
-                onboarding_completed=row['onboarding_completed'],
-                onboarding_step=row['onboarding_step'],
-                created_at=row['created_at'],
-                updated_at=row['updated_at']
+                user_id=row["id"],
+                email=row["email"],
+                full_name=row["full_name"],
+                phone_number=row["phone_number"],
+                australian_state=row["australian_state"],
+                user_type=row["user_type"],
+                subscription_status=row["subscription_status"],
+                credits_remaining=row["credits_remaining"],
+                organization=row["organization"],
+                preferences=row["preferences"],
+                onboarding_completed=row["onboarding_completed"],
+                onboarding_completed_at=row["onboarding_completed_at"],
+                onboarding_preferences=row["onboarding_preferences"],
+                created_at=row["created_at"],
+                updated_at=row["updated_at"],
             )
 
     async def create_profile(
-        self,
-        user_id: UUID,
-        email: str,
-        full_name: Optional[str] = None,
-        **kwargs
+        self, user_id: UUID, email: str, full_name: Optional[str] = None, **kwargs
     ) -> UserProfile:
         """
         Create a new user profile.
-        
+
         Args:
             user_id: User ID
             email: User email
             full_name: User's full name
             **kwargs: Additional profile fields
-            
+
         Returns:
             Created UserProfile
         """
@@ -144,182 +155,195 @@ class ProfilesRepository:
                 user_id,
                 email,
                 full_name,
-                kwargs.get('avatar_url'),
-                kwargs.get('phone'),
-                kwargs.get('company'),
-                kwargs.get('role'),
-                kwargs.get('bio'),
-                kwargs.get('preferences'),
-                kwargs.get('onboarding_completed', False),
-                kwargs.get('onboarding_step')
+                kwargs.get("avatar_url"),
+                kwargs.get("phone"),
+                kwargs.get("company"),
+                kwargs.get("role"),
+                kwargs.get("bio"),
+                kwargs.get("preferences"),
+                kwargs.get("onboarding_completed", False),
+                kwargs.get("onboarding_step"),
             )
-            
+
             return UserProfile(
-                user_id=row['user_id'],
-                email=row['email'],
-                full_name=row['full_name'],
-                avatar_url=row['avatar_url'],
-                phone=row['phone'],
-                company=row['company'],
-                role=row['role'],
-                bio=row['bio'],
-                preferences=row['preferences'],
-                onboarding_completed=row['onboarding_completed'],
-                onboarding_step=row['onboarding_step'],
-                created_at=row['created_at'],
-                updated_at=row['updated_at']
+                user_id=row["user_id"],
+                email=row["email"],
+                full_name=row["full_name"],
+                avatar_url=row["avatar_url"],
+                phone=row["phone"],
+                company=row["company"],
+                role=row["role"],
+                bio=row["bio"],
+                preferences=row["preferences"],
+                onboarding_completed=row["onboarding_completed"],
+                onboarding_step=row["onboarding_step"],
+                created_at=row["created_at"],
+                updated_at=row["updated_at"],
             )
 
     async def update_profile(
         self,
         user_id: Optional[UUID] = None,
-        **updates
+        **updates,
     ) -> Optional[UserProfile]:
         """
         Update user profile fields.
-        
-        Args:
-            user_id: User ID (uses instance user_id if not provided)
-            **updates: Fields to update
-            
-        Returns:
-            Updated UserProfile if successful, None if user not found
         """
         target_user_id = user_id or self.user_id
-        
+
         if not updates:
             return await self.get_profile(target_user_id)
-        
+
         async with get_user_connection(target_user_id) as conn:
             # Build dynamic update query
             set_clauses = []
             params = []
             param_count = 0
-            
+
             updateable_fields = [
-                'full_name', 'avatar_url', 'phone', 'company', 'role', 'bio',
-                'preferences', 'onboarding_completed', 'onboarding_step'
+                "full_name",
+                "phone_number",
+                "australian_state",
+                "user_type",
+                "subscription_status",
+                "credits_remaining",
+                "organization",
+                "preferences",
+                "onboarding_completed",
+                "onboarding_completed_at",
+                "onboarding_preferences",
             ]
-            
-            for field in updateable_fields:
-                if field in updates:
+
+            for field, value in updates.items():
+                if field in updateable_fields:
                     param_count += 1
                     set_clauses.append(f"{field} = ${param_count}")
-                    params.append(updates[field])
-            
+                    params.append(value)
+
             if not set_clauses:
                 return await self.get_profile(target_user_id)
-            
+
             # Add updated_at and user_id
             set_clauses.append("updated_at = now()")
             param_count += 1
             params.append(target_user_id)
-            
+
             query = f"""
                 UPDATE profiles 
                 SET {', '.join(set_clauses)}
-                WHERE user_id = ${param_count}
-                RETURNING user_id, email, full_name, avatar_url, phone, company, role, bio,
-                          preferences, onboarding_completed, onboarding_step,
-                          created_at, updated_at
+                WHERE id = ${param_count}
+                RETURNING 
+                    id,
+                    email,
+                    full_name,
+                    phone_number,
+                    australian_state,
+                    user_type,
+                    subscription_status,
+                    credits_remaining,
+                    organization,
+                    preferences,
+                    onboarding_completed,
+                    onboarding_completed_at,
+                    onboarding_preferences,
+                    created_at,
+                    updated_at
             """
-            
+
             row = await conn.fetchrow(query, *params)
-            
+
             if not row:
                 return None
-                
+
             return UserProfile(
-                user_id=row['user_id'],
-                email=row['email'],
-                full_name=row['full_name'],
-                avatar_url=row['avatar_url'],
-                phone=row['phone'],
-                company=row['company'],
-                role=row['role'],
-                bio=row['bio'],
-                preferences=row['preferences'],
-                onboarding_completed=row['onboarding_completed'],
-                onboarding_step=row['onboarding_step'],
-                created_at=row['created_at'],
-                updated_at=row['updated_at']
+                user_id=row["id"],
+                email=row["email"],
+                full_name=row["full_name"],
+                phone_number=row["phone_number"],
+                australian_state=row["australian_state"],
+                user_type=row["user_type"],
+                subscription_status=row["subscription_status"],
+                credits_remaining=row["credits_remaining"],
+                organization=row["organization"],
+                preferences=row["preferences"],
+                onboarding_completed=row["onboarding_completed"],
+                onboarding_completed_at=row["onboarding_completed_at"],
+                onboarding_preferences=row["onboarding_preferences"],
+                created_at=row["created_at"],
+                updated_at=row["updated_at"],
             )
 
     async def delete_profile(self, user_id: Optional[UUID] = None) -> bool:
         """
         Delete user profile.
-        
+
         Args:
             user_id: User ID (uses instance user_id if not provided)
-            
+
         Returns:
             True if deleted, False if not found
         """
         target_user_id = user_id or self.user_id
-        
+
         async with get_user_connection(target_user_id) as conn:
             result = await conn.execute(
-                "DELETE FROM profiles WHERE user_id = $1",
-                target_user_id
+                "DELETE FROM profiles WHERE id = $1", target_user_id
             )
-            return result.split()[-1] == '1'
+            return result.split()[-1] == "1"
 
     # ================================
     # ONBOARDING OPERATIONS
     # ================================
 
     async def update_onboarding_step(
-        self, 
-        step: str, 
-        user_id: Optional[UUID] = None
+        self, step: str, user_id: Optional[UUID] = None
     ) -> Optional[UserProfile]:
         """
         Update user's onboarding step.
-        
+
         Args:
             step: Onboarding step name
             user_id: User ID (uses instance user_id if not provided)
-            
+
         Returns:
             Updated UserProfile if successful
         """
-        return await self.update_profile(
-            user_id=user_id,
-            onboarding_step=step
-        )
+        return await self.update_profile(user_id=user_id, onboarding_step=step)
 
-    async def complete_onboarding(self, user_id: Optional[UUID] = None) -> Optional[UserProfile]:
+    async def complete_onboarding(
+        self, user_id: Optional[UUID] = None
+    ) -> Optional[UserProfile]:
         """
         Mark user's onboarding as completed.
-        
+
         Args:
             user_id: User ID (uses instance user_id if not provided)
-            
+
         Returns:
             Updated UserProfile if successful
         """
         return await self.update_profile(
-            user_id=user_id,
-            onboarding_completed=True,
-            onboarding_step=None
+            user_id=user_id, onboarding_completed=True, onboarding_step=None
         )
 
     # ================================
     # USER SETTINGS
     # ================================
 
-    async def get_settings(self, user_id: Optional[UUID] = None) -> Optional[ProfileSettings]:
+    async def get_settings(
+        self, user_id: Optional[UUID] = None
+    ) -> Optional[ProfileSettings]:
         """
         Get user settings.
-        
+
         Args:
             user_id: User ID (uses instance user_id if not provided)
-            
+
         Returns:
             ProfileSettings if found, None otherwise
         """
         target_user_id = user_id or self.user_id
-        
+
         async with get_user_connection(target_user_id) as conn:
             row = await conn.fetchrow(
                 """
@@ -329,43 +353,41 @@ class ProfilesRepository:
                 FROM user_settings
                 WHERE user_id = $1
                 """,
-                target_user_id
+                target_user_id,
             )
-            
+
             if not row:
                 return None
-                
+
             return ProfileSettings(
-                user_id=row['user_id'],
-                notifications_enabled=row['notifications_enabled'],
-                email_notifications=row['email_notifications'],
-                processing_notifications=row['processing_notifications'],
-                marketing_emails=row['marketing_emails'],
-                theme=row['theme'],
-                language=row['language'],
-                timezone=row['timezone'],
-                settings=row['settings'],
-                created_at=row['created_at'],
-                updated_at=row['updated_at']
+                user_id=row["user_id"],
+                notifications_enabled=row["notifications_enabled"],
+                email_notifications=row["email_notifications"],
+                processing_notifications=row["processing_notifications"],
+                marketing_emails=row["marketing_emails"],
+                theme=row["theme"],
+                language=row["language"],
+                timezone=row["timezone"],
+                settings=row["settings"],
+                created_at=row["created_at"],
+                updated_at=row["updated_at"],
             )
 
     async def create_or_update_settings(
-        self,
-        user_id: Optional[UUID] = None,
-        **settings_updates
+        self, user_id: Optional[UUID] = None, **settings_updates
     ) -> ProfileSettings:
         """
         Create or update user settings.
-        
+
         Args:
             user_id: User ID (uses instance user_id if not provided)
             **settings_updates: Settings fields to update
-            
+
         Returns:
             ProfileSettings (created or updated)
         """
         target_user_id = user_id or self.user_id
-        
+
         async with get_user_connection(target_user_id) as conn:
             # Upsert settings
             row = await conn.fetchrow(
@@ -390,28 +412,28 @@ class ProfilesRepository:
                           timezone, settings, created_at, updated_at
                 """,
                 target_user_id,
-                settings_updates.get('notifications_enabled', True),
-                settings_updates.get('email_notifications', True),
-                settings_updates.get('processing_notifications', True),
-                settings_updates.get('marketing_emails', False),
-                settings_updates.get('theme', 'system'),
-                settings_updates.get('language', 'en'),
-                settings_updates.get('timezone'),
-                settings_updates.get('settings')
+                settings_updates.get("notifications_enabled", True),
+                settings_updates.get("email_notifications", True),
+                settings_updates.get("processing_notifications", True),
+                settings_updates.get("marketing_emails", False),
+                settings_updates.get("theme", "system"),
+                settings_updates.get("language", "en"),
+                settings_updates.get("timezone"),
+                settings_updates.get("settings"),
             )
-            
+
             return ProfileSettings(
-                user_id=row['user_id'],
-                notifications_enabled=row['notifications_enabled'],
-                email_notifications=row['email_notifications'],
-                processing_notifications=row['processing_notifications'],
-                marketing_emails=row['marketing_emails'],
-                theme=row['theme'],
-                language=row['language'],
-                timezone=row['timezone'],
-                settings=row['settings'],
-                created_at=row['created_at'],
-                updated_at=row['updated_at']
+                user_id=row["user_id"],
+                notifications_enabled=row["notifications_enabled"],
+                email_notifications=row["email_notifications"],
+                processing_notifications=row["processing_notifications"],
+                marketing_emails=row["marketing_emails"],
+                theme=row["theme"],
+                language=row["language"],
+                timezone=row["timezone"],
+                settings=row["settings"],
+                created_at=row["created_at"],
+                updated_at=row["updated_at"],
             )
 
     # ================================
@@ -421,36 +443,37 @@ class ProfilesRepository:
     async def profile_exists(self, user_id: Optional[UUID] = None) -> bool:
         """
         Check if user profile exists.
-        
+
         Args:
             user_id: User ID (uses instance user_id if not provided)
-            
+
         Returns:
             True if profile exists
         """
         target_user_id = user_id or self.user_id
-        
+
         async with get_user_connection(target_user_id) as conn:
             result = await conn.fetchval(
-                "SELECT EXISTS(SELECT 1 FROM profiles WHERE user_id = $1)",
-                target_user_id
+                "SELECT EXISTS(SELECT 1 FROM profiles WHERE id = $1)", target_user_id
             )
             return bool(result)
 
-    async def get_profile_summary(self, user_id: Optional[UUID] = None) -> Optional[Dict[str, Any]]:
+    async def get_profile_summary(
+        self, user_id: Optional[UUID] = None
+    ) -> Optional[Dict[str, Any]]:
         """
         Get profile summary for display.
-        
+
         Args:
             user_id: User ID (uses instance user_id if not provided)
-            
+
         Returns:
             Profile summary dict or None
         """
         profile = await self.get_profile(user_id)
         if not profile:
             return None
-            
+
         return {
             "user_id": str(profile.user_id),
             "email": profile.email,
@@ -458,5 +481,7 @@ class ProfilesRepository:
             "avatar_url": profile.avatar_url,
             "company": profile.company,
             "onboarding_completed": profile.onboarding_completed,
-            "created_at": profile.created_at.isoformat() if profile.created_at else None
+            "created_at": (
+                profile.created_at.isoformat() if profile.created_at else None
+            ),
         }

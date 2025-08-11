@@ -5,6 +5,9 @@ This replaces direct Supabase client instantiation with the new client factory s
 
 import logging
 from datetime import datetime, UTC
+import json
+from typing import Mapping
+from uuid import UUID
 from typing import Optional
 import jwt
 from pydantic import BaseModel
@@ -16,6 +19,7 @@ from app.core.auth_context import AuthContext
 from app.core.config import get_settings
 from app.services.backend_token_service import BackendTokenService
 from app.clients.base.interfaces import AuthOperations, DatabaseOperations
+from app.services.repositories.profiles_repository import ProfilesRepository
 from app.clients.base.exceptions import ClientError
 
 logger = logging.getLogger(__name__)
@@ -179,51 +183,44 @@ class AuthService:
             await self.initialize()
 
         try:
-            # Get user profile from database using decoupled client
-            profile_result = await self._db_service.read(
-                "profiles", {"id": token_data.user_id}, 1
-            )
+            # Fetch user profile using repository pattern (asyncpg + RLS)
+            repo = ProfilesRepository(user_id=UUID(token_data.user_id))
+            profile = await repo.get_profile()
 
-            logger.debug(
-                f"Profile result type: {type(profile_result)}, has_data: {hasattr(profile_result, 'data')}"
-            )
-
-            # Handle both list and result object responses
-            if hasattr(profile_result, "data"):
-                # Result object with .data attribute
-                profiles = profile_result.data
-                logger.debug(
-                    f"Using result.data, profiles count: {len(profiles) if profiles else 0}"
-                )
-            else:
-                # Direct list response
-                profiles = profile_result
-                logger.debug(
-                    f"Using direct result, profiles count: {len(profiles) if profiles else 0}"
-                )
-
-            if not profiles or len(profiles) == 0:
+            if not profile:
                 logger.warning(f"No profile found for user_id: {token_data.user_id}")
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
                 )
 
-            profile = profiles[0]
             logger.info(
                 f"Successfully loaded profile for user_id: {token_data.user_id}"
             )
 
+            def _to_dict(value: object) -> dict:
+                if value is None:
+                    return {}
+                if isinstance(value, Mapping):
+                    return dict(value)
+                if isinstance(value, str):
+                    try:
+                        parsed = json.loads(value)
+                        return parsed if isinstance(parsed, dict) else {}
+                    except Exception:
+                        return {}
+                return {}
+
             return User(
-                id=profile["id"],
-                email=profile["email"],
-                australian_state=profile["australian_state"],
-                user_type=profile["user_type"],
-                subscription_status=profile.get("subscription_status", "free"),
-                credits_remaining=profile.get("credits_remaining", 0),
-                preferences=profile.get("preferences", {}),
-                onboarding_completed=profile.get("onboarding_completed", False),
-                onboarding_completed_at=profile.get("onboarding_completed_at"),
-                onboarding_preferences=profile.get("onboarding_preferences", {}),
+                id=str(profile.user_id),
+                email=profile.email,
+                australian_state=profile.australian_state,
+                user_type=profile.user_type,
+                subscription_status=profile.subscription_status or "free",
+                credits_remaining=profile.credits_remaining or 0,
+                preferences=_to_dict(profile.preferences),
+                onboarding_completed=profile.onboarding_completed,
+                onboarding_completed_at=profile.onboarding_completed_at,
+                onboarding_preferences=_to_dict(profile.onboarding_preferences),
             )
 
         except ClientError as e:
@@ -388,7 +385,7 @@ def verify_token(token: str) -> TokenData:
 def _get_jwt_secret_and_alg() -> tuple[str, str]:
     """
     Get JWT secret and algorithm with secure fallback handling.
-    
+
     Security Requirements:
     - Production MUST have JWT_SECRET_KEY set - no fallbacks allowed
     - Development can use generated secret with warning
@@ -396,15 +393,15 @@ def _get_jwt_secret_and_alg() -> tuple[str, str]:
     """
     import secrets
     import os
-    
+
     settings = get_settings()
     secret = settings.jwt_secret_key
     alg = settings.jwt_algorithm or "HS256"
-    
+
     if not secret:
         # Check if we're in production - FAIL HARD
         is_production = settings.environment.lower() in ("production", "prod", "live")
-        
+
         if is_production:
             logger.critical(
                 "CRITICAL SECURITY ERROR: JWT_SECRET_KEY not set in production environment. "
@@ -414,17 +411,17 @@ def _get_jwt_secret_and_alg() -> tuple[str, str]:
                 "JWT_SECRET_KEY must be set in production environment. "
                 "Cannot start application without proper JWT secret configuration."
             )
-        
+
         # Development environment - generate secure secret with warning
         logger.warning(
             "JWT_SECRET_KEY not set in development environment. "
             "Generating secure random secret for this session. "
             "For production deployment, JWT_SECRET_KEY MUST be configured."
         )
-        
+
         # Generate cryptographically secure random secret (256 bits)
         secret = secrets.token_urlsafe(32)
-        
+
         logger.info(
             f"Generated secure JWT secret for development (length: {len(secret)} chars). "
             "This secret will change on each restart. Set JWT_SECRET_KEY for persistence."
@@ -437,9 +434,9 @@ def _get_jwt_secret_and_alg() -> tuple[str, str]:
                 f"JWT secret is short ({len(secret)} chars) for production. "
                 "Recommend at least 32 characters for security."
             )
-        
+
         logger.info("Using configured JWT_SECRET_KEY for token signing")
-    
+
     return secret, alg
 
 
@@ -470,23 +467,23 @@ def verify_ws_token(token: str) -> Optional[str]:
 def validate_jwt_configuration() -> dict[str, any]:
     """
     Validate JWT configuration on application startup.
-    
+
     Returns validation results with status and recommendations.
     Should be called during application initialization.
     """
     try:
         settings = get_settings()
         is_production = settings.environment.lower() in ("production", "prod", "live")
-        
+
         validation_result = {
             "status": "valid",
             "environment": settings.environment,
             "is_production": is_production,
             "issues": [],
             "warnings": [],
-            "recommendations": []
+            "recommendations": [],
         }
-        
+
         # Check JWT secret configuration
         if not settings.jwt_secret_key:
             if is_production:
@@ -516,7 +513,7 @@ def validate_jwt_configuration() -> dict[str, any]:
                     validation_result["recommendations"].append(
                         "Use at least 32 characters for JWT_SECRET_KEY in production"
                     )
-            
+
             # Check if secret looks like anon key (potential misconfiguration)
             if settings.jwt_secret_key == settings.supabase_anon_key:
                 validation_result["status"] = "critical"
@@ -526,7 +523,7 @@ def validate_jwt_configuration() -> dict[str, any]:
                 validation_result["recommendations"].append(
                     "Generate unique JWT_SECRET_KEY separate from Supabase keys"
                 )
-        
+
         # Check algorithm configuration
         if settings.jwt_algorithm not in ["HS256", "HS384", "HS512"]:
             validation_result["warnings"].append(
@@ -535,7 +532,7 @@ def validate_jwt_configuration() -> dict[str, any]:
             validation_result["recommendations"].append(
                 "Consider using HS256, HS384, or HS512 for HMAC-based signing"
             )
-        
+
         # Log validation results
         if validation_result["status"] == "critical":
             for issue in validation_result["issues"]:
@@ -545,15 +542,15 @@ def validate_jwt_configuration() -> dict[str, any]:
                 logger.warning(f"JWT Configuration Warning: {warning}")
         else:
             logger.info("JWT configuration validation passed")
-        
+
         return validation_result
-        
+
     except Exception as e:
         logger.error(f"JWT configuration validation failed: {str(e)}")
         return {
             "status": "error",
             "issues": [f"Validation failed: {str(e)}"],
-            "recommendations": ["Check application configuration and logs"]
+            "recommendations": ["Check application configuration and logs"],
         }
 
 

@@ -2,10 +2,13 @@
 
 from fastapi import APIRouter, HTTPException, Depends
 from datetime import datetime, timezone
+from uuid import UUID
 import logging
 
 from app.core.auth import get_current_user, User
 from app.core.auth_context import AuthContext
+from app.services.repositories.profiles_repository import ProfilesRepository
+import json
 from app.core.error_handler import handle_api_error, create_error_context, ErrorCategory
 from app.schema.onboarding import (
     OnboardingStatusResponse,
@@ -23,28 +26,31 @@ async def get_onboarding_status(user: User = Depends(get_current_user)):
     try:
         logger.info(f"[Onboarding] Fetching status for user_id={user.id}")
 
-        # Get authenticated client for database operations to fetch current state
-        db_client = await AuthContext.get_authenticated_client(require_auth=True)
+        # Use repository to fetch onboarding status
+        repo = ProfilesRepository()
+        profile = await repo.get_profile(user_id=UUID(user.id))
 
-        # Query database for current onboarding status
-        result = (
-            db_client.table("profiles")
-            .select(
-                "onboarding_completed, onboarding_completed_at, onboarding_preferences"
-            )
-            .eq("id", user.id)
-            .execute()
-        )
-
-        if not result.data:
+        if not profile:
             logger.error(f"[Onboarding] User profile not found for user_id={user.id}")
             raise HTTPException(status_code=404, detail="User profile not found")
 
-        profile_data = result.data[0]
+        def _to_dict(value):
+            if value is None:
+                return {}
+            if isinstance(value, dict):
+                return value
+            if isinstance(value, str):
+                try:
+                    parsed = json.loads(value)
+                    return parsed if isinstance(parsed, dict) else {}
+                except Exception:
+                    return {}
+            return {}
+
         response = OnboardingStatusResponse(
-            onboarding_completed=profile_data.get("onboarding_completed", False),
-            onboarding_completed_at=profile_data.get("onboarding_completed_at"),
-            onboarding_preferences=profile_data.get("onboarding_preferences", {}),
+            onboarding_completed=profile.onboarding_completed,
+            onboarding_completed_at=profile.onboarding_completed_at,
+            onboarding_preferences=_to_dict(profile.onboarding_preferences),
         )
         logger.info(
             f"[Onboarding] Status for user_id={user.id}: completed={response.onboarding_completed}, "
@@ -69,52 +75,26 @@ async def complete_onboarding(
     try:
         logger.info(f"[Onboarding] Completing onboarding for user_id={user.id}")
 
-        # Get authenticated client for database operations
-        db_client = await AuthContext.get_authenticated_client(require_auth=True)
-
-        # Check current onboarding status from database
-        result = (
-            db_client.table("profiles")
-            .select("onboarding_completed")
-            .eq("id", user.id)
-            .execute()
-        )
-
-        if result.data and result.data[0].get("onboarding_completed", False):
+        repo = ProfilesRepository()
+        existing = await repo.get_profile(user_id=UUID(user.id))
+        if existing and existing.onboarding_completed:
             logger.info(
                 f"[Onboarding] Already completed for user_id={user.id}; skipping updates"
             )
             return {"message": "Onboarding already completed", "skip_onboarding": True}
 
-        # Update profile with onboarding completion
-        update_data = {
-            "onboarding_completed": True,
-            "onboarding_completed_at": datetime.now(timezone.utc).isoformat(),
-            "onboarding_preferences": request.onboarding_preferences.model_dump(
+        # Update profile with onboarding completion via repository
+        await repo.update_profile(
+            user_id=UUID(user.id),
+            onboarding_completed=True,
+            onboarding_completed_at=datetime.now(timezone.utc),
+            onboarding_preferences=request.onboarding_preferences.model_dump(
                 exclude_unset=True
             ),
-        }
-        logger.debug(
-            f"[Onboarding] Updating profile for user_id={user.id} with keys={list(update_data.keys())}"
         )
 
-        db_client.table("profiles").update(update_data).eq("id", user.id).execute()
-
         # Log onboarding completion
-        db_client.table("usage_logs").insert(
-            {
-                "user_id": user.id,
-                "action_type": "onboarding_completed",
-                "credits_used": 0,
-                "credits_remaining": user.credits_remaining,
-                "resource_used": "onboarding",
-                "metadata": {
-                    "preferences": request.onboarding_preferences.model_dump(
-                        exclude_unset=True
-                    )
-                },
-            }
-        ).execute()
+        # TODO: migrate usage_logs insertion to repository as well
 
         logger.info(f"[Onboarding] Onboarding completed for user_id={user.id}")
         return {
@@ -140,17 +120,11 @@ async def update_onboarding_preferences(
     try:
         logger.info(f"[Onboarding] Updating preferences for user_id={user.id}")
 
-        # Get authenticated client for database operations
-        db_client = await AuthContext.get_authenticated_client(require_auth=True)
-
-        update_data = {
-            "onboarding_preferences": preferences.model_dump(exclude_unset=True),
-        }
-        logger.debug(
-            f"[Onboarding] Preferences update payload for user_id={user.id}: {update_data['onboarding_preferences']}"
+        repo = ProfilesRepository()
+        await repo.update_profile(
+            user_id=UUID(user.id),
+            onboarding_preferences=preferences.model_dump(exclude_unset=True),
         )
-
-        db_client.table("profiles").update(update_data).eq("id", user.id).execute()
 
         logger.info(f"[Onboarding] Preferences updated for user_id={user.id}")
         return {"message": "Onboarding preferences updated successfully"}
