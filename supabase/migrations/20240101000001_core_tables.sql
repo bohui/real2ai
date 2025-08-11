@@ -93,6 +93,7 @@ CREATE TABLE usage_logs (
     action_type TEXT NOT NULL,
     credits_used INTEGER DEFAULT 0,
     credits_remaining INTEGER DEFAULT 0,
+    resource_used TEXT, -- contract_analysis, document_upload, etc.
     metadata JSONB DEFAULT '{}',
     timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
