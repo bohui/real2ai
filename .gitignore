@@ -88,3 +88,4 @@ requirements.txt
 backend/app/tasks/background_tasks_not_used.py
 backend/app/services/document_service_not_used.py
 backend/app/services/contract_analysis_service_not_used.py
+test_files/
