@@ -141,8 +141,9 @@ class ExtractTextNode(DocumentProcessingNodeBase):
             file_content = None
             if not content_hmac:
                 try:
-                    file_content = await user_client.storage.download(
-                        bucket="documents", path=storage_path
+                    # Use client wrapper for storage download
+                    file_content = await user_client.download_file(
+                        bucket=self.storage_bucket, path=storage_path
                     )
                     content_hmac = compute_content_hmac(file_content)
                     self._log_info(f"Computed content HMAC: {content_hmac}")
@@ -157,8 +158,17 @@ class ExtractTextNode(DocumentProcessingNodeBase):
             # Get algorithm version and compute parameters fingerprint
             settings = get_settings()
             algorithm_version = settings.artifacts_algorithm_version
+            # Normalize file type to expected MIME values
+            normalized_file_type = (file_type or "").lower()
+            if normalized_file_type in {"pdf"}:
+                normalized_file_type = "application/pdf"
+            elif normalized_file_type in {"png", "jpg", "jpeg", "tiff", "bmp"}:
+                normalized_file_type = f"image/{'jpeg' if normalized_file_type == 'jpg' else normalized_file_type}"
+            elif normalized_file_type in {"docx"}:
+                normalized_file_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
             params = {
-                "file_type": file_type,
+                "file_type": normalized_file_type,
                 "use_llm": self.use_llm,
                 "ocr_zoom": self._ocr_zoom,
                 "min_text_len_for_ocr": self._min_text_len_for_ocr,
@@ -177,7 +187,7 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                     user_client=user_client,
                     document_id=document_id,
                     storage_path=storage_path,
-                    file_type=file_type,
+                    file_type=normalized_file_type,
                     file_content=file_content,
                 )
             else:
@@ -214,7 +224,7 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                         user_client=user_client,
                         document_id=document_id,
                         storage_path=storage_path,
-                        file_type=file_type,
+                        file_type=normalized_file_type,
                         file_content=file_content,
                     )
 
@@ -242,7 +252,7 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                     {
                         "document_id": document_id,
                         "storage_path": storage_path,
-                        "file_type": file_type,
+                        "file_type": normalized_file_type,
                         "content_hmac": content_hmac,
                         "extraction_attempted": True,
                         "extraction_success": False,
