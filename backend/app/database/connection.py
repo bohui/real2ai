@@ -443,16 +443,28 @@ async def get_user_connection(
         # Set up user session context
         await _setup_user_session(connection, user_id)
         yield connection
-    finally:
-        # Reset GUCs in shared mode to prevent bleed-over
-        if settings.db_pool_mode == "shared":
-            await _reset_session_gucs(connection)
-
-        await pool.release(connection)
-        logger.debug(
-            "[DB] Released user connection",
-            extra={"user_id": str(user_id), "pool_mode": settings.db_pool_mode},
+    except Exception as e:
+        logger.error(
+            f"Error using user connection for user {user_id}: {e}",
+            extra={"user_id": str(user_id), "error_type": type(e).__name__}
         )
+        raise
+    finally:
+        try:
+            # Reset GUCs in shared mode to prevent bleed-over
+            if settings.db_pool_mode == "shared":
+                await _reset_session_gucs(connection)
+        except Exception as e:
+            logger.warning(f"Failed to reset session GUCs for user {user_id}: {e}")
+
+        try:
+            await pool.release(connection)
+            logger.debug(
+                "[DB] Released user connection",
+                extra={"user_id": str(user_id), "pool_mode": settings.db_pool_mode},
+            )
+        except Exception as e:
+            logger.error(f"Failed to release connection for user {user_id}: {e}")
 
 
 async def execute_raw_sql(query: str, *args, user_id: Optional[UUID] = None) -> Any:

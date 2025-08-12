@@ -81,15 +81,37 @@ celery_app.conf.beat_schedule = {
 
 
 def run_async_task(async_func):
-    """Decorator to run async functions in Celery tasks."""
+    """Decorator to run async functions in Celery tasks with persistent event loop."""
 
     def wrapper(*args, **kwargs):
+        # Check if there's an existing event loop
+        try:
+            loop = asyncio.get_running_loop()
+            # If we're in an existing loop, use it directly
+            # This prevents "Task attached to different loop" errors
+            if loop.is_running():
+                # Create a new task in the current loop
+                return asyncio.create_task(async_func(*args, **kwargs))
+        except RuntimeError:
+            # No event loop running, create one
+            pass
+        
+        # Create new event loop for Celery workers
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
             return loop.run_until_complete(async_func(*args, **kwargs))
         finally:
-            loop.close()
+            # Don't close the loop immediately - let LangGraph finish cleanup
+            try:
+                # Give pending tasks time to complete
+                pending_tasks = asyncio.all_tasks(loop)
+                if pending_tasks:
+                    loop.run_until_complete(asyncio.gather(*pending_tasks, return_exceptions=True))
+            except Exception as e:
+                logger.warning(f"Error cleaning up pending tasks: {e}")
+            finally:
+                loop.close()
 
     return wrapper
 

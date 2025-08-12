@@ -99,9 +99,9 @@ class ErrorHandlingNode(DocumentProcessingNodeBase):
                 
                 docs_repo = DocumentsRepository()
                 await docs_repo.update_processing_status_and_results(
-                    UUID(document_id),
-                    ProcessingStatus.FAILED.value,
-                    processing_errors
+                    document_id=UUID(document_id),
+                    processing_status=ProcessingStatus.FAILED.value,
+                    error_details=processing_errors
                 )
                 
                 self._log_info(
