@@ -58,7 +58,7 @@ class TestContractAnalysis:
         }
         
         # Mock the background task to prevent actual execution
-        with patch('app.tasks.background_tasks.analyze_contract_background', new_callable=AsyncMock) as mock_bg_task:
+        with patch('app.tasks.background_tasks.comprehensive_document_analysis', new_callable=AsyncMock) as mock_bg_task:
             response = client.post("/api/contracts/analyze", json=request_data)
         
             assert response.status_code == 200
@@ -162,7 +162,7 @@ class TestContractAnalysis:
         }
         
         # Mock the background task to prevent actual execution
-        with patch('app.tasks.background_tasks.analyze_contract_background', new_callable=AsyncMock) as mock_bg_task:
+        with patch('app.tasks.background_tasks.comprehensive_document_analysis', new_callable=AsyncMock) as mock_bg_task:
             response = client.post("/api/contracts/analyze", json=request_data)
             
             assert response.status_code == 200

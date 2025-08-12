@@ -46,35 +46,46 @@ class FinalValidationNode(BaseNode):
         progress_update = self._get_progress_update(state)
         state.update(progress_update)
 
+        # Initialize variable used in error context
+        use_llm = self.use_llm_config.get("final_validation", True)
         try:
             self._log_step_debug("Starting final validation", state)
 
             # Gather all workflow outputs
             workflow_outputs = self._gather_workflow_outputs(state)
-            
+
             if not workflow_outputs:
                 return self._handle_node_error(
                     state,
                     Exception("No workflow outputs available for validation"),
                     "No workflow outputs available for validation",
-                    {"state_keys": list(state.keys())}
+                    {"state_keys": list(state.keys())},
                 )
 
             # Perform validation
-            use_llm = self.use_llm_config.get("final_validation", True)
-            
+
             if use_llm:
                 try:
-                    validation_result = await self._validate_final_output_with_llm(workflow_outputs)
+                    validation_result = await self._validate_final_output_with_llm(
+                        workflow_outputs
+                    )
                 except Exception as llm_error:
-                    self._log_exception(llm_error, state, {"fallback_enabled": self.enable_fallbacks})
-                    
+                    self._log_exception(
+                        llm_error, state, {"fallback_enabled": self.enable_fallbacks}
+                    )
+
                     if self.enable_fallbacks:
-                        validation_result = await self._validate_final_output_rule_based(workflow_outputs)
+                        validation_result = (
+                            await self._validate_final_output_rule_based(
+                                workflow_outputs
+                            )
+                        )
                     else:
                         raise llm_error
             else:
-                validation_result = await self._validate_final_output_rule_based(workflow_outputs)
+                validation_result = await self._validate_final_output_rule_based(
+                    workflow_outputs
+                )
 
             # Update state with validation results
             state["final_validation_result"] = validation_result
@@ -84,7 +95,7 @@ class FinalValidationNode(BaseNode):
             # Determine overall validation status
             validation_passed = validation_result.get("validation_passed", False)
             validation_threshold = 0.7
-            
+
             if validation_confidence >= validation_threshold and validation_passed:
                 validation_status = "passed"
             else:
@@ -106,7 +117,7 @@ class FinalValidationNode(BaseNode):
             self._log_step_debug(
                 f"Final validation completed (status: {validation_status}, confidence: {validation_confidence:.2f})",
                 state,
-                {"final_workflow_confidence": final_confidence}
+                {"final_workflow_confidence": final_confidence},
             )
 
             return self.update_state_step(
@@ -115,31 +126,29 @@ class FinalValidationNode(BaseNode):
 
         except Exception as e:
             return self._handle_node_error(
-                state,
-                e,
-                f"Final validation failed: {str(e)}",
-                {"use_llm": use_llm}
+                state, e, f"Final validation failed: {str(e)}", {"use_llm": use_llm}
             )
 
     def _gather_workflow_outputs(self, state: RealEstateAgentState) -> Dict[str, Any]:
         """Gather all workflow outputs for validation."""
         outputs = {}
-        
+
         # Core analysis outputs
         core_outputs = [
-            "contract_terms", "compliance_analysis", "risk_assessment", 
-            "recommendations", "diagram_analysis"
+            "contract_terms",
+            "compliance_analysis",
+            "risk_assessment",
+            "recommendations",
+            "diagram_analysis",
         ]
-        
+
         for output_key in core_outputs:
             if output_key in state and state[output_key]:
                 outputs[output_key] = state[output_key]
 
         # Validation outputs
-        validation_outputs = [
-            "document_quality_metrics", "terms_validation_result"
-        ]
-        
+        validation_outputs = ["document_quality_metrics", "terms_validation_result"]
+
         for output_key in validation_outputs:
             if output_key in state and state[output_key]:
                 outputs[output_key] = state[output_key]
@@ -167,18 +176,24 @@ class FinalValidationNode(BaseNode):
                     "workflow_outputs": workflow_outputs,
                     "validation_type": "final_output",
                     "validation_criteria": [
-                        "completeness", "consistency", "accuracy", "relevance"
+                        "completeness",
+                        "consistency",
+                        "accuracy",
+                        "relevance",
                     ],
                     "required_outputs": [
-                        "contract_terms", "compliance_analysis", "risk_assessment", "recommendations"
-                    ]
-                }
+                        "contract_terms",
+                        "compliance_analysis",
+                        "risk_assessment",
+                        "recommendations",
+                    ],
+                },
             )
 
             rendered_prompt = await self.prompt_manager.render(
                 template_name="validation/final_output",
                 context=context,
-                service_name="contract_analysis_workflow"
+                service_name="contract_analysis_workflow",
             )
 
             response = await self._generate_content_with_fallback(
@@ -187,7 +202,9 @@ class FinalValidationNode(BaseNode):
 
             # Parse structured response
             if self.structured_parsers.get("workflow_validation"):
-                parsing_result = self.structured_parsers["workflow_validation"].parse(response)
+                parsing_result = self.structured_parsers["workflow_validation"].parse(
+                    response
+                )
                 if parsing_result.success and parsing_result.data:
                     return parsing_result.data
 
@@ -215,28 +232,46 @@ class FinalValidationNode(BaseNode):
             validation_passed = True
 
             # Check for required outputs
-            required_outputs = ["contract_terms", "compliance_analysis", "risk_assessment", "recommendations"]
-            
+            required_outputs = [
+                "contract_terms",
+                "compliance_analysis",
+                "risk_assessment",
+                "recommendations",
+            ]
+
             for required_output in required_outputs:
-                if required_output in workflow_outputs and workflow_outputs[required_output]:
-                    validation_checks.append({
-                        "check": f"{required_output}_present",
-                        "status": "passed",
-                        "details": f"{required_output} is present and populated"
-                    })
+                if (
+                    required_output in workflow_outputs
+                    and workflow_outputs[required_output]
+                ):
+                    validation_checks.append(
+                        {
+                            "check": f"{required_output}_present",
+                            "status": "passed",
+                            "details": f"{required_output} is present and populated",
+                        }
+                    )
                 else:
-                    validation_checks.append({
-                        "check": f"{required_output}_present",
-                        "status": "failed",
-                        "details": f"{required_output} is missing or empty"
-                    })
-                    validation_issues.append(f"Missing required output: {required_output}")
+                    validation_checks.append(
+                        {
+                            "check": f"{required_output}_present",
+                            "status": "failed",
+                            "details": f"{required_output} is missing or empty",
+                        }
+                    )
+                    validation_issues.append(
+                        f"Missing required output: {required_output}"
+                    )
                     validation_passed = False
 
             # Calculate overall validation confidence
-            passed_checks = len([check for check in validation_checks if check["status"] == "passed"])
+            passed_checks = len(
+                [check for check in validation_checks if check["status"] == "passed"]
+            )
             total_checks = len(validation_checks)
-            validation_confidence = passed_checks / total_checks if total_checks > 0 else 0.5
+            validation_confidence = (
+                passed_checks / total_checks if total_checks > 0 else 0.5
+            )
 
             return {
                 "validation_passed": validation_passed,
@@ -259,11 +294,13 @@ class FinalValidationNode(BaseNode):
                 "error": str(e),
             }
 
-    def _calculate_final_workflow_confidence(self, state: RealEstateAgentState) -> float:
+    def _calculate_final_workflow_confidence(
+        self, state: RealEstateAgentState
+    ) -> float:
         """Calculate final workflow confidence based on all step confidences."""
         try:
             confidence_scores = state.get("confidence_scores", {})
-            
+
             if not confidence_scores:
                 return 0.5  # Default medium confidence
 
@@ -274,14 +311,16 @@ class FinalValidationNode(BaseNode):
                 "compliance_analysis": 0.20,
                 "risk_assessment": 0.20,
                 "recommendations": 0.15,
-                "final_validation": 0.05
+                "final_validation": 0.05,
             }
 
             weighted_sum = 0.0
             total_weight = 0.0
 
             for step, confidence in confidence_scores.items():
-                weight = step_weights.get(step, 0.1)  # Default weight for unlisted steps
+                weight = step_weights.get(
+                    step, 0.1
+                )  # Default weight for unlisted steps
                 weighted_sum += confidence * weight
                 total_weight += weight
 
@@ -291,5 +330,7 @@ class FinalValidationNode(BaseNode):
             return max(0.0, min(1.0, final_confidence))
 
         except Exception as e:
-            self._log_exception(e, context={"calculation_method": "final_workflow_confidence"})
+            self._log_exception(
+                e, context={"calculation_method": "final_workflow_confidence"}
+            )
             return 0.5  # Default medium confidence

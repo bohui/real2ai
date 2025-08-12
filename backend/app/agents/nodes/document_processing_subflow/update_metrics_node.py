@@ -156,8 +156,12 @@ class UpdateMetricsNode(DocumentProcessingNodeBase):
                 },
             }
             
-            # Update document record
-            await user_client.database.update("documents", document_id, update_data)
+            # Update document record using repository
+            from app.services.repositories.documents_repository import DocumentsRepository
+            from uuid import UUID
+            
+            docs_repo = DocumentsRepository()
+            await docs_repo.update_processing_results(UUID(document_id), update_data)
             
             # Record final step completion in runs tracking
             run_id = state.get("run_id")

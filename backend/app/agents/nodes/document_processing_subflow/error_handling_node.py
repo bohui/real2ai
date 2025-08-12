@@ -93,8 +93,16 @@ class ErrorHandlingNode(DocumentProcessingNodeBase):
                     "processing_completed_at": datetime.now(timezone.utc),
                 }
                 
-                # Update document record with failure status
-                await user_client.database.update("documents", document_id, update_data)
+                # Update document record with failure status using repository
+                from app.services.repositories.documents_repository import DocumentsRepository
+                from uuid import UUID
+                
+                docs_repo = DocumentsRepository()
+                await docs_repo.update_processing_status_and_results(
+                    UUID(document_id),
+                    ProcessingStatus.FAILED.value,
+                    processing_errors
+                )
                 
                 self._log_info(
                     f"Successfully updated document {document_id} status to FAILED",

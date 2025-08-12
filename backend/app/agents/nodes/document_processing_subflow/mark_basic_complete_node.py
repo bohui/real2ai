@@ -78,11 +78,15 @@ class MarkBasicCompleteNode(DocumentProcessingNodeBase):
                 "processing_completed_at": processing_completed_at
             }
             
-            # Update document record
-            await user_client.database.update(
-                "documents",
-                document_id,
-                update_data
+            # Update document record using repository
+            from app.services.repositories.documents_repository import DocumentsRepository
+            from uuid import UUID
+            
+            docs_repo = DocumentsRepository()
+            await docs_repo.update_document_status(
+                UUID(document_id), 
+                ProcessingStatus.BASIC_COMPLETE.value,
+                processing_completed_at=processing_completed_at
             )
             
             # Complete the processing run if run_id is available

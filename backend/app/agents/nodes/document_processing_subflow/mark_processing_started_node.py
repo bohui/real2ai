@@ -77,11 +77,15 @@ class MarkProcessingStartedNode(DocumentProcessingNodeBase):
                 "processing_status": ProcessingStatus.PROCESSING.value
             }
             
-            # Update document record
-            await user_client.database.update(
-                "documents",
-                document_id,
-                update_data
+            # Update document record using repository
+            from app.services.repositories.documents_repository import DocumentsRepository
+            from uuid import UUID
+            
+            docs_repo = DocumentsRepository()
+            await docs_repo.update_document_status(
+                UUID(document_id),
+                ProcessingStatus.PROCESSING.value,
+                processing_started_at=processing_started_at
             )
             
             # Start a new processing run if not already started

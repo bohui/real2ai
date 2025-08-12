@@ -123,19 +123,33 @@ class AlreadyProcessedCheckNode(DocumentProcessingNodeBase):
             ProcessedDocumentSummary if processed, None otherwise
         """
         try:
-            # Get document record
-            doc_result = await user_client.database.select(
-                "documents",
-                columns="id, australian_state, full_text, total_pages, total_word_count, "
-                       "extraction_confidence, processing_timestamp, text_extraction_method, "
-                       "processing_status, original_filename, file_type, storage_path, content_hash",
-                filters={"id": document_id}
-            )
+            # Get document record using repository
+            from app.services.repositories.documents_repository import DocumentsRepository
+            from app.services.repositories.contracts_repository import ContractsRepository
+            from uuid import UUID
             
-            if not doc_result.get("data"):
+            docs_repo = DocumentsRepository()
+            document_obj = await docs_repo.get_document(UUID(document_id))
+            
+            if not document_obj:
                 return None
                 
-            document = doc_result["data"][0]
+            # Convert to dict for backward compatibility
+            document = {
+                "id": str(document_obj.id),
+                "australian_state": getattr(document_obj, 'australian_state', None),
+                "full_text": getattr(document_obj, 'full_text', None),
+                "total_pages": getattr(document_obj, 'total_pages', None),
+                "total_word_count": getattr(document_obj, 'total_word_count', None),
+                "extraction_confidence": getattr(document_obj, 'extraction_confidence', None),
+                "processing_timestamp": getattr(document_obj, 'processing_timestamp', None),
+                "text_extraction_method": getattr(document_obj, 'text_extraction_method', None),
+                "processing_status": document_obj.processing_status,
+                "original_filename": document_obj.original_filename,
+                "file_type": document_obj.file_type,
+                "storage_path": document_obj.storage_path,
+                "content_hash": document_obj.content_hash
+            }
             
             # Check if document has been processed
             processing_status = document.get("processing_status")
@@ -152,13 +166,10 @@ class AlreadyProcessedCheckNode(DocumentProcessingNodeBase):
             content_hash = document.get("content_hash")
             
             if not australian_state and content_hash:
-                contract_result = await user_client.database.select(
-                    "contracts",
-                    columns="australian_state",
-                    filters={"content_hash": content_hash}
-                )
-                if contract_result.get("data"):
-                    australian_state = contract_result["data"][0].get("australian_state")
+                contracts_repo = ContractsRepository()
+                contracts = await contracts_repo.get_contracts_by_content_hash(content_hash, limit=1)
+                if contracts:
+                    australian_state = getattr(contracts[0], 'australian_state', None)
             
             if not australian_state:
                 return None

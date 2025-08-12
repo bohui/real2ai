@@ -98,14 +98,15 @@ class BuildSummaryNode(DocumentProcessingNodeBase):
             extraction_methods = text_extraction_result.extraction_methods or []
             primary_method = extraction_methods[0] if extraction_methods else "unknown"
             
-            # Retrieve authoritative metadata from document record
-            doc_result = await user_client.database.select(
-                "documents",
-                columns="australian_state, original_filename, file_type, storage_path, content_hash",
-                filters={"id": document_id}
-            )
+            # Retrieve authoritative metadata from document record using repository
+            from app.services.repositories.documents_repository import DocumentsRepository
+            from app.services.repositories.contracts_repository import ContractsRepository
+            from uuid import UUID
             
-            if not doc_result.get("data"):
+            docs_repo = DocumentsRepository()
+            document = await docs_repo.get_document(UUID(document_id))
+            
+            if not document:
                 return self._handle_error(
                     state,
                     ValueError("Document not found while building summary"),
@@ -113,22 +114,18 @@ class BuildSummaryNode(DocumentProcessingNodeBase):
                     {"document_id": document_id}
                 )
             
-            doc_row = doc_result["data"][0]
-            australian_state_value = doc_row.get("australian_state")
-            original_filename = doc_row.get("original_filename")
-            file_type_value = doc_row.get("file_type")
-            storage_path_value = doc_row.get("storage_path")
-            content_hash_value = doc_row.get("content_hash")
+            australian_state_value = getattr(document, 'australian_state', None)
+            original_filename = document.original_filename
+            file_type_value = document.file_type
+            storage_path_value = document.storage_path
+            content_hash_value = document.content_hash
             
             # If document record doesn't have australian_state, derive from contract
             if not australian_state_value and content_hash_value:
-                contract_result = await user_client.database.select(
-                    "contracts",
-                    columns="australian_state",
-                    filters={"content_hash": content_hash_value}
-                )
-                if contract_result.get("data"):
-                    australian_state_value = contract_result["data"][0].get("australian_state")
+                contracts_repo = ContractsRepository()
+                contracts = await contracts_repo.get_contracts_by_content_hash(content_hash_value, limit=1)
+                if contracts:
+                    australian_state_value = getattr(contracts[0], 'australian_state', None)
             
             if not australian_state_value:
                 return self._handle_error(

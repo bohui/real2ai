@@ -43,6 +43,8 @@ class ComplianceAnalysisNode(BaseNode):
         progress_update = self._get_progress_update(state)
         state.update(progress_update)
 
+        # Initialize variables referenced in exception context
+        use_llm = self.use_llm_config.get("compliance_analysis", True)
         try:
             self._log_step_debug("Starting compliance analysis", state)
 
@@ -53,23 +55,24 @@ class ComplianceAnalysisNode(BaseNode):
                     state,
                     Exception("No contract terms available for compliance analysis"),
                     "No contract terms available for compliance analysis",
-                    {"available_keys": list(state.keys())}
+                    {"available_keys": list(state.keys())},
                 )
 
             # Determine Australian state for compliance rules
             australian_state = self._determine_australian_state(contract_terms, state)
-            
+
             # Perform compliance analysis
-            use_llm = self.use_llm_config.get("compliance_analysis", True)
-            
+
             if use_llm:
                 try:
                     compliance_result = await self._analyze_compliance_with_llm(
                         contract_terms, australian_state
                     )
                 except Exception as llm_error:
-                    self._log_exception(llm_error, state, {"fallback_enabled": self.enable_fallbacks})
-                    
+                    self._log_exception(
+                        llm_error, state, {"fallback_enabled": self.enable_fallbacks}
+                    )
+
                     if self.enable_fallbacks:
                         compliance_result = await self._analyze_compliance_rule_based(
                             contract_terms, australian_state
@@ -96,7 +99,10 @@ class ComplianceAnalysisNode(BaseNode):
             self._log_step_debug(
                 f"Compliance analysis completed (confidence: {compliance_confidence:.2f})",
                 state,
-                {"australian_state": australian_state, "compliance_checks": len(compliance_result.get("checks", []))}
+                {
+                    "australian_state": australian_state,
+                    "compliance_checks": len(compliance_result.get("checks", [])),
+                },
             )
 
             return self.update_state_step(
@@ -105,10 +111,7 @@ class ComplianceAnalysisNode(BaseNode):
 
         except Exception as e:
             return self._handle_node_error(
-                state,
-                e,
-                f"Compliance analysis failed: {str(e)}",
-                {"use_llm": use_llm}
+                state, e, f"Compliance analysis failed: {str(e)}", {"use_llm": use_llm}
             )
 
     def _determine_australian_state(
@@ -129,7 +132,7 @@ class ComplianceAnalysisNode(BaseNode):
                 "NT": ["nt", "northern territory", "darwin"],
                 "ACT": ["act", "australian capital territory", "canberra"],
             }
-            
+
             address_lower = property_address.lower()
             for state_code, keywords in state_mappings.items():
                 if any(keyword in address_lower for keyword in keywords):
@@ -178,7 +181,9 @@ class ComplianceAnalysisNode(BaseNode):
 
             # Parse structured response
             if self.structured_parsers.get("compliance_analysis"):
-                parsing_result = self.structured_parsers["compliance_analysis"].parse(llm_response)
+                parsing_result = self.structured_parsers["compliance_analysis"].parse(
+                    llm_response
+                )
                 if parsing_result.success and parsing_result.data:
                     return parsing_result.data
 
@@ -188,11 +193,15 @@ class ComplianceAnalysisNode(BaseNode):
                 return compliance_result
 
             # Final fallback to rule-based analysis
-            return await self._analyze_compliance_rule_based(contract_terms, australian_state)
+            return await self._analyze_compliance_rule_based(
+                contract_terms, australian_state
+            )
 
         except Exception as e:
-            self._log_exception(e, context={"analysis_method": "llm", "state": australian_state})
-            
+            self._log_exception(
+                e, context={"analysis_method": "llm", "state": australian_state}
+            )
+
             if not self.enable_fallbacks:
                 raise
 
@@ -208,12 +217,16 @@ class ComplianceAnalysisNode(BaseNode):
                 compliance_result = self._safe_json_parse(llm_response)
                 if compliance_result:
                     return compliance_result
-                    
+
             except Exception as fallback_error:
-                self._log_exception(fallback_error, context={"fallback_method": "prompt"})
+                self._log_exception(
+                    fallback_error, context={"fallback_method": "prompt"}
+                )
 
             # Final fallback to rule-based analysis
-            return await self._analyze_compliance_rule_based(contract_terms, australian_state)
+            return await self._analyze_compliance_rule_based(
+                contract_terms, australian_state
+            )
 
     def _create_compliance_fallback_prompt(
         self, contract_terms: Dict[str, Any], australian_state: str
@@ -254,45 +267,61 @@ Please provide a JSON response with the following structure:
             # Validate cooling-off period
             try:
                 from app.agents.tools.compliance import validate_cooling_off_period
-                
+
                 cooling_off_result = validate_cooling_off_period.invoke(
                     {"contract_terms": contract_terms, "state": australian_state}
                 )
-                
-                compliance_checks.append({
-                    "requirement": "cooling_off_period",
-                    "status": "compliant" if cooling_off_result.get("valid", False) else "non_compliant",
-                    "details": cooling_off_result.get("details", "Cooling-off period validation"),
-                    "confidence": 0.9
-                })
-                
+
+                compliance_checks.append(
+                    {
+                        "requirement": "cooling_off_period",
+                        "status": (
+                            "compliant"
+                            if cooling_off_result.get("valid", False)
+                            else "non_compliant"
+                        ),
+                        "details": cooling_off_result.get(
+                            "details", "Cooling-off period validation"
+                        ),
+                        "confidence": 0.9,
+                    }
+                )
+
                 compliance_confidence += 0.9
                 compliance_components += 1
 
             except Exception as e:
                 self._log_exception(e, context={"check": "cooling_off_period"})
-                compliance_checks.append({
-                    "requirement": "cooling_off_period",
-                    "status": "unknown",
-                    "details": f"Validation failed: {str(e)}",
-                    "confidence": 0.3
-                })
+                compliance_checks.append(
+                    {
+                        "requirement": "cooling_off_period",
+                        "status": "unknown",
+                        "details": f"Validation failed: {str(e)}",
+                        "confidence": 0.3,
+                    }
+                )
 
             # Calculate stamp duty if possible
             try:
                 from app.agents.tools.compliance import calculate_stamp_duty
-                
+
                 stamp_duty_result = calculate_stamp_duty.invoke(
                     {"contract_terms": contract_terms, "state": australian_state}
                 )
-                
-                compliance_checks.append({
-                    "requirement": "stamp_duty_calculation",
-                    "status": "compliant" if stamp_duty_result.get("calculated", False) else "unknown",
-                    "details": f"Estimated stamp duty: {stamp_duty_result.get('amount', 'N/A')}",
-                    "confidence": 0.8
-                })
-                
+
+                compliance_checks.append(
+                    {
+                        "requirement": "stamp_duty_calculation",
+                        "status": (
+                            "compliant"
+                            if stamp_duty_result.get("calculated", False)
+                            else "unknown"
+                        ),
+                        "details": f"Estimated stamp duty: {stamp_duty_result.get('amount', 'N/A')}",
+                        "confidence": 0.8,
+                    }
+                )
+
                 compliance_confidence += 0.8
                 compliance_components += 1
 
@@ -305,12 +334,20 @@ Please provide a JSON response with the following structure:
             compliance_confidence += 0.7
 
             # Calculate overall compliance score
-            overall_confidence = compliance_confidence / compliance_components if compliance_components > 0 else 0.5
-            
+            overall_confidence = (
+                compliance_confidence / compliance_components
+                if compliance_components > 0
+                else 0.5
+            )
+
             # Determine compliance status
-            compliant_checks = sum(1 for check in compliance_checks if check["status"] == "compliant")
+            compliant_checks = sum(
+                1 for check in compliance_checks if check["status"] == "compliant"
+            )
             total_checks = len(compliance_checks)
-            compliance_ratio = compliant_checks / total_checks if total_checks > 0 else 0
+            compliance_ratio = (
+                compliant_checks / total_checks if total_checks > 0 else 0
+            )
 
             if compliance_ratio >= 0.8:
                 overall_compliance = "compliant"
@@ -323,8 +360,14 @@ Please provide a JSON response with the following structure:
                 "overall_compliance": overall_compliance,
                 "compliance_score": compliance_ratio,
                 "checks": compliance_checks,
-                "issues": [check["details"] for check in compliance_checks if check["status"] == "non_compliant"],
-                "recommendations": self._generate_compliance_recommendations(compliance_checks, australian_state),
+                "issues": [
+                    check["details"]
+                    for check in compliance_checks
+                    if check["status"] == "non_compliant"
+                ],
+                "recommendations": self._generate_compliance_recommendations(
+                    compliance_checks, australian_state
+                ),
                 "overall_confidence": overall_confidence,
                 "analysis_method": "rule_based",
                 "state": australian_state,
@@ -358,7 +401,7 @@ Please provide a JSON response with the following structure:
 
         for field, description in required_fields.items():
             field_value = contract_terms.get(field)
-            
+
             if field_value and str(field_value).strip():
                 status = "compliant"
                 details = f"{description} - Present"
@@ -366,12 +409,14 @@ Please provide a JSON response with the following structure:
                 status = "non_compliant"
                 details = f"{description} - Missing or incomplete"
 
-            compliance_checks.append({
-                "requirement": field.replace("_", " ").title(),
-                "status": status,
-                "details": details,
-                "confidence": 0.9
-            })
+            compliance_checks.append(
+                {
+                    "requirement": field.replace("_", " ").title(),
+                    "status": status,
+                    "details": details,
+                    "confidence": 0.9,
+                }
+            )
 
     def _generate_compliance_recommendations(
         self, compliance_checks: list, australian_state: str
@@ -379,21 +424,35 @@ Please provide a JSON response with the following structure:
         """Generate compliance recommendations based on check results."""
         recommendations = []
 
-        non_compliant_checks = [check for check in compliance_checks if check["status"] == "non_compliant"]
-        
+        non_compliant_checks = [
+            check for check in compliance_checks if check["status"] == "non_compliant"
+        ]
+
         if non_compliant_checks:
-            recommendations.append(f"Address {len(non_compliant_checks)} compliance issues identified")
-            
+            recommendations.append(
+                f"Address {len(non_compliant_checks)} compliance issues identified"
+            )
+
             for check in non_compliant_checks:
                 if "cooling_off" in check["requirement"].lower():
-                    recommendations.append(f"Verify cooling-off period requirements for {australian_state}")
+                    recommendations.append(
+                        f"Verify cooling-off period requirements for {australian_state}"
+                    )
                 elif "stamp_duty" in check["requirement"].lower():
-                    recommendations.append(f"Calculate accurate stamp duty for {australian_state}")
+                    recommendations.append(
+                        f"Calculate accurate stamp duty for {australian_state}"
+                    )
                 else:
-                    recommendations.append(f"Review {check['requirement']} requirements")
+                    recommendations.append(
+                        f"Review {check['requirement']} requirements"
+                    )
 
         if not recommendations:
-            recommendations.append("Contract appears to meet basic compliance requirements")
-            recommendations.append("Consider professional legal review for complete compliance verification")
+            recommendations.append(
+                "Contract appears to meet basic compliance requirements"
+            )
+            recommendations.append(
+                "Consider professional legal review for complete compliance verification"
+            )
 
         return recommendations

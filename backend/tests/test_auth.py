@@ -108,17 +108,24 @@ class TestUserLogin:
     
     def test_login_user_success(self, client: TestClient, mock_db_client):
         """Test successful user login"""
-        # Mock successful auth response
-        mock_user = MagicMock()
+        # Create proper mock objects that can be JSON serialized
+        from types import SimpleNamespace
+        
+        # Use SimpleNamespace instead of MagicMock for serializable objects
+        mock_user = SimpleNamespace()
         mock_user.id = "test-user-id"
-        mock_session = MagicMock()
+        mock_user.email = "test@example.com"
+        
+        mock_session = SimpleNamespace()
         mock_session.access_token = "test-access-token"
         mock_session.refresh_token = "test-refresh-token"
         
-        mock_db_client.auth.sign_in_with_password.return_value = MagicMock(
-            user=mock_user,
-            session=mock_session
-        )
+        # Create auth result mock
+        auth_result = SimpleNamespace()
+        auth_result.user = mock_user
+        auth_result.session = mock_session
+        
+        mock_db_client.auth.sign_in_with_password.return_value = auth_result
         
         # Mock profile fetch
         profile_data = {

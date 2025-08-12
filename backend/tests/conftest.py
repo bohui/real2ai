@@ -102,7 +102,7 @@ def client(
                     with patch(
                         "app.main.get_supabase_client", return_value=mock_db_client
                     ):
-                test_client = TestClient(fastapi_app)
+                        test_client = TestClient(fastapi_app)
                         yield test_client
 
     # Clean up overrides
@@ -366,6 +366,7 @@ def test_settings():
     settings = get_settings()
     settings.max_file_size = 5 * 1024 * 1024  # 5MB
     settings.allowed_file_types = "pdf,doc,docx"  # Set the actual property
+    settings.use_backend_tokens = False  # Disable backend tokens for consistent test behavior
     return settings
 
 

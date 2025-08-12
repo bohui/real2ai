@@ -68,7 +68,7 @@ async def update_analysis_progress(
     try:
         # Get user-authenticated client
         # Use isolated client to prevent JWT token race conditions in concurrent tasks
-        user_client = await AuthContext.get_authenticated_client(isolated=True)
+        # user_client = await AuthContext.get_authenticated_client(isolated=True)
 
         # Update or create progress record
         # Determine status based on step and progress
@@ -349,15 +349,6 @@ async def comprehensive_document_analysis(
                 estimated_completion_minutes=1,
             )
 
-            # # Get processed document with extracted content
-            # doc_result = await user_client.database.select(
-            #     "documents", columns="*", filters={"id": document_id}
-            # )
-            # if not doc_result.get("data"):
-            #     raise ValueError(f"Document {document_id} not found after processing")
-
-            # processed_document = doc_result["data"][0]
-
             # Prepare minimal document_data for ContractAnalysisService
             # Validation requires either content or file_path; provide file_path to avoid pre-processing duplication
             document_data = {
@@ -387,17 +378,6 @@ async def comprehensive_document_analysis(
 
             # Execute contract analysis using the service layer
             logger.info(f"Starting contract analysis with document data")
-
-            # # Get contract details
-            # contract_result = await user_client.database.select(
-            #     "contracts", columns="*", filters={"id": contract_id}
-            # )
-            # contract_data = (
-            #     contract_result["data"][0] if contract_result.get("data") else {}
-            # )
-            # australian_state_enum = AustralianState(
-            #     contract_data.get("australian_state", "NSW")
-            # )
 
             async def persist_progress(step: str, percent: int, description: str):
                 # Persist to Supabase, update recovery registry, create checkpoint, then refresh task TTL

@@ -9,6 +9,7 @@ import pytest
 import uuid
 from unittest.mock import AsyncMock, Mock, patch
 from datetime import datetime, timezone
+from uuid import UUID
 
 from app.agents.subflows.document_processing_workflow import DocumentProcessingState
 from app.agents.nodes.document_processing_subflow import (
@@ -21,6 +22,7 @@ from app.agents.nodes.document_processing_subflow import (
     SaveParagraphsNode,
 )
 from app.schema.document import ProcessedDocumentSummary
+from app.services.repositories.documents_repository import Document
 
 
 @pytest.fixture
@@ -60,55 +62,71 @@ class TestFetchDocumentRecordNode:
     @pytest.mark.asyncio
     async def test_successful_fetch(self, sample_state, mock_user_client):
         """Test successful document metadata fetch."""
-        # Arrange
-        document_data = {
-            "id": sample_state["document_id"],
-            "storage_path": "documents/test.pdf",
-            "file_type": "application/pdf",
-            "content_hash": "test_hash_123",
-            "processing_status": "pending",
-            "original_filename": "test_document.pdf"
-        }
+        # Arrange - Create Document object for repository
+        document_obj = Document(
+            id=UUID(sample_state["document_id"]),
+            user_id=UUID(str(uuid.uuid4())),  # Mock user ID
+            original_filename="test_document.pdf",
+            storage_path="documents/test.pdf",
+            file_type="application/pdf",
+            file_size=1024,
+            content_hash="test_hash_123",
+            processing_status="pending"
+        )
         
-        mock_user_client.database.select.return_value = {
-            "data": [document_data]
-        }
+        # Mock the DocumentsRepository
+        mock_docs_repo = AsyncMock()
+        mock_docs_repo.get_document.return_value = document_obj
+        
+        # Ensure mock_user_client.database is never called
+        mock_user_client.database.select.side_effect = Exception("Should not be called - use repository instead")
         
         node = FetchDocumentRecordNode()
         
-        with patch.object(node, 'get_user_client', return_value=mock_user_client):
-            # Act
-            result = await node.execute(sample_state)
-            
-            # Assert
-            assert result["storage_path"] == "documents/test.pdf"
-            assert result["file_type"] == "application/pdf" 
-            assert result["content_hash"] == "test_hash_123"
-            assert result["error"] is None
-            
-            # Verify database call
-            mock_user_client.database.select.assert_called_once_with(
-                "documents",
-                columns="id, storage_path, file_type, content_hash, processing_status, original_filename",
-                filters={"id": sample_state["document_id"]}
-            )
+        with patch('app.agents.nodes.document_processing_subflow.fetch_document_node.DocumentsRepository', return_value=mock_docs_repo):
+            with patch.object(node, 'get_user_client', return_value=mock_user_client):
+                # Act
+                result = await node.execute(sample_state)
+                
+                # Assert
+                assert result["storage_path"] == "documents/test.pdf"
+                assert result["file_type"] == "application/pdf" 
+                assert result["content_hash"] == "test_hash_123"
+                assert result["error"] is None
+                
+                # Verify repository was called correctly
+                mock_docs_repo.get_document.assert_called_once_with(UUID(sample_state["document_id"]))
+                
+                # Verify user_client.database was NOT called
+                assert not mock_user_client.database.select.called
     
     @pytest.mark.asyncio
     async def test_document_not_found(self, sample_state, mock_user_client):
         """Test handling when document is not found."""
-        # Arrange
-        mock_user_client.database.select.return_value = {"data": []}
+        # Arrange - Mock repository to return None (document not found)
+        mock_docs_repo = AsyncMock()
+        mock_docs_repo.get_document.return_value = None
+        
+        # Ensure mock_user_client.database is never called
+        mock_user_client.database.select.side_effect = Exception("Should not be called - use repository instead")
         
         node = FetchDocumentRecordNode()
         
-        with patch.object(node, 'get_user_client', return_value=mock_user_client):
-            # Act
-            result = await node.execute(sample_state)
-            
-            # Assert
-            assert result["error"] == "Document not found or access denied"
-            assert result["error_details"] is not None
-            assert result["error_details"]["node"] == "fetch_document_record"
+        with patch('app.agents.nodes.document_processing_subflow.fetch_document_node.DocumentsRepository', return_value=mock_docs_repo):
+            with patch.object(node, 'get_user_client', return_value=mock_user_client):
+                # Act
+                result = await node.execute(sample_state)
+                
+                # Assert
+                assert result["error"] == "Document not found or access denied"
+                assert result["error_details"] is not None
+                assert result["error_details"]["node"] == "fetch_document_record"
+                
+                # Verify repository was called
+                mock_docs_repo.get_document.assert_called_once_with(UUID(sample_state["document_id"]))
+                
+                # Verify user_client.database was NOT called
+                assert not mock_user_client.database.select.called
     
     @pytest.mark.asyncio
     async def test_missing_document_id(self, mock_user_client):
@@ -253,21 +271,32 @@ class TestErrorHandlingNode:
             "node": "extract_text"
         }
         
+        # Mock the DocumentsRepository used in ErrorHandlingNode
+        mock_docs_repo = AsyncMock()
+        mock_docs_repo.update_processing_status_and_results = AsyncMock()
+        
+        # Ensure mock_user_client.database is never called
+        mock_user_client.database.update.side_effect = Exception("Should not be called - use repository instead")
+        
         node = ErrorHandlingNode()
         
-        with patch.object(node, 'get_user_client', return_value=mock_user_client):
-            # Act
-            result = await node.execute(error_state)
-            
-            # Assert
-            assert result["error"] == "Sample processing error"
-            assert result["error_details"] is not None
-            
-            # Verify database update call
-            mock_user_client.database.update.assert_called_once()
-            update_call = mock_user_client.database.update.call_args
-            assert update_call[0][0] == "documents"  # table name
-            assert update_call[0][1] == sample_state["document_id"]  # document id
+        with patch('app.agents.nodes.document_processing_subflow.error_handling_node.DocumentsRepository', return_value=mock_docs_repo):
+            with patch.object(node, 'get_user_client', return_value=mock_user_client):
+                # Act
+                result = await node.execute(error_state)
+                
+                # Assert
+                assert result["error"] == "Sample processing error"
+                assert result["error_details"] is not None
+                
+                # Verify repository method was called correctly
+                mock_docs_repo.update_processing_status_and_results.assert_called_once()
+                call_args = mock_docs_repo.update_processing_status_and_results.call_args
+                assert call_args[0][0] == UUID(sample_state["document_id"])  # document_id as UUID
+                assert call_args[0][1] == "failed"  # ProcessingStatus.FAILED.value
+                
+                # Verify user_client.database was NOT called
+                assert not mock_user_client.database.update.called
     
     @pytest.mark.asyncio
     async def test_handle_error_without_document_id(self):

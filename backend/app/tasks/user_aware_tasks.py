@@ -283,23 +283,22 @@ async def run_document_processing_subflow(
             # Import here to avoid circular import
             from app.models.supabase_models import ProcessingStatus
 
-            # Get user client for database update
-            user_client = await AuthContext.get_authenticated_client(isolated=True)
-
-            await user_client.database.update(
-                "documents",
-                document_id,
+            # Update document status using repository
+            from app.services.repositories.documents_repository import DocumentsRepository
+            from uuid import UUID
+            
+            docs_repo = DocumentsRepository()
+            await docs_repo.update_processing_status_and_results(
+                UUID(document_id),
+                ProcessingStatus.FAILED.value,
                 {
-                    "processing_status": ProcessingStatus.FAILED.value,
-                    "processing_errors": {
-                        "error": str(e),
-                        "task_id": self.request.id,
-                        "processing_time": processing_time,
-                        "failed_at": datetime.now(UTC).isoformat(),
-                        "workflow_type": "document_processing_subflow",
-                    },
-                    "processing_completed_at": datetime.now(UTC),
-                },
+                    "error": str(e),
+                    "task_id": self.request.id,
+                    "processing_time": processing_time,
+                    "failed_at": datetime.now(UTC).isoformat(),
+                    "workflow_type": "document_processing_subflow",
+                    "processing_completed_at": datetime.now(UTC).isoformat(),
+                }
             )
         except Exception as update_error:
             logger.error(
