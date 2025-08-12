@@ -120,8 +120,8 @@ class PDFProcessor:
             # Create content with image
             content = Content(
                 parts=[
-                    Part.from_text(prompt),
-                    Part.from_data(img_data, mime_type="image/png"),
+                    Part.from_text(text=prompt),
+                    Part.from_data(data=img_data, mime_type="image/png"),
                 ]
             )
 

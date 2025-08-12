@@ -2,11 +2,14 @@
 # Defines which templates each service can access and their priorities
 
 mappings:
-  gemini_ocr:
+  geminiocr:
     primary_templates:
       - name: "ocr_extraction"
         priority: 100
         description: "Primary OCR text extraction template"
+      - name: "ocr/text_diagram_insight"
+        priority: 95
+        description: "Text and diagram insight extraction template"
       - name: "ocr_validation"
         priority: 80
         description: "OCR quality validation template"
@@ -225,7 +228,7 @@ discovery_rules:
   
   # Service-specific tag patterns
   service_tag_patterns:
-    gemini_ocr: ["ocr", "extraction", "gemini"]
+    geminiocr: ["ocr", "extraction", "gemini"]
     contract_analysis: ["analysis", "contract", "legal"]
     websocket: ["websocket", "messaging", "notification"]
     property_profile: ["property", "market", "valuation"]
@@ -257,7 +260,7 @@ error_handling:
   error_notification_service: "websocket"
   
   service_fallbacks:
-    gemini_ocr:
+    geminiocr:
       - "basic_ocr_service"
       - "manual_processing"
     

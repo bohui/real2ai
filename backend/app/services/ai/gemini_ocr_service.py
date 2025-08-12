@@ -644,8 +644,8 @@ Focus on accuracy and completeness. Extract all visible text content."""
             )
             content = Content(
                 parts=[
-                    Part.from_text(rendered_prompt),
-                    Part.from_data(file_content, mime_type=mime_type),
+                    Part.from_text(text=rendered_prompt),
+                    Part.from_data(data=file_content, mime_type=mime_type),
                 ]
             )
 

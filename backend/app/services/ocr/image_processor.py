@@ -49,8 +49,8 @@ class ImageProcessor:
             mime_type = f"image/{content_type.replace('image/', '')}"
             content = Content(
                 parts=[
-                    Part.from_text(prompt),
-                    Part.from_data(enhanced_image, mime_type=mime_type),
+                    Part.from_text(text=prompt),
+                    Part.from_data(data=enhanced_image, mime_type=mime_type),
                 ]
             )
 
