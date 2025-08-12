@@ -98,10 +98,12 @@ class ErrorHandlingNode(DocumentProcessingNodeBase):
                 from uuid import UUID
                 
                 docs_repo = DocumentsRepository()
-                await docs_repo.update_processing_status_and_results(
-                    document_id=UUID(document_id),
-                    processing_status=ProcessingStatus.FAILED.value,
-                    error_details=processing_errors
+                # Use update_document_status method which properly handles processing_errors field
+                await docs_repo.update_document_status(
+                    UUID(document_id),
+                    ProcessingStatus.FAILED.value,
+                    error_details=processing_errors,
+                    processing_completed_at=datetime.now(timezone.utc)
                 )
                 
                 self._log_info(
