@@ -340,3 +340,81 @@ class AnalysisProgressRepository:
             filters["user_id"] = str(self.user_id)
 
         return await self.get_progress_records(filters, order_by="updated_at DESC")
+    
+    async def clear_progress_for_content_hash(
+        self, content_hash: str, user_id: str
+    ) -> int:
+        """
+        Clear all progress records for a specific content hash and user.
+        
+        This is used when processing fails and needs to restart cleanly.
+        
+        Args:
+            content_hash: Content hash to clear progress for
+            user_id: User ID as string
+            
+        Returns:
+            Number of records deleted
+        """
+        async with get_user_connection(self.user_id) as conn:
+            try:
+                result = await conn.execute(
+                    """
+                    DELETE FROM analysis_progress 
+                    WHERE content_hash = $1 AND user_id = $2
+                    """,
+                    content_hash,
+                    UUID(user_id),
+                )
+                # Extract number of affected rows from result
+                affected_rows = int(result.split()[-1]) if result.split() else 0
+                logger.info(
+                    f"Cleared {affected_rows} progress records for content_hash {content_hash}"
+                )
+                return affected_rows
+            except Exception as e:
+                logger.error(f"Failed to clear progress records: {e}")
+                return 0
+    
+    async def clear_stale_progress(
+        self, cutoff_time: datetime, user_id: Optional[str] = None
+    ) -> int:
+        """
+        Clear stale progress records older than the cutoff time.
+        
+        Args:
+            cutoff_time: Delete records older than this time
+            user_id: Optional user ID filter (clears for all users if not provided)
+            
+        Returns:
+            Number of records deleted
+        """
+        async with get_user_connection(self.user_id) as conn:
+            try:
+                if user_id:
+                    result = await conn.execute(
+                        """
+                        DELETE FROM analysis_progress 
+                        WHERE updated_at < $1 AND user_id = $2
+                        """,
+                        cutoff_time,
+                        UUID(user_id),
+                    )
+                else:
+                    result = await conn.execute(
+                        """
+                        DELETE FROM analysis_progress 
+                        WHERE updated_at < $1
+                        """,
+                        cutoff_time,
+                    )
+                
+                # Extract number of affected rows from result
+                affected_rows = int(result.split()[-1]) if result.split() else 0
+                logger.info(
+                    f"Cleared {affected_rows} stale progress records older than {cutoff_time}"
+                )
+                return affected_rows
+            except Exception as e:
+                logger.error(f"Failed to clear stale progress records: {e}")
+                return 0

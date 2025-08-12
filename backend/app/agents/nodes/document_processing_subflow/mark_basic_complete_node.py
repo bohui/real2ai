@@ -123,15 +123,31 @@ class MarkBasicCompleteNode(DocumentProcessingNodeBase):
             return state
             
         except Exception as e:
-            return self._handle_error(
-                state,
-                e,
-                f"Failed to mark basic processing complete: {str(e)}",
-                {
-                    "document_id": state.get("document_id"),
-                    "operation": "database_update",
-                    "table": "documents",
-                    "field": "processing_status",
-                    "target_status": ProcessingStatus.BASIC_COMPLETE.value
-                }
-            )
+            # Check if this is an authentication-related error
+            if ("authentication" in str(e).lower() or 
+                "user context" in str(e).lower() or
+                "unauthorized" in str(e).lower()):
+                return self._handle_error(
+                    state,
+                    e,
+                    f"Authentication error while marking processing complete: {str(e)}",
+                    {
+                        "document_id": state.get("document_id"),
+                        "operation": "mark_basic_complete",
+                        "error_type": "authentication",
+                        "requires_user_context": True
+                    }
+                )
+            else:
+                return self._handle_error(
+                    state,
+                    e,
+                    f"Failed to mark basic processing complete: {str(e)}",
+                    {
+                        "document_id": state.get("document_id"),
+                        "operation": "database_update",
+                        "table": "documents",
+                        "field": "processing_status",
+                        "target_status": ProcessingStatus.BASIC_COMPLETE.value
+                    }
+                )

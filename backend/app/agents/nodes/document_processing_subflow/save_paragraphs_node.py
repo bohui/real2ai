@@ -65,13 +65,16 @@ class SaveParagraphsNode(DocumentProcessingNodeBase):
 
             self._log_info(f"Saving {len(paragraph_artifacts)} paragraph references for document {document_id}")
 
-            # Get user ID from auth context and create repository
-            user_id = AuthContext.get_user_id()
-            if not user_id:
+            # Ensure user context is available before repository operations
+            state = self._ensure_user_context(state)
+            if "auth_error" in state:
                 return self._handle_error(
-                    state, ValueError("Missing user authentication"), 
-                    "User ID required for saving paragraphs"
+                    state, ValueError(state["auth_error"]), 
+                    "User authentication required for saving paragraphs"
                 )
+            
+            # Get user ID from validated context and create repository  
+            user_id = AuthContext.get_user_id()
             user_repo = UserDocsRepository(UUID(user_id))
 
             # Prepare paragraph data for batch upsert with enhanced annotations

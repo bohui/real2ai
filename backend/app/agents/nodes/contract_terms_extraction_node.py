@@ -73,10 +73,18 @@ class ContractTermsExtractionNode(BaseNode):
                 error_msg = "No text available for contract terms extraction - document processing may have failed"
 
                 # Log detailed diagnostic information for debugging
-                self._log_warning(
-                    f"Contract terms extraction failed: empty document",
-                    extra=diagnostic_info,
-                )
+                # Use getattr for defensive access in case method is missing
+                log_warning = getattr(self, '_log_warning', None)
+                if log_warning:
+                    log_warning(
+                        f"Contract terms extraction failed: empty document",
+                        extra=diagnostic_info,
+                    )
+                else:
+                    logger.warning(
+                        f"Contract terms extraction failed: empty document",
+                        extra=diagnostic_info
+                    )
 
                 return self._handle_node_error(
                     state,
@@ -136,11 +144,8 @@ class ContractTermsExtractionNode(BaseNode):
 
             # Update state with extracted terms
             state["contract_terms"] = contract_terms
-            if "confidence_scores" not in state or not isinstance(
-                state.get("confidence_scores"), dict
-            ):
-                state["confidence_scores"] = {}
-            state["confidence_scores"]["contract_extraction"] = confidence_score
+            # Defensive access for confidence_scores
+            state.setdefault("confidence_scores", {})["contract_extraction"] = confidence_score
 
             extraction_data = {
                 "contract_terms": contract_terms,

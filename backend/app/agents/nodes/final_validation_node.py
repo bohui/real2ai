@@ -90,7 +90,8 @@ class FinalValidationNode(BaseNode):
             # Update state with validation results
             state["final_validation_result"] = validation_result
             validation_confidence = validation_result.get("overall_confidence", 0.5)
-            state["confidence_scores"]["final_validation"] = validation_confidence
+            # Defensive access for confidence_scores
+            state.setdefault("confidence_scores", {})["final_validation"] = validation_confidence
 
             # Determine overall validation status
             validation_passed = validation_result.get("validation_passed", False)

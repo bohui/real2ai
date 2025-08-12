@@ -69,6 +69,14 @@ class SaveDiagramsNode(DocumentProcessingNodeBase):
             if not pages:
                 return state
             
+            # Ensure user context is available before repository operations
+            state = self._ensure_user_context(state)
+            if "auth_error" in state:
+                return self._handle_error(
+                    state, ValueError(state["auth_error"]), 
+                    "User authentication required for saving diagrams"
+                )
+            
             # Get user context and initialize repos
             user_context = await self.get_user_context()
             await self.initialize(uuid.UUID(user_context.user_id))

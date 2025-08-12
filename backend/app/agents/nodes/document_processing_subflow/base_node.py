@@ -63,6 +63,61 @@ class DocumentProcessingNodeBase(ABC):
         """Get authenticated user client for database operations."""
         return await AuthContext.get_authenticated_client(isolated=True)
     
+    async def get_user_context(self):
+        """Get user context for authentication and authorization."""
+        try:
+            return AuthContext.get_current_context()
+        except Exception as e:
+            self.logger.warning(f"Failed to get user context: {e}")
+            raise ValueError("User authentication required") from e
+    
+    def _ensure_user_context(self, state: DocumentProcessingState) -> DocumentProcessingState:
+        """
+        Ensure user context is available and valid.
+        
+        This method checks that the user context is properly set and accessible
+        for all database operations that require RLS (Row Level Security).
+        
+        Args:
+            state: Current document processing state
+            
+        Returns:
+            Updated state with user context validation
+            
+        Raises:
+            ValueError: If user context is not available or invalid
+        """
+        try:
+            # Verify user context is available
+            user_context = AuthContext.get_current_context()
+            if not user_context or not user_context.user_id:
+                raise ValueError("No user context available - authentication required")
+            
+            # Store user context in state for downstream nodes
+            state = state.copy()
+            state["user_context"] = {
+                "user_id": user_context.user_id,
+                "authenticated": True,
+                "context_type": "user_authenticated"
+            }
+            
+            self._log_debug(
+                f"User context validated for user {user_context.user_id}",
+                user_id=user_context.user_id
+            )
+            
+            return state
+            
+        except Exception as e:
+            self.logger.error(
+                f"User context validation failed: {e}",
+                exc_info=True
+            )
+            # Return state with error instead of raising to allow graceful handling
+            state = state.copy()
+            state["auth_error"] = f"User authentication required: {str(e)}"
+            return state
+    
     def _handle_error(
         self,
         state: DocumentProcessingState,
@@ -94,16 +149,37 @@ class DocumentProcessingNodeBase(ABC):
         if context:
             error_details["context"] = context
             
-        self.logger.error(
-            f"[{self.node_name}] {error_message}: {error}",
-            exc_info=True,
-            extra={"context": context}
+        # Check if this is an authentication error
+        is_auth_error = (
+            "authentication" in str(error).lower() or
+            "user context" in str(error).lower() or
+            "unauthorized" in str(error).lower() or
+            isinstance(error, (PermissionError, ValueError)) and "auth" in str(error).lower()
         )
+        
+        if is_auth_error:
+            error_details["error_category"] = "authentication"
+            self.logger.error(
+                f"[{self.node_name}] AUTHENTICATION ERROR - {error_message}: {error}",
+                exc_info=True,
+                extra={"context": context, "auth_error": True}
+            )
+        else:
+            self.logger.error(
+                f"[{self.node_name}] {error_message}: {error}",
+                exc_info=True,
+                extra={"context": context}
+            )
         
         # Update state with error
         state = state.copy()
         state["error"] = error_message
         state["error_details"] = error_details
+        state["processing_failed"] = True
+        
+        # Mark authentication errors specifically
+        if is_auth_error:
+            state["auth_failed"] = True
         
         return state
     
@@ -155,6 +231,42 @@ class DocumentProcessingNodeBase(ABC):
         """Log warning message with node context."""
         self.logger.warning(f"[{self.node_name}] {message}", extra=kwargs)
         
+    def _check_processing_prerequisites(self, state: DocumentProcessingState) -> bool:
+        """
+        Check if all prerequisites for processing are met.
+        
+        This includes user authentication, document availability, and required state.
+        
+        Args:
+            state: Current document processing state
+            
+        Returns:
+            bool: True if prerequisites are met, False otherwise
+        """
+        try:
+            # Check for authentication error in state
+            if state.get("auth_error") or state.get("auth_failed"):
+                self._log_warning("Processing prerequisites failed: authentication error")
+                return False
+            
+            # Check for user context
+            user_context = state.get("user_context")
+            if not user_context or not user_context.get("authenticated"):
+                self._log_warning("Processing prerequisites failed: no user context")
+                return False
+            
+            # Check for document ID
+            document_id = state.get("document_id")
+            if not document_id:
+                self._log_warning("Processing prerequisites failed: no document_id")
+                return False
+            
+            return True
+            
+        except Exception as e:
+            self._log_warning(f"Error checking prerequisites: {e}")
+            return False
+    
     def __repr__(self) -> str:
         """String representation of the node."""
         return f"{self.__class__.__name__}(node_name='{self.node_name}')"

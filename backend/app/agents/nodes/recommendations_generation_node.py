@@ -86,7 +86,8 @@ class RecommendationsGenerationNode(BaseNode):
             recommendations_confidence = recommendations_result.get(
                 "overall_confidence", 0.5
             )
-            state["confidence_scores"]["recommendations"] = recommendations_confidence
+            # Defensive access for confidence_scores
+            state.setdefault("confidence_scores", {})["recommendations"] = recommendations_confidence
 
             recommendations_data = {
                 "recommendations_result": recommendations_result,

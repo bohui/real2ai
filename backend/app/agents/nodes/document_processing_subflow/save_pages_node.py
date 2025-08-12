@@ -114,6 +114,14 @@ class SavePagesNode(DocumentProcessingNodeBase):
                 self._record_success(duration)
                 return state
             
+            # Ensure user context is available before repository operations
+            state = self._ensure_user_context(state)
+            if "auth_error" in state:
+                return self._handle_error(
+                    state, ValueError(state["auth_error"]), 
+                    "User authentication required for saving pages"
+                )
+            
             # Get user ID for repository initialization
             user_context = await self.get_user_context()
             user_id = uuid.UUID(user_context.user_id)
