@@ -408,6 +408,7 @@ class ContractAnalysisWorkflow:
         # Diagnostic: capture loop/thread/auth context before execution
         try:
             from app.core.auth_context import AuthContext
+
             auth_ctx = AuthContext.create_task_context()
             logger.debug(
                 "[Workflow] _run_async_node pre-exec",
@@ -432,6 +433,7 @@ class ContractAnalysisWorkflow:
             def run_in_thread():
                 try:
                     from app.core.auth_context import AuthContext as _AC
+
                     if auth_ctx:
                         _AC.restore_task_context(auth_ctx)
                 except Exception:
@@ -440,7 +442,9 @@ class ContractAnalysisWorkflow:
                 loop = asyncio.new_event_loop()
                 try:
                     # Propagate context so nested LangSmith traces attach to parent run
-                    return current_context.run(lambda: loop.run_until_complete(node_coroutine))
+                    return current_context.run(
+                        lambda: loop.run_until_complete(node_coroutine)
+                    )
                 finally:
                     loop.close()
 
@@ -450,6 +454,7 @@ class ContractAnalysisWorkflow:
         except RuntimeError:
             # No running loop; use or create a persistent loop for this workflow instance
             import asyncio as _asyncio
+
             if self._event_loop is None or self._event_loop.is_closed():
                 self._event_loop = _asyncio.new_event_loop()
             try:
@@ -459,6 +464,7 @@ class ContractAnalysisWorkflow:
                 pass
             try:
                 from app.core.auth_context import AuthContext
+
                 logger.debug(
                     "[Workflow] _run_async_node post-exec (persistent loop)",
                     extra={
