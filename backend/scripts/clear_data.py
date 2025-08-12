@@ -147,6 +147,19 @@ class DatabaseCleaner:
     db_url: str | None
     use_service_role: bool = True
 
+    async def _table_exists(self, conn: asyncpg.Connection, table: str) -> bool:
+        """Check table existence without raising when missing.
+
+        Uses to_regclass which returns NULL if the relation does not exist.
+        """
+        try:
+            exists = await conn.fetchval("SELECT to_regclass($1) IS NOT NULL", table)
+            return bool(exists)
+        except Exception as e:
+            # If existence check itself fails, be conservative and treat as missing
+            logger.debug(f"Existence check failed for {table}: {e}")
+            return False
+
     @asynccontextmanager
     async def _direct_connection(self):
         if not self.db_url:
@@ -182,19 +195,23 @@ class DatabaseCleaner:
         async with connection_ctx as conn:
             for table in tables:
                 try:
+                    # Skip quickly if table doesn't exist to avoid transaction aborts
+                    if not await self._table_exists(conn, table):
+                        logger.info(f"Skipping missing table: {table}")
+                        continue
+
+                    count_before = await self._get_row_count(conn, table)
+                    logger.info(f"Deleting from {table} (rows before: {count_before})")
                     async with conn.transaction():
-                        count_before = await self._get_row_count(conn, table)
-                        logger.info(
-                            f"Deleting from {table} (rows before: {count_before})"
-                        )
                         await conn.execute(f"DELETE FROM {table}")
-                        count_after = await self._get_row_count(conn, table)
-                        if count_after == 0:
-                            logger.info(f"Cleared {table}")
-                        else:
-                            logger.warning(
-                                f"{table} still has {count_after} rows after delete"
-                            )
+
+                    count_after = await self._get_row_count(conn, table)
+                    if count_after == 0:
+                        logger.info(f"Cleared {table}")
+                    else:
+                        logger.warning(
+                            f"{table} still has {count_after} rows after delete"
+                        )
                 except asyncpg.exceptions.UndefinedTableError:
                     logger.info(f"Skipping missing table: {table}")
                 except Exception as e:
@@ -224,6 +241,9 @@ class DatabaseCleaner:
 
             for table in tables:
                 try:
+                    if not await self._table_exists(conn, table):
+                        logger.info(f"Skipping missing table during TRUNCATE: {table}")
+                        continue
                     async with conn.transaction():
                         logger.warning("Executing TRUNCATE on: %s", table)
                         await conn.execute(f"TRUNCATE TABLE {table} {opts_sql}")

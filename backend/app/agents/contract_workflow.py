@@ -78,7 +78,7 @@ logger = logging.getLogger(__name__)
 class ContractAnalysisWorkflow:
     """
     Refactored LangGraph workflow with node-based architecture.
-    
+
     This version separates processing logic into specialized node classes,
     keeping the main workflow class focused on:
     - Configuration management
@@ -86,14 +86,14 @@ class ContractAnalysisWorkflow:
     - Workflow orchestration
     - State management
     - Performance metrics
-    
+
     Node Architecture Benefits:
     - Better code organization and maintainability
     - Easier testing of individual components
     - Clear separation of concerns
     - Reusable node components
     - Simplified debugging and monitoring
-    
+
     Configuration remains the same as the original workflow for backwards compatibility.
     """
 
@@ -110,22 +110,24 @@ class ContractAnalysisWorkflow:
         enable_fallbacks: bool = True,
     ):
         """Initialize the workflow with configuration and create node instances."""
-        
+
         # Initialize clients (will be set up in initialize method)
         self.openai_client = None
         self.gemini_client = None
-        
+
         # Model configuration
         if model_name is None:
             try:
                 from app.clients.openai.config import OpenAISettings
+
                 self.model_name = OpenAISettings().openai_model_name
             except Exception:
                 from app.clients.openai.config import DEFAULT_MODEL
+
                 self.model_name = DEFAULT_MODEL
         else:
             self.model_name = model_name
-        
+
         self.openai_api_base = openai_api_base
 
         # Initialize prompt manager
@@ -162,16 +164,32 @@ class ContractAnalysisWorkflow:
 
         # Initialize output parsers (kept for compatibility and shared access)
         self.risk_parser = create_parser(RiskAnalysisOutput, strict_mode=False)
-        self.recommendations_parser = create_parser(RecommendationsOutput, strict_mode=False)
-        
+        self.recommendations_parser = create_parser(
+            RecommendationsOutput, strict_mode=False
+        )
+
         self.structured_parsers = {
-            "risk_analysis": create_parser(RiskAnalysisOutput, strict_mode=False, retry_on_failure=True),
-            "recommendations": create_parser(RecommendationsOutput, strict_mode=False, retry_on_failure=True),
-            "contract_terms": create_parser(ContractTermsOutput, strict_mode=False, retry_on_failure=True),
-            "compliance_analysis": create_parser(ComplianceAnalysisOutput, strict_mode=False, retry_on_failure=True),
-            "terms_validation": create_parser(ContractTermsValidationOutput, strict_mode=False, retry_on_failure=True),
-            "document_quality": create_parser(DocumentQualityMetrics, strict_mode=False, retry_on_failure=True),
-            "workflow_validation": create_parser(WorkflowValidationOutput, strict_mode=False, retry_on_failure=True),
+            "risk_analysis": create_parser(
+                RiskAnalysisOutput, strict_mode=False, retry_on_failure=True
+            ),
+            "recommendations": create_parser(
+                RecommendationsOutput, strict_mode=False, retry_on_failure=True
+            ),
+            "contract_terms": create_parser(
+                ContractTermsOutput, strict_mode=False, retry_on_failure=True
+            ),
+            "compliance_analysis": create_parser(
+                ComplianceAnalysisOutput, strict_mode=False, retry_on_failure=True
+            ),
+            "terms_validation": create_parser(
+                ContractTermsValidationOutput, strict_mode=False, retry_on_failure=True
+            ),
+            "document_quality": create_parser(
+                DocumentQualityMetrics, strict_mode=False, retry_on_failure=True
+            ),
+            "workflow_validation": create_parser(
+                WorkflowValidationOutput, strict_mode=False, retry_on_failure=True
+            ),
         }
 
         # Performance metrics
@@ -186,9 +204,14 @@ class ContractAnalysisWorkflow:
 
         # Environment-aware logging
         self._settings = get_settings()
-        self._is_production = self._settings.environment.lower() in ("production", "prod", "live")
+        self._is_production = self._settings.environment.lower() in (
+            "production",
+            "prod",
+            "live",
+        )
         self._verbose_logging = bool(
-            self._settings.enhanced_workflow_detailed_logging and not self._is_production
+            self._settings.enhanced_workflow_detailed_logging
+            and not self._is_production
         )
 
         # Initialize node instances
@@ -196,7 +219,7 @@ class ContractAnalysisWorkflow:
 
         # Create workflow
         self.workflow = self._create_workflow()
-        
+
         logger.info(
             f"Refactored ContractAnalysisWorkflow initialized with {len(self.nodes)} nodes, "
             f"extraction config: {self.extraction_config}, "
@@ -209,22 +232,22 @@ class ContractAnalysisWorkflow:
         # Document Processing Nodes
         self.document_processing_node = DocumentProcessingNode(self)
         self.document_quality_validation_node = DocumentQualityValidationNode(self)
-        
+
         # Contract Analysis Nodes
         self.contract_terms_extraction_node = ContractTermsExtractionNode(self)
         self.terms_validation_node = TermsValidationNode(self)
-        
+
         # Compliance Analysis Nodes
         self.compliance_analysis_node = ComplianceAnalysisNode(self)
         self.diagram_analysis_node = DiagramAnalysisNode(self)
-        
+
         # Risk Assessment Nodes
         self.risk_assessment_node = RiskAssessmentNode(self)
         self.recommendations_generation_node = RecommendationsGenerationNode(self)
-        
+
         # Validation Nodes
         self.final_validation_node = FinalValidationNode(self)
-        
+
         # Utility Nodes
         self.input_validation_node = InputValidationNode(self)
         self.report_compilation_node = ReportCompilationNode(self)
@@ -259,9 +282,9 @@ class ContractAnalysisWorkflow:
 
             # Set clients in all nodes that need them
             for node in self.nodes.values():
-                if hasattr(node, 'openai_client'):
+                if hasattr(node, "openai_client"):
                     node.openai_client = self.openai_client
-                if hasattr(node, 'gemini_client'):
+                if hasattr(node, "gemini_client"):
                     node.gemini_client = self.gemini_client
 
             logger.info("Workflow clients initialized successfully")
@@ -286,8 +309,12 @@ class ContractAnalysisWorkflow:
 
         # Add validation nodes if enabled
         if self.enable_validation:
-            workflow.add_node("validate_document_quality", self.validate_document_quality_step)
-            workflow.add_node("validate_terms_completeness", self.validate_terms_completeness_step)
+            workflow.add_node(
+                "validate_document_quality", self.validate_document_quality_step
+            )
+            workflow.add_node(
+                "validate_terms_completeness", self.validate_terms_completeness_step
+            )
             workflow.add_node("validate_final_output", self.validate_final_output_step)
 
         # Add utility nodes
@@ -325,7 +352,11 @@ class ContractAnalysisWorkflow:
             "process_document",
             self.check_processing_success,
             {
-                "success": "validate_document_quality" if self.enable_validation else "extract_terms",
+                "success": (
+                    "validate_document_quality"
+                    if self.enable_validation
+                    else "extract_terms"
+                ),
                 "retry": "retry_processing",
                 "error": "handle_error",
             },
@@ -346,7 +377,11 @@ class ContractAnalysisWorkflow:
             "extract_terms",
             self.check_extraction_quality,
             {
-                "high_confidence": "validate_terms_completeness" if self.enable_validation else "analyze_compliance",
+                "high_confidence": (
+                    "validate_terms_completeness"
+                    if self.enable_validation
+                    else "analyze_compliance"
+                ),
                 "low_confidence": "retry_processing",
                 "error": "handle_error",
             },
@@ -362,23 +397,68 @@ class ContractAnalysisWorkflow:
     def _run_async_node(self, node_coroutine):
         """Helper to run async node execution in sync context."""
         import asyncio
+        import threading
+
+        # Diagnostic: capture loop/thread/auth context before execution
+        try:
+            from app.core.auth_context import AuthContext
+
+            logger.debug(
+                "[Workflow] _run_async_node pre-exec",
+                extra={
+                    "thread": threading.current_thread().name,
+                    "has_running_loop": hasattr(asyncio, "get_running_loop"),
+                    "user_id": AuthContext.get_user_id(),
+                    "has_token": bool(AuthContext.get_user_token()),
+                },
+            )
+        except Exception:
+            pass
         try:
             # Use create_task if we're in an async context, otherwise asyncio.run
             loop = asyncio.get_running_loop()
             # We're in an async context - this shouldn't happen for LangGraph nodes
             # but handle it gracefully
             import concurrent.futures
-            import threading
-            
+
             def run_in_thread():
                 return asyncio.run(node_coroutine)
-                
+
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
                 future = executor.submit(run_in_thread)
-                return future.result()
+                result = future.result()
+                # Diagnostic: post-exec
+                try:
+                    from app.core.auth_context import AuthContext
+
+                    logger.debug(
+                        "[Workflow] _run_async_node post-exec (threaded)",
+                        extra={
+                            "thread": threading.current_thread().name,
+                            "user_id": AuthContext.get_user_id(),
+                            "has_token": bool(AuthContext.get_user_token()),
+                        },
+                    )
+                except Exception:
+                    pass
+                return result
         except RuntimeError:
             # No event loop running, safe to use asyncio.run
-            return asyncio.run(node_coroutine)
+            result = asyncio.run(node_coroutine)
+            try:
+                from app.core.auth_context import AuthContext
+
+                logger.debug(
+                    "[Workflow] _run_async_node post-exec (asyncio.run)",
+                    extra={
+                        "thread": threading.current_thread().name,
+                        "user_id": AuthContext.get_user_id(),
+                        "has_token": bool(AuthContext.get_user_token()),
+                    },
+                )
+            except Exception:
+                pass
+            return result
 
     @langsmith_trace(name="validate_input", run_type="tool")
     def validate_input(self, state: RealEstateAgentState) -> RealEstateAgentState:
@@ -391,52 +471,74 @@ class ContractAnalysisWorkflow:
         return self._run_async_node(self.document_processing_node.execute(state))
 
     @langsmith_trace(name="validate_document_quality", run_type="tool")
-    def validate_document_quality_step(self, state: RealEstateAgentState) -> RealEstateAgentState:
+    def validate_document_quality_step(
+        self, state: RealEstateAgentState
+    ) -> RealEstateAgentState:
         """Execute document quality validation node."""
-        return self._run_async_node(self.document_quality_validation_node.execute(state))
+        return self._run_async_node(
+            self.document_quality_validation_node.execute(state)
+        )
 
     @langsmith_trace(name="extract_contract_terms", run_type="chain")
-    def extract_contract_terms(self, state: RealEstateAgentState) -> RealEstateAgentState:
+    def extract_contract_terms(
+        self, state: RealEstateAgentState
+    ) -> RealEstateAgentState:
         """Execute contract terms extraction node."""
         return self._run_async_node(self.contract_terms_extraction_node.execute(state))
 
     @langsmith_trace(name="validate_terms_completeness", run_type="tool")
-    def validate_terms_completeness_step(self, state: RealEstateAgentState) -> RealEstateAgentState:
+    def validate_terms_completeness_step(
+        self, state: RealEstateAgentState
+    ) -> RealEstateAgentState:
         """Execute terms validation node."""
         return self._run_async_node(self.terms_validation_node.execute(state))
 
     @langsmith_trace(name="analyze_australian_compliance", run_type="chain")
-    def analyze_australian_compliance(self, state: RealEstateAgentState) -> RealEstateAgentState:
+    def analyze_australian_compliance(
+        self, state: RealEstateAgentState
+    ) -> RealEstateAgentState:
         """Execute compliance analysis node."""
         return self._run_async_node(self.compliance_analysis_node.execute(state))
 
     @langsmith_trace(name="analyze_contract_diagrams", run_type="chain")
-    def analyze_contract_diagrams(self, state: RealEstateAgentState) -> RealEstateAgentState:
+    def analyze_contract_diagrams(
+        self, state: RealEstateAgentState
+    ) -> RealEstateAgentState:
         """Execute diagram analysis node."""
         return self._run_async_node(self.diagram_analysis_node.execute(state))
 
     @langsmith_trace(name="assess_contract_risks", run_type="chain")
-    def assess_contract_risks(self, state: RealEstateAgentState) -> RealEstateAgentState:
+    def assess_contract_risks(
+        self, state: RealEstateAgentState
+    ) -> RealEstateAgentState:
         """Execute risk assessment node."""
         return self._run_async_node(self.risk_assessment_node.execute(state))
 
     @langsmith_trace(name="generate_recommendations", run_type="chain")
-    def generate_recommendations(self, state: RealEstateAgentState) -> RealEstateAgentState:
+    def generate_recommendations(
+        self, state: RealEstateAgentState
+    ) -> RealEstateAgentState:
         """Execute recommendations generation node."""
         return self._run_async_node(self.recommendations_generation_node.execute(state))
 
     @langsmith_trace(name="validate_final_output", run_type="tool")
-    def validate_final_output_step(self, state: RealEstateAgentState) -> RealEstateAgentState:
+    def validate_final_output_step(
+        self, state: RealEstateAgentState
+    ) -> RealEstateAgentState:
         """Execute final validation node."""
         return self._run_async_node(self.final_validation_node.execute(state))
 
     @langsmith_trace(name="compile_analysis_report", run_type="chain")
-    def compile_analysis_report(self, state: RealEstateAgentState) -> RealEstateAgentState:
+    def compile_analysis_report(
+        self, state: RealEstateAgentState
+    ) -> RealEstateAgentState:
         """Execute report compilation node."""
         return self._run_async_node(self.report_compilation_node.execute(state))
 
     @langsmith_trace(name="handle_processing_error", run_type="tool")
-    def handle_processing_error(self, state: RealEstateAgentState) -> RealEstateAgentState:
+    def handle_processing_error(
+        self, state: RealEstateAgentState
+    ) -> RealEstateAgentState:
         """Execute error handling node."""
         return self._run_async_node(self.error_handling_node.execute(state))
 
@@ -459,7 +561,7 @@ class ContractAnalysisWorkflow:
         """Check document quality validation results."""
         quality_metrics = state.get("document_quality_metrics", {})
         overall_confidence = quality_metrics.get("overall_confidence", 0)
-        
+
         if overall_confidence >= 0.6:
             return "quality_passed"
         elif state.get("retry_attempts", 0) < 2:
@@ -471,16 +573,17 @@ class ContractAnalysisWorkflow:
         """Check contract terms extraction quality."""
         confidence_scores = state.get("confidence_scores", {})
         extraction_confidence = confidence_scores.get("contract_extraction", 0)
-        
+
         threshold = self.extraction_config.get("confidence_threshold", 0.3)
-        
+
         if extraction_confidence >= threshold:
             return "high_confidence"
-        elif state.get("retry_attempts", 0) < self.extraction_config.get("max_retries", 2):
+        elif state.get("retry_attempts", 0) < self.extraction_config.get(
+            "max_retries", 2
+        ):
             return "low_confidence"
         else:
             return "error"
-
 
     @langsmith_trace(name="contract_analysis_workflow", run_type="chain")
     async def analyze_contract(self, state: RealEstateAgentState) -> Dict[str, Any]:
@@ -489,22 +592,22 @@ class ContractAnalysisWorkflow:
             # Update metrics
             self._metrics["total_analyses"] += 1
             start_time = datetime.now(UTC)
-            
+
             # Execute workflow
             result = await self.workflow.ainvoke(state)
-            
+
             # Update performance metrics
             processing_time = (datetime.now(UTC) - start_time).total_seconds()
             self._metrics["total_processing_time"] += processing_time
             self._metrics["average_processing_time"] = (
                 self._metrics["total_processing_time"] / self._metrics["total_analyses"]
             )
-            
+
             if result.get("processing_status") == ProcessingStatus.COMPLETED:
                 self._metrics["successful_parses"] += 1
-            
+
             return result
-            
+
         except Exception as e:
             logger.error(f"Workflow execution failed: {e}")
             self._metrics["validation_failures"] += 1
@@ -513,13 +616,13 @@ class ContractAnalysisWorkflow:
     def get_metrics(self) -> Dict[str, Any]:
         """Get workflow performance metrics including node-specific metrics."""
         workflow_metrics = self._metrics.copy()
-        
+
         # Add node-specific metrics
         node_metrics = {}
         for node_name, node in self.nodes.items():
-            if hasattr(node, 'get_node_metrics'):
+            if hasattr(node, "get_node_metrics"):
                 node_metrics[node_name] = node.get_node_metrics()
-        
+
         return {
             "workflow_metrics": workflow_metrics,
             "node_metrics": node_metrics,
@@ -528,7 +631,7 @@ class ContractAnalysisWorkflow:
                 "enable_validation": self.enable_validation,
                 "enable_quality_checks": self.enable_quality_checks,
                 "enable_fallbacks": self.enable_fallbacks,
-            }
+            },
         }
 
     def reset_metrics(self):
@@ -541,10 +644,10 @@ class ContractAnalysisWorkflow:
             "total_processing_time": 0.0,
             "average_processing_time": 0.0,
         }
-        
+
         # Reset node metrics
         for node in self.nodes.values():
-            if hasattr(node, 'reset_node_metrics'):
+            if hasattr(node, "reset_node_metrics"):
                 node.reset_node_metrics()
 
     def __repr__(self) -> str:

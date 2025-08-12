@@ -121,6 +121,13 @@ class DocumentsRepository:
             Document or None if not found
         """
         async with get_user_connection(self.user_id) as conn:
+            logger.debug(
+                "[DocumentsRepository] get_document",
+                extra={
+                    "document_id": str(document_id),
+                    "repo_user_id": str(self.user_id) if self.user_id else None,
+                },
+            )
             row = await conn.fetchrow(
                 """
                 SELECT id, user_id, original_filename, storage_path, file_type, file_size, 
@@ -134,8 +141,16 @@ class DocumentsRepository:
             )
 
             if not row:
+                logger.debug(
+                    "[DocumentsRepository] get_document: not found",
+                    extra={"document_id": str(document_id)},
+                )
                 return None
 
+            logger.debug(
+                "[DocumentsRepository] get_document: row fetched",
+                extra={"document_id": str(document_id)},
+            )
             return Document(
                 id=row["id"],
                 user_id=row["user_id"],
@@ -455,7 +470,7 @@ class DocumentsRepository:
                             content_hash, processing_status, processing_started_at,
                             processing_completed_at, processing_errors, artifact_text_id,
                             total_pages, total_word_count, created_at, updated_at"""
-            
+
             rows = await conn.fetch(
                 f"""
                 SELECT {columns}
@@ -467,7 +482,17 @@ class DocumentsRepository:
                 UUID(user_id),
             )
 
-            if columns == "*" or "id" in columns:
+            # Only construct full `Document` objects when selecting all columns
+            logger.debug(
+                "[DocumentsRepository] get_documents_by_content_hash fetched rows",
+                extra={
+                    "content_hash": content_hash,
+                    "user_id": user_id,
+                    "columns": columns,
+                    "row_count": len(rows),
+                },
+            )
+            if columns.strip() == "*":
                 return [
                     Document(
                         id=row["id"],
@@ -489,9 +514,14 @@ class DocumentsRepository:
                     )
                     for row in rows
                 ]
-            else:
-                # Return raw dictionaries for partial column selections
+            # Return raw dictionaries for partial column selections
+            try:
                 return [dict(row) for row in rows]
+            except Exception as e:
+                logger.warning(
+                    f"[DocumentsRepository] Failed to map rows to dict for columns {columns}: {e}"
+                )
+                return []
 
     async def update_processing_results(
         self, document_id: UUID, results: Dict[str, Any]

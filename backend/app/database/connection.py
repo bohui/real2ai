@@ -255,6 +255,16 @@ async def _setup_user_session(
             claims = jwt.decode(user_token, options={"verify_signature": False})
 
             # Set session GUCs for RLS
+            logger.debug(
+                "[DB] Setting user session GUCs",
+                extra={
+                    "user_id": str(user_id),
+                    "has_claims": True,
+                    "loop_is_closed": getattr(
+                        asyncio.get_event_loop(), "is_closed", lambda: None
+                    )(),
+                },
+            )
             await connection.execute(
                 "SELECT set_config('request.jwt.claims', $1, false)", json.dumps(claims)
             )
@@ -268,7 +278,13 @@ async def _setup_user_session(
             logger.debug(f"Set user session context for user {user_id}")
 
         except Exception as e:
-            logger.error(f"Failed to set user session context: {e}")
+            logger.error(
+                f"Failed to set user session context: {e}",
+                extra={
+                    "user_id": str(user_id) if user_id else None,
+                    "event_loop_closed": True,
+                },
+            )
             # Set minimal auth context
             await connection.execute(
                 "SELECT set_config('role', $1, false)", "authenticated"
@@ -289,6 +305,7 @@ async def _reset_session_gucs(connection: asyncpg.Connection):
         connection: Database connection
     """
     try:
+        logger.debug("[DB] Resetting session GUCs to anon")
         await connection.execute("SELECT set_config('request.jwt.claims', NULL, false)")
         await connection.execute("SELECT set_config('role', 'anon', false)")
         await connection.execute(
@@ -327,6 +344,7 @@ async def get_service_role_connection() -> AsyncGenerator[asyncpg.Connection, No
     """
     pool = await ConnectionPoolManager.get_service_pool()
     connection = await pool.acquire()
+    logger.debug("[DB] Acquired service-role connection from pool")
 
     try:
         # Ensure service-role RLS context is present for this connection
@@ -334,6 +352,7 @@ async def get_service_role_connection() -> AsyncGenerator[asyncpg.Connection, No
         yield connection
     finally:
         await pool.release(connection)
+        logger.debug("[DB] Released service-role connection back to pool")
 
 
 @asynccontextmanager
@@ -365,6 +384,10 @@ async def get_user_connection(
 
     pool = await ConnectionPoolManager.get_user_pool(user_id)
     connection = await pool.acquire()
+    logger.debug(
+        "[DB] Acquired user connection",
+        extra={"user_id": str(user_id), "pool_mode": settings.db_pool_mode},
+    )
 
     try:
         # Set up user session context
@@ -376,6 +399,10 @@ async def get_user_connection(
             await _reset_session_gucs(connection)
 
         await pool.release(connection)
+        logger.debug(
+            "[DB] Released user connection",
+            extra={"user_id": str(user_id), "pool_mode": settings.db_pool_mode},
+        )
 
 
 async def execute_raw_sql(query: str, *args, user_id: Optional[UUID] = None) -> Any:

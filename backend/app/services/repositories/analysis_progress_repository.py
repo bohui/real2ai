@@ -51,10 +51,7 @@ class AnalysisProgressRepository:
         self.user_id = user_id
 
     async def upsert_progress(
-        self, 
-        content_hash: str, 
-        user_id: str, 
-        progress_data: Dict[str, Any]
+        self, content_hash: str, user_id: str, progress_data: Dict[str, Any]
     ) -> bool:
         """
         Upsert analysis progress record with content_hash + user_id unique constraint.
@@ -75,6 +72,33 @@ class AnalysisProgressRepository:
         """
         async with get_user_connection(self.user_id) as conn:
             try:
+                # Diagnostic logging for parameter types and values
+                step_started_at = progress_data.get("step_started_at")
+                logger.debug(
+                    "[AnalysisProgressRepository] Upsert called",
+                    extra={
+                        "content_hash": content_hash,
+                        "user_id": user_id,
+                        "current_step": progress_data.get("current_step"),
+                        "progress_percent": progress_data.get("progress_percent"),
+                        "status": progress_data.get("status"),
+                        "step_started_at_type": type(step_started_at).__name__,
+                        "has_error_message": bool(progress_data.get("error_message")),
+                    },
+                )
+                # Normalize datetime: ensure step_started_at is a datetime instance
+                norm_step_started_at = progress_data.get("step_started_at")
+                if isinstance(norm_step_started_at, str):
+                    try:
+                        norm_step_started_at = norm_step_started_at.replace(
+                            "Z", "+00:00"
+                        )
+                        norm_step_started_at = datetime.fromisoformat(
+                            norm_step_started_at
+                        )
+                    except Exception:
+                        norm_step_started_at = None
+
                 await conn.execute(
                     """
                     INSERT INTO analysis_progress (
@@ -98,21 +122,36 @@ class AnalysisProgressRepository:
                     progress_data.get("current_step"),
                     progress_data.get("progress_percent"),
                     progress_data.get("step_description"),
-                    progress_data.get("step_started_at"),
+                    norm_step_started_at,
                     progress_data.get("estimated_completion_minutes"),
                     progress_data.get("status", "in_progress"),
                     progress_data.get("error_message"),
                 )
+                logger.debug(
+                    "[AnalysisProgressRepository] Upsert succeeded",
+                    extra={
+                        "content_hash": content_hash,
+                        "user_id": user_id,
+                        "current_step": progress_data.get("current_step"),
+                    },
+                )
                 return True
             except Exception as e:
-                logger.error(f"Failed to upsert analysis progress: {e}")
+                logger.error(
+                    f"Failed to upsert analysis progress: {e}",
+                    extra={
+                        "content_hash": content_hash,
+                        "user_id": user_id,
+                        "step_started_at_repr": repr(
+                            progress_data.get("step_started_at")
+                        ),
+                        "progress_keys": list(progress_data.keys()),
+                    },
+                )
                 return False
 
     async def get_latest_progress(
-        self, 
-        content_hash: str, 
-        user_id: str,
-        columns: Optional[str] = None
+        self, content_hash: str, user_id: str, columns: Optional[str] = None
     ) -> Optional[Dict[str, Any]]:
         """
         Get latest progress record for content_hash and user_id.
@@ -126,7 +165,9 @@ class AnalysisProgressRepository:
             Progress record dictionary or None if not found
         """
         if columns is None:
-            columns = "current_step, progress_percent, updated_at, status, error_message"
+            columns = (
+                "current_step, progress_percent, updated_at, status, error_message"
+            )
 
         async with get_user_connection(self.user_id) as conn:
             try:
@@ -151,11 +192,11 @@ class AnalysisProgressRepository:
                 return None
 
     async def get_progress_records(
-        self, 
+        self,
         filters: Dict[str, Any],
         columns: Optional[str] = None,
         order_by: str = "updated_at DESC",
-        limit: Optional[int] = None
+        limit: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         """
         Get progress records with flexible filtering.
@@ -188,14 +229,14 @@ class AnalysisProgressRepository:
                         params.append(value)
 
                 where_clause = " AND ".join(where_clauses) if where_clauses else "TRUE"
-                
+
                 query = f"""
                     SELECT {columns}
                     FROM analysis_progress
                     WHERE {where_clause}
                     ORDER BY {order_by}
                 """
-                
+
                 if limit:
                     query += f" LIMIT {limit}"
 
@@ -232,11 +273,11 @@ class AnalysisProgressRepository:
                 return False
 
     async def update_progress_status(
-        self, 
-        content_hash: str, 
-        user_id: str, 
+        self,
+        content_hash: str,
+        user_id: str,
         status: str,
-        error_message: Optional[str] = None
+        error_message: Optional[str] = None,
     ) -> bool:
         """
         Update progress status for content_hash and user_id.
@@ -280,7 +321,9 @@ class AnalysisProgressRepository:
                 logger.error(f"Failed to update progress status: {e}")
                 return False
 
-    async def get_active_analyses(self, user_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    async def get_active_analyses(
+        self, user_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
         """
         Get all active (in_progress) analyses for a user.
 

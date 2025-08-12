@@ -52,7 +52,7 @@ class DocumentProcessingNode(BaseNode):
             # Validate document metadata
             document_data: Dict[str, Any] = state.get("document_data", {})
             document_id = document_data.get("document_id")
-            
+
             if not document_id:
                 error_msg = "Missing document_id in document_data"
                 self._log_step_debug(error_msg, state)
@@ -62,27 +62,42 @@ class DocumentProcessingNode(BaseNode):
 
             # Use the new document processing subflow via Celery task
             use_llm = self.use_llm_config.get("document_processing", True)
-            
+
             # Import the task here to avoid circular imports
             from app.tasks.user_aware_tasks import run_document_processing_subflow
             from app.core.auth_context import AuthContext
-            
+
             # Get current user ID for task context
             user_id = AuthContext.get_user_id()
+            if not user_id:
+                # Log diagnostic context to help identify why auth is missing
+                try:
+                    from app.core.auth_context import AuthContext as AC
+
+                    self._log_step_debug(
+                        "Missing AuthContext; cannot proceed with document processing",
+                        state,
+                        {
+                            "doc_id": document_id,
+                            "has_token": bool(AC.get_user_token()),
+                            "thread": __import__("threading").current_thread().name,
+                        },
+                    )
+                except Exception:
+                    pass
             if not user_id:
                 return self._handle_node_error(
                     state,
                     ValueError("User authentication required"),
                     "User authentication context required for document processing",
-                    {"document_id": document_id, "use_llm": use_llm}
+                    {"document_id": document_id, "use_llm": use_llm},
                 )
 
             # Launch document processing subflow task
             task_result = run_document_processing_subflow.apply_async(
-                args=[document_id, user_id, use_llm],
-                kwargs={}
+                args=[document_id, user_id, use_llm], kwargs={}
             )
-            
+
             # Wait for task completion (with timeout)
             try:
                 result = task_result.get(timeout=300)  # 5 minute timeout
@@ -96,8 +111,8 @@ class DocumentProcessingNode(BaseNode):
                         "document_id": document_id,
                         "task_id": task_result.id,
                         "use_llm": use_llm,
-                        "operation": "subflow_task"
-                    }
+                        "operation": "subflow_task",
+                    },
                 )
 
             if not summary or not summary.get("success"):
@@ -110,16 +125,22 @@ class DocumentProcessingNode(BaseNode):
                     state,
                     Exception(error_msg),
                     "Document processing failed",
-                    {"document_id": document_id, "use_llm": use_llm}
+                    {"document_id": document_id, "use_llm": use_llm},
                 )
 
             # Extract text and metadata
-            extracted_text = summary.get("full_text") or summary.get("extracted_text", "")
+            extracted_text = summary.get("full_text") or summary.get(
+                "extracted_text", ""
+            )
             extraction_method = summary.get("extraction_method", "unknown")
             extraction_confidence = summary.get("extraction_confidence", 0.0)
 
             # Assess text quality
-            text_quality = self._assess_text_quality(extracted_text) if self.enable_quality_checks else {"score": 0.8, "issues": []}
+            text_quality = (
+                self._assess_text_quality(extracted_text)
+                if self.enable_quality_checks
+                else {"score": 0.8, "issues": []}
+            )
 
             # Validate extracted text quality
             if not extracted_text or len(extracted_text.strip()) < 100:
@@ -127,7 +148,7 @@ class DocumentProcessingNode(BaseNode):
                     state,
                     Exception("Insufficient text content"),
                     "Insufficient text content extracted from document",
-                    {"character_count": len(extracted_text or "")}
+                    {"character_count": len(extracted_text or "")},
                 )
 
             # Update confidence scores
@@ -158,17 +179,22 @@ class DocumentProcessingNode(BaseNode):
             self._log_step_debug(
                 f"Document processing completed: {len(extracted_text)} chars extracted (LLM: {use_llm})",
                 state,
-                {"extraction_method": extraction_method, "confidence": extraction_confidence}
+                {
+                    "extraction_method": extraction_method,
+                    "confidence": extraction_confidence,
+                },
             )
 
-            return self.update_state_step(state, "document_processed", data=updated_data)
+            return self.update_state_step(
+                state, "document_processed", data=updated_data
+            )
 
         except Exception as e:
             return self._handle_node_error(
                 state,
                 e,
                 f"Document processing failed: {str(e)}",
-                {"use_llm": self.use_llm_config.get("document_processing", True)}
+                {"use_llm": self.use_llm_config.get("document_processing", True)},
             )
 
     def _assess_text_quality(self, text: str) -> Dict[str, Any]:
@@ -224,19 +250,33 @@ class DocumentProcessingNode(BaseNode):
 
         # Enhanced contract keyword detection
         contract_keywords = [
-            "contract", "agreement", "purchase", "sale", "property", "vendor", 
-            "purchaser", "settlement", "deposit", "conditions", "title", "transfer"
+            "contract",
+            "agreement",
+            "purchase",
+            "sale",
+            "property",
+            "vendor",
+            "purchaser",
+            "settlement",
+            "deposit",
+            "conditions",
+            "title",
+            "transfer",
         ]
-        
-        keyword_matches = sum(1 for keyword in contract_keywords if keyword.lower() in text.lower())
+
+        keyword_matches = sum(
+            1 for keyword in contract_keywords if keyword.lower() in text.lower()
+        )
         keyword_coverage = keyword_matches / len(contract_keywords)
-        
+
         if keyword_coverage < 0.2:
             issues.append("Low contract keyword coverage")
             score *= 0.8
 
         # Additional quality checks
-        average_word_length = sum(len(word) for word in words) / total_words if words else 0
+        average_word_length = (
+            sum(len(word) for word in words) / total_words if words else 0
+        )
         if average_word_length < 3:
             issues.append("Very short average word length")
             score *= 0.7
@@ -250,5 +290,5 @@ class DocumentProcessingNode(BaseNode):
                 "keyword_coverage": keyword_coverage,
                 "average_word_length": average_word_length,
                 "single_char_ratio": single_char_words / total_words if words else 0,
-            }
+            },
         }

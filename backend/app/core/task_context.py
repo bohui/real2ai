@@ -393,7 +393,12 @@ def user_aware_task(
                     logger.info(f"Extracted context_key: {context_key}")
                     logger.info(f"Remaining args: {remaining_args}")
 
-                    loop = asyncio.new_event_loop()
+                    # Reuse a persistent loop per worker to avoid closing an event loop
+                    # that asyncpg pools may still reference. Create once and keep it.
+                    loop = getattr(self, "_persistent_loop", None)
+                    if loop is None or loop.is_closed():
+                        loop = asyncio.new_event_loop()
+                        setattr(self, "_persistent_loop", loop)
                     asyncio.set_event_loop(loop)
                     try:
                         return loop.run_until_complete(
@@ -407,7 +412,8 @@ def user_aware_task(
                             )
                         )
                     finally:
-                        loop.close()
+                        # Do not close the persistent loop; keep it for future tasks
+                        pass
 
                 return async_wrapper
             else:
@@ -420,7 +426,10 @@ def user_aware_task(
                     context_key = args[0]
                     remaining_args = args[1:]
 
-                    loop = asyncio.new_event_loop()
+                    loop = getattr(self, "_persistent_loop", None)
+                    if loop is None or loop.is_closed():
+                        loop = asyncio.new_event_loop()
+                        setattr(self, "_persistent_loop", loop)
                     asyncio.set_event_loop(loop)
                     try:
                         return loop.run_until_complete(
@@ -434,7 +443,7 @@ def user_aware_task(
                             )
                         )
                     finally:
-                        loop.close()
+                        pass
 
                 return sync_wrapper
 
@@ -450,7 +459,10 @@ def user_aware_task(
                     context_key = args[0]
                     remaining_args = args[1:]
 
-                    loop = asyncio.new_event_loop()
+                    loop = getattr(self, "_persistent_loop", None)
+                    if loop is None or loop.is_closed():
+                        loop = asyncio.new_event_loop()
+                        setattr(self, "_persistent_loop", loop)
                     asyncio.set_event_loop(loop)
                     try:
                         return loop.run_until_complete(
@@ -459,7 +471,7 @@ def user_aware_task(
                             )
                         )
                     finally:
-                        loop.close()
+                        pass
 
                 return async_wrapper
             else:
@@ -472,7 +484,10 @@ def user_aware_task(
                     context_key = args[0]
                     remaining_args = args[1:]
 
-                    loop = asyncio.new_event_loop()
+                    loop = getattr(self, "_persistent_loop", None)
+                    if loop is None or loop.is_closed():
+                        loop = asyncio.new_event_loop()
+                        setattr(self, "_persistent_loop", loop)
                     asyncio.set_event_loop(loop)
                     try:
                         return loop.run_until_complete(
@@ -481,7 +496,7 @@ def user_aware_task(
                             )
                         )
                     finally:
-                        loop.close()
+                        pass
 
                 return sync_wrapper
 

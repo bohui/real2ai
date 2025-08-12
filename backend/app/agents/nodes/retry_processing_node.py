@@ -43,21 +43,21 @@ class RetryProcessingNode(BaseNode):
 
             # Determine what step failed and needs retry
             retry_info = self._determine_retry_strategy(state)
-            
+
             if not retry_info.get("can_retry", False):
                 return self._handle_node_error(
                     state,
                     Exception("No retry strategy available"),
                     "Step cannot be retried",
-                    {"retry_info": retry_info}
+                    {"retry_info": retry_info},
                 )
 
             # Execute retry strategy
             retry_result = await self._execute_retry_strategy(state, retry_info)
-            
+
             # Update state with retry results
             state["retry_result"] = retry_result
-            
+
             retry_data = {
                 "retry_result": retry_result,
                 "retry_strategy": retry_info.get("strategy", "unknown"),
@@ -73,7 +73,7 @@ class RetryProcessingNode(BaseNode):
             self._log_step_debug(
                 f"Retry processing completed (success: {retry_result.get('success', False)})",
                 state,
-                {"strategy": retry_info.get("strategy", "unknown")}
+                {"strategy": retry_info.get("strategy", "unknown")},
             )
 
             return self.update_state_step(state, step_name, data=retry_data)
@@ -83,7 +83,7 @@ class RetryProcessingNode(BaseNode):
                 state,
                 e,
                 f"Retry processing failed: {str(e)}",
-                {"retry_attempts": state.get("retry_attempts", 0)}
+                {"retry_attempts": state.get("retry_attempts", 0)},
             )
 
     def _determine_retry_strategy(self, state: RealEstateAgentState) -> Dict[str, Any]:
@@ -96,9 +96,18 @@ class RetryProcessingNode(BaseNode):
             return {"can_retry": False, "reason": "max_retries_exceeded"}
 
         # Determine failed step
-        progress = state.get("progress", {})
+        progress = state.get("progress")
+        if progress is None:
+            # Diagnostic log when progress is missing
+            self._log_step_debug(
+                "Progress missing during retry strategy determination",
+                state,
+                {"state_keys": list(state.keys()) if isinstance(state, dict) else []},
+            )
+            return {"can_retry": False, "reason": "no_progress_in_state"}
+
         step_history = progress.get("step_history", [])
-        
+
         if not step_history:
             return {"can_retry": False, "reason": "no_step_history"}
 
@@ -120,7 +129,7 @@ class RetryProcessingNode(BaseNode):
             "strategy": strategy,
             "step_name": step_name,
             "retry_count": retry_count,
-            "max_retries": max_retries
+            "max_retries": max_retries,
         }
 
     async def _execute_retry_strategy(
@@ -137,14 +146,15 @@ class RetryProcessingNode(BaseNode):
             if strategy == "api_retry_with_backoff":
                 # Implement exponential backoff
                 import asyncio
-                backoff_time = min(2 ** retry_count, 30)  # Max 30 seconds
+
+                backoff_time = min(2**retry_count, 30)  # Max 30 seconds
                 await asyncio.sleep(backoff_time)
-                
+
                 return {
                     "success": True,
                     "strategy_executed": strategy,
                     "backoff_time": backoff_time,
-                    "message": "API retry with backoff completed"
+                    "message": "API retry with backoff completed",
                 }
 
             elif strategy == "alternative_extraction":
@@ -153,7 +163,7 @@ class RetryProcessingNode(BaseNode):
                     "success": True,
                     "strategy_executed": strategy,
                     "method_switched": "rule_based",
-                    "message": "Switched to alternative extraction method"
+                    "message": "Switched to alternative extraction method",
                 }
 
             elif strategy == "document_reprocessing":
@@ -161,7 +171,7 @@ class RetryProcessingNode(BaseNode):
                 return {
                     "success": True,
                     "strategy_executed": strategy,
-                    "message": "Document reprocessing initiated"
+                    "message": "Document reprocessing initiated",
                 }
 
             else:
@@ -169,7 +179,7 @@ class RetryProcessingNode(BaseNode):
                 return {
                     "success": False,
                     "strategy_executed": strategy,
-                    "message": "Generic retry not implemented for this step type"
+                    "message": "Generic retry not implemented for this step type",
                 }
 
         except Exception as e:
@@ -177,5 +187,5 @@ class RetryProcessingNode(BaseNode):
                 "success": False,
                 "strategy_executed": strategy,
                 "error": str(e),
-                "message": f"Retry strategy execution failed: {str(e)}"
+                "message": f"Retry strategy execution failed: {str(e)}",
             }

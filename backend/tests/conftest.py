@@ -45,7 +45,10 @@ def client(
 ) -> Generator[TestClient, None, None]:
     """Create a test client for FastAPI app with auth override."""
     from app.core.auth import get_current_user
-    from app.clients.factory import get_supabase_client
+    from app.clients.factory import (
+        get_supabase_client,
+        get_service_supabase_client,
+    )
     from app.core.config import get_settings
     from app.services.document_service import DocumentService
     from unittest.mock import patch
@@ -57,6 +60,9 @@ def client(
 
     async def override_get_supabase_client():
         return mock_db_client
+    
+    async def override_get_service_supabase_client():
+        return mock_db_client
 
     def override_get_settings():
         return test_settings
@@ -65,6 +71,9 @@ def client(
 
     fastapi_app.dependency_overrides[get_current_user] = override_get_current_user
     fastapi_app.dependency_overrides[get_supabase_client] = override_get_supabase_client
+    fastapi_app.dependency_overrides[
+        get_service_supabase_client
+    ] = override_get_service_supabase_client
     fastapi_app.dependency_overrides[get_settings] = override_get_settings
 
     # Mock global db_client used in main module and router modules
@@ -84,8 +93,17 @@ def client(
             with patch(
                 "app.clients.factory.get_supabase_client", return_value=mock_db_client
             ):
+                # Patch service-role variant as well to prevent real initialization
+                with patch(
+                    "app.clients.factory.get_service_supabase_client",
+                    return_value=mock_db_client,
+                ):
+                    # Patch the symbol imported into app.main so lifespan uses the mock
+                    with patch(
+                        "app.main.get_supabase_client", return_value=mock_db_client
+                    ):
                 test_client = TestClient(fastapi_app)
-                yield test_client
+                        yield test_client
 
     # Clean up overrides
     fastapi_app.dependency_overrides.clear()

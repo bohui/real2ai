@@ -59,7 +59,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: real2ai-celery-worker
-    command: celery -A app.core.celery worker --loglevel=info --concurrency=4
+    command: celery -A app.core.celery worker --loglevel=${LOG_LEVEL:-INFO} --concurrency=4
     env_file:
       - .env
     environment:
@@ -94,7 +94,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: real2ai-celery-ocr-worker
-    command: celery -A app.core.celery worker --loglevel=info --queues=ocr_queue,priority_queue --concurrency=2
+    command: celery -A app.core.celery worker --loglevel=${LOG_LEVEL:-INFO} --queues=ocr_queue,priority_queue --concurrency=2
     env_file:
       - .env
     environment:
@@ -130,7 +130,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: real2ai-celery-batch-worker
-    command: celery -A app.core.celery worker --loglevel=info --queues=batch_queue --concurrency=1
+    command: celery -A app.core.celery worker --loglevel=${LOG_LEVEL:-INFO} --queues=batch_queue --concurrency=1
     env_file:
       - .env
     environment:
@@ -166,7 +166,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: real2ai-celery-beat
-    command: celery -A app.core.celery beat --loglevel=info
+    command: celery -A app.core.celery beat --loglevel=${LOG_LEVEL:-INFO}
     env_file:
       - .env
     environment:

@@ -29,7 +29,7 @@ services:
       - WORKER_TYPE=worker
       - CELERY_CONCURRENCY=4
       - CELERY_QUEUES=evaluation,batch,maintenance,cache
-      - LOG_LEVEL=INFO
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - REDIS_URL=redis://redis:6379/0
       - DATABASE_URL=${DATABASE_URL}
       - SUPABASE_URL=${SUPABASE_URL}
@@ -63,7 +63,7 @@ services:
       - WORKER_TYPE=priority-worker
       - CELERY_CONCURRENCY=2
       - CELERY_QUEUES=evaluation
-      - LOG_LEVEL=INFO
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - REDIS_URL=redis://redis:6379/0
       - DATABASE_URL=${DATABASE_URL}
       - SUPABASE_URL=${SUPABASE_URL}
@@ -95,7 +95,7 @@ services:
       - WORKER_TYPE=worker
       - CELERY_CONCURRENCY=2
       - CELERY_QUEUES=reports,ab_tests
-      - LOG_LEVEL=INFO
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - REDIS_URL=redis://redis:6379/0
       - DATABASE_URL=${DATABASE_URL}
       - SUPABASE_URL=${SUPABASE_URL}
@@ -121,7 +121,7 @@ services:
       - WORKER_TYPE=worker
       - CELERY_CONCURRENCY=1
       - CELERY_QUEUES=maintenance,monitoring
-      - LOG_LEVEL=INFO
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - REDIS_URL=redis://redis:6379/0
       - DATABASE_URL=${DATABASE_URL}
       - SUPABASE_URL=${SUPABASE_URL}
@@ -139,7 +139,7 @@ services:
       dockerfile: docker/evaluation-worker.Dockerfile
     restart: unless-stopped
     environment:
-      - LOG_LEVEL=INFO
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - REDIS_URL=redis://redis:6379/0
       - DATABASE_URL=${DATABASE_URL}
       - SUPABASE_URL=${SUPABASE_URL}

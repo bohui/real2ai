@@ -85,16 +85,32 @@ async def update_analysis_progress(
             "current_step": current_step,
             "progress_percent": progress_percent,
             "step_description": step_description,
-            "step_started_at": datetime.now(timezone.utc).isoformat(),
+            # Pass a datetime object for DB insertion (asyncpg expects datetime, not string)
+            "step_started_at": datetime.now(timezone.utc),
             "estimated_completion_minutes": estimated_completion_minutes,
             "status": status,
             "error_message": error_message,
         }
 
         # Upsert progress record using repository
+        logger.debug(
+            "[update_analysis_progress] Prepared progress_data",
+            extra={
+                "content_hash": content_hash,
+                "user_id": user_id,
+                "current_step": current_step,
+                "progress_percent": progress_percent,
+                "status": status,
+                "step_started_at_type": type(progress_data["step_started_at"]).__name__,
+            },
+        )
         progress_repo = AnalysisProgressRepository()
         result = await progress_repo.upsert_progress(
             content_hash, user_id, progress_data
+        )
+        logger.debug(
+            "[update_analysis_progress] Upsert result",
+            extra={"content_hash": content_hash, "user_id": user_id, "result": result},
         )
 
         # Resolve session ids (document_ids) for WS delivery and send progress
@@ -104,6 +120,14 @@ async def update_analysis_progress(
             docs_repo = DocumentsRepository()
             documents = await docs_repo.get_documents_by_content_hash(
                 content_hash, user_id, columns="id"
+            )
+            logger.debug(
+                "[update_analysis_progress] Documents for WS routing",
+                extra={
+                    "content_hash": content_hash,
+                    "user_id": user_id,
+                    "doc_count": len(documents) if documents is not None else 0,
+                },
             )
             if documents:
                 # Send to all documents with this content_hash
