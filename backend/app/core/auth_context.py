@@ -110,6 +110,31 @@ class AuthContext:
         return _refresh_token.get()
 
     @classmethod
+    def get_current_context(cls):
+        """
+        Get current authentication context as object.
+        
+        Returns:
+            SimpleNamespace: Object containing current auth context with attributes:
+                - user_id: Current user ID
+                - user_email: Current user email  
+                - token: Current JWT token
+                - metadata: Current auth metadata
+                - refresh_token: Current refresh token
+                - is_authenticated: Boolean indicating if user is authenticated
+        """
+        from types import SimpleNamespace
+        
+        return SimpleNamespace(
+            user_id=cls.get_user_id(),
+            user_email=cls.get_user_email(), 
+            token=cls.get_user_token(),
+            metadata=cls.get_auth_metadata(),
+            refresh_token=cls.get_refresh_token(),
+            is_authenticated=cls.is_authenticated()
+        )
+
+    @classmethod
     async def get_authenticated_client(
         cls, require_auth: bool = True, isolated: bool = False
     ):
