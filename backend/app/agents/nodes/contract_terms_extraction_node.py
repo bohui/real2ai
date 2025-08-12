@@ -56,21 +56,28 @@ class ContractTermsExtractionNode(BaseNode):
             if not full_text:
                 # Enhanced diagnostics for empty document
                 diagnostic_info = {
-                    "document_metadata_keys": list(document_metadata.keys()) if document_metadata else [],
+                    "document_metadata_keys": (
+                        list(document_metadata.keys()) if document_metadata else []
+                    ),
                     "document_metadata_type": str(type(document_metadata)),
-                    "document_data_keys": list(state.get("document_data", {}).keys()) if state.get("document_data") else [],
+                    "document_data_keys": (
+                        list(state.get("document_data", {}).keys())
+                        if state.get("document_data")
+                        else []
+                    ),
                     "parsing_status": str(state.get("parsing_status", "unknown")),
-                    "document_processing_complete": "document_metadata" in state and isinstance(state.get("document_metadata"), dict),
+                    "document_processing_complete": "document_metadata" in state
+                    and isinstance(state.get("document_metadata"), dict),
                 }
-                
+
                 error_msg = "No text available for contract terms extraction - document processing may have failed"
-                
+
                 # Log detailed diagnostic information for debugging
                 self._log_warning(
                     f"Contract terms extraction failed: empty document",
-                    extra=diagnostic_info
+                    extra=diagnostic_info,
                 )
-                
+
                 return self._handle_node_error(
                     state,
                     Exception(error_msg),
@@ -129,6 +136,10 @@ class ContractTermsExtractionNode(BaseNode):
 
             # Update state with extracted terms
             state["contract_terms"] = contract_terms
+            if "confidence_scores" not in state or not isinstance(
+                state.get("confidence_scores"), dict
+            ):
+                state["confidence_scores"] = {}
             state["confidence_scores"]["contract_extraction"] = confidence_score
 
             extraction_data = {

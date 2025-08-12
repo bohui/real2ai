@@ -1,24 +1,24 @@
-import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { motion, useInView } from 'framer-motion';
-import { 
-  Shield, 
-  Clock, 
-  MapPin, 
-  TrendingUp, 
-  CheckCircle, 
+import React, { useState } from "react";
+import { Link } from "react-router-dom";
+import { motion, useInView } from "framer-motion";
+import {
+  Shield,
+  Clock,
+  MapPin,
+  TrendingUp,
+  CheckCircle,
   Star,
   ArrowRight,
   Play,
   FileText,
   Brain,
-  Target
-} from 'lucide-react';
+  Target,
+} from "lucide-react";
 
-import { SEOHead } from '../components/seo/SEOHead';
-import { Button } from '../components/ui/Button';
-import { Card } from '../components/ui/Card';
-import { useSEO } from '../hooks/useSEO';
+import { SEOHead } from "../components/seo/SEOHead";
+import { Button } from "../components/ui/Button";
+import { Card } from "../components/ui/Card";
+import { useSEO } from "../hooks/useSEO";
 
 interface FeatureCardProps {
   icon: React.ReactNode;
@@ -27,7 +27,12 @@ interface FeatureCardProps {
   delay?: number;
 }
 
-const FeatureCard: React.FC<FeatureCardProps> = ({ icon, title, description, delay = 0 }) => (
+const FeatureCard: React.FC<FeatureCardProps> = ({
+  icon,
+  title,
+  description,
+  delay = 0,
+}) => (
   <motion.div
     initial={{ opacity: 0, y: 20 }}
     whileInView={{ opacity: 1, y: 0 }}
@@ -53,7 +58,13 @@ interface TestimonialProps {
   rating: number;
 }
 
-const Testimonial: React.FC<TestimonialProps> = ({ quote, author, role, location, rating }) => (
+const Testimonial: React.FC<TestimonialProps> = ({
+  quote,
+  author,
+  role,
+  location,
+  rating,
+}) => (
   <Card className="p-6 bg-white">
     <div className="flex items-center mb-4">
       {Array.from({ length: rating }, (_, i) => (
@@ -64,7 +75,9 @@ const Testimonial: React.FC<TestimonialProps> = ({ quote, author, role, location
     <div className="flex items-center">
       <div>
         <div className="font-semibold text-gray-900">{author}</div>
-        <div className="text-sm text-gray-500">{role} • {location}</div>
+        <div className="text-sm text-gray-500">
+          {role} • {location}
+        </div>
       </div>
     </div>
   </Card>
@@ -75,133 +88,209 @@ const MarketingIndexPage: React.FC = () => {
   const heroRef = React.useRef<HTMLDivElement>(null);
   const isHeroInView = useInView(heroRef, { once: true });
 
-  // SEO optimization
-  useSEO({
-    title: "Real2.AI - AI-Powered Australian Real Estate Contract Analysis | Your AI Step Before The Deal",
-    description: "Real2.AI provides intelligent Australian real estate contract analysis with 95%+ accuracy. State-specific compliance checking, instant risk assessment, and comprehensive property intelligence for NSW, VIC, QLD. Start your free analysis today.",
-    keywords: [
-      "Australian real estate AI",
-      "contract analysis Australia", 
-      "property risk assessment",
-      "NSW VIC QLD contract review",
-      "AI property assistant",
-      "real estate compliance check",
-      "Australian property laws",
-      "contract AI analysis",
-      "property purchase protection"
-    ],
-    canonical: "https://real2.ai",
-    structuredData: {
-      '@type': 'SoftwareApplication',
-      name: 'Real2.AI',
-      applicationCategory: 'Real Estate AI Assistant',
-      operatingSystem: 'Web Browser',
-      offers: {
-        '@type': 'Offer',
-        price: '49',
-        priceCurrency: 'AUD'
-      },
-      aggregateRating: {
-        '@type': 'AggregateRating',
-        ratingValue: '4.8',
-        reviewCount: '247'
-      }
-    }
-  });
-
   const statistics = [
-    { number: "95%+", label: "Contract Accuracy", description: "Risk identification rate" },
-    { number: "3 min", label: "Analysis Time", description: "Average processing time" },
-    { number: "8 States", label: "Coverage", description: "All Australian states" },
-    { number: "10,000+", label: "Contracts", description: "Successfully analyzed" }
+    {
+      number: "95%+",
+      label: "Contract Accuracy",
+      description: "Risk identification rate",
+    },
+    {
+      number: "3 min",
+      label: "Analysis Time",
+      description: "Average processing time",
+    },
+    {
+      number: "8 States",
+      label: "Coverage",
+      description: "All Australian states",
+    },
+    {
+      number: "10,000+",
+      label: "Contracts",
+      description: "Successfully analyzed",
+    },
   ];
 
   const features = [
     {
       icon: <Shield className="w-6 h-6" />,
       title: "AI-Powered Risk Detection",
-      description: "Advanced GPT-4 and Gemini 2.5 Pro analysis identifies hidden risks, compliance issues, and unfavorable terms with 95%+ accuracy."
+      description:
+        "Advanced GPT-4 and Gemini 2.5 Pro analysis identifies hidden risks, compliance issues, and unfavorable terms with 95%+ accuracy.",
     },
     {
       icon: <Clock className="w-6 h-6" />,
       title: "Instant Analysis",
-      description: "Get comprehensive contract analysis in minutes, not days. Real-time progress tracking keeps you informed throughout the process."
+      description:
+        "Get comprehensive contract analysis in minutes, not days. Real-time progress tracking keeps you informed throughout the process.",
     },
     {
       icon: <MapPin className="w-6 h-6" />,
       title: "Australian Legal Expertise",
-      description: "Built specifically for Australian property laws. Covers NSW, VIC, QLD, SA, WA, TAS, NT, ACT with state-specific compliance validation."
+      description:
+        "Built specifically for Australian property laws. Covers NSW, VIC, QLD, SA, WA, TAS, NT, ACT with state-specific compliance validation.",
     },
     {
       icon: <TrendingUp className="w-6 h-6" />,
       title: "Market Intelligence",
-      description: "Integrated with Domain.com.au and CoreLogic for real-time property valuations and market insights to inform your decisions."
+      description:
+        "Integrated with Domain.com.au and CoreLogic for real-time property valuations and market insights to inform your decisions.",
     },
     {
       icon: <FileText className="w-6 h-6" />,
       title: "OCR Technology",
-      description: "Advanced document scanning and text extraction handles any contract format - scanned PDFs, images, or digital documents."
+      description:
+        "Advanced document scanning and text extraction handles any contract format - scanned PDFs, images, or digital documents.",
     },
     {
       icon: <Brain className="w-6 h-6" />,
       title: "Multi-Agent AI",
-      description: "LangGraph workflow system with specialized AI agents for contract terms, compliance, risk assessment, and recommendations."
-    }
+      description:
+        "LangGraph workflow system with specialized AI agents for contract terms, compliance, risk assessment, and recommendations.",
+    },
   ];
 
   const testimonials = [
     {
-      quote: "Real2.AI saved me from a terrible contract with hidden clauses. The AI caught issues my lawyer missed initially.",
+      quote:
+        "Real2.AI saved me from a terrible contract with hidden clauses. The AI caught issues my lawyer missed initially.",
       author: "Sarah Chen",
       role: "First-time Buyer",
       location: "Sydney, NSW",
-      rating: 5
+      rating: 5,
     },
     {
-      quote: "As a buyer's agent, this tool has become essential. It helps me provide better service to my clients with instant analysis.",
+      quote:
+        "As a buyer's agent, this tool has become essential. It helps me provide better service to my clients with instant analysis.",
       author: "Michael Thompson",
       role: "Buyer's Agent",
-      location: "Melbourne, VIC", 
-      rating: 5
+      location: "Melbourne, VIC",
+      rating: 5,
     },
     {
-      quote: "The compliance checking for Queensland regulations is spot-on. Gives me confidence in every property purchase.",
+      quote:
+        "The compliance checking for Queensland regulations is spot-on. Gives me confidence in every property purchase.",
       author: "Emma Rodriguez",
       role: "Property Investor",
       location: "Brisbane, QLD",
-      rating: 5
-    }
+      rating: 5,
+    },
   ];
 
   const faqItems = [
     {
       question: "How accurate is Real2.AI's contract analysis?",
-      answer: "Real2.AI achieves 95%+ accuracy in identifying contract risks, compliance issues, and unfavorable terms through our advanced AI models including GPT-4 and Gemini 2.5 Pro, specifically trained on Australian property law."
+      answer:
+        "Real2.AI achieves 95%+ accuracy in identifying contract risks, compliance issues, and unfavorable terms through our advanced AI models including GPT-4 and Gemini 2.5 Pro, specifically trained on Australian property law.",
     },
     {
       question: "Which Australian states are supported?",
-      answer: "Real2.AI supports all Australian states and territories: NSW, VIC, QLD, SA, WA, TAS, NT, and ACT. Our AI is trained on state-specific property laws and regulations."
+      answer:
+        "Real2.AI supports all Australian states and territories: NSW, VIC, QLD, SA, WA, TAS, NT, and ACT. Our AI is trained on state-specific property laws and regulations.",
     },
     {
       question: "How long does contract analysis take?",
-      answer: "Most contracts are analyzed within 2-5 minutes. Complex documents may take up to 10 minutes. You'll receive real-time progress updates throughout the process."
+      answer:
+        "Most contracts are analyzed within 2-5 minutes. Complex documents may take up to 10 minutes. You'll receive real-time progress updates throughout the process.",
     },
     {
       question: "Is my contract data secure?",
-      answer: "Yes, we use enterprise-grade security with end-to-end encryption. Your documents are processed securely and automatically deleted after analysis unless you choose to save them."
+      answer:
+        "Yes, we use enterprise-grade security with end-to-end encryption. Your documents are processed securely and automatically deleted after analysis unless you choose to save them.",
     },
     {
       question: "Can Real2.AI replace my conveyancer or lawyer?",
-      answer: "Real2.AI is designed to complement, not replace, professional legal advice. Our AI analysis helps you identify potential issues early and have more informed discussions with your legal team."
-    }
+      answer:
+        "Real2.AI is designed to complement, not replace, professional legal advice. Our AI analysis helps you identify potential issues early and have more informed discussions with your legal team.",
+    },
   ];
+
+  // Build structured data using existing page content
+  const structuredData = [
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      name: "Real2.AI",
+      applicationCategory: "Real Estate AI Assistant",
+      operatingSystem: "Web Browser",
+      offers: {
+        "@type": "Offer",
+        price: "49",
+        priceCurrency: "AUD",
+      },
+      aggregateRating: {
+        "@type": "AggregateRating",
+        ratingValue: "4.8",
+        reviewCount: "247",
+      },
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      mainEntity: faqItems.map((item) => ({
+        "@type": "Question",
+        name: item.question,
+        acceptedAnswer: {
+          "@type": "Answer",
+          text: item.answer,
+        },
+      })),
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      itemListElement: [
+        {
+          "@type": "ListItem",
+          position: 1,
+          name: "Home",
+          item: "https://real2.ai/",
+        },
+      ],
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      name: "Real2.AI",
+      url: "https://real2.ai",
+      logo: "https://real2.ai/logo.png",
+    },
+  ];
+
+  // SEO optimization
+  const { seoData } = useSEO({
+    title:
+      "Real2.AI - AI-Powered Australian Real Estate Contract Analysis | Your AI Step Before The Deal",
+    description:
+      "Real2.AI provides intelligent Australian real estate contract analysis with 95%+ accuracy. State-specific compliance checking, instant risk assessment, and comprehensive property intelligence for NSW, VIC, QLD. Start your free analysis today.",
+    keywords: [
+      "Australian real estate AI",
+      "contract analysis Australia",
+      "property risk assessment",
+      "NSW VIC QLD contract review",
+      "AI property assistant",
+      "real estate compliance check",
+      "Australian property laws",
+      "contract AI analysis",
+      "property purchase protection",
+    ],
+    canonical: "/",
+    structuredData,
+  });
 
   return (
     <>
-      <SEOHead />
-      <main role="main" className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50">
+      <SEOHead data={seoData} />
+      <main
+        role="main"
+        className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50"
+      >
         {/* Hero Section */}
-        <section id="hero" ref={heroRef} className="relative overflow-hidden py-20 lg:py-32">
+        <section
+          id="hero"
+          ref={heroRef}
+          className="relative overflow-hidden py-20 lg:py-32"
+        >
           <div className="absolute inset-0 bg-gradient-to-r from-blue-600/10 to-indigo-600/10"></div>
           <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center">
@@ -212,18 +301,19 @@ const MarketingIndexPage: React.FC = () => {
                 className="mb-8"
               >
                 <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-gray-900 mb-6">
-                  Your{' '}
+                  Your{" "}
                   <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600">
                     AI Step
-                  </span>
-                  {' '}Before the Deal
+                  </span>{" "}
+                  Before the Deal
                 </h1>
                 <p className="text-xl lg:text-2xl text-gray-600 max-w-3xl mx-auto leading-relaxed">
-                  Australia's most advanced AI real estate assistant. Analyze contracts, assess risks, 
-                  and make confident property decisions with 95%+ accuracy.
+                  Australia's most advanced AI real estate assistant. Analyze
+                  contracts, assess risks, and make confident property decisions
+                  with 95%+ accuracy.
                 </p>
               </motion.div>
-              
+
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={isHeroInView ? { opacity: 1, y: 0 } : {}}
@@ -231,7 +321,10 @@ const MarketingIndexPage: React.FC = () => {
                 className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-12"
               >
                 <Link to="/register">
-                  <Button size="lg" className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 text-lg">
+                  <Button
+                    size="lg"
+                    className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 text-lg"
+                  >
                     Start Free Analysis
                     <ArrowRight className="ml-2 w-5 h-5" />
                   </Button>
@@ -261,12 +354,14 @@ const MarketingIndexPage: React.FC = () => {
                   height={500}
                   loading="eager"
                   decoding="async"
-                  fetchpriority="high"
+                  fetchPriority="high"
                   sizes="(max-width: 1024px) 100vw, 800px"
                 />
                 <div className="absolute -bottom-6 -left-6 bg-white rounded-lg shadow-lg p-4 flex items-center">
                   <CheckCircle className="w-6 h-6 text-green-500 mr-2" />
-                  <span className="text-sm font-medium">95%+ Accuracy Rate</span>
+                  <span className="text-sm font-medium">
+                    95%+ Accuracy Rate
+                  </span>
                 </div>
                 <div className="absolute -top-6 -right-6 bg-white rounded-lg shadow-lg p-4 flex items-center">
                   <Clock className="w-6 h-6 text-blue-500 mr-2" />
@@ -281,7 +376,10 @@ const MarketingIndexPage: React.FC = () => {
         <section id="social-proof" className="py-16 bg-white">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center mb-12">
-              <p className="text-gray-600 mb-8">Trusted by thousands of Australian property buyers and professionals</p>
+              <p className="text-gray-600 mb-8">
+                Trusted by thousands of Australian property buyers and
+                professionals
+              </p>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
                 {statistics.map((stat, index) => (
                   <motion.div
@@ -322,11 +420,12 @@ const MarketingIndexPage: React.FC = () => {
                   Why Choose Real2.AI?
                 </h2>
                 <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-                  Advanced AI technology meets Australian real estate expertise to protect your property investments
+                  Advanced AI technology meets Australian real estate expertise
+                  to protect your property investments
                 </p>
               </motion.div>
             </div>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
               {features.map((feature, index) => (
                 <FeatureCard
@@ -352,27 +451,30 @@ const MarketingIndexPage: React.FC = () => {
                 Get professional-grade contract analysis in three simple steps
               </p>
             </div>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
               {[
                 {
                   step: "1",
                   title: "Upload Contract",
-                  description: "Simply upload your contract or document. We support PDF, DOC, DOCX, and even scanned images.",
-                  icon: <FileText className="w-8 h-8" />
+                  description:
+                    "Simply upload your contract or document. We support PDF, DOC, DOCX, and even scanned images.",
+                  icon: <FileText className="w-8 h-8" />,
                 },
                 {
-                  step: "2", 
+                  step: "2",
                   title: "AI Analysis",
-                  description: "Our multi-agent AI system analyzes every clause, checks compliance, and identifies potential risks.",
-                  icon: <Brain className="w-8 h-8" />
+                  description:
+                    "Our multi-agent AI system analyzes every clause, checks compliance, and identifies potential risks.",
+                  icon: <Brain className="w-8 h-8" />,
                 },
                 {
                   step: "3",
                   title: "Receive Report",
-                  description: "Get a comprehensive analysis report with risk scores, recommendations, and next steps.",
-                  icon: <Target className="w-8 h-8" />
-                }
+                  description:
+                    "Get a comprehensive analysis report with risk scores, recommendations, and next steps.",
+                  icon: <Target className="w-8 h-8" />,
+                },
               ].map((step, index) => (
                 <motion.div
                   key={index}
@@ -393,9 +495,7 @@ const MarketingIndexPage: React.FC = () => {
                   <h3 className="text-xl font-semibold text-gray-900 mb-3">
                     {step.title}
                   </h3>
-                  <p className="text-gray-600">
-                    {step.description}
-                  </p>
+                  <p className="text-gray-600">{step.description}</p>
                   {index < 2 && (
                     <div className="hidden md:block absolute top-8 -right-6 w-12 h-0.5 bg-blue-200"></div>
                   )}
@@ -416,7 +516,7 @@ const MarketingIndexPage: React.FC = () => {
                 Join thousands of satisfied property buyers across Australia
               </p>
             </div>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
               {testimonials.map((testimonial, index) => (
                 <motion.div
@@ -447,19 +547,20 @@ const MarketingIndexPage: React.FC = () => {
                   Built for the Australian Market
                 </h2>
                 <p className="text-xl text-gray-600 mb-8">
-                  Real2.AI understands the unique complexities of Australian property law, 
-                  from stamp duty calculations to cooling-off periods across all states.
+                  Real2.AI understands the unique complexities of Australian
+                  property law, from stamp duty calculations to cooling-off
+                  periods across all states.
                 </p>
                 <div className="grid grid-cols-2 gap-4">
                   {[
                     "NSW Property Law",
                     "VIC Regulations",
-                    "QLD Compliance", 
+                    "QLD Compliance",
                     "SA Requirements",
                     "WA Standards",
                     "TAS Guidelines",
                     "NT Rules",
-                    "ACT Protocols"
+                    "ACT Protocols",
                   ].map((item, index) => (
                     <div key={index} className="flex items-center">
                       <CheckCircle className="w-5 h-5 text-green-500 mr-3" />
@@ -468,7 +569,7 @@ const MarketingIndexPage: React.FC = () => {
                   ))}
                 </div>
               </motion.div>
-              
+
               <motion.div
                 initial={{ opacity: 0, x: 20 }}
                 whileInView={{ opacity: 1, x: 0 }}
@@ -492,6 +593,47 @@ const MarketingIndexPage: React.FC = () => {
           </div>
         </section>
 
+        {/* Vision Section */}
+        <section id="vision" className="py-20 bg-white">
+          <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+            <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-6">
+              Our Vision
+            </h2>
+            <p className="text-xl text-gray-600 mb-10 max-w-3xl mx-auto">
+              Empower every Australian property buyer with trustworthy AI that
+              makes complex contracts clear, reduces risk, and levels the
+              playing field—so great property decisions are fast, fair, and
+              accessible.
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-left">
+              {[
+                {
+                  title: "Trust First",
+                  desc: "Transparent AI explanations and state-specific compliance checks you can rely on.",
+                },
+                {
+                  title: "Speed with Substance",
+                  desc: "Instant analysis without sacrificing depth—actionable insights in minutes.",
+                },
+                {
+                  title: "Access for All",
+                  desc: "Professional-grade diligence at an accessible price, across all Australian states.",
+                },
+              ].map((item, i) => (
+                <div
+                  key={i}
+                  className="bg-white rounded-xl p-6 shadow-md border border-gray-100"
+                >
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                    {item.title}
+                  </h3>
+                  <p className="text-gray-600 leading-relaxed">{item.desc}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
         {/* FAQ Section */}
         <section id="faq" className="py-20 bg-gray-50">
           <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -503,7 +645,7 @@ const MarketingIndexPage: React.FC = () => {
                 Everything you need to know about Real2.AI
               </p>
             </div>
-            
+
             <div className="space-y-6">
               {faqItems.map((item, index) => (
                 <motion.div
@@ -529,7 +671,10 @@ const MarketingIndexPage: React.FC = () => {
         </section>
 
         {/* Final CTA */}
-        <section id="get-started" className="py-20 bg-gradient-to-r from-blue-600 to-indigo-700">
+        <section
+          id="get-started"
+          className="py-20 bg-gradient-to-r from-blue-600 to-indigo-700"
+        >
           <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -541,21 +686,29 @@ const MarketingIndexPage: React.FC = () => {
                 Ready to Make Smarter Property Decisions?
               </h2>
               <p className="text-xl text-blue-100 mb-8 max-w-2xl mx-auto">
-                Join thousands of Australian property buyers who trust Real2.AI to protect their investments.
+                Join thousands of Australian property buyers who trust Real2.AI
+                to protect their investments.
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
                 <Link to="/register">
-                  <Button size="lg" className="w-full sm:w-auto bg-white text-blue-600 hover:bg-gray-50 px-8 py-3 text-lg">
+                  <Button
+                    size="lg"
+                    className="w-full sm:w-auto bg-white text-blue-600 hover:bg-gray-50 px-8 py-3 text-lg"
+                  >
                     Start Your Free Analysis
                     <ArrowRight className="ml-2 w-5 h-5" />
                   </Button>
                 </Link>
-                <Link to="/demo" className="text-blue-100 hover:text-white underline">
+                <Link
+                  to="/demo"
+                  className="text-blue-100 hover:text-white underline"
+                >
                   Book a Personal Demo
                 </Link>
               </div>
               <p className="text-sm text-blue-200 mt-6">
-                No credit card required • 30-day money-back guarantee • Enterprise support available
+                No credit card required • 30-day money-back guarantee •
+                Enterprise support available
               </p>
             </motion.div>
           </div>

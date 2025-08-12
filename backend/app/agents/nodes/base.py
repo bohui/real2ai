@@ -46,16 +46,16 @@ class BaseNode(ABC):
             async def execute(self, state: RealEstateAgentState) -> RealEstateAgentState:
                 try:
                     self._log_step_debug("Starting custom processing", state)
-                    
+
                     # Your node processing logic here
                     result = await self._process_with_logging(state)
-                    
+
                     return self.update_state_step(
-                        state, 
+                        state,
                         "custom_processing_complete",
                         data={"result": result}
                     )
-                    
+
                 except Exception as e:
                     return self._handle_node_error(state, e, "Custom processing failed")
         ```
@@ -69,7 +69,7 @@ class BaseNode(ABC):
         _get_progress_update(): Calculate progress updates based on current state
     """
 
-    def __init__(self, workflow: 'ContractAnalysisWorkflow', node_name: str):
+    def __init__(self, workflow: "ContractAnalysisWorkflow", node_name: str):
         """
         Initialize base node with workflow reference and configuration.
 
@@ -79,37 +79,46 @@ class BaseNode(ABC):
         """
         self.workflow = workflow
         self.node_name = node_name
-        
+
         # Access workflow configuration
         self.extraction_config = workflow.extraction_config
         self.use_llm_config = workflow.use_llm_config
         self.enable_validation = workflow.enable_validation
         self.enable_quality_checks = workflow.enable_quality_checks
         self.enable_fallbacks = workflow.enable_fallbacks
-        
+
         # Access workflow clients and managers
         self.openai_client = None  # Will be set during workflow initialization
         self.gemini_client = None  # Will be set during workflow initialization
         self.prompt_manager = workflow.prompt_manager
         self.structured_parsers = workflow.structured_parsers
-        
+
         # Environment and logging configuration
         self._settings = get_settings()
         self._is_production = self._settings.environment.lower() in (
-            "production", "prod", "live"
+            "production",
+            "prod",
+            "live",
         )
         self._verbose_logging = bool(
-            self._settings.enhanced_workflow_detailed_logging and not self._is_production
+            self._settings.enhanced_workflow_detailed_logging
+            and not self._is_production
         )
-        
+
         # Node-specific metrics
         self._node_metrics = {
             "executions": 0,
             "successes": 0,
             "failures": 0,
             "average_duration": 0.0,
-            "total_duration": 0.0
+            "total_duration": 0.0,
         }
+
+        # Helper to safely access state dicts from subclasses
+        # Avoids KeyError/AttributeError in nodes when state is not a plain dict
+        self.workflow_state_safe_get = (
+            lambda s, k, d=None: (s.get(k) if isinstance(s, dict) else d) or d
+        )
 
     @abstractmethod
     async def execute(self, state: RealEstateAgentState) -> RealEstateAgentState:
@@ -165,13 +174,13 @@ class BaseNode(ABC):
             "message": str(error),
             "timestamp": datetime.now().isoformat(),
         }
-        
+
         if state:
             base["session_id"] = state.get("session_id")
             # Only include user_id when verbose logging is enabled (avoid PII in prod)
             if self._verbose_logging:
                 base["user_id"] = state.get("user_id")
-                
+
         if context:
             base["context"] = context
 
@@ -242,13 +251,29 @@ class BaseNode(ABC):
             "state": safe_state,
             "timestamp": datetime.now().isoformat(),
         }
-        
+
         if details:
             log_data["details"] = details
 
         logger.debug(
             f"[{self.node_name}] {message} | data={json.dumps(log_data, default=str)}"
         )
+
+    def _log_warning(self, message: str, **kwargs) -> None:
+        """
+        Log warning messages with node context.
+
+        Compatible with existing calls that pass `extra=...` for structured logging.
+        """
+        try:
+            extra = kwargs.get("extra")
+            if extra is not None:
+                logger.warning(f"[{self.node_name}] {message}", extra=extra)
+            else:
+                logger.warning(f"[{self.node_name}] {message}")
+        except Exception:
+            # Fallback to simple warning without extras if logging fails
+            logger.warning(f"[{self.node_name}] {message}")
 
     def _handle_node_error(
         self,
@@ -281,15 +306,15 @@ class BaseNode(ABC):
                 result = await self._process_data(data)
             except ValidationError as e:
                 return self._handle_node_error(
-                    state, 
-                    e, 
+                    state,
+                    e,
                     "Data validation failed",
                     {"data_type": type(data).__name__}
                 )
             ```
         """
         self._log_exception(error, state, context)
-        
+
         error_step_name = f"{self.node_name}_error"
         error_details = {
             "error_type": type(error).__name__,
@@ -297,15 +322,12 @@ class BaseNode(ABC):
             "node": self.node_name,
             "timestamp": datetime.now().isoformat(),
         }
-        
+
         if context:
             error_details["context"] = context
 
         return update_state_step(
-            state,
-            error_step_name,
-            error=error_message,
-            data=error_details
+            state, error_step_name, error=error_message, data=error_details
         )
 
     def update_state_step(
@@ -349,9 +371,9 @@ class BaseNode(ABC):
         # Update node metrics on successful completion
         if not error:
             self._node_metrics["successes"] += 1
-            
+
         self._node_metrics["executions"] += 1
-        
+
         return update_state_step(state, step_name, data=data, error=error)
 
     def _get_progress_update(self, state: RealEstateAgentState) -> Dict[str, Any]:
@@ -383,9 +405,11 @@ class BaseNode(ABC):
             Dictionary containing node execution metrics
         """
         if self._node_metrics["executions"] > 0:
-            success_rate = self._node_metrics["successes"] / self._node_metrics["executions"]
+            success_rate = (
+                self._node_metrics["successes"] / self._node_metrics["executions"]
+            )
             self._node_metrics["success_rate"] = success_rate
-            
+
         return self._node_metrics.copy()
 
     def reset_node_metrics(self) -> None:
@@ -395,7 +419,7 @@ class BaseNode(ABC):
             "successes": 0,
             "failures": 0,
             "average_duration": 0.0,
-            "total_duration": 0.0
+            "total_duration": 0.0,
         }
 
     async def _generate_content_with_fallback(
@@ -403,19 +427,19 @@ class BaseNode(ABC):
     ) -> str:
         """
         Generate content with client fallback logic.
-        
+
         This method attempts to generate content using available clients with fallback:
         1. Try OpenAI client first
         2. Fall back to Gemini client if OpenAI fails and fallback is enabled
         3. Raise ClientError if no clients produce valid responses
-        
+
         Args:
             prompt: The prompt to send to the LLM
             use_gemini_fallback: Whether to use Gemini as fallback (default: True)
-            
+
         Returns:
             Generated content string
-            
+
         Raises:
             ClientError: If no valid response is generated from available clients
         """
@@ -424,14 +448,14 @@ class BaseNode(ABC):
                 response = await self.openai_client.generate_content(prompt)
                 if response and response.strip():
                     return response
-            
+
             if use_gemini_fallback and self.gemini_client:
                 response = await self.gemini_client.generate_content(prompt)
                 if response and response.strip():
                     return response
-                    
+
             raise ClientError("No valid response from available clients")
-            
+
         except Exception as e:
             logger.error(f"Content generation failed in {self.node_name}: {e}")
             if not self.enable_fallbacks:
@@ -441,10 +465,10 @@ class BaseNode(ABC):
     def _safe_json_parse(self, response: str) -> Optional[Dict[str, Any]]:
         """
         Safely parse JSON response with error handling.
-        
+
         Args:
             response: JSON string to parse
-            
+
         Returns:
             Parsed dictionary or None if parsing fails
         """

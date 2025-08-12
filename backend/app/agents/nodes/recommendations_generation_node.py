@@ -50,46 +50,64 @@ class RecommendationsGenerationNode(BaseNode):
             contract_terms = state.get("contract_terms", {})
             compliance_analysis = state.get("compliance_analysis", {})
             risk_assessment = state.get("risk_assessment", {})
-            
+
             # Perform recommendations generation
             use_llm = self.use_llm_config.get("recommendations", True)
-            
+
             if use_llm:
                 try:
-                    recommendations_result = await self._generate_recommendations_with_llm(
-                        contract_terms, compliance_analysis, risk_assessment
+                    recommendations_result = (
+                        await self._generate_recommendations_with_llm(
+                            contract_terms, compliance_analysis, risk_assessment, state
+                        )
                     )
                 except Exception as llm_error:
-                    self._log_exception(llm_error, state, {"fallback_enabled": self.enable_fallbacks})
-                    
+                    self._log_exception(
+                        llm_error, state, {"fallback_enabled": self.enable_fallbacks}
+                    )
+
                     if self.enable_fallbacks:
-                        recommendations_result = await self._generate_recommendations_rule_based(
-                            contract_terms, compliance_analysis, risk_assessment
+                        recommendations_result = (
+                            await self._generate_recommendations_rule_based(
+                                contract_terms, compliance_analysis, risk_assessment
+                            )
                         )
                     else:
                         raise llm_error
             else:
-                recommendations_result = await self._generate_recommendations_rule_based(
-                    contract_terms, compliance_analysis, risk_assessment
+                recommendations_result = (
+                    await self._generate_recommendations_rule_based(
+                        contract_terms, compliance_analysis, risk_assessment
+                    )
                 )
 
             # Update state with recommendations
             state["recommendations"] = recommendations_result
-            recommendations_confidence = recommendations_result.get("overall_confidence", 0.5)
+            recommendations_confidence = recommendations_result.get(
+                "overall_confidence", 0.5
+            )
             state["confidence_scores"]["recommendations"] = recommendations_confidence
 
             recommendations_data = {
                 "recommendations_result": recommendations_result,
                 "confidence_score": recommendations_confidence,
-                "recommendations_count": len(recommendations_result.get("recommendations", [])),
-                "priority_actions_count": len(recommendations_result.get("priority_actions", [])),
+                "recommendations_count": len(
+                    recommendations_result.get("recommendations", [])
+                ),
+                "priority_actions_count": len(
+                    recommendations_result.get("priority_actions", [])
+                ),
                 "generation_timestamp": datetime.now(UTC).isoformat(),
             }
 
             self._log_step_debug(
                 f"Recommendations generated (count: {len(recommendations_result.get('recommendations', []))}, confidence: {recommendations_confidence:.2f})",
                 state,
-                {"priority_actions": len(recommendations_result.get("priority_actions", []))}
+                {
+                    "priority_actions": len(
+                        recommendations_result.get("priority_actions", [])
+                    )
+                },
             )
 
             return self.update_state_step(
@@ -101,19 +119,22 @@ class RecommendationsGenerationNode(BaseNode):
                 state,
                 e,
                 f"Recommendations generation failed: {str(e)}",
-                {"use_llm": use_llm}
+                {"use_llm": use_llm},
             )
 
     async def _generate_recommendations_with_llm(
         self,
         contract_terms: Dict[str, Any],
         compliance_analysis: Dict[str, Any],
-        risk_assessment: Dict[str, Any]
+        risk_assessment: Dict[str, Any],
+        state: RealEstateAgentState,
     ) -> Dict[str, Any]:
         """Generate recommendations using LLM analysis."""
         try:
             from app.core.prompts import PromptContext, ContextType
 
+            # Include service-required context variables to satisfy prompt manager validation
+            doc_meta = self.workflow_state_safe_get(state, "document_metadata", {})
             context = PromptContext(
                 context_type=ContextType.GENERATION,
                 variables={
@@ -121,17 +142,28 @@ class RecommendationsGenerationNode(BaseNode):
                     "compliance_analysis": compliance_analysis,
                     "risk_assessment": risk_assessment,
                     "recommendation_categories": [
-                        "immediate_actions", "due_diligence", "risk_mitigation",
-                        "compliance_steps", "professional_advice"
+                        "immediate_actions",
+                        "due_diligence",
+                        "risk_mitigation",
+                        "compliance_steps",
+                        "professional_advice",
                     ],
-                    "priority_levels": ["high", "medium", "low"]
-                }
+                    "priority_levels": ["high", "medium", "low"],
+                    # Service mapping context requirements (best-effort)
+                    "extracted_text": (doc_meta.get("full_text", "") or "")[:8000],
+                    "australian_state": state.get("australian_state"),
+                    "contract_type": state.get("contract_type"),
+                    "user_type": state.get("user_type", "general"),
+                    "user_experience_level": state.get(
+                        "user_experience_level", "intermediate"
+                    ),
+                },
             )
 
             rendered_prompt = await self.prompt_manager.render(
-                template_name="generation/recommendations",
+                template_name="workflow/contract_recommendations",
                 context=context,
-                service_name="contract_analysis_workflow"
+                service_name="contract_analysis_workflow",
             )
 
             response = await self._generate_content_with_fallback(
@@ -140,7 +172,9 @@ class RecommendationsGenerationNode(BaseNode):
 
             # Parse structured response
             if self.structured_parsers.get("recommendations"):
-                parsing_result = self.structured_parsers["recommendations"].parse(response)
+                parsing_result = self.structured_parsers["recommendations"].parse(
+                    response
+                )
                 if parsing_result.success and parsing_result.data:
                     return parsing_result.data
 
@@ -166,7 +200,7 @@ class RecommendationsGenerationNode(BaseNode):
         self,
         contract_terms: Dict[str, Any],
         compliance_analysis: Dict[str, Any],
-        risk_assessment: Dict[str, Any]
+        risk_assessment: Dict[str, Any],
     ) -> Dict[str, Any]:
         """Generate recommendations using rule-based logic."""
         try:
@@ -177,43 +211,55 @@ class RecommendationsGenerationNode(BaseNode):
             if risk_assessment:
                 risk_level = risk_assessment.get("overall_risk_level", "medium")
                 risk_factors = risk_assessment.get("risk_factors", [])
-                
+
                 if risk_level == "high":
-                    priority_actions.append({
-                        "action": "Immediate professional review required",
-                        "category": "professional_advice",
-                        "priority": "high",
-                        "rationale": "High risk level identified in contract analysis"
-                    })
-                
+                    priority_actions.append(
+                        {
+                            "action": "Immediate professional review required",
+                            "category": "professional_advice",
+                            "priority": "high",
+                            "rationale": "High risk level identified in contract analysis",
+                        }
+                    )
+
                 for risk_factor in risk_factors[:3]:  # Top 3 risks
-                    recommendations.append({
-                        "type": "risk_mitigation",
-                        "description": f"Address {risk_factor.get('description', 'identified risk')}",
-                        "priority": "high" if risk_factor.get("risk_score", 0) > 0.5 else "medium",
-                        "category": risk_factor.get("category", "general")
-                    })
+                    recommendations.append(
+                        {
+                            "type": "risk_mitigation",
+                            "description": f"Address {risk_factor.get('description', 'identified risk')}",
+                            "priority": (
+                                "high"
+                                if risk_factor.get("risk_score", 0) > 0.5
+                                else "medium"
+                            ),
+                            "category": risk_factor.get("category", "general"),
+                        }
+                    )
 
             # Compliance-based recommendations
             if compliance_analysis:
                 compliance_score = compliance_analysis.get("compliance_score", 1.0)
-                
+
                 if compliance_score < 0.8:
-                    priority_actions.append({
-                        "action": "Review compliance issues with legal counsel",
-                        "category": "legal_review",
-                        "priority": "high",
-                        "rationale": f"Compliance score below threshold ({compliance_score:.2f})"
-                    })
-                
+                    priority_actions.append(
+                        {
+                            "action": "Review compliance issues with legal counsel",
+                            "category": "legal_review",
+                            "priority": "high",
+                            "rationale": f"Compliance score below threshold ({compliance_score:.2f})",
+                        }
+                    )
+
                 compliance_issues = compliance_analysis.get("issues", [])
                 for issue in compliance_issues:
-                    recommendations.append({
-                        "type": "compliance",
-                        "description": f"Resolve: {issue}",
-                        "priority": "medium",
-                        "category": "regulatory"
-                    })
+                    recommendations.append(
+                        {
+                            "type": "compliance",
+                            "description": f"Resolve: {issue}",
+                            "priority": "medium",
+                            "category": "regulatory",
+                        }
+                    )
 
             # Contract terms-based recommendations
             if contract_terms:
@@ -221,25 +267,29 @@ class RecommendationsGenerationNode(BaseNode):
 
             # General recommendations
             if not recommendations:
-                recommendations.extend([
-                    {
-                        "type": "general",
-                        "description": "Consider professional legal review",
-                        "priority": "medium",
-                        "category": "professional_advice"
-                    },
-                    {
-                        "type": "due_diligence",
-                        "description": "Verify all contract terms and conditions",
-                        "priority": "medium",
-                        "category": "verification"
-                    }
-                ])
+                recommendations.extend(
+                    [
+                        {
+                            "type": "general",
+                            "description": "Consider professional legal review",
+                            "priority": "medium",
+                            "category": "professional_advice",
+                        },
+                        {
+                            "type": "due_diligence",
+                            "description": "Verify all contract terms and conditions",
+                            "priority": "medium",
+                            "category": "verification",
+                        },
+                    ]
+                )
 
             return {
                 "recommendations": recommendations,
                 "priority_actions": priority_actions,
-                "summary": self._generate_recommendations_summary(recommendations, priority_actions),
+                "summary": self._generate_recommendations_summary(
+                    recommendations, priority_actions
+                ),
                 "overall_confidence": 0.8,
                 "generation_method": "rule_based",
                 "recommendation_count": len(recommendations),
@@ -255,7 +305,7 @@ class RecommendationsGenerationNode(BaseNode):
                         "type": "general",
                         "description": "Professional review recommended due to analysis limitations",
                         "priority": "high",
-                        "category": "professional_advice"
+                        "category": "professional_advice",
                     }
                 ],
                 "priority_actions": [],
@@ -271,41 +321,53 @@ class RecommendationsGenerationNode(BaseNode):
         """Add recommendations based on contract terms analysis."""
         # Check for missing critical terms
         critical_terms = ["purchase_price", "settlement_date", "property_address"]
-        missing_terms = [term for term in critical_terms if not contract_terms.get(term)]
-        
+        missing_terms = [
+            term for term in critical_terms if not contract_terms.get(term)
+        ]
+
         for term in missing_terms:
-            recommendations.append({
-                "type": "completeness",
-                "description": f"Verify and complete {term.replace('_', ' ')} information",
-                "priority": "high",
-                "category": "data_completeness"
-            })
+            recommendations.append(
+                {
+                    "type": "completeness",
+                    "description": f"Verify and complete {term.replace('_', ' ')} information",
+                    "priority": "high",
+                    "category": "data_completeness",
+                }
+            )
 
         # Check settlement date
         settlement_date = contract_terms.get("settlement_date")
         if settlement_date and "30" in str(settlement_date):
-            recommendations.append({
-                "type": "timeline",
-                "description": "Review tight settlement timeline - ensure adequate preparation time",
-                "priority": "medium",
-                "category": "timeline_management"
-            })
+            recommendations.append(
+                {
+                    "type": "timeline",
+                    "description": "Review tight settlement timeline - ensure adequate preparation time",
+                    "priority": "medium",
+                    "category": "timeline_management",
+                }
+            )
 
         # Check special conditions
         special_conditions = contract_terms.get("special_conditions", [])
         if len(special_conditions) > 3:
-            recommendations.append({
-                "type": "complexity",
-                "description": "Multiple special conditions identified - detailed review recommended",
-                "priority": "medium",
-                "category": "contract_complexity"
-            })
+            recommendations.append(
+                {
+                    "type": "complexity",
+                    "description": "Multiple special conditions identified - detailed review recommended",
+                    "priority": "medium",
+                    "category": "contract_complexity",
+                }
+            )
 
     def _generate_recommendations_summary(
-        self, recommendations: List[Dict[str, Any]], priority_actions: List[Dict[str, Any]]
+        self,
+        recommendations: List[Dict[str, Any]],
+        priority_actions: List[Dict[str, Any]],
     ) -> str:
         """Generate a summary of recommendations."""
-        high_priority_count = len([r for r in recommendations if r.get("priority") == "high"])
+        high_priority_count = len(
+            [r for r in recommendations if r.get("priority") == "high"]
+        )
         total_recommendations = len(recommendations)
         priority_actions_count = len(priority_actions)
 
@@ -315,8 +377,10 @@ class RecommendationsGenerationNode(BaseNode):
             summary = ""
 
         if high_priority_count > 0:
-            summary += f"{high_priority_count} high-priority recommendation(s) identified. "
-        
+            summary += (
+                f"{high_priority_count} high-priority recommendation(s) identified. "
+            )
+
         summary += f"Total of {total_recommendations} recommendation(s) generated for contract review."
 
         return summary

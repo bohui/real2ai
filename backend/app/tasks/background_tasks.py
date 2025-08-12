@@ -446,8 +446,10 @@ async def comprehensive_document_analysis(
             # Extract analysis results from service response
             # StartAnalysisResponse object - access attributes directly
             if not analysis_response.success:
-                error_msg = getattr(
-                    analysis_response, "error", "Contract analysis failed"
+                # Ensure we have a non-empty error message even if the field exists but is None/empty
+                error_msg = (
+                    getattr(analysis_response, "error", None)
+                    or "Contract analysis failed"
                 )
                 logger.error(f"Contract analysis failed: {error_msg}")
                 raise ValueError(f"Contract analysis failed: {error_msg}")
