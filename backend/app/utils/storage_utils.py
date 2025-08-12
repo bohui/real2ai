@@ -43,10 +43,9 @@ class ArtifactStorageService:
         
         try:
             # Upload file content
-            result = await client.storage.upload(
-                bucket=self.bucket_name,
+            result = client.storage().from_(self.bucket_name).upload(
                 path=storage_path,
-                file_data=content_bytes,
+                file=content_bytes,
                 file_options={
                     "content-type": "text/plain; charset=utf-8",
                     "cache-control": "3600"  # Cache for 1 hour
@@ -149,10 +148,9 @@ class ArtifactStorageService:
         client = await get_service_supabase_client()
         
         try:
-            result = await client.storage.upload(
-                bucket=self.bucket_name,
+            result = client.storage().from_(self.bucket_name).upload(
                 path=storage_path,
-                file_data=content_bytes,
+                file=content_bytes,
                 file_options={
                     "content-type": "text/plain; charset=utf-8",
                     "cache-control": "3600"
@@ -196,10 +194,9 @@ class ArtifactStorageService:
         client = await get_service_supabase_client()
         
         try:
-            result = await client.storage.upload(
-                bucket=self.bucket_name,
+            result = client.storage().from_(self.bucket_name).upload(
                 path=storage_path,
-                file_data=content_bytes,
+                file=content_bytes,
                 file_options={
                     "content-type": "text/plain; charset=utf-8",
                     "cache-control": "3600"

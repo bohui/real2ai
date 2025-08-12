@@ -452,6 +452,7 @@ class ContractAnalysisService:
         contract_type: str,
         user_experience: str,
         user_type: str,
+        document_type: str = "contract",
     ) -> RealEstateAgentState:
         """Create initial state for workflow"""
 
@@ -463,6 +464,7 @@ class ContractAnalysisService:
             "user_preferences": user_preferences,
             "user_type": user_type,
             "contract_type": contract_type,
+            "document_type": document_type,
             "user_experience": user_experience,
             "current_step": [
                 "initialized"

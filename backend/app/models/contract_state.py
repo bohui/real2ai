@@ -46,6 +46,8 @@ class RealEstateAgentState(TypedDict):
     user_preferences: Dict[str, Any]
     australian_state: AustralianState
     user_type: str  # buyer, investor, agent
+    contract_type: Optional[str]  # purchase_agreement, lease, etc.
+    document_type: Optional[str]  # contract, legal_document, etc.
 
     # Processing State
     current_step: Annotated[List[str], add]  # Use Annotated for concurrent updates
@@ -132,6 +134,8 @@ def create_initial_state(
     australian_state: AustralianState,
     user_type: str = "buyer",
     user_preferences: Optional[Dict[str, Any]] = None,
+    contract_type: str = "purchase_agreement",
+    document_type: str = "contract",
 ) -> RealEstateAgentState:
     """Create initial agent state"""
 
@@ -157,6 +161,8 @@ def create_initial_state(
         user_preferences=user_preferences or {},
         australian_state=australian_state,
         user_type=user_type,
+        contract_type=contract_type,
+        document_type=document_type,
         # Processing State
         current_step=["initialized"],  # Now a list for Annotated handling
         error_state=None,

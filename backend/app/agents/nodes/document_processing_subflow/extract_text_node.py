@@ -548,9 +548,9 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                     )
             # Route by file type
             if file_type == "application/pdf":
-                return await self._extract_pdf_text_hybrid(file_content)
+                return await self._extract_pdf_text_hybrid(file_content, state)
             elif file_type.startswith("image/"):
-                text, method = await self._extract_image_text_basic(file_content)
+                text, method = await self._extract_image_text_basic(file_content, state)
                 page = PageExtraction(
                     page_number=1,
                     text_content=text,
@@ -652,7 +652,7 @@ class ExtractTextNode(DocumentProcessingNodeBase):
             return "", "pdf_failed"
 
     async def _extract_pdf_text_hybrid(
-        self, file_content: bytes
+        self, file_content: bytes, state: DocumentProcessingState
     ) -> TextExtractionResult:
         """Hybrid PDF extraction: PyMuPDF first, selective OCR/VLM per page."""
         try:
@@ -703,6 +703,9 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                             file_type="png",
                             filename=f"page_{idx+1}.png",
                             analysis_focus="diagram_detection",
+                            australian_state=state.get("australian_state", "NSW"),
+                            contract_type=state.get("contract_type", "purchase_agreement"),
+                            document_type=state.get("document_type", "contract"),
                         )
                         llm_text = (llm_result or {}).get("text", "")
                         if len(llm_text.strip()) > len(raw_text.strip()):
@@ -773,7 +776,7 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                 total_word_count=0,
             )
 
-    async def _extract_image_text_basic(self, file_content: bytes) -> tuple[str, str]:
+    async def _extract_image_text_basic(self, file_content: bytes, state: DocumentProcessingState) -> tuple[str, str]:
         """Basic OCR text extraction from images."""
         try:
             if self.use_llm:
@@ -787,6 +790,9 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                         file_type="png",  # treat as image; service just needs a valid image type
                         filename="image_page.png",
                         analysis_focus="ocr",
+                        australian_state=state.get("australian_state", "NSW"),
+                        contract_type=state.get("contract_type", "purchase_agreement"),
+                        document_type=state.get("document_type", "contract"),
                     )
                     text = (result or {}).get("text", "")
                     return text, "ocr_gemini"

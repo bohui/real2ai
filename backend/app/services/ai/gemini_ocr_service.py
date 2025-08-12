@@ -599,6 +599,9 @@ Focus on accuracy and completeness. Extract all visible text content."""
         file_type: str,
         filename: str,
         analysis_focus: str = "diagram_detection",
+        australian_state: Optional[str] = None,
+        contract_type: Optional[str] = None,
+        document_type: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Lightweight helper to get OCR text and diagram type (if applicable) via a single LLM call.
 
@@ -630,6 +633,9 @@ Focus on accuracy and completeness. Extract all visible text content."""
                     "filename": filename,
                     "file_type": file_type,
                     "analysis_focus": analysis_focus,
+                    "australian_state": australian_state,
+                    "contract_type": contract_type,
+                    "document_type": document_type,
                 },
                 output_parser=parser,
                 validate=True,

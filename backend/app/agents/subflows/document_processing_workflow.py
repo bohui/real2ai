@@ -57,6 +57,9 @@ class DocumentProcessingState(TypedDict):
 
     # Optional input overrides
     content_hash: Optional[str]
+    australian_state: Optional[str]
+    contract_type: Optional[str]
+    document_type: Optional[str]
 
     # Working state
     storage_path: Optional[str]
@@ -341,7 +344,13 @@ class DocumentProcessingWorkflow:
 
     @langsmith_trace(name="document_processing_workflow", run_type="chain")
     async def process_document(
-        self, document_id: str, use_llm: bool = None, content_hash: Optional[str] = None
+        self, 
+        document_id: str, 
+        use_llm: bool = None, 
+        content_hash: Optional[str] = None,
+        australian_state: Optional[str] = None,
+        contract_type: Optional[str] = None,
+        document_type: Optional[str] = None,
     ) -> ProcessedDocumentSummary | ProcessingErrorResponse:
         """
         Main entry point for document processing.
@@ -350,6 +359,9 @@ class DocumentProcessingWorkflow:
             document_id: ID of document to process
             use_llm: Override LLM usage setting (optional)
             content_hash: Content hash override (optional)
+            australian_state: Australian state for context (optional)
+            contract_type: Contract type for context (optional)
+            document_type: Document type for context (optional)
 
         Returns:
             ProcessedDocumentSummary on success or ProcessingErrorResponse on failure
@@ -362,6 +374,9 @@ class DocumentProcessingWorkflow:
                     use_llm if use_llm is not None else self.use_llm_document_processing
                 ),
                 content_hash=content_hash,
+                australian_state=australian_state,
+                contract_type=contract_type,
+                document_type=document_type,
                 storage_path=None,
                 file_type=None,
                 text_extraction_result=None,
