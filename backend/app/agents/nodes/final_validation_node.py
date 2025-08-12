@@ -67,7 +67,7 @@ class FinalValidationNode(BaseNode):
             if use_llm:
                 try:
                     validation_result = await self._validate_final_output_with_llm(
-                        workflow_outputs
+                        workflow_outputs, state
                     )
                 except Exception as llm_error:
                     self._log_exception(
@@ -164,12 +164,19 @@ class FinalValidationNode(BaseNode):
         return outputs
 
     async def _validate_final_output_with_llm(
-        self, workflow_outputs: Dict[str, Any]
+        self, workflow_outputs: Dict[str, Any], state: RealEstateAgentState
     ) -> Dict[str, Any]:
         """Validate final output using LLM analysis."""
         try:
             from app.core.prompts import PromptContext, ContextType
 
+            # Include service-required context variables to satisfy prompt manager validation
+            doc_meta = (
+                state.get("document_metadata", {}) if isinstance(state, dict) else {}
+            )
+
+            # Extract analysis results from state for template variables
+            from datetime import datetime, timezone
             context = PromptContext(
                 context_type=ContextType.VALIDATION,
                 variables={
@@ -187,11 +194,28 @@ class FinalValidationNode(BaseNode):
                         "risk_assessment",
                         "recommendations",
                     ],
+                    # Service mapping context requirements (best-effort)
+                    "extracted_text": (doc_meta.get("full_text", "") or "")[:8000],
+                    "australian_state": state.get("australian_state"),
+                    "contract_type": state.get("contract_type"),
+                    "user_type": state.get("user_type", "general"),
+                    "user_experience_level": state.get(
+                        "user_experience_level", "intermediate"
+                    ),
+                    # Template-required variables
+                    "analysis_type": state.get("analysis_type", "comprehensive"),
+                    "user_experience": state.get(
+                        "user_experience", state.get("user_experience_level", "intermediate")
+                    ),
+                    "risk_assessment": state.get("risk_assessment", {}),
+                    "compliance_check": state.get("compliance_check", {}),
+                    "recommendations": state.get("recommendations", []),
+                    "analysis_timestamp": datetime.now(timezone.utc).isoformat(),
                 },
             )
 
             rendered_prompt = await self.prompt_manager.render(
-                template_name="validation/final_output",
+                template_name="validation/final_output_validation",
                 context=context,
                 service_name="contract_analysis_workflow",
             )
@@ -265,8 +289,10 @@ class FinalValidationNode(BaseNode):
                     validation_passed = False
 
             # Calculate overall validation confidence
-            passed_checks = len(
-                [check for check in validation_checks if check["status"] == "passed"]
+            passed_checks = sum(
+                1
+                for vc in validation_checks
+                if isinstance(vc, dict) and vc.get("status") == "passed"
             )
             total_checks = len(validation_checks)
             validation_confidence = (
