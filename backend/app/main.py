@@ -14,15 +14,32 @@ from typing import Dict, Optional, Any
 from asyncio import AbstractEventLoop
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
+from app.core.config import get_settings
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+# Configure logging to respect LOG_LEVEL from environment or settings
+settings = get_settings()
+
+level_name = os.getenv("LOG_LEVEL", settings.log_level or "INFO").upper()
+log_level = getattr(logging, level_name, logging.INFO)
+
+# Configure root logging level (may be a no-op if handlers already exist under uvicorn)
+logging.basicConfig(level=log_level)
+
+# Ensure key loggers follow the configured level even if basicConfig was a no-op
+for logger_name in (
+    "app",
+    "app.router.websockets",
+    "uvicorn",
+    "uvicorn.error",
+    "uvicorn.access",
+):
+    logging.getLogger(logger_name).setLevel(log_level)
+
 logger = logging.getLogger(__name__)
 
 # Import application modules
 from app.models.contract_state import RealEstateAgentState, create_initial_state
 from app.agents.contract_workflow import ContractAnalysisWorkflow
-from app.core.config import get_settings
 from app.clients.factory import get_supabase_client
 from app.clients.supabase.client import SupabaseClient
 from app.services.document_service import DocumentService
@@ -71,7 +88,6 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
 
 # Initialize services
-settings = get_settings()
 security = HTTPBearer()
 # db_client will be initialized in lifespan function
 db_client: Optional[SupabaseClient] = None

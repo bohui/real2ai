@@ -17,7 +17,9 @@ from app.clients.factory import get_service_supabase_client
 from enum import Enum
 from app.services.backend_token_service import BackendTokenService
 from app.services.repositories.analyses_repository import AnalysesRepository
-from app.services.repositories.analysis_progress_repository import AnalysisProgressRepository
+from app.services.repositories.analysis_progress_repository import (
+    AnalysisProgressRepository,
+)
 from app.services.repositories.documents_repository import DocumentsRepository
 from app.services.repositories.contracts_repository import ContractsRepository
 
@@ -62,7 +64,7 @@ async def check_document_cache_status(document_id: str, user_id: str) -> Dict[st
         if not document:
             raise ValueError(f"Document {document_id} not found or access denied")
 
-        # Convert to dict for backward compatibility  
+        # Convert to dict for backward compatibility
         document = {
             "id": str(document.id),
             "user_id": str(document.user_id),
@@ -195,9 +197,7 @@ async def check_document_cache_status(document_id: str, user_id: str) -> Dict[st
 
             # Get detailed progress if available
             progress_repo = AnalysisProgressRepository()
-            progress = await progress_repo.get_latest_progress(
-                content_hash, user_id
-            )
+            progress = await progress_repo.get_latest_progress(content_hash, user_id)
 
             progress_info = None
             if progress:
@@ -232,7 +232,9 @@ async def check_document_cache_status(document_id: str, user_id: str) -> Dict[st
                 "content_hash": content_hash,
                 "contract_id": contract_id,
                 "analysis_id": str(analysis.id),
-                "error_message": (analysis.error_details or {}).get("message", "Analysis failed"),
+                "error_message": (analysis.error_details or {}).get(
+                    "message", "Analysis failed"
+                ),
                 "retry_available": True,
                 "message": "Previous analysis failed - retry available",
             }
@@ -496,25 +498,47 @@ async def document_analysis_websocket(
                     "created_at": document_obj.created_at,
                     "original_filename": document_obj.original_filename,
                     "file_size": document_obj.file_size,
+                    "processing_status": getattr(
+                        document_obj, "processing_status", None
+                    ),
                 }
                 created_at = document.get("created_at")
 
                 if created_at:
-                    # Check if document was created within last 5 minutes
-                    created_time = datetime.fromisoformat(
-                        created_at.replace("Z", "+00:00")
-                    )
+                    # Convert created_at to aware datetime safely
+                    try:
+                        if isinstance(created_at, str):
+                            created_time = datetime.fromisoformat(
+                                created_at.replace("Z", "+00:00")
+                            )
+                        elif isinstance(created_at, datetime):
+                            created_time = created_at
+                        else:
+                            created_time = None
+                    except Exception as dt_err:
+                        logger.warning(
+                            "Failed to parse created_at for document %s: %s",
+                            document_id,
+                            dt_err,
+                        )
+                        created_time = None
                     five_minutes_ago = datetime.now(UTC) - timedelta(minutes=5)
 
-                    if created_time > five_minutes_ago:
+                    if created_time is not None:
+                        # Ensure timezone-aware (assume UTC if naive)
+                        if created_time.tzinfo is None:
+                            created_time = created_time.replace(tzinfo=UTC)
+                    if created_time and created_time > five_minutes_ago:
                         # Send document_uploaded notification
+                        filename_to_send = document.get("original_filename", "Unknown")
+                        status_to_send = document.get("processing_status", "uploaded")
                         await websocket_manager.send_personal_message(
                             document_id,
                             websocket,
                             WebSocketEvents.document_uploaded(
                                 document_id=document_id,
-                                filename=document.get("filename", "Unknown"),
-                                processing_status=document.get("status", "uploaded"),
+                                filename=filename_to_send,
+                                processing_status=status_to_send,
                             ),
                         )
                         logger.info(
@@ -842,7 +866,9 @@ async def handle_retry_analysis_request(
 
         # Use the new retry function to safely handle existing analysis records
         analyses_repo = AnalysesRepository(use_service_role=True)
-        retry_analysis_id = await analyses_repo.retry_contract_analysis(content_hash, user_id)
+        retry_analysis_id = await analyses_repo.retry_contract_analysis(
+            content_hash, user_id
+        )
 
         if not retry_analysis_id:
             raise ValueError("Failed to retry analysis via database function")
@@ -917,7 +943,9 @@ async def handle_status_request(
         if not contract_id or contract_id == "None":
             try:
                 contracts_repo = ContractsRepository()
-                contracts = await contracts_repo.get_contracts_by_content_hash(content_hash, limit=1)
+                contracts = await contracts_repo.get_contracts_by_content_hash(
+                    content_hash, limit=1
+                )
                 if contracts:
                     contract_id = str(contracts[0].id)
             except Exception:
@@ -925,20 +953,22 @@ async def handle_status_request(
                 pass
 
         # Check if user has access to this content_hash through user_contract_views
-        user_contract_views = await docs_repo.get_user_contract_views(content_hash, user_id, limit=1)
+        user_contract_views = await docs_repo.get_user_contract_views(
+            content_hash, user_id, limit=1
+        )
 
         # If no user_contract_views entry exists, create one to ensure access
         if not user_contract_views:
             # Create a user_contract_views entry to ensure access to contracts and analyses
             try:
-                # Need to create user_contract_views entry - using user_client database temporarily 
+                # Need to create user_contract_views entry - using user_client database temporarily
                 # TODO: Create UserContractViewsRepository for this operation
                 await user_client.database.create(
                     "user_contract_views",
                     {
                         "user_id": user_id,
                         "content_hash": content_hash,
-                        "property_address": getattr(document, 'property_address', None),
+                        "property_address": getattr(document, "property_address", None),
                         "source": "upload",
                     },
                 )
@@ -984,10 +1014,12 @@ async def handle_status_request(
                     "data": {
                         "contract_id": contract_id,
                         "status": analysis.status,
-                        "progress_percent": get_progress_from_status(
-                            analysis.status
+                        "progress_percent": get_progress_from_status(analysis.status),
+                        "last_updated": (
+                            analysis.updated_at.isoformat()
+                            if analysis.updated_at
+                            else None
                         ),
-                        "last_updated": analysis.updated_at.isoformat() if analysis.updated_at else None,
                     },
                 }
             else:
@@ -1056,26 +1088,24 @@ async def handle_cancellation_request(
         for record in progress_records:
             await progress_repo.update_progress_by_id(
                 record["id"],
-                {"status": "cancelled", "error_message": "Analysis cancelled by user"}
+                {"status": "cancelled", "error_message": "Analysis cancelled by user"},
             )
 
         # Update analysis records using AnalysesRepository
         try:
             analyses_repo = AnalysesRepository(use_service_role=True)
             analysis = await analyses_repo.get_analysis_by_content_hash(content_hash)
-            
+
             if analysis:
                 await analyses_repo.update_analysis_status(
                     analysis.id,
                     status="cancelled",
-                    error_details={"cancelled_by_user": user_id}
+                    error_details={"cancelled_by_user": user_id},
                 )
                 logger.info(f"Cancelled analysis {analysis.id} for user {user_id}")
         except Exception as e:
             logger.warning(f"Failed to update analysis status during cancel: {e}")
-            logger.info(
-                "Skip direct update to shared analyses rows during cancel"
-            )
+            logger.info("Skip direct update to shared analyses rows during cancel")
 
         # Try to cancel the Celery task if we can find it
         try:
@@ -1174,7 +1204,7 @@ async def _dispatch_analysis_task(
             "file_type": document_obj.file_type,
             "file_size": document_obj.file_size,
             "content_hash": document_obj.content_hash,
-            "processing_status": document_obj.processing_status
+            "processing_status": document_obj.processing_status,
         }
         content_hash = document.get("content_hash")
         if not content_hash:
@@ -1195,12 +1225,9 @@ async def _dispatch_analysis_task(
 
         # Create analysis record using AnalysesRepository
         analyses_repo = AnalysesRepository(use_service_role=True)
-        
+
         analysis = await analyses_repo.upsert_analysis(
-            content_hash=content_hash,
-            agent_version="1.0",
-            status="pending",
-            result={}
+            content_hash=content_hash, agent_version="1.0", status="pending", result={}
         )
         analysis_id = str(analysis.id)
         logger.info(f"Created new analysis record: {analysis_id}")
