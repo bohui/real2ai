@@ -6,6 +6,7 @@ instead of storing connections, preventing pool misuse.
 """
 
 import asyncio
+import json
 from typing import Dict, List, Optional, Tuple, Any
 from uuid import UUID
 import asyncpg
@@ -539,7 +540,8 @@ class ArtifactsRepository:
             async with conn.transaction():
                 await conn.execute("SELECT pg_advisory_xact_lock($1)", lock_key)
                 
-                # Try insert first
+                # Try insert first - serialize features to JSON string for jsonb column
+                features_json = json.dumps(features) if features is not None else None
                 await conn.execute(
                     """
                     INSERT INTO artifact_paragraphs (
@@ -552,7 +554,7 @@ class ArtifactsRepository:
                     """,
                     content_hmac, algorithm_version, params_fingerprint,
                     page_number, paragraph_index, paragraph_text_uri,
-                    paragraph_text_sha256, features
+                    paragraph_text_sha256, features_json
                 )
                 
                 # Then SELECT to get the artifact (whether newly inserted or existing)
