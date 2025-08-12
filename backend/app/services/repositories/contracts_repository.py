@@ -8,6 +8,7 @@ discrepancies across environments.
 """
 
 from typing import Dict, List, Optional, Any
+import json
 from uuid import UUID
 from dataclasses import dataclass
 from datetime import datetime
@@ -65,7 +66,7 @@ class ContractsRepository:
                 """
                 INSERT INTO contracts (
                     content_hash, contract_type, australian_state, metadata
-                ) VALUES ($1, $2, $3, $4)
+                ) VALUES ($1, $2, $3, $4::jsonb)
                 ON CONFLICT (content_hash) DO UPDATE SET
                     contract_type = COALESCE(contracts.contract_type, EXCLUDED.contract_type),
                     australian_state = COALESCE(contracts.australian_state, EXCLUDED.australian_state),
@@ -77,7 +78,7 @@ class ContractsRepository:
                 content_hash,
                 contract_type,
                 australian_state,
-                metadata,
+                json.dumps(metadata) if metadata is not None else None,
             )
 
             return Contract(
@@ -217,10 +218,10 @@ class ContractsRepository:
             result = await conn.execute(
                 """
                 UPDATE contracts 
-                SET metadata = $1, updated_at = now()
+                SET metadata = $1::jsonb, updated_at = now()
                 WHERE id = $2
                 """,
-                metadata,
+                json.dumps(metadata) if metadata is not None else None,
                 contract_id,
             )
             return result.split()[-1] == "1"

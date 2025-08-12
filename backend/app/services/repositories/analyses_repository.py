@@ -6,6 +6,7 @@ and shared analyses depending on table RLS configuration.
 """
 
 from typing import Dict, List, Optional, Any
+import json
 from uuid import UUID
 from dataclasses import dataclass
 from datetime import datetime
@@ -84,14 +85,14 @@ class AnalysesRepository:
             insert_columns.append("result")
             insert_values.append(f"${param_count}::jsonb")
             set_clauses.append(f"result = EXCLUDED.result")
-            params.append(result)
+            params.append(json.dumps(result))
 
         if error_details is not None:
             param_count += 1
             insert_columns.append("error_details")
             insert_values.append(f"${param_count}::jsonb")
             set_clauses.append(f"error_details = EXCLUDED.error_details")
-            params.append(error_details)
+            params.append(json.dumps(error_details))
 
         if started_at is not None:
             param_count += 1
@@ -280,12 +281,12 @@ class AnalysesRepository:
         if result is not None:
             param_count += 1
             set_clauses.append(f"result = ${param_count}::jsonb")
-            params.append(result)
+            params.append(json.dumps(result))
 
         if error_details is not None:
             param_count += 1
             set_clauses.append(f"error_details = ${param_count}::jsonb")
-            params.append(error_details)
+            params.append(json.dumps(error_details))
 
         if completed_at is not None:
             param_count += 1
