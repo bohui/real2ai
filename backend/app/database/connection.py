@@ -37,7 +37,10 @@ class ConnectionPoolManager:
 
     _service_pool: Optional[asyncpg.Pool] = None
     _user_pools: OrderedDict[UUID, UserPoolInfo] = OrderedDict()
-    _pool_lock = asyncio.Lock()
+    # Pools must be used only with the event loop they were created with.
+    # We bind pools to a specific loop id and recreate them if the loop changes.
+    _loop_id: Optional[int] = None
+    _pool_lock: Optional[asyncio.Lock] = None
     _metrics: Dict[str, int] = {
         "active_user_pools": 0,
         "evictions": 0,
@@ -46,8 +49,46 @@ class ConnectionPoolManager:
     }
 
     @classmethod
+    def _ensure_loop_bound(cls) -> None:
+        """Ensure pools are bound to the current event loop. Reset when loop changes."""
+        try:
+            current_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            # Fallback to get_event_loop for older contexts
+            current_loop = asyncio.get_event_loop()
+
+        current_loop_id = id(current_loop)
+        if cls._loop_id is None:
+            cls._loop_id = current_loop_id
+            if cls._pool_lock is None:
+                cls._pool_lock = asyncio.Lock()
+            return
+
+        if cls._loop_id != current_loop_id:
+            # Event loop changed; close all existing pools and rebind
+            # Best-effort synchronous cleanup; schedule async close if possible
+            async def _close_all():
+                await cls.close_all()
+
+            try:
+                if current_loop.is_running():
+                    # Run cleanup in the new loop to avoid cross-loop awaits
+                    fut = current_loop.create_task(_close_all())
+                    # Fire-and-forget; errors will be logged inside close_all
+                else:
+                    current_loop.run_until_complete(_close_all())
+            except Exception:
+                # If cleanup fails, reset references; the GC/driver will clean up
+                cls._service_pool = None
+                cls._user_pools.clear()
+
+            cls._loop_id = current_loop_id
+            cls._pool_lock = asyncio.Lock()
+
+    @classmethod
     async def get_service_pool(cls) -> asyncpg.Pool:
         """Get service role connection pool"""
+        cls._ensure_loop_bound()
         if cls._service_pool is None:
             settings = get_settings()
             dsn = cls._get_database_dsn()
@@ -66,6 +107,7 @@ class ConnectionPoolManager:
     @classmethod
     async def get_user_pool(cls, user_id: UUID) -> asyncpg.Pool:
         """Get user-specific connection pool based on configured mode"""
+        cls._ensure_loop_bound()
         settings = get_settings()
 
         if settings.db_pool_mode == "per_user":
@@ -77,7 +119,9 @@ class ConnectionPoolManager:
     @classmethod
     async def _get_per_user_pool(cls, user_id: UUID) -> asyncpg.Pool:
         """Get or create per-user connection pool"""
-        async with cls._pool_lock:
+        cls._ensure_loop_bound()
+        # mypy: _pool_lock is ensured in _ensure_loop_bound
+        async with cls._pool_lock:  # type: ignore[arg-type]
             settings = get_settings()
 
             # Check if pool exists and touch it
@@ -175,7 +219,8 @@ class ConnectionPoolManager:
     @classmethod
     async def cleanup_expired_pools(cls):
         """Clean up expired pools based on TTL"""
-        async with cls._pool_lock:
+        cls._ensure_loop_bound()
+        async with cls._pool_lock:  # type: ignore[arg-type]
             settings = get_settings()
             current_time = time.time()
             expired_users = []
@@ -193,6 +238,9 @@ class ConnectionPoolManager:
     @classmethod
     async def close_all(cls):
         """Close all connection pools"""
+        # Guard against None lock in startup/cleanup races
+        if cls._pool_lock is None:
+            cls._pool_lock = asyncio.Lock()
         async with cls._pool_lock:
             pools_to_close = []
 
@@ -213,6 +261,8 @@ class ConnectionPoolManager:
                 "pool_hits": 0,
                 "pool_misses": 0,
             }
+            # Reset loop binding to allow rebind on next use
+            cls._loop_id = None
             logger.info("All connection pools closed")
 
     @classmethod
