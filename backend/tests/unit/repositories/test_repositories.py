@@ -28,6 +28,14 @@ from app.services.repositories.runs_repository import (
     RunStatus,
     StepStatus,
 )
+from app.services.repositories.analysis_progress_repository import (
+    AnalysisProgressRepository,
+    AnalysisProgress,
+)
+from app.services.repositories.documents_repository import (
+    DocumentsRepository,
+    Document,
+)
 
 
 class TestArtifactsRepository:
@@ -395,3 +403,352 @@ class TestRunsRepository:
         assert result['status'] == 'in_progress'
         assert result['steps']['total'] == 5
         assert result['steps']['completed'] == 2
+
+
+class TestAnalysisProgressRepository:
+    """Test AnalysisProgressRepository"""
+
+    def setup_method(self):
+        """Setup test fixtures"""
+        self.user_id = uuid4()
+        self.repo = AnalysisProgressRepository(self.user_id)
+        self.content_hash = "test_content_hash_123"
+        self.user_id_str = str(uuid4())
+
+    @pytest.mark.asyncio
+    async def test_upsert_progress_success(self):
+        """Test upserting progress record successfully"""
+        mock_connection = AsyncMock()
+        mock_connection.execute.return_value = None  # Successful upsert
+        
+        progress_data = {
+            "current_step": "analysis_start",
+            "progress_percent": 25,
+            "step_description": "Starting contract analysis",
+            "status": "in_progress",
+            "estimated_completion_minutes": 2,
+        }
+        
+        with patch('app.services.repositories.analysis_progress_repository.get_user_connection') as mock_get_conn:
+            mock_get_conn.return_value.__aenter__.return_value = mock_connection
+            
+            result = await self.repo.upsert_progress(
+                self.content_hash, self.user_id_str, progress_data
+            )
+            
+        assert result is True
+        mock_connection.execute.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_upsert_progress_failure(self):
+        """Test upsert progress failure"""
+        mock_connection = AsyncMock()
+        mock_connection.execute.side_effect = Exception("Database error")
+        
+        progress_data = {
+            "current_step": "analysis_start",
+            "progress_percent": 25,
+            "status": "in_progress",
+        }
+        
+        with patch('app.services.repositories.analysis_progress_repository.get_user_connection') as mock_get_conn:
+            mock_get_conn.return_value.__aenter__.return_value = mock_connection
+            
+            result = await self.repo.upsert_progress(
+                self.content_hash, self.user_id_str, progress_data
+            )
+            
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_get_latest_progress_found(self):
+        """Test getting latest progress record when found"""
+        mock_connection = AsyncMock()
+        mock_row = {
+            "current_step": "analysis_complete",
+            "progress_percent": 100,
+            "updated_at": datetime.utcnow(),
+            "status": "completed",
+            "error_message": None,
+        }
+        mock_connection.fetchrow.return_value = mock_row
+        
+        with patch('app.services.repositories.analysis_progress_repository.get_user_connection') as mock_get_conn:
+            mock_get_conn.return_value.__aenter__.return_value = mock_connection
+            
+            result = await self.repo.get_latest_progress(
+                self.content_hash, self.user_id_str
+            )
+            
+        assert result is not None
+        assert result["current_step"] == "analysis_complete"
+        assert result["progress_percent"] == 100
+        assert result["status"] == "completed"
+
+    @pytest.mark.asyncio
+    async def test_get_latest_progress_not_found(self):
+        """Test getting latest progress when not found"""
+        mock_connection = AsyncMock()
+        mock_connection.fetchrow.return_value = None
+        
+        with patch('app.services.repositories.analysis_progress_repository.get_user_connection') as mock_get_conn:
+            mock_get_conn.return_value.__aenter__.return_value = mock_connection
+            
+            result = await self.repo.get_latest_progress(
+                self.content_hash, self.user_id_str
+            )
+            
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_get_progress_records_with_filters(self):
+        """Test getting progress records with filters"""
+        mock_connection = AsyncMock()
+        mock_rows = [
+            {
+                "id": uuid4(),
+                "content_hash": self.content_hash,
+                "user_id": UUID(self.user_id_str),
+                "current_step": "queued",
+                "progress_percent": 5,
+                "status": "in_progress",
+                "created_at": datetime.utcnow(),
+            },
+            {
+                "id": uuid4(),
+                "content_hash": self.content_hash,
+                "user_id": UUID(self.user_id_str),
+                "current_step": "analysis_complete",
+                "progress_percent": 100,
+                "status": "completed",
+                "created_at": datetime.utcnow(),
+            }
+        ]
+        mock_connection.fetch.return_value = mock_rows
+        
+        filters = {"content_hash": self.content_hash, "user_id": self.user_id_str}
+        
+        with patch('app.services.repositories.analysis_progress_repository.get_user_connection') as mock_get_conn:
+            mock_get_conn.return_value.__aenter__.return_value = mock_connection
+            
+            result = await self.repo.get_progress_records(filters)
+            
+        assert len(result) == 2
+        assert all(isinstance(record, dict) for record in result)
+        assert result[0]["current_step"] == "queued"
+        assert result[1]["current_step"] == "analysis_complete"
+
+    @pytest.mark.asyncio
+    async def test_update_progress_status_success(self):
+        """Test updating progress status successfully"""
+        mock_connection = AsyncMock()
+        mock_connection.execute.return_value = "UPDATE 1"
+        
+        with patch('app.services.repositories.analysis_progress_repository.get_user_connection') as mock_get_conn:
+            mock_get_conn.return_value.__aenter__.return_value = mock_connection
+            
+            result = await self.repo.update_progress_status(
+                self.content_hash, self.user_id_str, "failed", "Analysis timeout"
+            )
+            
+        assert result is True
+
+    @pytest.mark.asyncio
+    async def test_delete_progress_success(self):
+        """Test deleting progress record successfully"""
+        mock_connection = AsyncMock()
+        mock_connection.execute.return_value = "DELETE 1"
+        
+        with patch('app.services.repositories.analysis_progress_repository.get_user_connection') as mock_get_conn:
+            mock_get_conn.return_value.__aenter__.return_value = mock_connection
+            
+            result = await self.repo.delete_progress(
+                self.content_hash, self.user_id_str
+            )
+            
+        assert result is True
+
+    @pytest.mark.asyncio
+    async def test_get_active_analyses(self):
+        """Test getting active analyses for user"""
+        mock_connection = AsyncMock()
+        mock_rows = [
+            {
+                "id": uuid4(),
+                "content_hash": "hash1",
+                "user_id": UUID(self.user_id_str),
+                "current_step": "in_progress",
+                "progress_percent": 50,
+                "status": "in_progress",
+                "created_at": datetime.utcnow(),
+            }
+        ]
+        mock_connection.fetch.return_value = mock_rows
+        
+        with patch('app.services.repositories.analysis_progress_repository.get_user_connection') as mock_get_conn:
+            mock_get_conn.return_value.__aenter__.return_value = mock_connection
+            
+            result = await self.repo.get_active_analyses(self.user_id_str)
+            
+        assert len(result) == 1
+        assert result[0]["status"] == "in_progress"
+        assert result[0]["progress_percent"] == 50
+
+
+class TestDocumentsRepositoryExtended:
+    """Test extended DocumentsRepository methods"""
+
+    def setup_method(self):
+        """Setup test fixtures"""
+        self.user_id = uuid4()
+        self.repo = DocumentsRepository(self.user_id)
+        self.document_id = uuid4()
+        self.content_hash = "test_content_hash_456"
+
+    @pytest.mark.asyncio
+    async def test_get_documents_by_content_hash_found(self):
+        """Test getting documents by content hash when found"""
+        mock_connection = AsyncMock()
+        mock_rows = [
+            {
+                "id": self.document_id,
+                "user_id": self.user_id,
+                "original_filename": "test.pdf",
+                "storage_path": "/path/to/test.pdf",
+                "file_type": "pdf",
+                "file_size": 1024,
+                "content_hash": self.content_hash,
+                "processing_status": "processed",
+                "processing_started_at": None,
+                "processing_completed_at": datetime.utcnow(),
+                "processing_errors": None,
+                "artifact_text_id": None,
+                "total_pages": 5,
+                "total_word_count": 500,
+                "created_at": datetime.utcnow(),
+                "updated_at": datetime.utcnow(),
+            }
+        ]
+        mock_connection.fetch.return_value = mock_rows
+        
+        with patch('app.services.repositories.documents_repository.get_user_connection') as mock_get_conn:
+            mock_get_conn.return_value.__aenter__.return_value = mock_connection
+            
+            result = await self.repo.get_documents_by_content_hash(
+                self.content_hash, str(self.user_id)
+            )
+            
+        assert len(result) == 1
+        document = result[0]
+        assert isinstance(document, Document)
+        assert document.content_hash == self.content_hash
+        assert document.original_filename == "test.pdf"
+
+    @pytest.mark.asyncio
+    async def test_get_documents_by_content_hash_partial_columns(self):
+        """Test getting documents by content hash with partial columns"""
+        mock_connection = AsyncMock()
+        mock_rows = [
+            {
+                "id": self.document_id,
+            }
+        ]
+        mock_connection.fetch.return_value = mock_rows
+        
+        with patch('app.services.repositories.documents_repository.get_user_connection') as mock_get_conn:
+            mock_get_conn.return_value.__aenter__.return_value = mock_connection
+            
+            result = await self.repo.get_documents_by_content_hash(
+                self.content_hash, str(self.user_id), columns="id"
+            )
+            
+        assert len(result) == 1
+        assert isinstance(result[0], dict)
+        assert result[0]["id"] == self.document_id
+
+    @pytest.mark.asyncio
+    async def test_update_processing_results_success(self):
+        """Test updating processing results successfully"""
+        mock_connection = AsyncMock()
+        mock_connection.execute.return_value = "UPDATE 1"
+        
+        results = {
+            "extracted_text": "Sample text",
+            "confidence": 0.95,
+            "method": "ocr"
+        }
+        
+        with patch('app.services.repositories.documents_repository.get_user_connection') as mock_get_conn:
+            mock_get_conn.return_value.__aenter__.return_value = mock_connection
+            
+            result = await self.repo.update_processing_results(
+                self.document_id, results
+            )
+            
+        assert result is True
+
+    @pytest.mark.asyncio
+    async def test_update_processing_status_and_results_with_results(self):
+        """Test updating both status and results"""
+        mock_connection = AsyncMock()
+        mock_connection.execute.return_value = "UPDATE 1"
+        
+        results = {"extraction_confidence": 0.9}
+        
+        with patch('app.services.repositories.documents_repository.get_user_connection') as mock_get_conn:
+            mock_get_conn.return_value.__aenter__.return_value = mock_connection
+            
+            result = await self.repo.update_processing_status_and_results(
+                self.document_id, "processed", results
+            )
+            
+        assert result is True
+
+    @pytest.mark.asyncio
+    async def test_update_processing_status_and_results_status_only(self):
+        """Test updating only status without results"""
+        mock_connection = AsyncMock()
+        mock_connection.execute.return_value = "UPDATE 1"
+        
+        with patch('app.services.repositories.documents_repository.get_user_connection') as mock_get_conn:
+            mock_get_conn.return_value.__aenter__.return_value = mock_connection
+            
+            result = await self.repo.update_processing_status_and_results(
+                self.document_id, "failed"
+            )
+            
+        assert result is True
+
+    @pytest.mark.asyncio
+    async def test_get_document_with_content_hash(self):
+        """Test getting document with content_hash field included"""
+        mock_connection = AsyncMock()
+        mock_row = {
+            "id": self.document_id,
+            "user_id": self.user_id,
+            "original_filename": "test.pdf",
+            "storage_path": "/path/to/test.pdf",
+            "file_type": "pdf",
+            "file_size": 1024,
+            "content_hash": self.content_hash,
+            "processing_status": "processed",
+            "processing_started_at": None,
+            "processing_completed_at": datetime.utcnow(),
+            "processing_errors": None,
+            "artifact_text_id": None,
+            "total_pages": 5,
+            "total_word_count": 500,
+            "created_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow(),
+        }
+        mock_connection.fetchrow.return_value = mock_row
+        
+        with patch('app.services.repositories.documents_repository.get_user_connection') as mock_get_conn:
+            mock_get_conn.return_value.__aenter__.return_value = mock_connection
+            
+            result = await self.repo.get_document(self.document_id)
+            
+        assert result is not None
+        assert isinstance(result, Document)
+        assert result.content_hash == self.content_hash
+        assert result.id == self.document_id

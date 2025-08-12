@@ -7,9 +7,11 @@ from the database using user-authenticated context.
 
 from typing import Dict, Any
 from datetime import datetime, timezone
+from uuid import UUID
 
 from app.agents.subflows.document_processing_workflow import DocumentProcessingState
 from .base_node import DocumentProcessingNodeBase
+from app.services.repositories.documents_repository import DocumentsRepository
 
 
 class FetchDocumentRecordNode(DocumentProcessingNodeBase):
@@ -55,17 +57,11 @@ class FetchDocumentRecordNode(DocumentProcessingNodeBase):
             
             self._log_info(f"Fetching document record for ID: {document_id}")
             
-            # Get user-authenticated client
-            user_client = await self.get_user_client()
+            # Fetch document record with RLS enforcement using repository
+            docs_repo = DocumentsRepository()
+            document_obj = await docs_repo.get_document(UUID(document_id))
             
-            # Fetch document record with RLS enforcement
-            result = await user_client.database.select(
-                "documents",
-                columns="id, storage_path, file_type, content_hash, processing_status, original_filename",
-                filters={"id": document_id}
-            )
-            
-            if not result.get("data"):
+            if not document_obj:
                 return self._handle_error(
                     state,
                     ValueError("Document not found or access denied"),
@@ -76,7 +72,15 @@ class FetchDocumentRecordNode(DocumentProcessingNodeBase):
                     }
                 )
             
-            document = result["data"][0]
+            # Convert to dict for backward compatibility
+            document = {
+                "id": str(document_obj.id),
+                "storage_path": document_obj.storage_path,
+                "file_type": document_obj.file_type,
+                "content_hash": document_obj.content_hash,
+                "processing_status": document_obj.processing_status,
+                "original_filename": document_obj.original_filename,
+            }
             
             # Extract required metadata
             storage_path = document.get("storage_path")

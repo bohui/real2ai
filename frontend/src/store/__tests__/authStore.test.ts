@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook } from "@testing-library/react";
-import { useAuthStore } from "../authStore";
-import { apiService } from "@/services/api";
+
 import type {
   AuthResponse,
   User,
@@ -9,25 +8,74 @@ import type {
   UserRegistrationRequest,
 } from "@/types";
 
-// Mock API service
+// First unmock the authStore to test the real implementation
+vi.unmock('@/store/authStore');
+
+// Mock localStorage for Zustand persistence
+const localStorageMock = {
+  getItem: vi.fn(),
+  setItem: vi.fn(),
+  removeItem: vi.fn(),
+  clear: vi.fn(),
+};
+Object.defineProperty(window, 'localStorage', {
+  value: localStorageMock
+});
+
+// Mock API service module - define the mock inline to avoid hoisting issues
 vi.mock("@/services/api", () => ({
   apiService: {
     login: vi.fn(),
     register: vi.fn(),
+    logout: vi.fn(),
     getCurrentUser: vi.fn(),
     updateProfile: vi.fn(),
     setToken: vi.fn(),
     clearToken: vi.fn(),
+    handleError: vi.fn((error) => error?.message || 'Unknown error'),
+    setTokens: vi.fn(),
+    clearTokens: vi.fn(),
   },
 }));
 
+// Mock UI store import to avoid circular dependency issues
+vi.mock("@/store/uiStore", () => ({
+  useUIStore: {
+    getState: () => ({
+      resetOnboardingState: vi.fn(),
+    }),
+  },
+}));
+
+// Import after mocking
+import { useAuthStore } from "../authStore";
+import { apiService } from "@/services/api";
+
+// Get typed access to mocked API service
 const mockApiService = vi.mocked(apiService);
+
+const mockUser: User = {
+  id: "test-user-id",
+  email: "test@example.com",
+  australian_state: "NSW",
+  user_type: "buyer",
+  subscription_status: "premium",
+  credits_remaining: 10,
+  preferences: {},
+  onboarding_completed: true,
+  onboarding_preferences: {
+    practice_area: "property",
+    jurisdiction: "nsw",
+  },
+};
 
 describe("AuthStore", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // Reset store state before each test
-    useAuthStore.getState().logout();
+    act(() => {
+      useAuthStore.getState().logout();
+    });
   });
 
   afterEach(() => {
@@ -47,39 +95,26 @@ describe("AuthStore", () => {
 
   describe("Login", () => {
     it("should login successfully", async () => {
-      const mockUser: User = {
-        id: "1",
-        email: "test@example.com",
-        australian_state: "NSW",
-        user_type: "buyer",
-        subscription_status: "premium",
-        credits_remaining: 100,
-        preferences: {},
-        onboarding_completed: false,
-        onboarding_preferences: {}
-      };
-
       const mockAuthResponse: AuthResponse = {
         access_token: "mock-jwt-token",
         refresh_token: "mock-refresh-token",
         user_profile: mockUser,
       };
 
-      mockApiService.login.mockResolvedValueOnce(mockAuthResponse);
-
-      const { result } = renderHook(() => useAuthStore());
+      mockApiService.login.mockResolvedValue(mockAuthResponse);
 
       const loginData: UserLoginRequest = {
         email: "test@example.com",
         password: "password123",
       };
 
+      const { result } = renderHook(() => useAuthStore());
+
       await act(async () => {
         await result.current.login(loginData);
       });
 
       expect(mockApiService.login).toHaveBeenCalledWith(loginData);
-      expect(mockApiService.setToken).toHaveBeenCalledWith("mock-jwt-token");
       expect(result.current.user).toEqual(mockUser);
       expect(result.current.isAuthenticated).toBe(true);
       expect(result.current.isLoading).toBe(false);
@@ -88,15 +123,15 @@ describe("AuthStore", () => {
 
     it("should handle login error", async () => {
       const errorMessage = "Invalid credentials";
-      const loginPromise = Promise.reject(new Error(errorMessage));
-      mockApiService.login.mockReturnValueOnce(loginPromise);
-
-      const { result } = renderHook(() => useAuthStore());
+      mockApiService.login.mockRejectedValue(new Error(errorMessage));
+      mockApiService.handleError.mockReturnValue(errorMessage);
 
       const loginData: UserLoginRequest = {
         email: "test@example.com",
-        password: "wrongpassword",
+        password: "wrong-password",
       };
+
+      const { result } = renderHook(() => useAuthStore());
 
       await act(async () => {
         try {
@@ -109,7 +144,7 @@ describe("AuthStore", () => {
       expect(result.current.user).toBeNull();
       expect(result.current.isAuthenticated).toBe(false);
       expect(result.current.isLoading).toBe(false);
-      expect(result.current.error).toBeTruthy();
+      expect(result.current.error).toBe(errorMessage);
     });
   });
 

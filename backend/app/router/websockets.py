@@ -3,6 +3,7 @@
 import json
 import logging
 from typing import Dict, Any, Optional
+from uuid import UUID
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
 from datetime import datetime, UTC, timedelta
 
@@ -16,6 +17,9 @@ from app.clients.factory import get_service_supabase_client
 from enum import Enum
 from app.services.backend_token_service import BackendTokenService
 from app.services.repositories.analyses_repository import AnalysesRepository
+from app.services.repositories.analysis_progress_repository import AnalysisProgressRepository
+from app.services.repositories.documents_repository import DocumentsRepository
+from app.services.repositories.contracts_repository import ContractsRepository
 
 
 class CacheStatus(str, Enum):
@@ -52,14 +56,20 @@ async def check_document_cache_status(document_id: str, user_id: str) -> Dict[st
         user_client = await AuthContext.get_authenticated_client(require_auth=True)
 
         # Get document with user context (RLS enforced)
-        doc_result = await user_client.database.select(
-            "documents", columns="*", filters={"id": document_id, "user_id": user_id}
-        )
+        docs_repo = DocumentsRepository()
+        document = await docs_repo.get_document(UUID(document_id))
 
-        if not doc_result.get("data"):
+        if not document:
             raise ValueError(f"Document {document_id} not found or access denied")
 
-        document = doc_result["data"][0]
+        # Convert to dict for backward compatibility  
+        document = {
+            "id": str(document.id),
+            "user_id": str(document.user_id),
+            "content_hash": document.content_hash,
+            "original_filename": document.original_filename,
+            "processing_status": document.processing_status,
+        }
         content_hash = document.get("content_hash")
         if not content_hash:
             logger.info("Document has no content_hash; treating as cache MISS")
@@ -76,16 +86,13 @@ async def check_document_cache_status(document_id: str, user_id: str) -> Dict[st
             f"Checking cache for document {document_id} with content_hash: {content_hash}"
         )
 
-        # Check if user has access to documents with this content_hash using user's authenticated client
-        user_documents_result = await user_client.database.select(
-            "documents",
-            columns="*",
-            filters={"content_hash": content_hash, "user_id": user_id},
-            order_by="created_at DESC",
-            limit=1,
+        # Check if user has access to documents with this content_hash using repository
+        docs_repo = DocumentsRepository()
+        user_documents = await docs_repo.get_documents_by_content_hash(
+            content_hash, user_id
         )
 
-        if not user_documents_result.get("data"):
+        if not user_documents:
             # CACHE MISS - User doesn't have access to any documents with this content_hash
             logger.info(
                 f"Cache MISS: User doesn't have access to documents with content_hash {content_hash}"
@@ -102,26 +109,19 @@ async def check_document_cache_status(document_id: str, user_id: str) -> Dict[st
         # User has access to documents with this content_hash, now check for contracts
         # Since the user has access to documents with this content_hash, they should be able to access contracts
         # But we need to ensure the RLS policy is satisfied by checking user_contract_views first
-        user_contract_view_result = await user_client.database.select(
-            "user_contract_views",
-            columns="*",
-            filters={"content_hash": content_hash, "user_id": user_id},
-            order_by="created_at DESC",
-            limit=1,
+        user_contract_views = await docs_repo.get_user_contract_views(
+            content_hash, user_id, limit=1
         )
 
         # If no user_contract_views entry exists, create one to ensure access
-        if not user_contract_view_result.get("data"):
+        if not user_contract_views:
             # Create a user_contract_views entry to ensure access to contracts and analyses
             try:
-                await user_client.database.create(
-                    "user_contract_views",
-                    {
-                        "user_id": user_id,
-                        "content_hash": content_hash,
-                        "property_address": document.get("property_address"),
-                        "source": "upload",
-                    },
+                await docs_repo.create_user_contract_view(
+                    user_id=UUID(user_id),
+                    content_hash=content_hash,
+                    property_address=document.get("property_address"),
+                    source="upload",
                 )
                 logger.info(
                     f"Created user_contract_views entry for user {user_id} and content_hash {content_hash}"
@@ -131,15 +131,10 @@ async def check_document_cache_status(document_id: str, user_id: str) -> Dict[st
                 # Continue anyway - the user should still have access through documents
 
         # Now check for contracts - the RLS policy should allow access since user has documents with this content_hash
-        contract_result = await user_client.database.select(
-            "contracts",
-            columns="*",
-            filters={"content_hash": content_hash},
-            order_by="created_at DESC",
-            limit=1,
-        )
+        contracts_repo = ContractsRepository()
+        contract = await contracts_repo.get_contract_by_content_hash(content_hash)
 
-        if not contract_result.get("data"):
+        if not contract:
             # CACHE MISS - No contract found for this content_hash
             logger.info(
                 f"Cache MISS: No contract found for content_hash {content_hash}"
@@ -153,8 +148,7 @@ async def check_document_cache_status(document_id: str, user_id: str) -> Dict[st
                 "message": "New document - analysis will start shortly",
             }
 
-        contract = contract_result["data"][0]
-        contract_id = contract["id"]
+        contract_id = str(contract.id)
 
         # Check analysis status using AnalysesRepository
         analyses_repo = AnalysesRepository(use_service_role=True)
@@ -200,17 +194,13 @@ async def check_document_cache_status(document_id: str, user_id: str) -> Dict[st
             )
 
             # Get detailed progress if available
-            progress_result = await user_client.database.select(
-                "analysis_progress",
-                columns="*",
-                filters={"content_hash": content_hash, "user_id": user_id},
-                order_by="updated_at DESC",
-                limit=1,
+            progress_repo = AnalysisProgressRepository()
+            progress = await progress_repo.get_latest_progress(
+                content_hash, user_id
             )
 
             progress_info = None
-            if progress_result.get("data"):
-                progress = progress_result["data"][0]
+            if progress:
                 progress_info = {
                     "current_step": progress["current_step"],
                     "progress_percent": progress["progress_percent"],
@@ -497,15 +487,16 @@ async def document_analysis_websocket(
         # Send document_uploaded notification if this is a recent upload
         try:
             # Get document details to check upload time
-            user_client = await AuthContext.get_authenticated_client()
-            doc_result = await user_client.database.select(
-                "documents",
-                columns="*",
-                filters={"id": document_id, "user_id": str(user.id)},
-            )
+            docs_repo = DocumentsRepository()
+            document_obj = await docs_repo.get_document(UUID(document_id))
 
-            if doc_result.get("data"):
-                document = doc_result["data"][0]
+            if document_obj:
+                document = {
+                    "id": str(document_obj.id),
+                    "created_at": document_obj.created_at,
+                    "original_filename": document_obj.original_filename,
+                    "file_size": document_obj.file_size,
+                }
                 created_at = document.get("created_at")
 
                 if created_at:
@@ -817,17 +808,13 @@ async def handle_retry_analysis_request(
         )
 
         # Get the content_hash for the contract to use in retry
-        user_client = await AuthContext.get_authenticated_client(require_auth=True)
+        contracts_repo = ContractsRepository()
+        contract = await contracts_repo.get_contract_by_id(UUID(contract_id))
 
-        # Get contract to find content_hash
-        contract_result = await user_client.database.select(
-            "contracts", columns="content_hash", filters={"id": contract_id}
-        )
-
-        if not contract_result.get("data"):
+        if not contract:
             raise ValueError("Contract not found")
 
-        content_hash = contract_result["data"][0]["content_hash"]
+        content_hash = contract.content_hash
 
         # Check current analysis status before attempting retry
         analyses_repo = AnalysesRepository(use_service_role=True)
@@ -854,10 +841,8 @@ async def handle_retry_analysis_request(
                 return
 
         # Use the new retry function to safely handle existing analysis records
-        retry_analysis_id = await user_client.database.execute_rpc(
-            "retry_contract_analysis",
-            {"p_content_hash": content_hash, "p_user_id": user_id},
-        )
+        analyses_repo = AnalysesRepository(use_service_role=True)
+        retry_analysis_id = await analyses_repo.retry_contract_analysis(content_hash, user_id)
 
         if not retry_analysis_id:
             raise ValueError("Failed to retry analysis via database function")
@@ -918,56 +903,42 @@ async def handle_status_request(
         user_client = await AuthContext.get_authenticated_client(require_auth=True)
 
         # First get the content_hash from the document
-        doc_result = await user_client.database.select(
-            "documents",
-            columns="content_hash",
-            filters={"id": document_id, "user_id": user_id},
-        )
+        docs_repo = DocumentsRepository()
+        document = await docs_repo.get_document(UUID(document_id))
 
-        if not doc_result.get("data"):
+        if not document:
             raise ValueError(f"Document {document_id} not found or access denied")
 
-        content_hash = doc_result["data"][0].get("content_hash")
+        content_hash = document.content_hash
         if not content_hash:
             raise ValueError(f"Document {document_id} has no content hash")
 
         # If client didn't provide a contract_id, try to resolve it by content_hash
         if not contract_id or contract_id == "None":
             try:
-                contract_result = await user_client.database.select(
-                    "contracts",
-                    columns="id",
-                    filters={"content_hash": content_hash},
-                    order_by="created_at DESC",
-                    limit=1,
-                )
-                if contract_result.get("data"):
-                    contract_id = contract_result["data"][0]["id"]
+                contracts_repo = ContractsRepository()
+                contracts = await contracts_repo.get_contracts_by_content_hash(content_hash, limit=1)
+                if contracts:
+                    contract_id = str(contracts[0].id)
             except Exception:
                 # If this lookup fails, continue; we'll still report status by content_hash
                 pass
 
         # Check if user has access to this content_hash through user_contract_views
-        user_contract_view_result = await user_client.database.select(
-            "user_contract_views",
-            columns="*",
-            filters={"content_hash": content_hash, "user_id": user_id},
-            order_by="created_at DESC",
-            limit=1,
-        )
+        user_contract_views = await docs_repo.get_user_contract_views(content_hash, user_id, limit=1)
 
         # If no user_contract_views entry exists, create one to ensure access
-        if not user_contract_view_result.get("data"):
+        if not user_contract_views:
             # Create a user_contract_views entry to ensure access to contracts and analyses
             try:
+                # Need to create user_contract_views entry - using user_client database temporarily 
+                # TODO: Create UserContractViewsRepository for this operation
                 await user_client.database.create(
                     "user_contract_views",
                     {
                         "user_id": user_id,
                         "content_hash": content_hash,
-                        "property_address": doc_result["data"][0].get(
-                            "property_address"
-                        ),
+                        "property_address": getattr(document, 'property_address', None),
                         "source": "upload",
                     },
                 )
@@ -979,16 +950,11 @@ async def handle_status_request(
                 # Continue anyway - the user should still have access through documents
 
         # Get detailed progress from analysis_progress table (user context - RLS enforced)
-        progress_result = await user_client.database.select(
-            "analysis_progress",
-            columns="*",
-            filters={"content_hash": content_hash, "user_id": user_id},
-            order_by="updated_at DESC",
-            limit=1,
-        )
+        progress_repo = AnalysisProgressRepository()
+        progress_data = await progress_repo.get_latest_progress(content_hash, user_id)
 
-        if progress_result.get("data"):
-            progress = progress_result["data"][0]
+        if progress_data:
+            progress = progress_data
             status_message = {
                 "event_type": "analysis_progress",
                 "timestamp": datetime.now(UTC).isoformat(),
@@ -1068,33 +1034,29 @@ async def handle_cancellation_request(
         user_client = await AuthContext.get_authenticated_client(require_auth=True)
 
         # Get the content_hash from the document
-        doc_result = await user_client.database.select(
-            "documents",
-            columns="content_hash",
-            filters={"id": document_id, "user_id": user_id},
-        )
+        docs_repo = DocumentsRepository()
+        document = await docs_repo.get_document(UUID(document_id))
 
-        if not doc_result.get("data"):
+        if not document:
             raise ValueError(f"Document {document_id} not found or access denied")
 
-        content_hash = doc_result["data"][0].get("content_hash")
+        content_hash = document.content_hash
 
         # Find and update analysis_progress records that match the filters
-        progress_records = await user_client.database.read(
-            "analysis_progress",
+        progress_repo = AnalysisProgressRepository()
+        progress_records = await progress_repo.get_progress_records(
             filters={
                 "content_hash": content_hash,
                 "user_id": user_id,
                 "status": "in_progress",
-            },
+            }
         )
 
         # Update each matching progress record
         for record in progress_records:
-            await user_client.database.update(
-                "analysis_progress",
+            await progress_repo.update_progress_by_id(
                 record["id"],
-                {"status": "cancelled", "error_message": "Analysis cancelled by user"},
+                {"status": "cancelled", "error_message": "Analysis cancelled by user"}
             )
 
         # Update analysis records using AnalysesRepository
@@ -1197,14 +1159,23 @@ async def _dispatch_analysis_task(
         user_client = await AuthContext.get_authenticated_client(require_auth=True)
 
         # Get document record
-        doc_result = await user_client.database.select(
-            "documents", columns="*", filters={"id": document_id, "user_id": user_id}
-        )
+        docs_repo = DocumentsRepository()
+        document_obj = await docs_repo.get_document(UUID(document_id))
 
-        if not doc_result.get("data"):
+        if not document_obj:
             raise ValueError(f"Document {document_id} not found or access denied")
 
-        document = doc_result["data"][0]
+        # Convert to dict for backward compatibility
+        document = {
+            "id": str(document_obj.id),
+            "user_id": str(document_obj.user_id),
+            "original_filename": document_obj.original_filename,
+            "storage_path": document_obj.storage_path,
+            "file_type": document_obj.file_type,
+            "file_size": document_obj.file_size,
+            "content_hash": document_obj.content_hash,
+            "processing_status": document_obj.processing_status
+        }
         content_hash = document.get("content_hash")
         if not content_hash:
             raise ValueError("Document has no content_hash; cannot dispatch analysis")

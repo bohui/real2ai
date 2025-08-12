@@ -2,6 +2,7 @@
 
 import hashlib
 from typing import Dict, List, Optional, Union, TypedDict, Any
+from uuid import UUID
 from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, Body, Query
 from fastapi.responses import JSONResponse
 import logging
@@ -23,6 +24,7 @@ from app.schema.contract import (
 )
 from app.clients.supabase.client import SupabaseClient
 from app.services.repositories.analyses_repository import AnalysesRepository
+from app.services.repositories.documents_repository import DocumentsRepository
 
 logger = logging.getLogger(__name__)
 
@@ -620,19 +622,28 @@ async def _get_user_document(
 ) -> DocumentRecord:
     """Get user document with user context (RLS enforced)"""
     try:
-        doc_result = await user_client.database.select(
-            "documents", columns="*", filters={"id": document_id, "user_id": user_id}
-        )
+        docs_repo = DocumentsRepository()
+        document = await docs_repo.get_document(UUID(document_id))
 
         logger.debug(
-            f"Document query result for {document_id}: {doc_result is not None}"
+            f"Document query result for {document_id}: {document is not None}"
         )
 
-        if not doc_result.get("data"):
+        if not document:
             logger.warning(f"Document {document_id} not found for user {user_id}")
             raise ValueError(f"Document not found or you don't have access to it")
 
-        document = doc_result["data"][0]
+        # Convert to dict for backward compatibility
+        document = {
+            "id": str(document.id),
+            "user_id": str(document.user_id),
+            "original_filename": document.original_filename,
+            "storage_path": document.storage_path,
+            "file_type": document.file_type,
+            "file_size": document.file_size,
+            "content_hash": document.content_hash,
+            "processing_status": document.processing_status,
+        }
         logger.debug(
             f"Retrieved document: id={document.get('id')}, status={document.get('processing_status')}"
         )

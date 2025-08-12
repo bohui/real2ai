@@ -239,15 +239,17 @@ vi.mock('@/contexts/SEOContext', () => {
   };
 })
 
-// Mock useWebSocket hook
+// Mock useWebSocket hook - can be overridden in individual tests
 vi.mock('@/hooks/useWebSocket', () => ({
   useWebSocket: () => ({
     ws: null,
     isConnected: false,
     isConnecting: false,
-    reconnect: vi.fn(),
+    error: null,
+    send: vi.fn(),
+    connect: vi.fn(),
     disconnect: vi.fn(),
-    sendMessage: vi.fn(),
+    reconnect: vi.fn(),
   }),
 }))
 

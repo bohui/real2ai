@@ -19,20 +19,22 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class Document:
-    """Document model"""
+    """Document model aligned with current `documents` schema."""
+
     id: UUID
     user_id: UUID
-    filename: str
     original_filename: str
+    storage_path: str
+    file_type: str
     file_size: int
-    content_type: str
+    content_hash: Optional[str]
     processing_status: str
     processing_started_at: Optional[datetime] = None
     processing_completed_at: Optional[datetime] = None
     processing_errors: Optional[Dict[str, Any]] = None
     artifact_text_id: Optional[UUID] = None
-    total_pages: Optional[int] = None
-    total_word_count: Optional[int] = None
+    total_pages: Optional[int] = 0
+    total_word_count: Optional[int] = 0
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
@@ -43,7 +45,7 @@ class DocumentsRepository:
     def __init__(self, user_id: Optional[UUID] = None):
         """
         Initialize documents repository.
-        
+
         Args:
             user_id: Optional user ID (uses auth context if not provided)
         """
@@ -51,57 +53,61 @@ class DocumentsRepository:
 
     async def create_document(self, document_data: Dict[str, Any]) -> Document:
         """
-        Create a new document.
+        Create a new document aligned with current schema.
 
-        Args:
-            document_data: Document data dictionary containing:
-                - filename: str
-                - original_filename: str
-                - file_size: int
-                - content_type: str
-                - processing_status: str (default: 'pending')
+        Expected keys in document_data:
+        - id, user_id, original_filename, storage_path, file_type,
+          file_size, content_hash, processing_status,
+          contract_type (optional), australian_state (optional),
+          text_extraction_method (optional)
 
         Returns:
-            Document: Created document
+        - Document dataclass instance
         """
         async with get_user_connection(self.user_id) as conn:
             row = await conn.fetchrow(
                 """
                 INSERT INTO documents (
-                    filename, original_filename, file_size, content_type,
-                    processing_status, user_id
-                ) VALUES ($1, $2, $3, $4, $5, 
-                    COALESCE($6::uuid, (current_setting('request.jwt.claim.sub'))::uuid)
-                )
-                RETURNING id, user_id, filename, original_filename, file_size, 
-                         content_type, processing_status, processing_started_at,
-                         processing_completed_at, processing_errors, artifact_text_id,
-                         total_pages, total_word_count, created_at, updated_at
+                    id, user_id, original_filename, storage_path, file_type,
+                    file_size, content_hash, processing_status,
+                    contract_type, australian_state, text_extraction_method
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                RETURNING 
+                    id, user_id, original_filename, storage_path, file_type,
+                    file_size, content_hash, processing_status, processing_started_at,
+                    processing_completed_at, processing_errors, artifact_text_id,
+                    total_pages, total_word_count, created_at, updated_at
                 """,
-                document_data['filename'],
-                document_data['original_filename'],
-                document_data['file_size'],
-                document_data['content_type'],
-                document_data.get('processing_status', 'pending'),
-                self.user_id
+                document_data.get("id"),
+                document_data.get("user_id"),
+                document_data.get("original_filename"),
+                document_data.get("storage_path"),
+                document_data.get("file_type"),
+                document_data.get("file_size"),
+                document_data.get("content_hash"),
+                document_data.get("processing_status", "uploaded"),
+                document_data.get("contract_type"),
+                document_data.get("australian_state"),
+                document_data.get("text_extraction_method"),
             )
 
             return Document(
-                id=row['id'],
-                user_id=row['user_id'],
-                filename=row['filename'],
-                original_filename=row['original_filename'],
-                file_size=row['file_size'],
-                content_type=row['content_type'],
-                processing_status=row['processing_status'],
-                processing_started_at=row['processing_started_at'],
-                processing_completed_at=row['processing_completed_at'],
-                processing_errors=row['processing_errors'],
-                artifact_text_id=row['artifact_text_id'],
-                total_pages=row['total_pages'],
-                total_word_count=row['total_word_count'],
-                created_at=row['created_at'],
-                updated_at=row['updated_at']
+                id=row["id"],
+                user_id=row["user_id"],
+                original_filename=row["original_filename"],
+                storage_path=row["storage_path"],
+                file_type=row["file_type"],
+                file_size=row["file_size"],
+                content_hash=row["content_hash"],
+                processing_status=row["processing_status"],
+                processing_started_at=row["processing_started_at"],
+                processing_completed_at=row["processing_completed_at"],
+                processing_errors=row["processing_errors"],
+                artifact_text_id=row["artifact_text_id"],
+                total_pages=row["total_pages"],
+                total_word_count=row["total_word_count"],
+                created_at=row["created_at"],
+                updated_at=row["updated_at"],
             )
 
     async def get_document(self, document_id: UUID) -> Optional[Document]:
@@ -117,35 +123,36 @@ class DocumentsRepository:
         async with get_user_connection(self.user_id) as conn:
             row = await conn.fetchrow(
                 """
-                SELECT id, user_id, filename, original_filename, file_size, 
-                       content_type, processing_status, processing_started_at,
+                SELECT id, user_id, original_filename, storage_path, file_type, file_size, 
+                       content_hash, processing_status, processing_started_at,
                        processing_completed_at, processing_errors, artifact_text_id,
                        total_pages, total_word_count, created_at, updated_at
                 FROM documents
                 WHERE id = $1
                 """,
-                document_id
+                document_id,
             )
 
             if not row:
                 return None
 
             return Document(
-                id=row['id'],
-                user_id=row['user_id'],
-                filename=row['filename'],
-                original_filename=row['original_filename'],
-                file_size=row['file_size'],
-                content_type=row['content_type'],
-                processing_status=row['processing_status'],
-                processing_started_at=row['processing_started_at'],
-                processing_completed_at=row['processing_completed_at'],
-                processing_errors=row['processing_errors'],
-                artifact_text_id=row['artifact_text_id'],
-                total_pages=row['total_pages'],
-                total_word_count=row['total_word_count'],
-                created_at=row['created_at'],
-                updated_at=row['updated_at']
+                id=row["id"],
+                user_id=row["user_id"],
+                original_filename=row["original_filename"],
+                storage_path=row["storage_path"],
+                file_size=row["file_size"],
+                file_type=row["file_type"],
+                content_hash=row["content_hash"],
+                processing_status=row["processing_status"],
+                processing_started_at=row["processing_started_at"],
+                processing_completed_at=row["processing_completed_at"],
+                processing_errors=row["processing_errors"],
+                artifact_text_id=row["artifact_text_id"],
+                total_pages=row["total_pages"],
+                total_word_count=row["total_word_count"],
+                created_at=row["created_at"],
+                updated_at=row["updated_at"],
             )
 
     async def update_document_status(
@@ -154,7 +161,7 @@ class DocumentsRepository:
         status: str,
         error_details: Optional[Dict[str, Any]] = None,
         processing_started_at: Optional[datetime] = None,
-        processing_completed_at: Optional[datetime] = None
+        processing_completed_at: Optional[datetime] = None,
     ) -> bool:
         """
         Update document processing status.
@@ -182,7 +189,9 @@ class DocumentsRepository:
 
             if processing_started_at is not None:
                 param_count += 1
-                set_clauses.append(f"processing_started_at = COALESCE(processing_started_at, ${param_count})")
+                set_clauses.append(
+                    f"processing_started_at = COALESCE(processing_started_at, ${param_count})"
+                )
                 params.append(processing_started_at)
 
             if processing_completed_at is not None:
@@ -201,12 +210,10 @@ class DocumentsRepository:
             """
 
             result = await conn.execute(query, *params)
-            return result.split()[-1] == '1'
+            return result.split()[-1] == "1"
 
     async def update_document_metrics(
-        self,
-        document_id: UUID,
-        aggregated_metrics: Dict[str, Any]
+        self, document_id: UUID, aggregated_metrics: Dict[str, Any]
     ) -> bool:
         """
         Update document with aggregated metrics.
@@ -226,20 +233,20 @@ class DocumentsRepository:
             params = []
             param_count = 0
 
-            if 'total_pages' in aggregated_metrics:
+            if "total_pages" in aggregated_metrics:
                 param_count += 1
                 set_clauses.append(f"total_pages = ${param_count}")
-                params.append(aggregated_metrics['total_pages'])
+                params.append(aggregated_metrics["total_pages"])
 
-            if 'total_word_count' in aggregated_metrics:
+            if "total_word_count" in aggregated_metrics:
                 param_count += 1
                 set_clauses.append(f"total_word_count = ${param_count}")
-                params.append(aggregated_metrics['total_word_count'])
+                params.append(aggregated_metrics["total_word_count"])
 
-            if 'artifact_text_id' in aggregated_metrics:
+            if "artifact_text_id" in aggregated_metrics:
                 param_count += 1
                 set_clauses.append(f"artifact_text_id = ${param_count}")
-                params.append(aggregated_metrics['artifact_text_id'])
+                params.append(aggregated_metrics["artifact_text_id"])
 
             if param_count == 0:
                 # No metrics to update
@@ -256,13 +263,10 @@ class DocumentsRepository:
             """
 
             result = await conn.execute(query, *params)
-            return result.split()[-1] == '1'
+            return result.split()[-1] == "1"
 
     async def list_user_documents(
-        self,
-        limit: int = 50,
-        offset: int = 0,
-        status_filter: Optional[str] = None
+        self, limit: int = 50, offset: int = 0, status_filter: Optional[str] = None
     ) -> List[Document]:
         """
         List user's documents with optional filtering.
@@ -286,8 +290,8 @@ class DocumentsRepository:
                 params.append(status_filter)
 
             query = f"""
-                SELECT id, user_id, filename, original_filename, file_size, 
-                       content_type, processing_status, processing_started_at,
+                SELECT id, user_id, original_filename, storage_path, file_type, file_size, 
+                       content_hash, processing_status, processing_started_at,
                        processing_completed_at, processing_errors, artifact_text_id,
                        total_pages, total_word_count, created_at, updated_at
                 FROM documents
@@ -300,21 +304,22 @@ class DocumentsRepository:
 
             return [
                 Document(
-                    id=row['id'],
-                    user_id=row['user_id'],
-                    filename=row['filename'],
-                    original_filename=row['original_filename'],
-                    file_size=row['file_size'],
-                    content_type=row['content_type'],
-                    processing_status=row['processing_status'],
-                    processing_started_at=row['processing_started_at'],
-                    processing_completed_at=row['processing_completed_at'],
-                    processing_errors=row['processing_errors'],
-                    artifact_text_id=row['artifact_text_id'],
-                    total_pages=row['total_pages'],
-                    total_word_count=row['total_word_count'],
-                    created_at=row['created_at'],
-                    updated_at=row['updated_at']
+                    id=row["id"],
+                    user_id=row["user_id"],
+                    original_filename=row["original_filename"],
+                    storage_path=row["storage_path"],
+                    file_size=row["file_size"],
+                    file_type=row["file_type"],
+                    content_hash=row["content_hash"],
+                    processing_status=row["processing_status"],
+                    processing_started_at=row["processing_started_at"],
+                    processing_completed_at=row["processing_completed_at"],
+                    processing_errors=row["processing_errors"],
+                    artifact_text_id=row["artifact_text_id"],
+                    total_pages=row["total_pages"],
+                    total_word_count=row["total_word_count"],
+                    created_at=row["created_at"],
+                    updated_at=row["updated_at"],
                 )
                 for row in rows
             ]
@@ -331,10 +336,9 @@ class DocumentsRepository:
         """
         async with get_user_connection(self.user_id) as conn:
             result = await conn.execute(
-                "DELETE FROM documents WHERE id = $1",
-                document_id
+                "DELETE FROM documents WHERE id = $1", document_id
             )
-            return result.split()[-1] == '1'
+            return result.split()[-1] == "1"
 
     async def get_documents_by_status(self, status: str) -> List[Document]:
         """
@@ -352,7 +356,7 @@ class DocumentsRepository:
         self,
         document_ids: List[UUID],
         status: str,
-        error_details: Optional[Dict[str, Any]] = None
+        error_details: Optional[Dict[str, Any]] = None,
     ) -> int:
         """
         Batch update multiple documents' status.
@@ -389,3 +393,168 @@ class DocumentsRepository:
 
             result = await conn.execute(query, *query_params)
             return int(result.split()[-1])
+
+    async def create_user_contract_view(
+        self,
+        *,
+        user_id: UUID,
+        content_hash: str,
+        property_address: Optional[str] = None,
+        source: str = "upload",
+    ) -> bool:
+        """Create a `user_contract_views` record for the user."""
+        async with get_user_connection(self.user_id) as conn:
+            result = await conn.execute(
+                """
+                INSERT INTO user_contract_views (user_id, content_hash, property_address, source)
+                VALUES ($1, $2, $3, $4)
+                """,
+                user_id,
+                content_hash,
+                property_address,
+                source,
+            )
+            return result.split()[-1] == "1"
+
+    async def get_user_contract_views(
+        self, content_hash: str, user_id: str, limit: int = 1
+    ) -> List[Dict[str, Any]]:
+        """Get user_contract_views records for content_hash and user_id."""
+        async with get_user_connection(self.user_id) as conn:
+            rows = await conn.fetch(
+                """
+                SELECT *
+                FROM user_contract_views
+                WHERE content_hash = $1 AND user_id = $2
+                ORDER BY created_at DESC
+                LIMIT $3
+                """,
+                content_hash,
+                UUID(user_id),
+                limit,
+            )
+            return [dict(row) for row in rows]
+
+    async def get_documents_by_content_hash(
+        self, content_hash: str, user_id: str, columns: str = "*"
+    ) -> List[Document]:
+        """
+        Get documents by content_hash and user_id.
+
+        Args:
+            content_hash: Content hash to filter by
+            user_id: User ID as string
+            columns: Columns to select (default: all)
+
+        Returns:
+            List of Document objects
+        """
+        async with get_user_connection(self.user_id) as conn:
+            if columns == "*":
+                columns = """id, user_id, original_filename, storage_path, file_type, file_size, 
+                            content_hash, processing_status, processing_started_at,
+                            processing_completed_at, processing_errors, artifact_text_id,
+                            total_pages, total_word_count, created_at, updated_at"""
+            
+            rows = await conn.fetch(
+                f"""
+                SELECT {columns}
+                FROM documents
+                WHERE content_hash = $1 AND user_id = $2
+                ORDER BY created_at DESC
+                """,
+                content_hash,
+                UUID(user_id),
+            )
+
+            if columns == "*" or "id" in columns:
+                return [
+                    Document(
+                        id=row["id"],
+                        user_id=row["user_id"],
+                        original_filename=row["original_filename"],
+                        storage_path=row["storage_path"],
+                        file_size=row["file_size"],
+                        file_type=row["file_type"],
+                        content_hash=row["content_hash"],
+                        processing_status=row["processing_status"],
+                        processing_started_at=row["processing_started_at"],
+                        processing_completed_at=row["processing_completed_at"],
+                        processing_errors=row["processing_errors"],
+                        artifact_text_id=row["artifact_text_id"],
+                        total_pages=row["total_pages"],
+                        total_word_count=row["total_word_count"],
+                        created_at=row["created_at"],
+                        updated_at=row["updated_at"],
+                    )
+                    for row in rows
+                ]
+            else:
+                # Return raw dictionaries for partial column selections
+                return [dict(row) for row in rows]
+
+    async def update_processing_results(
+        self, document_id: UUID, results: Dict[str, Any]
+    ) -> bool:
+        """
+        Update document processing_results field.
+
+        Args:
+            document_id: Document ID
+            results: Processing results dictionary
+
+        Returns:
+            True if update successful, False otherwise
+        """
+        async with get_user_connection(self.user_id) as conn:
+            result = await conn.execute(
+                """
+                UPDATE documents 
+                SET processing_results = $1, updated_at = now()
+                WHERE id = $2
+                """,
+                results,
+                document_id,
+            )
+            return result.split()[-1] == "1"
+
+    async def update_processing_status_and_results(
+        self,
+        document_id: UUID,
+        status: str,
+        results: Optional[Dict[str, Any]] = None,
+    ) -> bool:
+        """
+        Update both processing_status and processing_results.
+
+        Args:
+            document_id: Document ID
+            status: New processing status
+            results: Optional processing results
+
+        Returns:
+            True if update successful, False otherwise
+        """
+        async with get_user_connection(self.user_id) as conn:
+            if results is not None:
+                result = await conn.execute(
+                    """
+                    UPDATE documents 
+                    SET processing_status = $1, processing_results = $2, updated_at = now()
+                    WHERE id = $3
+                    """,
+                    status,
+                    results,
+                    document_id,
+                )
+            else:
+                result = await conn.execute(
+                    """
+                    UPDATE documents 
+                    SET processing_status = $1, updated_at = now()
+                    WHERE id = $2
+                    """,
+                    status,
+                    document_id,
+                )
+            return result.split()[-1] == "1"

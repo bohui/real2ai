@@ -1,15 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
-import { useWebSocket } from '../useWebSocket'
 
-// Simplified Mock WebSocket with synchronous behavior for reliable testing
-class MockWebSocket {
+// Remove the hook mock from setup to test the actual hook
+vi.unmock('@/hooks/useWebSocket')
+const { useWebSocket } = await import('../useWebSocket')
+
+// Enhanced Mock WebSocket with better test support
+class TestMockWebSocket {
   static CONNECTING = 0
   static OPEN = 1
   static CLOSING = 2
   static CLOSED = 3
 
-  readyState: number = MockWebSocket.CONNECTING
+  readyState: number = TestMockWebSocket.CONNECTING
   url: string
   onopen: ((event: Event) => void) | null = null
   onclose: ((event: CloseEvent) => void) | null = null
@@ -18,27 +21,27 @@ class MockWebSocket {
 
   constructor(url: string) {
     this.url = url
-    // Store instance for test access
-    MockWebSocket.lastInstance = this
+    TestMockWebSocket.lastInstance = this
+    TestMockWebSocket.instances.push(this)
   }
 
-  send(_data: string) {
-    if (this.readyState !== MockWebSocket.OPEN) {
+  send(data: string) {
+    if (this.readyState !== TestMockWebSocket.OPEN) {
       throw new Error('WebSocket is not open')
     }
   }
 
   close(code = 1000) {
-    this.readyState = MockWebSocket.CLOSING
+    this.readyState = TestMockWebSocket.CLOSING
     setTimeout(() => {
-      this.readyState = MockWebSocket.CLOSED
+      this.readyState = TestMockWebSocket.CLOSED
       this.onclose?.(new CloseEvent('close', { code }))
     }, 0)
   }
 
   // Test helper methods
   simulateOpen() {
-    this.readyState = MockWebSocket.OPEN
+    this.readyState = TestMockWebSocket.OPEN
     this.onopen?.(new Event('open'))
   }
 
@@ -47,24 +50,29 @@ class MockWebSocket {
   }
 
   simulateMessage(data: any) {
-    if (this.readyState === MockWebSocket.OPEN) {
+    if (this.readyState === TestMockWebSocket.OPEN) {
       this.onmessage?.(new MessageEvent('message', { 
         data: JSON.stringify(data) 
       }))
     }
   }
 
-  // Store last created instance for testing
-  static lastInstance: MockWebSocket | null = null
+  static lastInstance: TestMockWebSocket | null = null
+  static instances: TestMockWebSocket[] = []
+  
+  static reset() {
+    TestMockWebSocket.lastInstance = null
+    TestMockWebSocket.instances = []
+  }
 }
 
-// Mock WebSocket globally
-vi.stubGlobal('WebSocket', MockWebSocket)
+// Override global WebSocket for this test file
+vi.stubGlobal('WebSocket', TestMockWebSocket)
 
 describe('useWebSocket', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    MockWebSocket.lastInstance = null
+    TestMockWebSocket.reset()
   })
 
   describe('Initial State', () => {
@@ -81,11 +89,11 @@ describe('useWebSocket', () => {
       const { result } = renderHook(() => useWebSocket('ws://localhost:8000/ws'))
       
       // Hook creates WebSocket immediately when URL provided
-      expect(result.current.ws).toBeInstanceOf(MockWebSocket)
+      expect(result.current.ws).toBeInstanceOf(TestMockWebSocket)
       expect(result.current.isConnecting).toBe(true)
       expect(result.current.isConnected).toBe(false)
       expect(result.current.error).toBeNull()
-      expect(MockWebSocket.lastInstance?.url).toBe('ws://localhost:8000/ws')
+      expect(TestMockWebSocket.lastInstance?.url).toBe('ws://localhost:8000/ws')
     })
   })
 
@@ -96,7 +104,7 @@ describe('useWebSocket', () => {
         useWebSocket('ws://localhost:8000/ws', { onOpen })
       )
 
-      const mockWs = MockWebSocket.lastInstance!
+      const mockWs = TestMockWebSocket.lastInstance!
       
       await act(async () => {
         mockWs.simulateOpen()
@@ -110,7 +118,7 @@ describe('useWebSocket', () => {
     it('should handle manual disconnect', () => {
       const { result } = renderHook(() => useWebSocket('ws://localhost:8000/ws'))
       
-      const mockWs = MockWebSocket.lastInstance!
+      const mockWs = TestMockWebSocket.lastInstance!
       
       act(() => {
         mockWs.simulateOpen()
@@ -131,10 +139,10 @@ describe('useWebSocket', () => {
     it('should provide reconnect functionality', async () => {
       const { result } = renderHook(() => useWebSocket('ws://localhost:8000/ws'))
       
-      let mockWs = MockWebSocket.lastInstance!
+      const originalWs = TestMockWebSocket.lastInstance!
       
       await act(async () => {
-        mockWs.simulateOpen()
+        originalWs.simulateOpen()
       })
       
       expect(result.current.isConnected).toBe(true)
@@ -144,14 +152,19 @@ describe('useWebSocket', () => {
         result.current.reconnect()
       })
 
+      // Wait for the reconnect timeout
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 150))
+      })
+
       // Should create new WebSocket instance
-      expect(MockWebSocket.lastInstance).not.toBe(mockWs)
+      const newWs = TestMockWebSocket.lastInstance!
+      expect(newWs).not.toBe(originalWs)
       expect(result.current.isConnecting).toBe(true)
       
       // New connection should work
-      mockWs = MockWebSocket.lastInstance!
       await act(async () => {
-        mockWs.simulateOpen()
+        newWs.simulateOpen()
       })
       
       expect(result.current.isConnected).toBe(true)
@@ -162,7 +175,7 @@ describe('useWebSocket', () => {
     it('should send messages when connected', () => {
       const { result } = renderHook(() => useWebSocket('ws://localhost:8000/ws'))
       
-      const mockWs = MockWebSocket.lastInstance!
+      const mockWs = TestMockWebSocket.lastInstance!
       const sendSpy = vi.spyOn(mockWs, 'send')
       
       act(() => {
@@ -179,7 +192,7 @@ describe('useWebSocket', () => {
     it('should not send messages when disconnected', () => {
       const { result } = renderHook(() => useWebSocket('ws://localhost:8000/ws'))
       
-      const mockWs = MockWebSocket.lastInstance!
+      const mockWs = TestMockWebSocket.lastInstance!
       const sendSpy = vi.spyOn(mockWs, 'send')
 
       // Don't open the connection
@@ -197,7 +210,7 @@ describe('useWebSocket', () => {
         useWebSocket('ws://localhost:8000/ws', { onMessage })
       )
       
-      const mockWs = MockWebSocket.lastInstance!
+      const mockWs = TestMockWebSocket.lastInstance!
       
       act(() => {
         mockWs.simulateOpen()
@@ -219,7 +232,7 @@ describe('useWebSocket', () => {
         useWebSocket('ws://localhost:8000/ws', { onMessage })
       )
       
-      const mockWs = MockWebSocket.lastInstance!
+      const mockWs = TestMockWebSocket.lastInstance!
       
       act(() => {
         mockWs.simulateOpen()
@@ -240,7 +253,7 @@ describe('useWebSocket', () => {
         useWebSocket('ws://localhost:8000/ws', { onError })
       )
       
-      const mockWs = MockWebSocket.lastInstance!
+      const mockWs = TestMockWebSocket.lastInstance!
 
       act(() => {
         mockWs.simulateError()
@@ -254,7 +267,7 @@ describe('useWebSocket', () => {
     it('should set error when sending fails', () => {
       const { result } = renderHook(() => useWebSocket('ws://localhost:8000/ws'))
       
-      const mockWs = MockWebSocket.lastInstance!
+      const mockWs = TestMockWebSocket.lastInstance!
       
       act(() => {
         mockWs.simulateOpen()
@@ -279,7 +292,7 @@ describe('useWebSocket', () => {
         useWebSocket('ws://localhost:8000/ws')
       )
       
-      const mockWs = MockWebSocket.lastInstance!
+      const mockWs = TestMockWebSocket.lastInstance!
       const closeSpy = vi.spyOn(mockWs, 'close')
       
       act(() => {
@@ -302,7 +315,7 @@ describe('useWebSocket', () => {
         })
       )
       
-      expect(result.current.ws).toBeInstanceOf(MockWebSocket)
+      expect(result.current.ws).toBeInstanceOf(TestMockWebSocket)
       expect(result.current.isConnecting).toBe(true)
     })
 
@@ -318,7 +331,7 @@ describe('useWebSocket', () => {
         useWebSocket('ws://localhost:8000/ws', callbacks)
       )
       
-      const mockWs = MockWebSocket.lastInstance!
+      const mockWs = TestMockWebSocket.lastInstance!
 
       // Test open callback
       act(() => {

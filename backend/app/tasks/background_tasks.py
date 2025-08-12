@@ -28,6 +28,8 @@ from app.services.communication.websocket_singleton import websocket_manager
 from app.services.communication.redis_pubsub import publish_progress_sync
 from app.core.task_recovery import CheckpointData
 from app.services.repositories.analyses_repository import AnalysesRepository
+from app.services.repositories.analysis_progress_repository import AnalysisProgressRepository
+from app.services.repositories.documents_repository import DocumentsRepository
 
 logger = logging.getLogger(__name__)
 
@@ -86,27 +88,24 @@ async def update_analysis_progress(
             "error_message": error_message,
         }
 
-        # Upsert progress record using content_hash + user_id unique constraint
-        result = await user_client.database.upsert(
-            "analysis_progress",
-            progress_data,
-            conflict_columns=["content_hash", "user_id"],
+        # Upsert progress record using repository
+        progress_repo = AnalysisProgressRepository()
+        result = await progress_repo.upsert_progress(
+            content_hash, user_id, progress_data
         )
 
         # Resolve session ids (document_ids) for WS delivery and send progress
         # Send to ALL documents with this content_hash since multiple uploads may exist
         try:
             # Find ALL documents for this user/content_hash to route messages
-            doc_result = await user_client.database.select(
-                "documents",
-                columns="id",
-                filters={"user_id": user_id, "content_hash": content_hash},
-                order_by="created_at DESC",
+            docs_repo = DocumentsRepository()
+            documents = await docs_repo.get_documents_by_content_hash(
+                content_hash, user_id, columns="id"
             )
-            if doc_result.get("data"):
+            if documents:
                 # Send to all documents with this content_hash
-                for doc in doc_result["data"]:
-                    session_id = doc["id"]
+                for doc in documents:
+                    session_id = str(doc["id"]) if isinstance(doc, dict) else str(doc.id)
                     logger.info(
                         f"Sending progress to document {session_id} for content_hash {content_hash}"
                     )
@@ -206,12 +205,20 @@ async def comprehensive_document_analysis(
             user_client = await document_service.get_user_client(isolated=True)
 
             # Get document record
-            doc_result = await user_client.database.select(
-                "documents", columns="*", filters={"id": document_id}
-            )
-            if not doc_result.get("data"):
+            docs_repo = DocumentsRepository()
+            document = await docs_repo.get_document(UUID(document_id))
+            if not document:
                 raise Exception("Document not found or access denied")
-            document = doc_result["data"][0]
+            # Convert to dict for backward compatibility
+            document = {
+                "id": str(document.id),
+                "user_id": str(document.user_id),
+                "original_filename": document.original_filename,
+                "storage_path": document.storage_path,
+                "file_type": document.file_type,
+                "content_hash": document.content_hash,
+                "processing_status": document.processing_status,
+            }
 
             # Get content_hash for progress tracking
             content_hash = analysis_options.get("content_hash") or document.get(
@@ -224,15 +231,13 @@ async def comprehensive_document_analysis(
 
             # Determine resume point from latest analysis_progress (if any)
             try:
-                latest_progress = await user_client.database.select(
-                    "analysis_progress",
-                    columns="current_step, progress_percent, updated_at",
-                    filters={"content_hash": content_hash, "user_id": user_id},
-                    order_by="updated_at DESC",
-                    limit=1,
+                progress_repo = AnalysisProgressRepository()
+                latest_progress = await progress_repo.get_latest_progress(
+                    content_hash, user_id, 
+                    columns="current_step, progress_percent, updated_at"
                 )
-                if latest_progress.get("data"):
-                    last_step = latest_progress["data"][0].get("current_step")
+                if latest_progress:
+                    last_step = latest_progress.get("current_step")
                     # Inject resume info into analysis options
                     if last_step:
                         analysis_options["resume_from_step"] = last_step
@@ -272,8 +277,8 @@ async def comprehensive_document_analysis(
             if is_retry and resume_from_step:
                 # For retry operations, preserve the previous progress and show resumption
                 previous_progress = (
-                    latest_progress["data"][0]["progress_percent"]
-                    if latest_progress.get("data")
+                    latest_progress.get("progress_percent", 5)
+                    if latest_progress
                     else 5
                 )
                 await update_analysis_progress(
@@ -518,24 +523,14 @@ async def comprehensive_document_analysis(
                 last_progress_percent = 0
                 last_step = "unknown"
                 try:
-                    # Use isolated client to prevent JWT token race conditions in concurrent tasks
-                    user_client = await AuthContext.get_authenticated_client(
-                        isolated=True
+                    progress_repo = AnalysisProgressRepository()
+                    latest_progress = await progress_repo.get_latest_progress(
+                        content_hash, user_id, 
+                        columns="current_step, progress_percent"
                     )
-                    latest_progress = await user_client.database.select(
-                        "analysis_progress",
-                        columns="current_step, progress_percent",
-                        filters={"content_hash": content_hash, "user_id": user_id},
-                        order_by="updated_at DESC",
-                        limit=1,
-                    )
-                    if latest_progress.get("data"):
-                        last_step = latest_progress["data"][0].get(
-                            "current_step", "unknown"
-                        )
-                        last_progress_percent = latest_progress["data"][0].get(
-                            "progress_percent", 0
-                        )
+                    if latest_progress:
+                        last_step = latest_progress.get("current_step", "unknown")
+                        last_progress_percent = latest_progress.get("progress_percent", 0)
                 except Exception as fetch_err:
                     logger.warning(f"Could not fetch last progress: {fetch_err}")
 
@@ -601,8 +596,9 @@ async def enhanced_reprocess_document_with_ocr_background(
         user_client = await document_service.get_user_client(isolated=True)
 
         # Update document status
-        await user_client.update(
-            "documents", {"id": document_id}, {"processing_status": "reprocessing_ocr"}
+        docs_repo = DocumentsRepository()
+        await docs_repo.update_document_status(
+            UUID(document_id), "reprocessing_ocr"
         )
 
         # Send WebSocket notification
@@ -653,10 +649,8 @@ async def enhanced_reprocess_document_with_ocr_background(
         }
 
         # Update document with OCR results
-        await user_client.update(
-            "documents",
-            {"id": document_id},
-            {"status": "processed", "processing_results": extraction_result},
+        await docs_repo.update_processing_status_and_results(
+            UUID(document_id), "processed", extraction_result
         )
 
         # Send enhanced completion notification
@@ -694,10 +688,8 @@ async def enhanced_reprocess_document_with_ocr_background(
         logger.error(f"OCR reprocessing failed for {document_id}: {str(e)}")
 
         # Update status to failed
-        await user_client.update(
-            "documents",
-            {"id": document_id},
-            {"status": "ocr_failed", "processing_results": {"error": str(e)}},
+        await docs_repo.update_processing_status_and_results(
+            UUID(document_id), "ocr_failed", {"error": str(e)}
         )
 
         # Send error notification
@@ -779,42 +771,38 @@ async def batch_ocr_processing_background(
                 async with semaphore:
                     try:
                         # Get document details
-                        doc_result = await user_client.database.select(
-                            "documents", columns="*", filters={"id": doc_id}
-                        )
+                        docs_repo = DocumentsRepository()
+                        document = await docs_repo.get_document(UUID(doc_id))
 
-                        if not doc_result.get("data"):
+                        if not document:
                             logger.warning(
                                 f"Document {doc_id} not found in batch processing"
                             )
                             return
 
-                        document = doc_result["data"][0]
+                        # Convert to dict for backward compatibility
+                        document_dict = {
+                            "storage_path": document.storage_path,
+                            "file_type": document.file_type,
+                        }
 
                         # Update document status
-                        await user_client.update(
-                            "documents",
-                            {"id": doc_id},
-                            {"processing_status": "processing_ocr"},
+                        await docs_repo.update_document_status(
+                            UUID(doc_id), "processing_ocr"
                         )
 
                         # Process with OCR
                         extraction_result = (
                             await document_service.extract_text_with_ocr(
-                                document["storage_path"],
-                                document["file_type"],
+                                document_dict["storage_path"],
+                                document_dict["file_type"],
                                 contract_context=batch_context,
                             )
                         )
 
                         # Update document with results
-                        await user_client.update(
-                            "documents",
-                            {"id": doc_id},
-                            {
-                                "processing_status": "processed",
-                                "processing_results": extraction_result,
-                            },
+                        await docs_repo.update_processing_status_and_results(
+                            UUID(doc_id), "processed", extraction_result
                         )
 
                         processed_docs += 1
@@ -825,13 +813,8 @@ async def batch_ocr_processing_background(
                         )
 
                         # Update document status to failed
-                        await user_client.update(
-                            "documents",
-                            {"id": doc_id},
-                            {
-                                "processing_status": "ocr_failed",
-                                "processing_results": {"error": str(e)},
-                            },
+                        await docs_repo.update_processing_status_and_results(
+                            UUID(doc_id), "ocr_failed", {"error": str(e)}
                         )
 
             # Execute parallel processing
@@ -845,37 +828,27 @@ async def batch_ocr_processing_background(
             for i, doc_id in enumerate(document_ids):
                 try:
                     # Get document details
-                    doc_result = await user_client.database.select(
-                        "documents", columns="*", filters={"id": doc_id}
-                    )
+                    docs_repo = DocumentsRepository()
+                    document = await docs_repo.get_document(UUID(doc_id))
 
-                    if not doc_result.get("data"):
+                    if not document:
                         continue
 
-                    document = doc_result["data"][0]
-
                     # Update document status
-                    await user_client.update(
-                        "documents",
-                        {"id": doc_id},
-                        {"processing_status": "processing_ocr"},
+                    await docs_repo.update_document_status(
+                        UUID(doc_id), "processing_ocr"
                     )
 
                     # Process with OCR
                     extraction_result = await document_service.extract_text_with_ocr(
-                        document["storage_path"],
-                        document["file_type"],
+                        document.storage_path,
+                        document.file_type,
                         contract_context=batch_context,
                     )
 
                     # Update document with results
-                    await user_client.update(
-                        "documents",
-                        {"id": doc_id},
-                        {
-                            "processing_status": "processed",
-                            "processing_results": extraction_result,
-                        },
+                    await docs_repo.update_processing_status_and_results(
+                        UUID(doc_id), "processed", extraction_result
                     )
 
                     processed_docs += 1

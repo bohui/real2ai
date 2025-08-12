@@ -18,6 +18,7 @@ import re
 import uuid
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timezone
+from uuid import UUID
 from pathlib import Path
 import mimetypes
 
@@ -92,6 +93,7 @@ from app.services.base.user_aware_service import (
     ServiceInitializationMixin,
 )
 from app.clients import get_gemini_client
+from app.services.repositories.documents_repository import DocumentsRepository
 from app.core.config import get_settings
 from app.core.langsmith_config import langsmith_trace
 from app.clients.base.exceptions import (
@@ -521,30 +523,23 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
                     ),
                 )
 
-            # Create document record in database (user context - RLS enforced)
-            document_data = {
-                "id": document_id,
-                "user_id": user_id,
-                "original_filename": file_info["original_filename"],
-                "file_type": file_info["file_type"],
-                "storage_path": storage_path,
-                "file_size": file_info["file_size"],
-                "content_hash": file_info["content_hash"],
-                "processing_status": ProcessingStatus.UPLOADED.value,
-                "contract_type": contract_type,
-                "australian_state": australian_state,
-                "text_extraction_method": "pending",
-            }
-
-            # Use the database client's create method instead of insert
-            created_record = await user_client.database.create(
-                "documents", document_data
+            # Create document record using repository (user context - RLS enforced)
+            repo = DocumentsRepository()
+            await repo.create_document(
+                {
+                    "id": document_id,
+                    "user_id": user_id,
+                    "original_filename": file_info["original_filename"],
+                    "file_type": file_info["file_type"],
+                    "storage_path": storage_path,
+                    "file_size": file_info["file_size"],
+                    "content_hash": file_info.get("content_hash"),
+                    "processing_status": ProcessingStatus.UPLOADED.value,
+                    "contract_type": contract_type,
+                    "australian_state": australian_state,
+                    "text_extraction_method": "pending",
+                }
             )
-
-            if not created_record:
-                return UploadRecordResult(
-                    success=False, error="Failed to create document record"
-                )
 
             # Create user_contract_views record for RLS policy access
             if file_info.get("content_hash"):
@@ -556,8 +551,11 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
                         "source": "upload",
                     }
 
-                    await user_client.database.create(
-                        "user_contract_views", user_contract_view_data
+                    await repo.create_user_contract_view(
+                        user_id=user_id,
+                        content_hash=file_info["content_hash"],
+                        property_address=None,
+                        source="upload",
                     )
                     self.logger.info(
                         f"Created user_contract_views record for document {document_id}"
@@ -587,17 +585,14 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
     ):
         """Update document processing status - USER OPERATION"""
         try:
-            user_client = await self.get_user_client()
             self.log_operation("update", "document", document_id)
 
-            update_data = {
-                "processing_status": status,
-            }
-
-            if error_details:
-                update_data["processing_errors"] = error_details
-
-            await user_client.database.update("documents", document_id, update_data)
+            repo = DocumentsRepository()
+            await repo.update_document_status(
+                UUID(document_id),
+                status,
+                error_details=error_details,
+            )
 
         except Exception as e:
             self.logger.error(f"Failed to update document status: {str(e)}")
@@ -607,7 +602,7 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
     ) -> List[DocumentDetails]:
         """Get user's documents - USER OPERATION with explicit user context"""
         try:
-            user_client = await self.get_user_client()
+            repo = DocumentsRepository(UUID(user_id))
 
             # RLS will automatically filter to user's documents
             # user_id parameter is for application logic validation
@@ -620,32 +615,21 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
 
             self.log_operation("list", "documents", user_id)
 
-            # Use the read method with empty filters to get all user documents
-            # RLS will automatically filter to user's documents
-            result = await user_client.database.read(
-                "documents", filters={}, limit=limit
-            )
-            documents: List[DocumentDetails] = []
-            for rec in result:
-                try:
-                    documents.append(
-                        DocumentDetails(
-                            id=str(rec.get("id")),
-                            user_id=str(rec.get("user_id")),
-                            filename=rec.get("original_filename")
-                            or rec.get("filename", "unknown"),
-                            file_type=rec.get("file_type", "unknown"),
-                            file_size=int(rec.get("file_size", 0)),
-                            status=rec.get("processing_status")
-                            or rec.get("status", "unknown"),
-                            storage_path=rec.get("storage_path", ""),
-                            created_at=rec.get("created_at"),
-                            processing_results=rec.get("processing_results"),
-                        )
-                    )
-                except Exception:
-                    continue
-            return documents
+            docs = await repo.list_user_documents(limit=limit)
+            return [
+                DocumentDetails(
+                    id=str(d.id),
+                    user_id=str(d.user_id),
+                    filename=d.original_filename,
+                    file_type=d.file_type,
+                    file_size=int(d.file_size),
+                    status=d.processing_status,
+                    storage_path=d.storage_path,
+                    created_at=d.created_at,
+                    processing_results=None,
+                )
+                for d in docs
+            ]
 
         except Exception as e:
             self.logger.error(f"Failed to get user documents: {str(e)}")
@@ -897,6 +881,7 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
     def _calculate_hash(self, file_content: bytes) -> str:
         """Calculate SHA-256 hash of file content"""
         import hashlib
+
         return hashlib.sha256(file_content).hexdigest()
 
     def _create_success_response(

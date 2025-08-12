@@ -473,3 +473,27 @@ class AnalysesRepository:
             'by_status': {row['status']: row['count'] for row in status_rows},
             'by_agent_version': {row['agent_version']: row['count'] for row in agent_rows}
         }
+
+    async def retry_contract_analysis(self, content_hash: str, user_id: str) -> Optional[UUID]:
+        """
+        Retry contract analysis by calling the database RPC function.
+        
+        Args:
+            content_hash: Content hash for the analysis
+            user_id: User ID as string
+            
+        Returns:
+            Analysis ID if successful, None otherwise
+        """
+        # Use service role for RPC function execution since it typically requires elevated permissions
+        async with get_service_role_connection() as conn:
+            try:
+                result = await conn.fetchval(
+                    "SELECT retry_contract_analysis($1, $2)",
+                    content_hash,
+                    UUID(user_id) if isinstance(user_id, str) else user_id
+                )
+                return result if result else None
+            except Exception as e:
+                logger.error(f"Failed to retry contract analysis: {e}")
+                return None
