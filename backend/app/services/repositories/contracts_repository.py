@@ -1,8 +1,10 @@
 """
 Contracts Repository - Service-role contract operations
 
-This repository handles contract operations using service-role connections
-since contracts are shared by content_hash and not user-scoped.
+This repository handles contract operations using the service-role context.
+Prefer the Supabase service client (PostgREST) so RLS/grants are enforced
+consistently by the Supabase stack, avoiding direct Postgres permission
+discrepancies across environments.
 """
 
 from typing import Dict, List, Optional, Any
@@ -11,7 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime
 import logging
 
-from app.database.connection import get_service_role_connection
+from app.database.connection import get_service_role_connection, get_user_connection
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +21,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class Contract:
     """Contract model"""
+
     id: UUID
     content_hash: str
     contract_type: str
@@ -29,14 +32,21 @@ class Contract:
 
 
 class ContractsRepository:
-    """Repository for service-role contract operations"""
+    """Repository for contract operations.
+
+    - Writes (upserts/updates/deletes) use service-role connection
+    - Reads can be user-scoped (RLS) if a user_id is provided
+    """
+
+    def __init__(self, user_id: Optional[UUID] = None):
+        self.user_id = user_id
 
     async def upsert_contract_by_content_hash(
         self,
         content_hash: str,
         contract_type: str,
         australian_state: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> Contract:
         """
         Upsert contract by content hash.
@@ -67,20 +77,22 @@ class ContractsRepository:
                 content_hash,
                 contract_type,
                 australian_state,
-                metadata
+                metadata,
             )
 
             return Contract(
-                id=row['id'],
-                content_hash=row['content_hash'],
-                contract_type=row['contract_type'],
-                australian_state=row['australian_state'],
-                metadata=row['metadata'],
-                created_at=row['created_at'],
-                updated_at=row['updated_at']
+                id=row["id"],
+                content_hash=row["content_hash"],
+                contract_type=row["contract_type"],
+                australian_state=row["australian_state"],
+                metadata=row["metadata"],
+                created_at=row["created_at"],
+                updated_at=row["updated_at"],
             )
 
-    async def get_contract_id_by_content_hash(self, content_hash: str) -> Optional[UUID]:
+    async def get_contract_id_by_content_hash(
+        self, content_hash: str
+    ) -> Optional[UUID]:
         """
         Get contract ID by content hash.
 
@@ -90,14 +102,25 @@ class ContractsRepository:
         Returns:
             Contract ID or None if not found
         """
-        async with get_service_role_connection() as conn:
-            row = await conn.fetchrow(
-                "SELECT id FROM contracts WHERE content_hash = $1",
-                content_hash
-            )
-            return row['id'] if row else None
+        # Prefer user-scoped read if user_id was provided (RLS enforced)
+        if self.user_id is not None:
+            async with get_user_connection(self.user_id) as conn:
+                row = await conn.fetchrow(
+                    """
+                    SELECT id FROM contracts WHERE content_hash = $1
+                    """,
+                    content_hash,
+                )
+        else:
+            async with get_service_role_connection() as conn:
+                row = await conn.fetchrow(
+                    "SELECT id FROM contracts WHERE content_hash = $1", content_hash
+                )
+            return row["id"] if row else None
 
-    async def get_contract_by_content_hash(self, content_hash: str) -> Optional[Contract]:
+    async def get_contract_by_content_hash(
+        self, content_hash: str
+    ) -> Optional[Contract]:
         """
         Get contract by content hash.
 
@@ -107,28 +130,40 @@ class ContractsRepository:
         Returns:
             Contract or None if not found
         """
-        async with get_service_role_connection() as conn:
-            row = await conn.fetchrow(
-                """
+        if self.user_id is not None:
+            async with get_user_connection(self.user_id) as conn:
+                row = await conn.fetchrow(
+                    """
+                    SELECT id, content_hash, contract_type, australian_state, 
+                           metadata, created_at, updated_at
+                    FROM contracts
+                    WHERE content_hash = $1
+                    """,
+                    content_hash,
+                )
+        else:
+            async with get_service_role_connection() as conn:
+                row = await conn.fetchrow(
+                    """
                 SELECT id, content_hash, contract_type, australian_state, 
                        metadata, created_at, updated_at
                 FROM contracts
                 WHERE content_hash = $1
                 """,
-                content_hash
-            )
+                    content_hash,
+                )
 
             if not row:
                 return None
 
             return Contract(
-                id=row['id'],
-                content_hash=row['content_hash'],
-                contract_type=row['contract_type'],
-                australian_state=row['australian_state'],
-                metadata=row['metadata'],
-                created_at=row['created_at'],
-                updated_at=row['updated_at']
+                id=row["id"],
+                content_hash=row["content_hash"],
+                contract_type=row["contract_type"],
+                australian_state=row["australian_state"],
+                metadata=row["metadata"],
+                created_at=row["created_at"],
+                updated_at=row["updated_at"],
             )
 
     async def get_contract_by_id(self, contract_id: UUID) -> Optional[Contract]:
@@ -149,26 +184,24 @@ class ContractsRepository:
                 FROM contracts
                 WHERE id = $1
                 """,
-                contract_id
+                contract_id,
             )
 
             if not row:
                 return None
 
             return Contract(
-                id=row['id'],
-                content_hash=row['content_hash'],
-                contract_type=row['contract_type'],
-                australian_state=row['australian_state'],
-                metadata=row['metadata'],
-                created_at=row['created_at'],
-                updated_at=row['updated_at']
+                id=row["id"],
+                content_hash=row["content_hash"],
+                contract_type=row["contract_type"],
+                australian_state=row["australian_state"],
+                metadata=row["metadata"],
+                created_at=row["created_at"],
+                updated_at=row["updated_at"],
             )
 
     async def update_contract_metadata(
-        self,
-        contract_id: UUID,
-        metadata: Dict[str, Any]
+        self, contract_id: UUID, metadata: Dict[str, Any]
     ) -> bool:
         """
         Update contract metadata.
@@ -188,15 +221,12 @@ class ContractsRepository:
                 WHERE id = $2
                 """,
                 metadata,
-                contract_id
+                contract_id,
             )
-            return result.split()[-1] == '1'
+            return result.split()[-1] == "1"
 
     async def list_contracts_by_type(
-        self,
-        contract_type: str,
-        limit: int = 50,
-        offset: int = 0
+        self, contract_type: str, limit: int = 50, offset: int = 0
     ) -> List[Contract]:
         """
         List contracts by type.
@@ -221,27 +251,24 @@ class ContractsRepository:
                 """,
                 contract_type,
                 limit,
-                offset
+                offset,
             )
 
             return [
                 Contract(
-                    id=row['id'],
-                    content_hash=row['content_hash'],
-                    contract_type=row['contract_type'],
-                    australian_state=row['australian_state'],
-                    metadata=row['metadata'],
-                    created_at=row['created_at'],
-                    updated_at=row['updated_at']
+                    id=row["id"],
+                    content_hash=row["content_hash"],
+                    contract_type=row["contract_type"],
+                    australian_state=row["australian_state"],
+                    metadata=row["metadata"],
+                    created_at=row["created_at"],
+                    updated_at=row["updated_at"],
                 )
                 for row in rows
             ]
 
     async def list_contracts_by_state(
-        self,
-        australian_state: str,
-        limit: int = 50,
-        offset: int = 0
+        self, australian_state: str, limit: int = 50, offset: int = 0
     ) -> List[Contract]:
         """
         List contracts by Australian state.
@@ -266,18 +293,18 @@ class ContractsRepository:
                 """,
                 australian_state,
                 limit,
-                offset
+                offset,
             )
 
             return [
                 Contract(
-                    id=row['id'],
-                    content_hash=row['content_hash'],
-                    contract_type=row['contract_type'],
-                    australian_state=row['australian_state'],
-                    metadata=row['metadata'],
-                    created_at=row['created_at'],
-                    updated_at=row['updated_at']
+                    id=row["id"],
+                    content_hash=row["content_hash"],
+                    contract_type=row["contract_type"],
+                    australian_state=row["australian_state"],
+                    metadata=row["metadata"],
+                    created_at=row["created_at"],
+                    updated_at=row["updated_at"],
                 )
                 for row in rows
             ]
@@ -294,10 +321,9 @@ class ContractsRepository:
         """
         async with get_service_role_connection() as conn:
             result = await conn.execute(
-                "DELETE FROM contracts WHERE id = $1",
-                contract_id
+                "DELETE FROM contracts WHERE id = $1", contract_id
             )
-            return result.split()[-1] == '1'
+            return result.split()[-1] == "1"
 
     async def get_contract_stats(self) -> Dict[str, Any]:
         """
@@ -308,10 +334,8 @@ class ContractsRepository:
         """
         async with get_service_role_connection() as conn:
             # Get total count and count by type
-            total_row = await conn.fetchrow(
-                "SELECT COUNT(*) as total FROM contracts"
-            )
-            
+            total_row = await conn.fetchrow("SELECT COUNT(*) as total FROM contracts")
+
             type_rows = await conn.fetch(
                 """
                 SELECT contract_type, COUNT(*) as count
@@ -320,7 +344,7 @@ class ContractsRepository:
                 ORDER BY count DESC
                 """
             )
-            
+
             state_rows = await conn.fetch(
                 """
                 SELECT australian_state, COUNT(*) as count
@@ -332,7 +356,9 @@ class ContractsRepository:
             )
 
             return {
-                'total_contracts': total_row['total'],
-                'by_type': {row['contract_type']: row['count'] for row in type_rows},
-                'by_state': {row['australian_state']: row['count'] for row in state_rows}
+                "total_contracts": total_row["total"],
+                "by_type": {row["contract_type"]: row["count"] for row in type_rows},
+                "by_state": {
+                    row["australian_state"]: row["count"] for row in state_rows
+                },
             }

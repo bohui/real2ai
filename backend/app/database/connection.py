@@ -7,7 +7,7 @@ import asyncpg
 import json
 import time
 from collections import OrderedDict
-from typing import Dict, Optional, Any, AsyncContextManager
+from typing import Dict, Optional, Any, AsyncContextManager, AsyncGenerator
 from uuid import UUID
 from contextlib import asynccontextmanager
 import logging
@@ -298,8 +298,27 @@ async def _reset_session_gucs(connection: asyncpg.Connection):
         logger.error(f"Failed to reset session GUCs: {e}")
 
 
+async def _setup_service_session(connection: asyncpg.Connection):
+    """
+    Set up a service-role session so RLS policies that rely on auth.jwt() pass.
+
+    Supabase RLS policies often check auth.jwt()->>'role' = 'service_role'. When
+    connecting directly to Postgres (asyncpg), we must set the same GUCs that
+    PostgREST would set.
+    """
+    try:
+        claims = {"role": "service_role"}
+        await connection.execute(
+            "SELECT set_config('request.jwt.claims', $1, false)", json.dumps(claims)
+        )
+        await connection.execute("SELECT set_config('role', $1, false)", "service_role")
+        logger.debug("Set service-role session context for connection")
+    except Exception as e:
+        logger.error(f"Failed to set service session context: {e}")
+
+
 @asynccontextmanager
-async def get_service_role_connection() -> AsyncContextManager[asyncpg.Connection]:
+async def get_service_role_connection() -> AsyncGenerator[asyncpg.Connection, None]:
     """
     Get a service role database connection with context management.
 
@@ -310,6 +329,8 @@ async def get_service_role_connection() -> AsyncContextManager[asyncpg.Connectio
     connection = await pool.acquire()
 
     try:
+        # Ensure service-role RLS context is present for this connection
+        await _setup_service_session(connection)
         yield connection
     finally:
         await pool.release(connection)
@@ -318,7 +339,7 @@ async def get_service_role_connection() -> AsyncContextManager[asyncpg.Connectio
 @asynccontextmanager
 async def get_user_connection(
     user_id: Optional[UUID] = None,
-) -> AsyncContextManager[asyncpg.Connection]:
+) -> AsyncGenerator[asyncpg.Connection, None]:
     """
     Get a user-scoped database connection with JWT-based RLS enforcement.
 
@@ -415,4 +436,3 @@ async def fetchrow_raw_sql(query: str, *args, user_id: Optional[UUID] = None) ->
     else:
         async with get_service_role_connection() as connection:
             return await connection.fetchrow(query, *args)
-

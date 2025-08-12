@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class Analysis:
     """Analysis model"""
+
     id: UUID
     content_hash: str
     agent_version: str
@@ -38,7 +39,7 @@ class AnalysesRepository:
     def __init__(self, user_id: Optional[UUID] = None, use_service_role: bool = False):
         """
         Initialize analyses repository.
-        
+
         Args:
             user_id: Optional user ID for user-scoped operations
             use_service_role: If True, use service role for shared analyses
@@ -54,7 +55,7 @@ class AnalysesRepository:
         result: Optional[Dict[str, Any]] = None,
         error_details: Optional[Dict[str, Any]] = None,
         started_at: Optional[datetime] = None,
-        completed_at: Optional[datetime] = None
+        completed_at: Optional[datetime] = None,
     ) -> Analysis:
         """
         Upsert analysis by content hash and agent version.
@@ -72,13 +73,8 @@ class AnalysesRepository:
             Analysis: Existing or newly created analysis
         """
         # Build dynamic query based on provided parameters
-        set_clauses = [
-            "status = EXCLUDED.status",
-            "updated_at = now()"
-        ]
-        insert_columns = [
-            "content_hash", "agent_version", "status"
-        ]
+        set_clauses = ["status = EXCLUDED.status", "updated_at = now()"]
+        insert_columns = ["content_hash", "agent_version", "status"]
         insert_values = ["$1", "$2", "$3"]
         params = [content_hash, agent_version, status]
         param_count = 3
@@ -86,14 +82,14 @@ class AnalysesRepository:
         if result is not None:
             param_count += 1
             insert_columns.append("result")
-            insert_values.append(f"${param_count}")
+            insert_values.append(f"${param_count}::jsonb")
             set_clauses.append(f"result = EXCLUDED.result")
             params.append(result)
 
         if error_details is not None:
             param_count += 1
             insert_columns.append("error_details")
-            insert_values.append(f"${param_count}")
+            insert_values.append(f"${param_count}::jsonb")
             set_clauses.append(f"error_details = EXCLUDED.error_details")
             params.append(error_details)
 
@@ -101,7 +97,9 @@ class AnalysesRepository:
             param_count += 1
             insert_columns.append("started_at")
             insert_values.append(f"${param_count}")
-            set_clauses.append(f"started_at = COALESCE(analyses.started_at, EXCLUDED.started_at)")
+            set_clauses.append(
+                f"started_at = COALESCE(analyses.started_at, EXCLUDED.started_at)"
+            )
             params.append(started_at)
 
         if completed_at is not None:
@@ -115,7 +113,9 @@ class AnalysesRepository:
         if not self.use_service_role:
             param_count += 1
             insert_columns.append("user_id")
-            insert_values.append(f"COALESCE(${param_count}::uuid, (current_setting('request.jwt.claim.sub'))::uuid)")
+            insert_values.append(
+                f"COALESCE(${param_count}::uuid, (current_setting('request.jwt.claim.sub'))::uuid)"
+            )
             params.append(self.user_id)
 
         query = f"""
@@ -137,23 +137,21 @@ class AnalysesRepository:
                 row = await conn.fetchrow(query, *params)
 
         return Analysis(
-            id=row['id'],
-            content_hash=row['content_hash'],
-            agent_version=row['agent_version'],
-            status=row['status'],
-            result=row['result'],
-            error_details=row['error_details'],
-            started_at=row['started_at'],
-            completed_at=row['completed_at'],
-            user_id=row['user_id'],
-            created_at=row['created_at'],
-            updated_at=row['updated_at']
+            id=row["id"],
+            content_hash=row["content_hash"],
+            agent_version=row["agent_version"],
+            status=row["status"],
+            result=row["result"],
+            error_details=row["error_details"],
+            started_at=row["started_at"],
+            completed_at=row["completed_at"],
+            user_id=row["user_id"],
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
         )
 
     async def get_analysis_by_content_hash(
-        self,
-        content_hash: str,
-        agent_version: Optional[str] = None
+        self, content_hash: str, agent_version: Optional[str] = None
     ) -> Optional[Analysis]:
         """
         Get analysis by content hash and optional agent version.
@@ -198,17 +196,17 @@ class AnalysesRepository:
             return None
 
         return Analysis(
-            id=row['id'],
-            content_hash=row['content_hash'],
-            agent_version=row['agent_version'],
-            status=row['status'],
-            result=row['result'],
-            error_details=row['error_details'],
-            started_at=row['started_at'],
-            completed_at=row['completed_at'],
-            user_id=row['user_id'],
-            created_at=row['created_at'],
-            updated_at=row['updated_at']
+            id=row["id"],
+            content_hash=row["content_hash"],
+            agent_version=row["agent_version"],
+            status=row["status"],
+            result=row["result"],
+            error_details=row["error_details"],
+            started_at=row["started_at"],
+            completed_at=row["completed_at"],
+            user_id=row["user_id"],
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
         )
 
     async def get_analysis_by_id(self, analysis_id: UUID) -> Optional[Analysis]:
@@ -240,17 +238,17 @@ class AnalysesRepository:
             return None
 
         return Analysis(
-            id=row['id'],
-            content_hash=row['content_hash'],
-            agent_version=row['agent_version'],
-            status=row['status'],
-            result=row['result'],
-            error_details=row['error_details'],
-            started_at=row['started_at'],
-            completed_at=row['completed_at'],
-            user_id=row['user_id'],
-            created_at=row['created_at'],
-            updated_at=row['updated_at']
+            id=row["id"],
+            content_hash=row["content_hash"],
+            agent_version=row["agent_version"],
+            status=row["status"],
+            result=row["result"],
+            error_details=row["error_details"],
+            started_at=row["started_at"],
+            completed_at=row["completed_at"],
+            user_id=row["user_id"],
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
         )
 
     async def update_analysis_status(
@@ -259,7 +257,7 @@ class AnalysesRepository:
         status: str,
         result: Optional[Dict[str, Any]] = None,
         error_details: Optional[Dict[str, Any]] = None,
-        completed_at: Optional[datetime] = None
+        completed_at: Optional[datetime] = None,
     ) -> bool:
         """
         Update analysis status and result.
@@ -281,12 +279,12 @@ class AnalysesRepository:
 
         if result is not None:
             param_count += 1
-            set_clauses.append(f"result = ${param_count}")
+            set_clauses.append(f"result = ${param_count}::jsonb")
             params.append(result)
 
         if error_details is not None:
             param_count += 1
-            set_clauses.append(f"error_details = ${param_count}")
+            set_clauses.append(f"error_details = ${param_count}::jsonb")
             params.append(error_details)
 
         if completed_at is not None:
@@ -310,14 +308,11 @@ class AnalysesRepository:
         else:
             async with get_user_connection(self.user_id) as conn:
                 result = await conn.execute(query, *params)
-        
-        return result.split()[-1] == '1'
+
+        return result.split()[-1] == "1"
 
     async def list_analyses_by_status(
-        self,
-        status: str,
-        limit: int = 50,
-        offset: int = 0
+        self, status: str, limit: int = 50, offset: int = 0
     ) -> List[Analysis]:
         """
         List analyses by status.
@@ -349,26 +344,23 @@ class AnalysesRepository:
 
         return [
             Analysis(
-                id=row['id'],
-                content_hash=row['content_hash'],
-                agent_version=row['agent_version'],
-                status=row['status'],
-                result=row['result'],
-                error_details=row['error_details'],
-                started_at=row['started_at'],
-                completed_at=row['completed_at'],
-                user_id=row['user_id'],
-                created_at=row['created_at'],
-                updated_at=row['updated_at']
+                id=row["id"],
+                content_hash=row["content_hash"],
+                agent_version=row["agent_version"],
+                status=row["status"],
+                result=row["result"],
+                error_details=row["error_details"],
+                started_at=row["started_at"],
+                completed_at=row["completed_at"],
+                user_id=row["user_id"],
+                created_at=row["created_at"],
+                updated_at=row["updated_at"],
             )
             for row in rows
         ]
 
     async def list_analyses_by_agent_version(
-        self,
-        agent_version: str,
-        limit: int = 50,
-        offset: int = 0
+        self, agent_version: str, limit: int = 50, offset: int = 0
     ) -> List[Analysis]:
         """
         List analyses by agent version.
@@ -400,17 +392,17 @@ class AnalysesRepository:
 
         return [
             Analysis(
-                id=row['id'],
-                content_hash=row['content_hash'],
-                agent_version=row['agent_version'],
-                status=row['status'],
-                result=row['result'],
-                error_details=row['error_details'],
-                started_at=row['started_at'],
-                completed_at=row['completed_at'],
-                user_id=row['user_id'],
-                created_at=row['created_at'],
-                updated_at=row['updated_at']
+                id=row["id"],
+                content_hash=row["content_hash"],
+                agent_version=row["agent_version"],
+                status=row["status"],
+                result=row["result"],
+                error_details=row["error_details"],
+                started_at=row["started_at"],
+                completed_at=row["completed_at"],
+                user_id=row["user_id"],
+                created_at=row["created_at"],
+                updated_at=row["updated_at"],
             )
             for row in rows
         ]
@@ -433,8 +425,8 @@ class AnalysesRepository:
         else:
             async with get_user_connection(self.user_id) as conn:
                 result = await conn.execute(query, analysis_id)
-        
-        return result.split()[-1] == '1'
+
+        return result.split()[-1] == "1"
 
     async def get_analysis_stats(self) -> Dict[str, Any]:
         """
@@ -469,19 +461,23 @@ class AnalysesRepository:
                 agent_rows = await conn.fetch(agent_query)
 
         return {
-            'total_analyses': total_row['total'],
-            'by_status': {row['status']: row['count'] for row in status_rows},
-            'by_agent_version': {row['agent_version']: row['count'] for row in agent_rows}
+            "total_analyses": total_row["total"],
+            "by_status": {row["status"]: row["count"] for row in status_rows},
+            "by_agent_version": {
+                row["agent_version"]: row["count"] for row in agent_rows
+            },
         }
 
-    async def retry_contract_analysis(self, content_hash: str, user_id: str) -> Optional[UUID]:
+    async def retry_contract_analysis(
+        self, content_hash: str, user_id: str
+    ) -> Optional[UUID]:
         """
         Retry contract analysis by calling the database RPC function.
-        
+
         Args:
             content_hash: Content hash for the analysis
             user_id: User ID as string
-            
+
         Returns:
             Analysis ID if successful, None otherwise
         """
@@ -491,7 +487,7 @@ class AnalysesRepository:
                 result = await conn.fetchval(
                     "SELECT retry_contract_analysis($1, $2)",
                     content_hash,
-                    UUID(user_id) if isinstance(user_id, str) else user_id
+                    UUID(user_id) if isinstance(user_id, str) else user_id,
                 )
                 return result if result else None
             except Exception as e:

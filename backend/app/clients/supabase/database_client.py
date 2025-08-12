@@ -150,12 +150,15 @@ class SupabaseDatabaseClient(BaseClient):
     ) -> List[Dict[str, Any]]:
         """Execute an UPSERT query."""
         try:
-            query = self.table(table_name).upsert(data)
-
+            # supabase-py upsert supports on_conflict as an argument
             if on_conflict:
-                query = query.on_conflict(on_conflict)
-
-            response = query.execute()
+                response = (
+                    self.table(table_name)
+                    .upsert(data, on_conflict=on_conflict)
+                    .execute()
+                )
+            else:
+                response = self.table(table_name).upsert(data).execute()
             return response.data
 
         except APIError as e:

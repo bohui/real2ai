@@ -13,6 +13,7 @@ from abc import ABC, abstractmethod
 
 from app.core.auth_context import AuthContext
 from app.clients.factory import get_service_supabase_client
+from app.services.repositories.recovery_repository import RecoveryRepository
 from app.core.task_recovery import TaskState, RecoveryMethod, RecoverableTask
 from app.core.celery import celery_app
 from app.tasks import background_tasks
@@ -258,18 +259,15 @@ class CleanRestartStrategy(RecoveryStrategy):
                 content_hash = analysis_options.get("content_hash")
 
                 if content_hash:
-                    client = await get_service_supabase_client()
-
-                    # Check analysis progress
-                    progress_result = await client.database.read(
-                        "analysis_progress", filters={"content_hash": content_hash}
+                    # Check analysis progress via repository
+                    repo = RecoveryRepository()
+                    progress = await repo.get_analysis_progress_by_content_hash(
+                        content_hash
                     )
 
-                    if progress_result:
-                        progress = progress_result[0]
-                        if progress["progress_percent"] >= 75:
-                            completed_work["documents_processed"].append(content_hash)
-                            completed_work["estimated_time_saved"] = 600  # 10 minutes
+                    if progress and progress.get("progress_percent", 0) >= 75:
+                        completed_work["documents_processed"].append(content_hash)
+                        completed_work["estimated_time_saved"] = 600  # 10 minutes
 
         except Exception as e:
             logger.warning(f"Failed to analyze completed work for {task.task_id}: {e}")
@@ -358,12 +356,11 @@ class ValidationOnlyStrategy(RecoveryStrategy):
             client = await get_service_supabase_client()
 
             if task.task_name == "comprehensive_document_analysis":
-                # Check if analysis completed via content_hash
+                # Check if analysis completed via content_hash using repository
                 analysis_options = task.task_kwargs.get("analysis_options", {})
                 content_hash = analysis_options.get("content_hash")
 
                 if content_hash:
-                    # Check if analysis completed using AnalysesRepository
                     analyses_repo = AnalysesRepository(use_service_role=True)
                     analysis = await analyses_repo.get_analysis_by_content_hash(
                         content_hash, status="completed"
@@ -377,7 +374,11 @@ class ValidationOnlyStrategy(RecoveryStrategy):
                                 "content_hash": analysis.content_hash,
                                 "status": analysis.status,
                                 "result": analysis.result,
-                                "created_at": analysis.created_at.isoformat() if analysis.created_at else None,
+                                "created_at": (
+                                    analysis.created_at.isoformat()
+                                    if analysis.created_at
+                                    else None
+                                ),
                             },
                             "estimated_time_saved": 1800,  # 30 minutes
                         }
@@ -445,8 +446,10 @@ class RecoveryOrchestrator:
         """Validate system health before recovery"""
         # Check database connectivity
         try:
-            client = await get_service_supabase_client()
-            await client.database.read("profiles", limit=1)
+            repo = RecoveryRepository()
+            ok = await repo.verify_database_connectivity()
+            if not ok:
+                raise Exception("Database connectivity check returned False")
             logger.info("Database connectivity verified")
         except Exception as e:
             raise Exception(f"Database connectivity check failed: {e}")
@@ -619,13 +622,10 @@ class RecoveryOrchestrator:
     async def _load_full_task_data(self, task: RecoverableTask) -> RecoverableTask:
         """Load full task data including args and kwargs"""
         try:
-            client = await get_service_supabase_client()
-            result = await client.database.read(
-                "task_registry", filters={"id": task.registry_id}
-            )
+            repo = RecoveryRepository()
+            row = await repo.get_task_registry_row(task.registry_id)
 
-            if result:
-                row = result[0]
+            if row:
                 task.task_args = tuple(
                     json.loads(row["task_args"]) if row["task_args"] else []
                 )

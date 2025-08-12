@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 class ErrorCategory(str, Enum):
     """Error categories for better organization and handling"""
+
     AUTHENTICATION = "authentication"
     AUTHORIZATION = "authorization"
     VALIDATION = "validation"
@@ -32,15 +33,17 @@ class ErrorCategory(str, Enum):
 
 class ErrorSeverity(str, Enum):
     """Error severity levels"""
+
     CRITICAL = "critical"  # System-breaking issues
-    HIGH = "high"         # Feature-breaking issues
-    MEDIUM = "medium"     # Degraded functionality
-    LOW = "low"          # Minor issues, warnings
+    HIGH = "high"  # Feature-breaking issues
+    MEDIUM = "medium"  # Degraded functionality
+    LOW = "low"  # Minor issues, warnings
 
 
 @dataclass
 class ErrorContext:
     """Additional context for error handling"""
+
     user_id: Optional[str] = None
     contract_id: Optional[str] = None
     session_id: Optional[str] = None
@@ -52,6 +55,7 @@ class ErrorContext:
 @dataclass
 class EnhancedError:
     """Enhanced error with user-friendly messaging and recovery options"""
+
     category: ErrorCategory
     severity: ErrorSeverity
     code: str
@@ -66,11 +70,11 @@ class EnhancedError:
 
 class ErrorHandler:
     """Centralized error handling with user-friendly messages and retry logic"""
-    
+
     def __init__(self):
         self.error_mappings = self._initialize_error_mappings()
         self.retry_strategies = self._initialize_retry_strategies()
-    
+
     def _initialize_error_mappings(self) -> Dict[str, EnhancedError]:
         """Initialize comprehensive error mappings"""
         return {
@@ -83,9 +87,9 @@ class ErrorHandler:
                 technical_message="JWT token has expired",
                 suggested_actions=[
                     "Click the login button to sign in again",
-                    "Make sure your device's clock is set correctly"
+                    "Make sure your device's clock is set correctly",
                 ],
-                retry_eligible=False
+                retry_eligible=False,
             ),
             "invalid_credentials": EnhancedError(
                 category=ErrorCategory.AUTHENTICATION,
@@ -96,9 +100,9 @@ class ErrorHandler:
                 suggested_actions=[
                     "Double-check your email address and password",
                     "Use the 'Forgot Password' link if needed",
-                    "Contact support if you continue having issues"
+                    "Contact support if you continue having issues",
                 ],
-                retry_eligible=False
+                retry_eligible=False,
             ),
             "insufficient_credits": EnhancedError(
                 category=ErrorCategory.AUTHORIZATION,
@@ -109,11 +113,10 @@ class ErrorHandler:
                 suggested_actions=[
                     "Upgrade to a paid plan for more credits",
                     "Wait for your credits to reset next month",
-                    "Contact support for credit assistance"
+                    "Contact support for credit assistance",
                 ],
-                retry_eligible=False
+                retry_eligible=False,
             ),
-            
             # File Processing Errors
             "file_too_large": EnhancedError(
                 category=ErrorCategory.FILE_PROCESSING,
@@ -124,9 +127,9 @@ class ErrorHandler:
                 suggested_actions=[
                     "Compress the PDF file using a PDF compressor",
                     "Split large documents into smaller sections",
-                    "Try uploading a different file format"
+                    "Try uploading a different file format",
                 ],
-                retry_eligible=False
+                retry_eligible=False,
             ),
             "file_format_unsupported": EnhancedError(
                 category=ErrorCategory.FILE_PROCESSING,
@@ -137,9 +140,9 @@ class ErrorHandler:
                 suggested_actions=[
                     "Convert your file to PDF format",
                     "Save Word documents as .docx files",
-                    "Contact support if your file should be supported"
+                    "Contact support if your file should be supported",
                 ],
-                retry_eligible=False
+                retry_eligible=False,
             ),
             "file_corrupted": EnhancedError(
                 category=ErrorCategory.FILE_PROCESSING,
@@ -151,10 +154,10 @@ class ErrorHandler:
                     "Try uploading the file again",
                     "Open the file on your device to check if it works",
                     "Re-save or re-export the document",
-                    "Contact the document sender for a new copy"
+                    "Contact the document sender for a new copy",
                 ],
                 retry_eligible=True,
-                max_retries=2
+                max_retries=2,
             ),
             "empty_file": EnhancedError(
                 category=ErrorCategory.FILE_PROCESSING,
@@ -166,11 +169,10 @@ class ErrorHandler:
                     "Select a different file that contains content",
                     "Check that the file isn't corrupted or empty",
                     "Ensure the document was saved properly before uploading",
-                    "Try opening the file on your device first to verify it has content"
+                    "Try opening the file on your device first to verify it has content",
                 ],
-                retry_eligible=False
+                retry_eligible=False,
             ),
-            
             # Contract Analysis Errors
             "analysis_failed": EnhancedError(
                 category=ErrorCategory.CONTRACT_ANALYSIS,
@@ -182,10 +184,10 @@ class ErrorHandler:
                     "Make sure the document is a property contract",
                     "Check that the text is clear and readable",
                     "Try uploading a higher quality scan",
-                    "Contact support with your document details"
+                    "Contact support with your document details",
                 ],
                 retry_eligible=True,
-                max_retries=3
+                max_retries=3,
             ),
             "low_confidence_extraction": EnhancedError(
                 category=ErrorCategory.CONTRACT_ANALYSIS,
@@ -197,10 +199,10 @@ class ErrorHandler:
                     "Upload a clearer copy of the document",
                     "Check the analysis results carefully",
                     "Consult with a legal professional for confirmation",
-                    "Contact support if important details are missing"
+                    "Contact support if important details are missing",
                 ],
                 retry_eligible=True,
-                max_retries=2
+                max_retries=2,
             ),
             "unsupported_contract_type": EnhancedError(
                 category=ErrorCategory.CONTRACT_ANALYSIS,
@@ -212,26 +214,25 @@ class ErrorHandler:
                     "Verify this is a property purchase contract",
                     "Check the analysis results for partial insights",
                     "Contact support for assistance with special contract types",
-                    "Consider having the contract reviewed manually by a lawyer"
+                    "Consider having the contract reviewed manually by a lawyer",
                 ],
-                retry_eligible=False
+                retry_eligible=False,
             ),
-            
             # Database Errors
             "database_connection": EnhancedError(
                 category=ErrorCategory.DATABASE,
                 severity=ErrorSeverity.CRITICAL,
-                code="DB_001", 
+                code="DB_001",
                 user_message="We're experiencing technical difficulties. Please try again in a few moments.",
                 technical_message="Database connection failed",
                 suggested_actions=[
                     "Wait a few minutes and try again",
                     "Refresh the page",
                     "Check our status page for system updates",
-                    "Contact support if the issue persists"
+                    "Contact support if the issue persists",
                 ],
                 retry_eligible=True,
-                max_retries=3
+                max_retries=3,
             ),
             "database_timeout": EnhancedError(
                 category=ErrorCategory.DATABASE,
@@ -242,13 +243,12 @@ class ErrorHandler:
                 suggested_actions=[
                     "Wait a moment and try again",
                     "Check your internet connection",
-                    "Try the operation during off-peak hours"
+                    "Try the operation during off-peak hours",
                 ],
                 retry_eligible=True,
-                max_retries=2
+                max_retries=2,
             ),
-            
-            # External API Errors  
+            # External API Errors
             "openai_api_limit": EnhancedError(
                 category=ErrorCategory.EXTERNAL_API,
                 severity=ErrorSeverity.HIGH,
@@ -258,10 +258,10 @@ class ErrorHandler:
                 suggested_actions=[
                     "Wait 5-10 minutes before trying again",
                     "Try during off-peak hours for faster processing",
-                    "Contact support if you need urgent analysis"
+                    "Contact support if you need urgent analysis",
                 ],
                 retry_eligible=True,
-                max_retries=3
+                max_retries=3,
             ),
             "api_service_unavailable": EnhancedError(
                 category=ErrorCategory.EXTERNAL_API,
@@ -273,12 +273,11 @@ class ErrorHandler:
                     "Check our status page for updates",
                     "Try again in 15-30 minutes",
                     "Follow us on social media for real-time updates",
-                    "Contact support for urgent requests"
+                    "Contact support for urgent requests",
                 ],
                 retry_eligible=True,
-                max_retries=2
+                max_retries=2,
             ),
-            
             # Network Errors
             "network_timeout": EnhancedError(
                 category=ErrorCategory.NETWORK,
@@ -290,12 +289,11 @@ class ErrorHandler:
                     "Check your internet connection",
                     "Refresh the page and try again",
                     "Try switching to a different network",
-                    "Contact support if timeouts persist"
+                    "Contact support if timeouts persist",
                 ],
                 retry_eligible=True,
-                max_retries=3
+                max_retries=3,
             ),
-            
             # Rate Limiting
             "rate_limit_exceeded": EnhancedError(
                 category=ErrorCategory.RATE_LIMIT,
@@ -307,12 +305,11 @@ class ErrorHandler:
                     "Wait 60 seconds before trying again",
                     "Reduce the frequency of your requests",
                     "Upgrade your plan for higher limits",
-                    "Contact support if you need higher limits"
+                    "Contact support if you need higher limits",
                 ],
                 retry_eligible=True,
-                max_retries=1
+                max_retries=1,
             ),
-            
             # Validation Errors
             "invalid_australian_state": EnhancedError(
                 category=ErrorCategory.VALIDATION,
@@ -323,9 +320,9 @@ class ErrorHandler:
                 suggested_actions=[
                     "Select your state from the dropdown menu",
                     "Make sure you're analyzing an Australian property contract",
-                    "Contact support if your state isn't listed"
+                    "Contact support if your state isn't listed",
                 ],
-                retry_eligible=False
+                retry_eligible=False,
             ),
             "missing_required_field": EnhancedError(
                 category=ErrorCategory.VALIDATION,
@@ -336,12 +333,12 @@ class ErrorHandler:
                 suggested_actions=[
                     "Check for any highlighted empty fields",
                     "Make sure all required information is provided",
-                    "Contact support if you're unsure what's required"
+                    "Contact support if you're unsure what's required",
                 ],
-                retry_eligible=False
-            )
+                retry_eligible=False,
+            ),
         }
-    
+
     def _initialize_retry_strategies(self) -> Dict[ErrorCategory, Dict[str, Any]]:
         """Initialize retry strategies for different error categories"""
         return {
@@ -349,76 +346,78 @@ class ErrorHandler:
                 "initial_delay": 1.0,
                 "max_delay": 30.0,
                 "exponential_base": 2.0,
-                "jitter": True
+                "jitter": True,
             },
             ErrorCategory.EXTERNAL_API: {
                 "initial_delay": 5.0,
                 "max_delay": 300.0,
                 "exponential_base": 2.0,
-                "jitter": True
+                "jitter": True,
             },
             ErrorCategory.NETWORK: {
                 "initial_delay": 2.0,
                 "max_delay": 60.0,
                 "exponential_base": 2.0,
-                "jitter": True
+                "jitter": True,
             },
             ErrorCategory.CONTRACT_ANALYSIS: {
                 "initial_delay": 10.0,
                 "max_delay": 180.0,
                 "exponential_base": 1.5,
-                "jitter": True
+                "jitter": True,
             },
             ErrorCategory.FILE_PROCESSING: {
                 "initial_delay": 3.0,
                 "max_delay": 30.0,
                 "exponential_base": 2.0,
-                "jitter": False
-            }
+                "jitter": False,
+            },
         }
-    
+
     def handle_error(
-        self, 
-        error: Exception, 
+        self,
+        error: Exception,
         context: Optional[ErrorContext] = None,
-        fallback_category: ErrorCategory = ErrorCategory.SYSTEM
+        fallback_category: ErrorCategory = ErrorCategory.SYSTEM,
     ) -> Tuple[EnhancedError, HTTPException]:
         """
         Handle any error and return enhanced error info plus HTTP response
         """
         try:
             # Map exception to enhanced error
-            enhanced_error = self._map_exception_to_error(error, context, fallback_category)
-            
+            enhanced_error = self._map_exception_to_error(
+                error, context, fallback_category
+            )
+
             # Log the error appropriately
             self._log_error(enhanced_error, error, context)
-            
+
             # Create HTTP response
             http_exception = self._create_http_exception(enhanced_error)
-            
+
             return enhanced_error, http_exception
-            
+
         except Exception as handler_error:
             # Fallback if error handler itself fails
             logger.critical(f"Error handler failed: {str(handler_error)}")
             fallback_error = self._create_fallback_error(error, context)
             fallback_http = HTTPException(
                 status_code=500,
-                detail="A system error occurred. Please try again later."
+                detail="A system error occurred. Please try again later.",
             )
             return fallback_error, fallback_http
-    
+
     def _map_exception_to_error(
-        self, 
-        error: Exception, 
+        self,
+        error: Exception,
         context: Optional[ErrorContext],
-        fallback_category: ErrorCategory
+        fallback_category: ErrorCategory,
     ) -> EnhancedError:
         """Map Python exception to enhanced error"""
-        
+
         error_str = str(error).lower()
         error_type = type(error).__name__
-        
+
         # Try to identify error from message content
         if "token" in error_str and ("expired" in error_str or "invalid" in error_str):
             enhanced_error = self.error_mappings["token_expired"].copy()
@@ -452,7 +451,9 @@ class ErrorHandler:
                 enhanced_error = self.error_mappings["openai_api_limit"].copy()
             else:
                 enhanced_error = self.error_mappings["api_service_unavailable"].copy()
-        elif "state" in error_str and ("invalid" in error_str or "not found" in error_str):
+        elif "state" in error_str and (
+            "invalid" in error_str or "not found" in error_str
+        ):
             enhanced_error = self.error_mappings["invalid_australian_state"].copy()
         elif "required" in error_str and "field" in error_str:
             enhanced_error = self.error_mappings["missing_required_field"].copy()
@@ -468,26 +469,26 @@ class ErrorHandler:
                     "Try the operation again",
                     "Refresh the page",
                     "Check your internet connection",
-                    "Contact support if the problem continues"
+                    "Contact support if the problem continues",
                 ],
                 retry_eligible=True,
-                max_retries=2
+                max_retries=2,
             )
-        
+
         # Add context if provided
         if context:
             enhanced_error.context = context
-            
+
         return enhanced_error
-    
+
     def _log_error(
-        self, 
-        enhanced_error: EnhancedError, 
-        original_error: Exception, 
-        context: Optional[ErrorContext]
+        self,
+        enhanced_error: EnhancedError,
+        original_error: Exception,
+        context: Optional[ErrorContext],
     ):
         """Log error with appropriate level and context"""
-        
+
         log_data = {
             "error_code": enhanced_error.code,
             "category": enhanced_error.category.value,
@@ -496,17 +497,19 @@ class ErrorHandler:
             "original_error": str(original_error),
             "traceback": traceback.format_exc(),
         }
-        
+
         if context:
-            log_data.update({
-                "user_id": context.user_id,
-                "contract_id": context.contract_id,
-                "session_id": context.session_id,
-                "operation": context.operation,
-                "retry_count": context.retry_count,
-                "metadata": context.metadata
-            })
-        
+            log_data.update(
+                {
+                    "user_id": context.user_id,
+                    "contract_id": context.contract_id,
+                    "session_id": context.session_id,
+                    "operation": context.operation,
+                    "retry_count": context.retry_count,
+                    "metadata": context.metadata,
+                }
+            )
+
         # Log at appropriate level
         if enhanced_error.severity == ErrorSeverity.CRITICAL:
             logger.critical("Critical error occurred", extra=log_data)
@@ -516,18 +519,18 @@ class ErrorHandler:
             logger.warning("Medium severity error occurred", extra=log_data)
         else:
             logger.info("Low severity error occurred", extra=log_data)
-    
+
     def _create_http_exception(self, enhanced_error: EnhancedError) -> HTTPException:
         """Create HTTP exception from enhanced error"""
-        
+
         # Map severity to HTTP status codes
         status_mapping = {
             ErrorSeverity.CRITICAL: 503,  # Service Unavailable
-            ErrorSeverity.HIGH: 500,      # Internal Server Error  
-            ErrorSeverity.MEDIUM: 400,    # Bad Request
-            ErrorSeverity.LOW: 400        # Bad Request
+            ErrorSeverity.HIGH: 500,  # Internal Server Error
+            ErrorSeverity.MEDIUM: 400,  # Bad Request
+            ErrorSeverity.LOW: 400,  # Bad Request
         }
-        
+
         # Special cases for specific categories
         if enhanced_error.category == ErrorCategory.AUTHENTICATION:
             status_code = 401  # Unauthorized
@@ -539,7 +542,7 @@ class ErrorHandler:
             status_code = 429  # Too Many Requests
         else:
             status_code = status_mapping.get(enhanced_error.severity, 500)
-        
+
         # Create detailed response
         detail = {
             "error_code": enhanced_error.code,
@@ -548,20 +551,18 @@ class ErrorHandler:
             "severity": enhanced_error.severity.value,
             "suggested_actions": enhanced_error.suggested_actions,
             "retry_eligible": enhanced_error.retry_eligible,
-            "timestamp": enhanced_error.timestamp.isoformat()
+            "timestamp": enhanced_error.timestamp.isoformat(),
         }
-        
+
         if enhanced_error.retry_eligible:
             detail["max_retries"] = enhanced_error.max_retries
             if enhanced_error.context and enhanced_error.context.retry_count > 0:
                 detail["retry_count"] = enhanced_error.context.retry_count
-        
+
         return HTTPException(status_code=status_code, detail=detail)
-    
+
     def _create_fallback_error(
-        self, 
-        error: Exception, 
-        context: Optional[ErrorContext]
+        self, error: Exception, context: Optional[ErrorContext]
     ) -> EnhancedError:
         """Create fallback error when main error handling fails"""
         return EnhancedError(
@@ -572,20 +573,17 @@ class ErrorHandler:
             technical_message=f"Error handler failed processing: {str(error)}",
             suggested_actions=[
                 "Contact support immediately",
-                "Include details about what you were doing when this happened"
+                "Include details about what you were doing when this happened",
             ],
             retry_eligible=False,
-            context=context
+            context=context,
         )
-    
+
     def create_validation_error(
-        self, 
-        field_name: str, 
-        value: Any, 
-        message: str
+        self, field_name: str, value: Any, message: str
     ) -> HTTPException:
         """Create user-friendly validation error"""
-        
+
         detail = {
             "error_code": "VAL_003",
             "message": f"Invalid {field_name}: {message}",
@@ -596,12 +594,12 @@ class ErrorHandler:
             "suggested_actions": [
                 f"Please provide a valid {field_name}",
                 "Check the format requirements",
-                "Contact support if you need help"
+                "Contact support if you need help",
             ],
             "retry_eligible": False,
-            "timestamp": datetime.now(UTC).isoformat()
+            "timestamp": datetime.now(UTC).isoformat(),
         }
-        
+
         return HTTPException(status_code=422, detail=detail)
 
 
@@ -612,7 +610,7 @@ error_handler = ErrorHandler()
 def handle_api_error(
     error: Exception,
     context: Optional[ErrorContext] = None,
-    fallback_category: ErrorCategory = ErrorCategory.SYSTEM
+    fallback_category: ErrorCategory = ErrorCategory.SYSTEM,
 ) -> HTTPException:
     """
     Convenience function to handle API errors
@@ -630,7 +628,7 @@ def create_error_context(
     session_id: Optional[str] = None,
     operation: Optional[str] = None,
     retry_count: int = 0,
-    **metadata
+    **metadata,
 ) -> ErrorContext:
     """Convenience function to create error context"""
     return ErrorContext(
@@ -639,5 +637,5 @@ def create_error_context(
         session_id=session_id,
         operation=operation,
         retry_count=retry_count,
-        metadata=metadata if metadata else None
+        metadata=metadata if metadata else None,
     )

@@ -9,6 +9,7 @@ from typing import Dict, Any, List, Optional
 
 from app.core.auth_context import AuthContext
 from app.clients.factory import get_service_supabase_client
+from app.services.repositories.recovery_repository import RecoveryRepository
 from app.core.task_recovery import TaskState
 from app.core.config import get_settings
 
@@ -74,50 +75,25 @@ class RecoveryMonitor:
     async def get_recovery_health_status(self) -> Dict[str, Any]:
         """Get current recovery system health status"""
         try:
-            client = await get_service_supabase_client()
+            repo = RecoveryRepository()
 
             # Check recovery queue depth
-            queue_result = await client.database.read(
-                "recovery_queue", filters={"status": "pending"}, count_only=True
-            )
-            queue_depth = queue_result.get("count", 0)
+            queue_depth = await repo.count_recovery_queue_pending()
 
             # Check recent failures
             one_hour_ago = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
-            failure_result = await client.database.read(
-                "recovery_queue",
-                filters={"status": "failed", "created_at__gte": one_hour_ago},
-                count_only=True,
-            )
-            recent_failures = failure_result.get("count", 0)
+            recent_failures = await repo.count_recovery_queue_failed_since(one_hour_ago)
 
             # Check orphaned tasks
             ten_minutes_ago = (
                 datetime.now(timezone.utc) - timedelta(minutes=10)
             ).isoformat()
-            orphaned_result = await client.database.read(
-                "task_registry",
-                filters={
-                    "current_state": TaskState.ORPHANED.value,
-                    "last_heartbeat__lt": ten_minutes_ago,
-                },
-                count_only=True,
+            orphaned_count = await repo.count_task_registry_orphaned_before(
+                ten_minutes_ago
             )
-            orphaned_count = orphaned_result.get("count", 0)
 
             # Check stuck tasks
-            stuck_result = await client.database.read(
-                "task_registry",
-                filters={
-                    "current_state__in": [
-                        TaskState.PROCESSING.value,
-                        TaskState.RECOVERING.value,
-                    ],
-                    "last_heartbeat__lt": ten_minutes_ago,
-                },
-                count_only=True,
-            )
-            stuck_count = stuck_result.get("count", 0)
+            stuck_count = await repo.count_task_registry_stuck_before(ten_minutes_ago)
 
             # Determine overall health
             health_status = "healthy"
@@ -191,40 +167,47 @@ class RecoveryMonitor:
     async def get_recovery_metrics(self) -> Dict[str, Any]:
         """Get detailed recovery metrics"""
         try:
-            client = await get_service_supabase_client()
-
             # Task state distribution
             state_distribution = {}
             for state in TaskState:
-                result = await client.database.read(
-                    "task_registry",
-                    filters={"current_state": state.value},
-                    count_only=True,
-                )
-                state_distribution[state.value] = result.get("count", 0)
+                repo = RecoveryRepository()
+                # Reuse orphaned/stuck helpers where applicable, fallback to generic count
+                if state == TaskState.ORPHANED:
+                    ten_years_ago = (
+                        datetime.now(timezone.utc) - timedelta(days=3650)
+                    ).isoformat()
+                    state_distribution[state.value] = (
+                        await repo.count_task_registry_orphaned_before(ten_years_ago)
+                    )
+                elif state in (TaskState.PROCESSING, TaskState.RECOVERING):
+                    ten_years_ago = (
+                        datetime.now(timezone.utc) - timedelta(days=3650)
+                    ).isoformat()
+                    state_distribution[state.value] = (
+                        await repo.count_task_registry_stuck_before(ten_years_ago)
+                    )
+                else:
+                    # Generic count using raw SQL
+                    from app.database.connection import fetchrow_raw_sql
+
+                    row = await fetchrow_raw_sql(
+                        "SELECT COUNT(*) AS c FROM task_registry WHERE current_state = $1",
+                        state.value,
+                    )
+                    state_distribution[state.value] = int(row["c"]) if row else 0
 
             # Recovery success rates (last 24 hours)
             twenty_four_hours_ago = (
                 datetime.now(timezone.utc) - timedelta(hours=24)
             ).isoformat()
 
-            total_recovery_attempts = await client.database.read(
-                "recovery_queue",
-                filters={"created_at__gte": twenty_four_hours_ago},
-                count_only=True,
+            repo = RecoveryRepository()
+            total_attempts = await repo.count_recovery_queue_since(
+                twenty_four_hours_ago
             )
-
-            successful_recoveries = await client.database.read(
-                "recovery_queue",
-                filters={
-                    "created_at__gte": twenty_four_hours_ago,
-                    "status": "completed",
-                },
-                count_only=True,
+            successful_attempts = await repo.count_recovery_queue_completed_since(
+                twenty_four_hours_ago
             )
-
-            total_attempts = total_recovery_attempts.get("count", 0)
-            successful_attempts = successful_recoveries.get("count", 0)
 
             success_rate = (
                 (successful_attempts / total_attempts * 100)
@@ -251,31 +234,21 @@ class RecoveryMonitor:
     async def _calculate_average_recovery_time(self) -> float:
         """Calculate average recovery time"""
         try:
-            client = await get_service_supabase_client()
-
-            # Get completed recoveries with timing data
             twenty_four_hours_ago = (
                 datetime.now(timezone.utc) - timedelta(hours=24)
             ).isoformat()
-
-            result = await client.database.read(
-                "recovery_queue",
-                columns=["processing_started", "processing_completed"],
-                filters={
-                    "status": "completed",
-                    "created_at__gte": twenty_four_hours_ago,
-                    "processing_started__is_not": None,
-                    "processing_completed__is_not": None,
-                },
+            repo = RecoveryRepository()
+            rows = await repo.fetch_completed_recoveries_with_timings_since(
+                twenty_four_hours_ago
             )
 
-            if not result:
+            if not rows:
                 return 0.0
 
             total_time = 0
             count = 0
 
-            for row in result:
+            for row in rows:
                 started = datetime.fromisoformat(
                     row["processing_started"].replace("Z", "+00:00")
                 )
@@ -295,44 +268,19 @@ class RecoveryMonitor:
     async def cleanup_old_records(self, days_to_keep: int = 30):
         """Clean up old recovery records"""
         try:
-            # Use isolated client to prevent JWT token race conditions in concurrent tasks
-            client = await AuthContext.get_authenticated_client(isolated=True)
+            repo = RecoveryRepository()
             cutoff_date = (
                 datetime.now(timezone.utc) - timedelta(days=days_to_keep)
             ).isoformat()
 
             # Clean up old completed task registry entries
-            completed_tasks = await client.database.delete(
-                "task_registry",
-                filters={
-                    "current_state__in": [
-                        TaskState.COMPLETED.value,
-                        TaskState.FAILED.value,
-                    ],
-                    "updated_at__lt": cutoff_date,
-                },
-            )
+            _ = await repo.delete_old_task_registry_completed_before(cutoff_date)
 
             # Clean up old recovery queue entries
-            old_recoveries = await client.database.delete(
-                "recovery_queue",
-                filters={
-                    "status__in": ["completed", "failed"],
-                    "created_at__lt": cutoff_date,
-                },
-            )
+            _ = await repo.delete_old_recovery_queue_before(cutoff_date)
 
             # Clean up old checkpoints for completed tasks
-            old_checkpoints = await client.database.execute_sql(
-                f"""
-                DELETE FROM task_checkpoints 
-                WHERE task_registry_id NOT IN (
-                    SELECT id FROM task_registry 
-                    WHERE current_state NOT IN ('completed', 'failed')
-                ) 
-                AND created_at < '{cutoff_date}'
-            """
-            )
+            await repo.cleanup_old_checkpoints(cutoff_date)
 
             logger.info(
                 f"Cleanup completed: removed old recovery records older than {days_to_keep} days"

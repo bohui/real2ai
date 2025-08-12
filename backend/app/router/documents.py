@@ -1,6 +1,14 @@
 """Document management router."""
 
-from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, BackgroundTasks, Request
+from fastapi import (
+    APIRouter,
+    HTTPException,
+    Depends,
+    UploadFile,
+    File,
+    BackgroundTasks,
+    Request,
+)
 from typing import Optional, Dict, Any, List
 import logging
 
@@ -113,22 +121,21 @@ async def upload_document(
     try:
         # Get client IP for rate limiting and security logging
         client_ip = request.client.host if request.client else "unknown"
-        
+
         # Check rate limiting
         is_limited, limit_reason = upload_rate_limiter.is_rate_limited(
-            user_id=str(user.id),
-            client_ip=client_ip
+            user_id=str(user.id), client_ip=client_ip
         )
-        
+
         if is_limited:
             logger.warning(
                 f"Rate limit exceeded for user {user.id} from IP {client_ip}: {limit_reason}"
             )
             raise HTTPException(
                 status_code=429,
-                detail=f"Rate limit exceeded: {limit_reason}. Please try again later."
+                detail=f"Rate limit exceeded: {limit_reason}. Please try again later.",
             )
-        
+
         # Log upload attempt
         logger.info(
             f"Fast upload attempt: filename={file.filename}, size={file.size}, content_type={file.content_type}, client_ip={client_ip}"
@@ -136,27 +143,25 @@ async def upload_document(
 
         # Comprehensive security validation
         logger.info(f"Starting security validation for file: {file.filename}")
-        
+
         security_result = await file_security_validator.validate_file_security(
-            file=file,
-            max_size_override=settings.max_file_size,
-            user_id=str(user.id)
+            file=file, max_size_override=settings.max_file_size, user_id=str(user.id)
         )
-        
+
         if not security_result.is_valid:
             logger.warning(
                 f"File security validation failed: {security_result.error_message}",
                 extra={
                     "user_id": str(user.id),
                     "filename": file.filename,
-                    "error": security_result.error_message
-                }
+                    "error": security_result.error_message,
+                },
             )
             raise HTTPException(
                 status_code=400,
-                detail=f"File security validation failed: {security_result.error_message}"
+                detail=f"File security validation failed: {security_result.error_message}",
             )
-        
+
         # Log security warnings if any
         if security_result.warnings:
             logger.warning(
@@ -164,28 +169,32 @@ async def upload_document(
                 extra={
                     "user_id": str(user.id),
                     "filename": file.filename,
-                    "warnings": security_result.warnings
-                }
+                    "warnings": security_result.warnings,
+                },
             )
-        
+
         # Update filename to sanitized version if available
-        if security_result.metadata and security_result.metadata.get("sanitized_filename"):
+        if security_result.metadata and security_result.metadata.get(
+            "sanitized_filename"
+        ):
             original_filename = file.filename
             sanitized_filename = security_result.metadata["sanitized_filename"]
             if original_filename != sanitized_filename:
                 logger.info(
                     f"Using sanitized filename: {original_filename} -> {sanitized_filename}",
-                    extra={"user_id": str(user.id)}
+                    extra={"user_id": str(user.id)},
                 )
                 # Note: We keep the original filename for display but could use sanitized for storage
-        
+
         logger.info(
             f"File security validation passed for {file.filename}",
             extra={
                 "user_id": str(user.id),
                 "file_hash": security_result.metadata.get("file_hash", "unknown"),
-                "validation_checks": security_result.metadata.get("validation_checks_passed", [])
-            }
+                "validation_checks": security_result.metadata.get(
+                    "validation_checks_passed", []
+                ),
+            },
         )
 
         # Fast upload - just store file and create record
@@ -204,12 +213,29 @@ async def upload_document(
 
         # Check if upload was successful
         if not upload_result.success:
-            logger.error(
-                f"Document upload failed: {upload_result.error or 'Unknown error'}"
-            )
+            error_message = str(upload_result.error or "Unknown error")
+            logger.error(f"Document upload failed: {error_message}")
+
+            # If the failure is due to auth/token issues, return 401 to trigger re-login on UI
+            lowered = error_message.lower()
+            auth_indicators = [
+                "unauthorized",
+                "jwt expired",
+                "token expired",
+                "invalid_token",
+                "signature verification failed",
+                "pgrst301",
+            ]
+            if any(indicator in lowered for indicator in auth_indicators):
+                raise HTTPException(
+                    status_code=401,
+                    detail="Authentication required. Please log in again.",
+                )
+
+            # Otherwise treat as server error
             raise HTTPException(
                 status_code=500,
-                detail=f"Document upload failed: {upload_result.error or 'Unknown error'}",
+                detail=f"Document upload failed: {error_message}",
             )
 
         logger.info("Fast document upload completed successfully")
@@ -706,20 +732,19 @@ async def get_security_status(
     user: User = Depends(get_current_user),
 ):
     """Get current security configuration and user rate limit status."""
-    
+
     try:
         # Get client IP
         client_ip = request.client.host if request.client else "unknown"
-        
+
         # Get rate limit info
         rate_limit_info = upload_rate_limiter.get_rate_limit_info(
-            user_id=str(user.id),
-            client_ip=client_ip
+            user_id=str(user.id), client_ip=client_ip
         )
-        
+
         # Get security settings
         security_settings = file_security_policy.get_security_settings()
-        
+
         return {
             "security_enabled": True,
             "security_features": [
@@ -729,15 +754,15 @@ async def get_security_status(
                 "Filename sanitization",
                 "File size validation by type",
                 "Comprehensive security logging",
-                "Rate limiting protection"
+                "Rate limiting protection",
             ],
             "security_settings": security_settings,
             "rate_limit_status": rate_limit_info,
             "user_id": str(user.id),
             "client_ip": client_ip,
-            "timestamp": logger.info.__name__  # Current time marker
+            "timestamp": logger.info.__name__,  # Current time marker
         }
-        
+
     except Exception as e:
         logger.error(f"Security status error: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
