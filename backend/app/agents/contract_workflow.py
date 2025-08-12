@@ -214,6 +214,10 @@ class ContractAnalysisWorkflow:
             and not self._is_production
         )
 
+        # Persistent event loop for node execution in worker context to avoid
+        # cross-loop issues with async resources (e.g., asyncpg pools, clients)
+        self._event_loop = None
+
         # Initialize node instances
         self._initialize_nodes()
 
@@ -395,75 +399,65 @@ class ContractAnalysisWorkflow:
 
     # Node execution wrapper methods
     def _run_async_node(self, node_coroutine):
-        """Helper to run async node execution in sync context."""
+        """Run async node in a persistent event loop to prevent cross-loop issues."""
         import asyncio
         import threading
 
         # Diagnostic: capture loop/thread/auth context before execution
         try:
             from app.core.auth_context import AuthContext
-
+            auth_ctx = AuthContext.create_task_context()
             logger.debug(
                 "[Workflow] _run_async_node pre-exec",
                 extra={
-                    "thread": threading.current_thread().name,
-                    "has_running_loop": hasattr(asyncio, "get_running_loop"),
+                    "thread_name": threading.current_thread().name,
+                    "has_running_loop": True,
                     "user_id": AuthContext.get_user_id(),
                     "has_token": bool(AuthContext.get_user_token()),
                 },
             )
         except Exception:
-            pass
+            auth_ctx = None  # type: ignore[assignment]
+
         try:
-            # Use create_task if we're in an async context, otherwise asyncio.run
-            loop = asyncio.get_running_loop()
-            # We're in an async context - this shouldn't happen for LangGraph nodes
-            # but handle it gracefully
+            # If already inside an async loop (unexpected here), run in a thread
+            asyncio.get_running_loop()
             import concurrent.futures
 
             def run_in_thread():
-                return asyncio.run(node_coroutine)
-
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(run_in_thread)
-                result = future.result()
-                # Diagnostic: post-exec
                 try:
-                    from app.core.auth_context import AuthContext
-
-                    logger.debug(
-                        "[Workflow] _run_async_node post-exec (threaded)",
-                        extra={
-                            "thread": threading.current_thread().name,
-                            "execution_path": "threaded",
-                            "had_running_loop": True,
-                            "user_id": AuthContext.get_user_id(),
-                            "has_token": bool(AuthContext.get_user_token()),
-                        },
-                    )
+                    from app.core.auth_context import AuthContext as _AC
+                    if auth_ctx:
+                        _AC.restore_task_context(auth_ctx)
                 except Exception:
                     pass
+                # Use a dedicated loop in this helper as well
+                loop = asyncio.new_event_loop()
+                try:
+                    return loop.run_until_complete(node_coroutine)
+                finally:
+                    loop.close()
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                result = executor.submit(run_in_thread).result()
                 return result
         except RuntimeError:
-            # No event loop running, safe to use asyncio.run
-            # This is expected in Celery worker context - log at debug level without traceback
-            logger.debug(
-                "[Workflow] No running event loop detected, using asyncio.run() for node execution",
-                extra={
-                    "execution_context": "celery_worker",
-                    "thread": threading.current_thread().name,
-                    "execution_path": "asyncio.run",
-                },
-            )
-            result = asyncio.run(node_coroutine)
+            # No running loop; use or create a persistent loop for this workflow instance
+            import asyncio as _asyncio
+            if self._event_loop is None or self._event_loop.is_closed():
+                self._event_loop = _asyncio.new_event_loop()
+            try:
+                result = self._event_loop.run_until_complete(node_coroutine)
+            finally:
+                # Do not close persistent loop; reuse across nodes
+                pass
             try:
                 from app.core.auth_context import AuthContext
-
                 logger.debug(
-                    "[Workflow] _run_async_node post-exec (asyncio.run)",
+                    "[Workflow] _run_async_node post-exec (persistent loop)",
                     extra={
-                        "thread": threading.current_thread().name,
-                        "execution_path": "asyncio.run",
+                        "thread_name": threading.current_thread().name,
+                        "execution_path": "persistent_loop",
                         "had_running_loop": False,
                         "user_id": AuthContext.get_user_id(),
                         "has_token": bool(AuthContext.get_user_token()),
