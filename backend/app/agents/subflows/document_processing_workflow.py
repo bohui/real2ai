@@ -265,36 +265,42 @@ class DocumentProcessingWorkflow:
         """Segment document text into paragraphs and create artifacts."""
         return await self.paragraph_segmentation_node.execute(state)
 
+    @langsmith_trace(name="save_paragraphs", run_type="tool")
     async def save_paragraphs(
         self, state: DocumentProcessingState
     ) -> DocumentProcessingState:
         """Save user paragraph references to database."""
         return await self.save_paragraphs_node.execute(state)
 
+    @langsmith_trace(name="save_pages", run_type="tool")
     async def save_pages(
         self, state: DocumentProcessingState
     ) -> DocumentProcessingState:
         """Save page-level analysis results to database."""
         return await self.save_pages_node.execute(state)
 
+    @langsmith_trace(name="aggregate_diagrams", run_type="tool")
     async def aggregate_diagrams(
         self, state: DocumentProcessingState
     ) -> DocumentProcessingState:
         """Aggregate diagram detection results from pages."""
         return await self.aggregate_diagrams_node.execute(state)
 
+    @langsmith_trace(name="save_diagrams", run_type="tool")
     async def save_diagrams(
         self, state: DocumentProcessingState
     ) -> DocumentProcessingState:
         """Save diagram detection results to database."""
         return await self.save_diagrams_node.execute(state)
 
+    @langsmith_trace(name="update_metrics", run_type="tool")
     async def update_metrics(
         self, state: DocumentProcessingState
     ) -> DocumentProcessingState:
         """Update document with aggregated metrics."""
         return await self.update_metrics_node.execute(state)
 
+    @langsmith_trace(name="mark_basic_complete", run_type="tool")
     async def mark_basic_complete(
         self, state: DocumentProcessingState
     ) -> DocumentProcessingState:
