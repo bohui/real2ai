@@ -72,9 +72,12 @@ async def update_analysis_progress(
 
         # Update or create progress record
         # Determine status based on step and progress
+        # Only mark as completed if we have confirmation of successful processing
         if current_step.endswith("_failed") or current_step == "failed":
             status = "failed"
-        elif progress_percent >= 100:
+        elif progress_percent >= 100 and current_step == "analysis_complete":
+            # Additional validation: only mark as completed for analysis_complete step
+            # This prevents premature completion marking
             status = "completed"
         else:
             status = "in_progress"
@@ -475,49 +478,93 @@ async def comprehensive_document_analysis(
             # Save analysis results using AnalysesRepository
             analyses_repo = AnalysesRepository(use_service_role=True)
 
-            # Update analysis with results
-            await analyses_repo.update_analysis_status(
-                analysis_id,
-                status="completed",
-                result=analysis_result,
-                completed_at=datetime.now(timezone.utc),
-            )
+            # Validate analysis results before marking as completed
+            has_meaningful_results = _validate_analysis_results(analysis_result)
+            
+            if has_meaningful_results:
+                # Update analysis with results
+                await analyses_repo.update_analysis_status(
+                    analysis_id,
+                    status="completed",
+                    result=analysis_result,
+                    completed_at=datetime.now(timezone.utc),
+                )
+            else:
+                # Mark as failed if no meaningful results
+                logger.warning(f"Analysis {analysis_id} produced no meaningful results")
+                await analyses_repo.update_analysis_status(
+                    analysis_id,
+                    status="failed",
+                    error_details={"error_message": "Analysis produced no meaningful results - document processing may have failed"},
+                    completed_at=datetime.now(timezone.utc),
+                )
+                raise ValueError("Analysis produced no meaningful results - document processing failed")
 
-            # Step 9: Complete (95-100%)
-            await update_analysis_progress(
-                user_id,
-                content_hash,
-                progress_percent=PROGRESS_STAGES["contract_analysis"][
-                    "analysis_complete"
-                ],
-                current_step="analysis_complete",
-                step_description="Analysis completed successfully! Results are ready to view.",
-                estimated_completion_minutes=0,
-            )
+            # Step 9: Complete (95-100%) - only if we have meaningful results
+            if has_meaningful_results:
+                await update_analysis_progress(
+                    user_id,
+                    content_hash,
+                    progress_percent=PROGRESS_STAGES["contract_analysis"][
+                        "analysis_complete"
+                    ],
+                    current_step="analysis_complete",
+                    step_description="Analysis completed successfully! Results are ready to view.",
+                    estimated_completion_minutes=0,
+                )
+            else:
+                # Mark as failed in progress tracking
+                await update_analysis_progress(
+                    user_id,
+                    content_hash,
+                    progress_percent=90,  # Keep at 90% to indicate processing issue
+                    current_step="processing_failed",
+                    step_description="Document processing failed - no meaningful content extracted.",
+                    error_message="Document processing did not extract sufficient content for analysis",
+                )
 
-            # Send completion notification
-            analysis_summary = {
-                "analysis_id": analysis_id,
-                "risk_score": analysis_result.get("risk_assessment", {}).get(
-                    "overall_risk_score", 0.0
-                ),
-                "processing_time": getattr(analysis_response, "processing_time", 0)
-                or 0,
-                "recommendations_count": len(
-                    analysis_result.get("recommendations", [])
-                ),
-                "compliance_status": analysis_result.get("compliance_check", {}).get(
-                    "state_compliance", False
-                ),
-            }
-            publish_progress_sync(
-                contract_id,
-                WebSocketEvents.analysis_completed(contract_id, analysis_summary),
-            )
+            # Send completion notification only if we have meaningful results
+            if has_meaningful_results:
+                analysis_summary = {
+                    "analysis_id": analysis_id,
+                    "risk_score": analysis_result.get("risk_assessment", {}).get(
+                        "overall_risk_score", 0.0
+                    ),
+                    "processing_time": getattr(analysis_response, "processing_time", 0)
+                    or 0,
+                    "recommendations_count": len(
+                        analysis_result.get("recommendations", [])
+                    ),
+                    "compliance_status": analysis_result.get("compliance_check", {}).get(
+                        "state_compliance", False
+                    ),
+                }
+                publish_progress_sync(
+                    contract_id,
+                    WebSocketEvents.analysis_completed(contract_id, analysis_summary),
+                )
+            else:
+                # Send failure notification
+                publish_progress_sync(
+                    contract_id,
+                    {
+                        "event_type": "analysis_failed",
+                        "data": {
+                            "contract_id": contract_id,
+                            "analysis_id": analysis_id,
+                            "error_message": "Document processing failed - insufficient content extracted"
+                        }
+                    }
+                )
 
-            logger.info(
-                f"Comprehensive analysis completed successfully for contract {contract_id}"
-            )
+            if has_meaningful_results:
+                logger.info(
+                    f"Comprehensive analysis completed successfully for contract {contract_id}"
+                )
+            else:
+                logger.warning(
+                    f"Comprehensive analysis failed for contract {contract_id} - no meaningful results"
+                )
 
     except Exception as e:
         logger.error(f"Comprehensive analysis failed: {str(e)}", exc_info=True)
@@ -966,3 +1013,67 @@ Generated by Real2.AI Contract Analysis Platform
     except Exception as e:
         logger.error(f"PDF report generation failed: {str(e)}")
         raise Exception(f"Report generation failed: {str(e)}")
+
+
+def _validate_analysis_results(analysis_result: Dict[str, Any]) -> bool:
+    """
+    Validate that analysis results contain meaningful data indicating successful processing.
+    
+    Args:
+        analysis_result: The analysis result dictionary
+        
+    Returns:
+        bool: True if analysis contains meaningful results, False otherwise
+    """
+    try:
+        if not analysis_result or not isinstance(analysis_result, dict):
+            return False
+        
+        # Check for contract terms with meaningful content
+        contract_terms = analysis_result.get("contract_terms", {})
+        if contract_terms and isinstance(contract_terms, dict):
+            # Look for at least some extracted contract data
+            meaningful_fields = [
+                "purchase_price",
+                "settlement_date",
+                "property_address", 
+                "vendor_name",
+                "purchaser_name"
+            ]
+            
+            extracted_fields = 0
+            for field in meaningful_fields:
+                value = contract_terms.get(field)
+                if value and str(value).strip() and str(value).strip() != "Not specified":
+                    extracted_fields += 1
+            
+            # Require at least 2 meaningful contract terms
+            if extracted_fields >= 2:
+                return True
+        
+        # Check for risk assessment results
+        risk_assessment = analysis_result.get("risk_assessment", {})
+        if risk_assessment and isinstance(risk_assessment, dict):
+            overall_risk = risk_assessment.get("overall_risk_level")
+            if overall_risk and overall_risk != "unknown":
+                return True
+        
+        # Check for compliance analysis
+        compliance = analysis_result.get("compliance_analysis", {})
+        if compliance and isinstance(compliance, dict):
+            state_compliance = compliance.get("state_compliance")
+            if state_compliance is not None:  # Can be True or False
+                return True
+        
+        # Check for any recommendations
+        recommendations = analysis_result.get("recommendations", {})
+        if recommendations and isinstance(recommendations, dict):
+            rec_list = recommendations.get("recommendations", [])
+            if rec_list and len(rec_list) > 0:
+                return True
+        
+        return False
+        
+    except Exception as e:
+        logger.warning(f"Error validating analysis results: {e}")
+        return False
