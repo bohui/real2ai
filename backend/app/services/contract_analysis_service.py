@@ -918,11 +918,11 @@ class ContractAnalysisService:
                         self.session_id,
                         self.contract_id,
                         "compile_report",
-                        100,
+                        98,
                         "Compiling final analysis report",
                     )
                     self._schedule_persist(
-                        "compile_report", 100, "Compiling final analysis report"
+                        "compile_report", 98, "Compiling final analysis report"
                     )
 
                 return result
@@ -960,12 +960,12 @@ class ContractAnalysisService:
                         self.session_id,
                         self.contract_id,
                         "validate_document_quality",
-                        20,
+                        18,
                         "Validating document quality and readability",
                     )
                     self._schedule_persist(
                         "validate_document_quality",
-                        20,
+                        18,
                         "Validating document quality and readability",
                     )
 
@@ -1101,6 +1101,20 @@ class ContractAnalysisService:
         except Exception:
             pass
 
+        # Always fan out via Redis to the contract session channel
+        try:
+            from app.services.communication.redis_pubsub import publish_progress_sync
+
+            message = WebSocketEvents.analysis_progress(
+                contract_id, step, progress_percent, description
+            )
+            publish_progress_sync(contract_id, message)
+        except Exception as redis_error:
+            logger.warning(
+                f"Progress update Redis publish failed for {contract_id}: {redis_error}"
+            )
+
+        # Additionally attempt direct WS delivery on the session_id (best-effort)
         try:
             loop = asyncio.get_running_loop()
             loop.create_task(
@@ -1108,23 +1122,12 @@ class ContractAnalysisService:
                     session_id, contract_id, step, progress_percent, description
                 )
             )
-        except RuntimeError:
-            # No running loop: fall back to Redis pub/sub sync publish
-            try:
-                from app.services.communication.redis_pubsub import (
-                    publish_progress_sync,
-                )
-
-                message = WebSocketEvents.analysis_progress(
-                    contract_id, step, progress_percent, description
-                )
-                publish_progress_sync(contract_id, message)
-            except Exception as fallback_error:
-                logger.warning(
-                    f"Progress update fallback (Redis) failed for {contract_id}: {fallback_error}"
-                )
         except Exception as e:
-            logger.warning(f"Failed to schedule progress update for {contract_id}: {e}")
+            # Ignore; Redis path is authoritative for fan-out
+            logger.debug(
+                f"Skipping direct WS schedule for {contract_id}: {e}",
+                exc_info=False,
+            )
 
     async def get_analysis_status(self, contract_id: str) -> Optional[AnalysisStatus]:
         """Get current analysis status"""

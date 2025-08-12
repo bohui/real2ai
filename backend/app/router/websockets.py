@@ -954,14 +954,16 @@ async def handle_status_request(
             # Create a user_contract_views entry to ensure access to contracts and analyses
             try:
                 # Create user_contract_views entry using repository
-                from app.services.repositories.user_contract_views_repository import UserContractViewsRepository
-                
+                from app.services.repositories.user_contract_views_repository import (
+                    UserContractViewsRepository,
+                )
+
                 contract_views_repo = UserContractViewsRepository()
                 await contract_views_repo.create_contract_view(
                     user_id=user_id,
                     content_hash=content_hash,
                     property_address=getattr(document, "property_address", None),
-                    source="upload"
+                    source="upload",
                 )
                 logger.info(
                     f"Created user_contract_views entry for user {user_id} and content_hash {content_hash}"

@@ -116,66 +116,31 @@ async def update_analysis_progress(
             extra={"content_hash": content_hash, "user_id": user_id, "result": result},
         )
 
-        # Resolve session ids (document_ids) for WS delivery and send progress
-        # Send to ALL documents with this content_hash since multiple uploads may exist
+        # IMPORTANT: Do not emit per-step analysis_progress over the document WebSocket channel.
+        # The unified ContractAnalysisService already emits ordered progress over the contract/session channel.
+        # Emitting here causes duplicate, out-of-order updates interleaving across channels which regresses the UI.
+        # We still persist to DB and publish to Redis below for internal consumers.
         try:
-            # Find ALL documents for this user/content_hash to route messages
+            # We intentionally skip WebSocket fan-out on the document channel to prevent UI regressions.
             docs_repo = DocumentsRepository()
             documents = await docs_repo.get_documents_by_content_hash(
                 content_hash, user_id, columns="id"
             )
             logger.debug(
-                "[update_analysis_progress] Documents for WS routing",
+                "[update_analysis_progress] Skipping WS broadcast on document channel",
                 extra={
                     "content_hash": content_hash,
                     "user_id": user_id,
                     "doc_count": len(documents) if documents is not None else 0,
+                    "broadcast_skipped": True,
                 },
             )
-            if documents:
-                # Send to all documents with this content_hash
-                for doc in documents:
-                    session_id = (
-                        str(doc["id"]) if isinstance(doc, dict) else str(doc.id)
-                    )
-                    logger.info(
-                        f"Sending progress to document {session_id} for content_hash {content_hash}"
-                    )
-                    await websocket_manager.send_message(
-                        session_id,
-                        {
-                            "event_type": "analysis_progress",
-                            "timestamp": datetime.now(timezone.utc).isoformat(),
-                            "data": {
-                                "content_hash": content_hash,
-                                "progress_percent": progress_percent,
-                                "current_step": current_step,
-                                "step_description": step_description,
-                                "estimated_completion_minutes": estimated_completion_minutes,
-                                "status": status,  # Include status in WebSocket message
-                                "error_message": error_message,
-                            },
-                        },
-                    )
         except Exception as ws_error:
-            logger.warning(f"WS progress routing failed: {ws_error}")
+            logger.warning(f"WS progress routing introspection failed: {ws_error}")
 
-        # Send Redis pub/sub update using content_hash as channel identifier
-        publish_progress_sync(
-            content_hash,
-            {
-                "event_type": "analysis_progress",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "data": {
-                    "content_hash": content_hash,
-                    "progress_percent": progress_percent,
-                    "current_step": current_step,
-                    "step_description": step_description,
-                    "estimated_completion_minutes": estimated_completion_minutes,
-                    "status": status,  # Use the same status determined above
-                },
-            },
-        )
+        # Do not publish progress to Redis here to avoid duplicate/out-of-order UI updates.
+        # The ContractAnalysisService is the single source of truth for real-time progress
+        # and will publish progress via Redis/WebSocket. We only persist to DB in this path.
 
         logger.info(
             f"Progress updated: {current_step} ({progress_percent}%) for content_hash {content_hash}"
@@ -480,7 +445,7 @@ async def comprehensive_document_analysis(
 
             # Validate analysis results before marking as completed
             has_meaningful_results = _validate_analysis_results(analysis_result)
-            
+
             if has_meaningful_results:
                 # Update analysis with results
                 await analyses_repo.update_analysis_status(
@@ -495,10 +460,14 @@ async def comprehensive_document_analysis(
                 await analyses_repo.update_analysis_status(
                     analysis_id,
                     status="failed",
-                    error_details={"error_message": "Analysis produced no meaningful results - document processing may have failed"},
+                    error_details={
+                        "error_message": "Analysis produced no meaningful results - document processing may have failed"
+                    },
                     completed_at=datetime.now(timezone.utc),
                 )
-                raise ValueError("Analysis produced no meaningful results - document processing failed")
+                raise ValueError(
+                    "Analysis produced no meaningful results - document processing failed"
+                )
 
             # Step 9: Complete (95-100%) - only if we have meaningful results
             if has_meaningful_results:
@@ -535,9 +504,9 @@ async def comprehensive_document_analysis(
                     "recommendations_count": len(
                         analysis_result.get("recommendations", [])
                     ),
-                    "compliance_status": analysis_result.get("compliance_check", {}).get(
-                        "state_compliance", False
-                    ),
+                    "compliance_status": analysis_result.get(
+                        "compliance_check", {}
+                    ).get("state_compliance", False),
                 }
                 publish_progress_sync(
                     contract_id,
@@ -552,9 +521,9 @@ async def comprehensive_document_analysis(
                         "data": {
                             "contract_id": contract_id,
                             "analysis_id": analysis_id,
-                            "error_message": "Document processing failed - insufficient content extracted"
-                        }
-                    }
+                            "error_message": "Document processing failed - insufficient content extracted",
+                        },
+                    },
                 )
 
             if has_meaningful_results:
@@ -1018,17 +987,17 @@ Generated by Real2.AI Contract Analysis Platform
 def _validate_analysis_results(analysis_result: Dict[str, Any]) -> bool:
     """
     Validate that analysis results contain meaningful data indicating successful processing.
-    
+
     Args:
         analysis_result: The analysis result dictionary
-        
+
     Returns:
         bool: True if analysis contains meaningful results, False otherwise
     """
     try:
         if not analysis_result or not isinstance(analysis_result, dict):
             return False
-        
+
         # Check for contract terms with meaningful content
         contract_terms = analysis_result.get("contract_terms", {})
         if contract_terms and isinstance(contract_terms, dict):
@@ -1036,44 +1005,48 @@ def _validate_analysis_results(analysis_result: Dict[str, Any]) -> bool:
             meaningful_fields = [
                 "purchase_price",
                 "settlement_date",
-                "property_address", 
+                "property_address",
                 "vendor_name",
-                "purchaser_name"
+                "purchaser_name",
             ]
-            
+
             extracted_fields = 0
             for field in meaningful_fields:
                 value = contract_terms.get(field)
-                if value and str(value).strip() and str(value).strip() != "Not specified":
+                if (
+                    value
+                    and str(value).strip()
+                    and str(value).strip() != "Not specified"
+                ):
                     extracted_fields += 1
-            
+
             # Require at least 2 meaningful contract terms
             if extracted_fields >= 2:
                 return True
-        
+
         # Check for risk assessment results
         risk_assessment = analysis_result.get("risk_assessment", {})
         if risk_assessment and isinstance(risk_assessment, dict):
             overall_risk = risk_assessment.get("overall_risk_level")
             if overall_risk and overall_risk != "unknown":
                 return True
-        
+
         # Check for compliance analysis
         compliance = analysis_result.get("compliance_analysis", {})
         if compliance and isinstance(compliance, dict):
             state_compliance = compliance.get("state_compliance")
             if state_compliance is not None:  # Can be True or False
                 return True
-        
+
         # Check for any recommendations
         recommendations = analysis_result.get("recommendations", {})
         if recommendations and isinstance(recommendations, dict):
             rec_list = recommendations.get("recommendations", [])
             if rec_list and len(rec_list) > 0:
                 return True
-        
+
         return False
-        
+
     except Exception as e:
         logger.warning(f"Error validating analysis results: {e}")
         return False
