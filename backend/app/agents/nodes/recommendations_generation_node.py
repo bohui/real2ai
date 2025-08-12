@@ -50,6 +50,14 @@ class RecommendationsGenerationNode(BaseNode):
             contract_terms = state.get("contract_terms", {})
             compliance_analysis = state.get("compliance_analysis", {})
             risk_assessment = state.get("risk_assessment", {})
+            
+            # Log data availability for debugging
+            self._log_step_debug(
+                f"Analysis data available: contract_terms={bool(contract_terms)}, "
+                f"compliance_analysis={bool(compliance_analysis)}, "
+                f"risk_assessment={bool(risk_assessment)}",
+                state
+            )
 
             # Perform recommendations generation
             use_llm = self.use_llm_config.get("recommendations", True)
@@ -139,9 +147,10 @@ class RecommendationsGenerationNode(BaseNode):
             context = PromptContext(
                 context_type=ContextType.GENERATION,
                 variables={
-                    "contract_terms": contract_terms,
-                    "compliance_analysis": compliance_analysis,
-                    "risk_assessment": risk_assessment,
+                    # Fix variable name mapping and provide defaults for null values
+                    "contract_terms": contract_terms or {},
+                    "compliance_check": compliance_analysis or {},  # Template expects 'compliance_check'
+                    "risk_assessment": risk_assessment or {},
                     "recommendation_categories": [
                         "immediate_actions",
                         "due_diligence",
@@ -152,12 +161,11 @@ class RecommendationsGenerationNode(BaseNode):
                     "priority_levels": ["high", "medium", "low"],
                     # Service mapping context requirements (best-effort)
                     "extracted_text": (doc_meta.get("full_text", "") or "")[:8000],
-                    "australian_state": state.get("australian_state"),
-                    "contract_type": state.get("contract_type"),
+                    "australian_state": state.get("australian_state", "NSW"),
+                    "contract_type": state.get("contract_type", "purchase_agreement"),
                     "user_type": state.get("user_type", "general"),
-                    "user_experience_level": state.get(
-                        "user_experience_level", "intermediate"
-                    ),
+                    # Template expects 'user_experience', not 'user_experience_level'
+                    "user_experience": state.get("user_experience_level", "intermediate"),
                 },
             )
 
