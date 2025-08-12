@@ -49,7 +49,8 @@ class RealEstateAgentState(TypedDict):
 
     # Processing State
     current_step: Annotated[List[str], add]  # Use Annotated for concurrent updates
-    error_state: Optional[str]
+    # Allow concurrent writes; last update wins to satisfy LangGraph's reducer requirement
+    error_state: Annotated[Optional[str], lambda existing, incoming: incoming]
     confidence_scores: Dict[str, float]
     processing_time: Optional[float]
     progress: Optional[Dict[str, Any]]
