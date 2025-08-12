@@ -12,6 +12,13 @@ from typing import Dict, Any, Optional
 from app.models.contract_state import RealEstateAgentState
 from app.schema.enums import ProcessingStatus
 from .base import BaseNode
+from app.agents.subflows.document_processing_workflow import (
+    DocumentProcessingWorkflow,
+)
+from app.schema.document import (
+    ProcessedDocumentSummary,
+    ProcessingErrorResponse,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -60,11 +67,8 @@ class DocumentProcessingNode(BaseNode):
                     state, "document_processing_failed", error=error_msg
                 )
 
-            # Use the new document processing subflow via Celery task
+            # Use the document processing subflow directly (no Celery blocking)
             use_llm = self.use_llm_config.get("document_processing", True)
-
-            # Import the task here to avoid circular imports
-            from app.tasks.user_aware_tasks import run_document_processing_subflow
             from app.core.auth_context import AuthContext
 
             # Get current user ID for task context
@@ -75,52 +79,72 @@ class DocumentProcessingNode(BaseNode):
                     from app.core.auth_context import AuthContext as AC
 
                     self._log_step_debug(
-                        "Missing AuthContext; cannot proceed with document processing",
+                        "Missing AuthContext; attempting fallback to state user_id",
                         state,
                         {
                             "doc_id": document_id,
                             "has_token": bool(AC.get_user_token()),
-                            "thread": __import__("threading").current_thread().name,
+                            "thread_name": __import__("threading")
+                            .current_thread()
+                            .name,
                         },
                     )
                 except Exception:
                     pass
-            if not user_id:
-                return self._handle_node_error(
-                    state,
-                    ValueError("User authentication required"),
-                    "User authentication context required for document processing",
-                    {"document_id": document_id, "use_llm": use_llm},
-                )
 
-            # Launch document processing subflow task
-            task_result = run_document_processing_subflow.apply_async(
-                args=[document_id, user_id, use_llm], kwargs={}
-            )
+                # Fallback: use user_id from workflow state if available
+                fallback_user_id = state.get("user_id")
+                if fallback_user_id:
+                    user_id = fallback_user_id
+                else:
+                    return self._handle_node_error(
+                        state,
+                        ValueError("User authentication required"),
+                        "User authentication context required for document processing",
+                        {"document_id": document_id, "use_llm": use_llm},
+                    )
 
-            # Wait for task completion (with timeout)
+            # Run the subflow inline within the current task context
             try:
-                result = task_result.get(timeout=300)  # 5 minute timeout
-                summary = result.get("result")
-            except Exception as task_error:
+                subflow = DocumentProcessingWorkflow(
+                    use_llm_document_processing=use_llm, storage_bucket="documents"
+                )
+                content_hash = document_data.get("content_hash")
+                result = await subflow.process_document(
+                    document_id=document_id, use_llm=use_llm, content_hash=content_hash
+                )
+                summary = result
+            except Exception as subflow_error:
                 return self._handle_node_error(
                     state,
-                    task_error,
-                    f"Document processing task failed: {str(task_error)}",
+                    subflow_error,
+                    f"Document processing subflow failed: {str(subflow_error)}",
                     {
                         "document_id": document_id,
-                        "task_id": task_result.id,
                         "use_llm": use_llm,
-                        "operation": "subflow_task",
+                        "operation": "subflow_inline",
                     },
                 )
 
-            if not summary or not summary.get("success"):
-                error_msg = (
-                    summary.get("error")
-                    if isinstance(summary, dict)
-                    else "Processing failed"
-                )
+            # Validate subflow result
+            success = False
+            error_msg = None
+            if isinstance(summary, ProcessedDocumentSummary):
+                success = bool(summary.success)
+            elif isinstance(summary, ProcessingErrorResponse):
+                success = False
+                error_msg = summary.error
+            else:
+                # Fallback for unexpected type
+                try:
+                    success = bool(getattr(summary, "success", False))
+                    error_msg = getattr(summary, "error", None)
+                except Exception:
+                    success = False
+                    error_msg = "Processing failed"
+
+            if not success:
+                error_msg = error_msg or "Processing failed"
                 return self._handle_node_error(
                     state,
                     Exception(error_msg),
@@ -129,11 +153,19 @@ class DocumentProcessingNode(BaseNode):
                 )
 
             # Extract text and metadata
-            extracted_text = summary.get("full_text") or summary.get(
-                "extracted_text", ""
-            )
-            extraction_method = summary.get("extraction_method", "unknown")
-            extraction_confidence = summary.get("extraction_confidence", 0.0)
+            if isinstance(summary, ProcessedDocumentSummary):
+                extracted_text = summary.full_text or ""
+                extraction_method = summary.extraction_method or "unknown"
+                extraction_confidence = float(summary.extraction_confidence or 0.0)
+            else:
+                # Defensive fallback for other schema types
+                extracted_text = getattr(summary, "full_text", None) or getattr(
+                    summary, "extracted_text", ""
+                )
+                extraction_method = getattr(summary, "extraction_method", "unknown")
+                extraction_confidence = float(
+                    getattr(summary, "extraction_confidence", 0.0)
+                )
 
             # Assess text quality
             text_quality = (
@@ -145,25 +177,36 @@ class DocumentProcessingNode(BaseNode):
             # Validate extracted text quality
             if not extracted_text or len(extracted_text.strip()) < 100:
                 # Enhanced diagnostics for empty/insufficient text
+                # Safely capture summary keys and success flag from Pydantic models
+                try:
+                    if hasattr(summary, "model_dump"):
+                        summary_dict = summary.model_dump()  # pydantic v2
+                    elif hasattr(summary, "dict"):
+                        summary_dict = summary.dict()  # pydantic v1
+                    else:
+                        summary_dict = {k: getattr(summary, k) for k in dir(summary)}
+                except Exception:
+                    summary_dict = {}
+
                 diagnostic_info = {
                     "character_count": len(extracted_text or ""),
                     "word_count": len((extracted_text or "").split()),
                     "extraction_method": extraction_method,
                     "extraction_confidence": extraction_confidence,
                     "document_id": document_id,
-                    "summary_keys": list(summary.keys()) if summary else [],
+                    "summary_keys": list(summary_dict.keys()),
                     "use_llm": use_llm,
-                    "processing_success": summary.get("success") if summary else False,
+                    "processing_success": bool(summary_dict.get("success", False)),
                 }
-                
+
                 error_msg = f"Insufficient text content extracted from document (got {len(extracted_text or '')} characters)"
-                
+
                 # Log detailed diagnostic information for debugging
                 self._log_warning(
                     f"Document processing extracted insufficient text: {diagnostic_info}",
-                    extra=diagnostic_info
+                    extra=diagnostic_info,
                 )
-                
+
                 return self._handle_node_error(
                     state,
                     Exception("Insufficient text content"),
@@ -191,7 +234,7 @@ class DocumentProcessingNode(BaseNode):
                         "processing_timestamp", datetime.now(UTC).isoformat()
                     ),
                     "enhanced_processing": True,
-                    "llm_used": summary.get("llm_used", False),
+                    "llm_used": getattr(summary, "llm_used", False),
                 },
                 "parsing_status": ProcessingStatus.COMPLETED,
             }
