@@ -217,14 +217,46 @@ class ReportCompilationNode(BaseNode):
                 },
             }
 
-            # Update state with compiled report and mark overall success
-            state["compiled_report"] = compiled_report
-            # Service expects report data here
-            state["report_data"] = compiled_report
-            # Clear any previous error when we successfully compile a report
-            state["error_state"] = None
-            # Use the canonical state key expected by the service layer
-            state["parsing_status"] = ProcessingStatus.COMPLETED
+            # Validate that we have sufficient data for completion
+            has_artifacts = self._validate_artifacts_exist(state)
+            has_extracted_text = self._validate_extracted_text_exists(state)
+            
+            # Only mark as completed if we have real artifacts or extracted text
+            if has_artifacts or has_extracted_text:
+                # Update state with compiled report and mark overall success
+                state["compiled_report"] = compiled_report
+                # Service expects report data here
+                state["report_data"] = compiled_report
+                # Clear any previous error when we successfully compile a report
+                state["error_state"] = None
+                # Use the canonical state key expected by the service layer
+                state["parsing_status"] = ProcessingStatus.COMPLETED
+                
+                self._log_step_debug(
+                    "Report compilation marked as completed with valid artifacts", 
+                    state,
+                    {
+                        "has_artifacts": has_artifacts,
+                        "has_extracted_text": has_extracted_text,
+                        "contract_terms_present": bool(state.get("contract_terms"))
+                    }
+                )
+            else:
+                # Document processing failed - don't mark as completed
+                state["compiled_report"] = compiled_report
+                state["report_data"] = compiled_report
+                state["error_state"] = "Document processing failed - no artifacts or extracted text found"
+                state["parsing_status"] = ProcessingStatus.ERROR
+                
+                self._log_step_debug(
+                    "Report compilation failed - insufficient artifacts for completion", 
+                    state,
+                    {
+                        "has_artifacts": has_artifacts,
+                        "has_extracted_text": has_extracted_text,
+                        "available_keys": list(state.keys())
+                    }
+                )
 
             # Ensure analysis_results has minimal required aggregates for response builders
             analysis_results: AnalysisResultsAggregate = cast(
@@ -248,16 +280,18 @@ class ReportCompilationNode(BaseNode):
                 analysis_results["recommendations"] = state.get("recommendations")
             state["analysis_results"] = analysis_results
 
+            # Set compilation data based on validation results
+            processing_completed = (has_artifacts or has_extracted_text)
+            final_status = ProcessingStatus.COMPLETED if processing_completed else ProcessingStatus.ERROR
+            error_state = "" if processing_completed else "Document processing failed - no artifacts or extracted text found"
+            
             compilation_data: CompilationData = {
                 "compiled_report": compiled_report,
                 "report_sections": len([k for k, v in compiled_report.items() if v]),
                 "compilation_timestamp": datetime.now(UTC).isoformat(),
-                "processing_completed": True,
-                # Clear any previous error in the aggregated state by setting to empty string
-                # (update_state_step ignores None, but propagates non-None values)
-                "error_state": "",
-                # Explicitly propagate success status in the delta
-                "parsing_status": ProcessingStatus.COMPLETED,
+                "processing_completed": processing_completed,
+                "error_state": error_state,
+                "parsing_status": final_status,
             }
 
             self._log_step_debug(
@@ -511,6 +545,94 @@ class ReportCompilationNode(BaseNode):
             )
 
         return notes
+    
+    def _validate_artifacts_exist(self, state: RealEstateAgentState) -> bool:
+        """
+        Validate that document processing artifacts were successfully created.
+        
+        This checks for evidence that document processing completed successfully,
+        including extracted text, pages, paragraphs, or diagrams.
+        """
+        try:
+            # Check for document metadata indicating successful processing
+            doc_metadata = state.get("document_metadata", {})
+            if doc_metadata:
+                # Look for extraction indicators
+                text_quality_score = doc_metadata.get("text_quality_score", 0)
+                character_count = doc_metadata.get("character_count", 0)
+                
+                if text_quality_score > 0 and character_count > 0:
+                    return True
+            
+            # Check for artifact-related state keys
+            artifact_indicators = [
+                "extracted_text",
+                "document_pages", 
+                "document_paragraphs",
+                "document_diagrams",
+                "text_content"
+            ]
+            
+            for indicator in artifact_indicators:
+                value = state.get(indicator)
+                if value:
+                    # Check if it's a non-empty string or list
+                    if isinstance(value, str) and len(value.strip()) > 0:
+                        return True
+                    elif isinstance(value, (list, dict)) and len(value) > 0:
+                        return True
+            
+            return False
+            
+        except Exception as e:
+            self._log_exception(e, context={"validation": "artifacts_exist"})
+            return False
+    
+    def _validate_extracted_text_exists(self, state: RealEstateAgentState) -> bool:
+        """
+        Validate that text extraction was successful and produced meaningful content.
+        
+        This is a fallback check for cases where artifacts weren't created but
+        text extraction succeeded.
+        """
+        try:
+            # Check contract terms for extracted content
+            contract_terms = state.get("contract_terms", {})
+            if contract_terms and isinstance(contract_terms, dict):
+                # Look for non-empty fields that indicate successful extraction
+                meaningful_fields = [
+                    "purchase_price",
+                    "settlement_date", 
+                    "property_address",
+                    "vendor_name",
+                    "purchaser_name"
+                ]
+                
+                for field in meaningful_fields:
+                    value = contract_terms.get(field)
+                    if value and str(value).strip():
+                        return True
+                
+                # Check if we have any non-empty contract terms
+                non_empty_terms = [
+                    v for v in contract_terms.values() 
+                    if v is not None and str(v).strip()
+                ]
+                if len(non_empty_terms) >= 3:  # At least 3 meaningful terms
+                    return True
+            
+            # Check for document quality metrics indicating successful processing
+            doc_quality = state.get("document_quality_metrics", {})
+            if doc_quality:
+                extraction_confidence = doc_quality.get("extraction_confidence", 0)
+                if extraction_confidence > 0.3:  # Reasonable extraction confidence
+                    return True
+            
+            return False
+            
+        except Exception as e:
+            self._log_exception(e, context={"validation": "extracted_text_exists"})
+            return False
 
     def _calculate_processing_time(self, state: RealEstateAgentState) -> str:
         """Calculate total processing time."""
