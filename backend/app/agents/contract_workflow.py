@@ -403,6 +403,7 @@ class ContractAnalysisWorkflow:
         """Run async node in a persistent event loop to prevent cross-loop issues."""
         import asyncio
         import threading
+        import contextvars
 
         # Diagnostic: capture loop/thread/auth context before execution
         try:
@@ -425,6 +426,9 @@ class ContractAnalysisWorkflow:
             asyncio.get_running_loop()
             import concurrent.futures
 
+            # Capture the current context (includes LangSmith trace contextvars)
+            current_context = contextvars.copy_context()
+
             def run_in_thread():
                 try:
                     from app.core.auth_context import AuthContext as _AC
@@ -435,7 +439,8 @@ class ContractAnalysisWorkflow:
                 # Use a dedicated loop in this helper as well
                 loop = asyncio.new_event_loop()
                 try:
-                    return loop.run_until_complete(node_coroutine)
+                    # Propagate context so nested LangSmith traces attach to parent run
+                    return current_context.run(lambda: loop.run_until_complete(node_coroutine))
                 finally:
                     loop.close()
 
