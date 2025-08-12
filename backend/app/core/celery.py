@@ -39,6 +39,9 @@ celery_app.conf.update(
     broker_connection_retry_on_startup=True,
     broker_connection_max_retries=100,
     result_backend_always_retry=True,
+    # Event loop configuration for async tasks
+    worker_pool="threads",  # Use thread pool instead of fork for better async support
+    worker_max_tasks_per_child=100,  # Restart workers periodically to prevent memory leaks
     task_routes={
         "app.tasks.ocr_tasks.process_document_ocr": {"queue": "ocr_queue"},
         "app.tasks.ocr_tasks.batch_process_documents": {"queue": "batch_queue"},

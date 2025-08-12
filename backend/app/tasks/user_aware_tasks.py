@@ -14,6 +14,7 @@ from typing import Dict, Any, Optional
 from datetime import datetime, UTC
 from app.core.task_context import user_aware_task, task_manager, get_task_store
 from app.core.auth_context import AuthContext
+from app.core.async_utils import celery_async_task
 from app.services.document_service import DocumentService
 from app.services.base.user_aware_service import UserAwareService
 from app.agents.subflows.document_processing_workflow import DocumentProcessingWorkflow
@@ -154,6 +155,7 @@ from app.core.celery import celery_app
 
 @celery_app.task(bind=True)
 @user_aware_task
+@celery_async_task
 async def run_document_processing_subflow(
     self,
     document_id: str,
