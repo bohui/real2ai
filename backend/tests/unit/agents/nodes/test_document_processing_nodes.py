@@ -280,7 +280,7 @@ class TestErrorHandlingNode:
         
         node = ErrorHandlingNode()
         
-        with patch('app.agents.nodes.document_processing_subflow.error_handling_node.DocumentsRepository', return_value=mock_docs_repo):
+        with patch('app.services.repositories.documents_repository.DocumentsRepository', return_value=mock_docs_repo):
             with patch.object(node, 'get_user_client', return_value=mock_user_client):
                 # Act
                 result = await node.execute(error_state)
