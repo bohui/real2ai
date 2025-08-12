@@ -11,6 +11,7 @@ from typing import Dict, Any, Optional
 
 from app.models.contract_state import RealEstateAgentState
 from app.schema.enums import ProcessingStatus
+from app.core.async_utils import AsyncContextManager, ensure_async_pool_initialization
 from .base import BaseNode
 from app.agents.subflows.document_processing_workflow import (
     DocumentProcessingWorkflow,
@@ -106,14 +107,16 @@ class DocumentProcessingNode(BaseNode):
 
             # Run the subflow inline within the current task context
             try:
-                subflow = DocumentProcessingWorkflow(
-                    use_llm_document_processing=use_llm, storage_bucket="documents"
-                )
-                content_hash = document_data.get("content_hash")
-                result = await subflow.process_document(
-                    document_id=document_id, use_llm=use_llm, content_hash=content_hash
-                )
-                summary = result
+                # Ensure async context is properly managed to prevent event loop conflicts
+                async with AsyncContextManager():
+                    subflow = DocumentProcessingWorkflow(
+                        use_llm_document_processing=use_llm, storage_bucket="documents"
+                    )
+                    content_hash = document_data.get("content_hash")
+                    result = await subflow.process_document(
+                        document_id=document_id, use_llm=use_llm, content_hash=content_hash
+                    )
+                    summary = result
             except Exception as subflow_error:
                 return self._handle_node_error(
                     state,

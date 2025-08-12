@@ -14,6 +14,7 @@ from datetime import datetime, UTC
 # Core imports
 from app.models.contract_state import RealEstateAgentState
 from app.schema.enums import ProcessingStatus
+from app.core.async_utils import AsyncContextManager, ensure_async_pool_initialization
 from app.models.workflow_outputs import (
     RiskAnalysisOutput,
     RecommendationsOutput,
@@ -600,8 +601,9 @@ class ContractAnalysisWorkflow:
             self._metrics["total_analyses"] += 1
             start_time = datetime.now(UTC)
 
-            # Execute workflow
-            result = await self.workflow.ainvoke(state)
+            # Execute workflow with proper async context to prevent event loop conflicts
+            async with AsyncContextManager():
+                result = await self.workflow.ainvoke(state)
 
             # Update performance metrics
             processing_time = (datetime.now(UTC) - start_time).total_seconds()
