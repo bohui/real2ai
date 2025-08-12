@@ -8,6 +8,7 @@ import asyncio
 import time
 import logging
 from typing import Dict, Any, List, Optional
+from uuid import UUID
 from datetime import datetime, timezone
 
 from app.core.celery import celery_app
@@ -28,7 +29,9 @@ from app.services.communication.websocket_singleton import websocket_manager
 from app.services.communication.redis_pubsub import publish_progress_sync
 from app.core.task_recovery import CheckpointData
 from app.services.repositories.analyses_repository import AnalysesRepository
-from app.services.repositories.analysis_progress_repository import AnalysisProgressRepository
+from app.services.repositories.analysis_progress_repository import (
+    AnalysisProgressRepository,
+)
 from app.services.repositories.documents_repository import DocumentsRepository
 
 logger = logging.getLogger(__name__)
@@ -105,7 +108,9 @@ async def update_analysis_progress(
             if documents:
                 # Send to all documents with this content_hash
                 for doc in documents:
-                    session_id = str(doc["id"]) if isinstance(doc, dict) else str(doc.id)
+                    session_id = (
+                        str(doc["id"]) if isinstance(doc, dict) else str(doc.id)
+                    )
                     logger.info(
                         f"Sending progress to document {session_id} for content_hash {content_hash}"
                     )
@@ -233,8 +238,9 @@ async def comprehensive_document_analysis(
             try:
                 progress_repo = AnalysisProgressRepository()
                 latest_progress = await progress_repo.get_latest_progress(
-                    content_hash, user_id, 
-                    columns="current_step, progress_percent, updated_at"
+                    content_hash,
+                    user_id,
+                    columns="current_step, progress_percent, updated_at",
                 )
                 if latest_progress:
                     last_step = latest_progress.get("current_step")
@@ -277,9 +283,7 @@ async def comprehensive_document_analysis(
             if is_retry and resume_from_step:
                 # For retry operations, preserve the previous progress and show resumption
                 previous_progress = (
-                    latest_progress.get("progress_percent", 5)
-                    if latest_progress
-                    else 5
+                    latest_progress.get("progress_percent", 5) if latest_progress else 5
                 )
                 await update_analysis_progress(
                     user_id,
@@ -525,12 +529,13 @@ async def comprehensive_document_analysis(
                 try:
                     progress_repo = AnalysisProgressRepository()
                     latest_progress = await progress_repo.get_latest_progress(
-                        content_hash, user_id, 
-                        columns="current_step, progress_percent"
+                        content_hash, user_id, columns="current_step, progress_percent"
                     )
                     if latest_progress:
                         last_step = latest_progress.get("current_step", "unknown")
-                        last_progress_percent = latest_progress.get("progress_percent", 0)
+                        last_progress_percent = latest_progress.get(
+                            "progress_percent", 0
+                        )
                 except Exception as fetch_err:
                     logger.warning(f"Could not fetch last progress: {fetch_err}")
 
@@ -597,9 +602,7 @@ async def enhanced_reprocess_document_with_ocr_background(
 
         # Update document status
         docs_repo = DocumentsRepository()
-        await docs_repo.update_document_status(
-            UUID(document_id), "reprocessing_ocr"
-        )
+        await docs_repo.update_document_status(UUID(document_id), "reprocessing_ocr")
 
         # Send WebSocket notification
         await websocket_manager.send_message(
