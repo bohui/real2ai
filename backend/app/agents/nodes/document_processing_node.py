@@ -144,11 +144,31 @@ class DocumentProcessingNode(BaseNode):
 
             # Validate extracted text quality
             if not extracted_text or len(extracted_text.strip()) < 100:
+                # Enhanced diagnostics for empty/insufficient text
+                diagnostic_info = {
+                    "character_count": len(extracted_text or ""),
+                    "word_count": len((extracted_text or "").split()),
+                    "extraction_method": extraction_method,
+                    "extraction_confidence": extraction_confidence,
+                    "document_id": document_id,
+                    "summary_keys": list(summary.keys()) if summary else [],
+                    "use_llm": use_llm,
+                    "processing_success": summary.get("success") if summary else False,
+                }
+                
+                error_msg = f"Insufficient text content extracted from document (got {len(extracted_text or '')} characters)"
+                
+                # Log detailed diagnostic information for debugging
+                self._log_warning(
+                    f"Document processing extracted insufficient text: {diagnostic_info}",
+                    extra=diagnostic_info
+                )
+                
                 return self._handle_node_error(
                     state,
                     Exception("Insufficient text content"),
-                    "Insufficient text content extracted from document",
-                    {"character_count": len(extracted_text or "")},
+                    error_msg,
+                    diagnostic_info,
                 )
 
             # Update confidence scores

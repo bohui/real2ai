@@ -435,6 +435,8 @@ class ContractAnalysisWorkflow:
                         "[Workflow] _run_async_node post-exec (threaded)",
                         extra={
                             "thread": threading.current_thread().name,
+                            "execution_path": "threaded",
+                            "had_running_loop": True,
                             "user_id": AuthContext.get_user_id(),
                             "has_token": bool(AuthContext.get_user_token()),
                         },
@@ -444,6 +446,15 @@ class ContractAnalysisWorkflow:
                 return result
         except RuntimeError:
             # No event loop running, safe to use asyncio.run
+            # This is expected in Celery worker context - log at debug level without traceback
+            logger.debug(
+                "[Workflow] No running event loop detected, using asyncio.run() for node execution",
+                extra={
+                    "execution_context": "celery_worker",
+                    "thread": threading.current_thread().name,
+                    "execution_path": "asyncio.run",
+                },
+            )
             result = asyncio.run(node_coroutine)
             try:
                 from app.core.auth_context import AuthContext
@@ -452,6 +463,8 @@ class ContractAnalysisWorkflow:
                     "[Workflow] _run_async_node post-exec (asyncio.run)",
                     extra={
                         "thread": threading.current_thread().name,
+                        "execution_path": "asyncio.run",
+                        "had_running_loop": False,
                         "user_id": AuthContext.get_user_id(),
                         "has_token": bool(AuthContext.get_user_token()),
                     },

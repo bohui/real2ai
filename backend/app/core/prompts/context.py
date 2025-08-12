@@ -24,6 +24,9 @@ class ContextType(Enum):
     RISK = "risk"
     FINANCIAL = "financial"
     RECOMMENDATION = "recommendation"
+    VALIDATION = "validation"
+    EXTRACTION = "extraction"
+    GENERATION = "generation"
 
 
 @dataclass

@@ -45,6 +45,30 @@ class RetryProcessingNode(BaseNode):
             retry_info = self._determine_retry_strategy(state)
 
             if not retry_info.get("can_retry", False):
+                # Add targeted diagnostics to understand why retrying is not possible
+                try:
+                    progress = (
+                        state.get("progress") if isinstance(state, dict) else None
+                    )
+                    step_history = (
+                        (progress or {}).get("step_history", []) if progress else []
+                    )
+                    last_step = step_history[-1] if step_history else {}
+                    self._log_step_debug(
+                        "Retry not possible; logging diagnostic context",
+                        state,
+                        {
+                            "reason": retry_info.get("reason"),
+                            "has_progress": progress is not None,
+                            "step_history_len": len(step_history),
+                            "last_step": last_step.get("step"),
+                            "state_keys": (
+                                list(state.keys()) if isinstance(state, dict) else []
+                            ),
+                        },
+                    )
+                except Exception:
+                    pass
                 return self._handle_node_error(
                     state,
                     Exception("No retry strategy available"),
@@ -109,6 +133,17 @@ class RetryProcessingNode(BaseNode):
         step_history = progress.get("step_history", [])
 
         if not step_history:
+            # Provide more detail when step history is empty
+            self._log_step_debug(
+                "Step history empty during retry strategy determination",
+                state,
+                {
+                    "progress_keys": (
+                        list(progress.keys()) if isinstance(progress, dict) else []
+                    ),
+                    "state_keys": list(state.keys()) if isinstance(state, dict) else [],
+                },
+            )
             return {"can_retry": False, "reason": "no_step_history"}
 
         failed_step = step_history[-1]

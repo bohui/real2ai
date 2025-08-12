@@ -149,6 +149,28 @@ registry:
       system_requirements: ["assistant_core"]
       description: "Validation and quality assurance workflow"
       estimated_tokens: 2000
+
+    # Validation templates
+    validation_document_quality:
+      path: "user/templates/validation/document_quality_validation.md"
+      category: "validation"
+      system_requirements: ["assistant_core", "legal_specialist"]
+      description: "Document quality validation template"
+      estimated_tokens: 3000
+
+    validation_final_output:
+      path: "user/templates/validation/final_output_validation.md"
+      category: "validation" 
+      system_requirements: ["assistant_core", "legal_specialist"]
+      description: "Final output validation template"
+      estimated_tokens: 2500
+
+    validation_terms_completeness:
+      path: "user/templates/validation/terms_completeness_validation.md"
+      category: "validation"
+      system_requirements: ["assistant_core", "legal_specialist"]
+      description: "Contract terms completeness validation template"
+      estimated_tokens: 2000
       
     clarification_prompts:
       path: "user/templates/interactions/clarification.md"

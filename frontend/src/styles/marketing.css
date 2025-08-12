@@ -1,0 +1,588 @@
+/**
+ * Real2.AI Marketing Landing Page Styles
+ * Responsive design system optimized for conversions and accessibility
+ */
+
+@import 'tailwindcss/base';
+@import 'tailwindcss/components'; 
+@import 'tailwindcss/utilities';
+
+/* Custom CSS Variables for Brand Consistency */
+:root {
+  /* Brand Colors - Australian-inspired palette */
+  --real2ai-primary: #1e40af; /* Blue 700 */
+  --real2ai-primary-light: #3b82f6; /* Blue 500 */
+  --real2ai-primary-dark: #1e3a8a; /* Blue 800 */
+  --real2ai-secondary: #4f46e5; /* Indigo 600 */
+  --real2ai-accent: #06b6d4; /* Cyan 500 - Australian ocean */
+  
+  /* Success/Trust Colors */
+  --real2ai-success: #059669; /* Emerald 600 */
+  --real2ai-success-light: #10b981; /* Emerald 500 */
+  
+  /* Warning/Risk Colors */
+  --real2ai-warning: #d97706; /* Amber 600 */
+  --real2ai-error: #dc2626; /* Red 600 */
+  
+  /* Neutral Colors */
+  --real2ai-gray-50: #f9fafb;
+  --real2ai-gray-100: #f3f4f6;
+  --real2ai-gray-200: #e5e7eb;
+  --real2ai-gray-600: #4b5563;
+  --real2ai-gray-900: #111827;
+  
+  /* Typography Scale */
+  --text-xs: 0.75rem; /* 12px */
+  --text-sm: 0.875rem; /* 14px */
+  --text-base: 1rem; /* 16px */
+  --text-lg: 1.125rem; /* 18px */
+  --text-xl: 1.25rem; /* 20px */
+  --text-2xl: 1.5rem; /* 24px */
+  --text-3xl: 1.875rem; /* 30px */
+  --text-4xl: 2.25rem; /* 36px */
+  --text-5xl: 3rem; /* 48px */
+  --text-6xl: 3.75rem; /* 60px */
+  
+  /* Spacing Scale */
+  --space-1: 0.25rem; /* 4px */
+  --space-2: 0.5rem; /* 8px */
+  --space-3: 0.75rem; /* 12px */
+  --space-4: 1rem; /* 16px */
+  --space-6: 1.5rem; /* 24px */
+  --space-8: 2rem; /* 32px */
+  --space-12: 3rem; /* 48px */
+  --space-16: 4rem; /* 64px */
+  --space-20: 5rem; /* 80px */
+  
+  /* Border Radius */
+  --radius-sm: 0.375rem; /* 6px */
+  --radius-md: 0.5rem; /* 8px */
+  --radius-lg: 0.75rem; /* 12px */
+  --radius-xl: 1rem; /* 16px */
+  --radius-2xl: 1.5rem; /* 24px */
+  
+  /* Shadows */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  --shadow-2xl: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+}
+
+/* Base Marketing Page Styles */
+.marketing-page {
+  /* Ensure full viewport coverage */
+  min-height: 100vh;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  line-height: 1.6;
+  color: var(--real2ai-gray-900);
+  
+  /* Smooth scrolling for anchor links */
+  scroll-behavior: smooth;
+}
+
+/* Hero Section Optimizations */
+.hero-section {
+  /* Gradient background with subtle animation */
+  background: linear-gradient(135deg, var(--real2ai-gray-50) 0%, #f0f9ff 50%, #e0f2fe 100%);
+  background-size: 400% 400%;
+  animation: gradientShift 10s ease infinite;
+  
+  /* Ensure proper viewport height on mobile */
+  min-height: max(600px, 100vh);
+  
+  /* Optimized layout for hero content */
+  display: flex;
+  align-items: center;
+  position: relative;
+  overflow: hidden;
+}
+
+@keyframes gradientShift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* Hero Text Optimization */
+.hero-title {
+  font-size: clamp(2.5rem, 5vw, 3.75rem);
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.025em;
+  margin-bottom: var(--space-6);
+  
+  /* Responsive font scaling */
+  @media (max-width: 640px) {
+    font-size: 2.25rem;
+    line-height: 1.2;
+  }
+}
+
+.hero-subtitle {
+  font-size: clamp(1.125rem, 2.5vw, 1.5rem);
+  color: var(--real2ai-gray-600);
+  max-width: 48rem;
+  margin: 0 auto var(--space-8);
+  
+  @media (max-width: 640px) {
+    font-size: 1.125rem;
+  }
+}
+
+/* Feature Cards with Enhanced Visual Hierarchy */
+.feature-card {
+  background: white;
+  border-radius: var(--radius-xl);
+  padding: var(--space-6);
+  box-shadow: var(--shadow-lg);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid var(--real2ai-gray-200);
+  
+  /* Hover effects for engagement */
+  &:hover {
+    box-shadow: var(--shadow-xl);
+    transform: translateY(-4px);
+    border-color: var(--real2ai-primary-light);
+  }
+  
+  /* Focus states for accessibility */
+  &:focus-within {
+    outline: 2px solid var(--real2ai-primary);
+    outline-offset: 2px;
+  }
+}
+
+.feature-card-icon {
+  width: 3rem;
+  height: 3rem;
+  background: linear-gradient(135deg, var(--real2ai-primary) 0%, var(--real2ai-secondary) 100%);
+  border-radius: var(--radius-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  margin-bottom: var(--space-4);
+  flex-shrink: 0;
+}
+
+.feature-card-title {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--real2ai-gray-900);
+  margin-bottom: var(--space-3);
+}
+
+.feature-card-description {
+  color: var(--real2ai-gray-600);
+  line-height: 1.6;
+}
+
+/* Statistics Section with Visual Impact */
+.stats-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-8);
+  margin: var(--space-16) 0;
+}
+
+.stat-item {
+  text-align: center;
+  
+  .stat-number {
+    font-size: clamp(2.25rem, 4vw, 3rem);
+    font-weight: 800;
+    color: var(--real2ai-primary);
+    display: block;
+    margin-bottom: var(--space-2);
+  }
+  
+  .stat-label {
+    font-size: var(--text-lg);
+    font-weight: 600;
+    color: var(--real2ai-gray-900);
+    margin-bottom: var(--space-1);
+  }
+  
+  .stat-description {
+    font-size: var(--text-sm);
+    color: var(--real2ai-gray-600);
+  }
+}
+
+/* CTA Buttons with High Conversion Design */
+.cta-primary {
+  background: linear-gradient(135deg, var(--real2ai-primary) 0%, var(--real2ai-secondary) 100%);
+  color: white;
+  padding: var(--space-3) var(--space-8);
+  border-radius: var(--radius-lg);
+  font-weight: 600;
+  font-size: var(--text-lg);
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  text-decoration: none;
+  
+  /* Hover and focus states */
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-xl);
+  }
+  
+  &:focus {
+    outline: 2px solid var(--real2ai-primary);
+    outline-offset: 2px;
+  }
+  
+  &:active {
+    transform: translateY(0);
+  }
+}
+
+.cta-secondary {
+  background: white;
+  color: var(--real2ai-primary);
+  padding: var(--space-3) var(--space-6);
+  border: 2px solid var(--real2ai-primary);
+  border-radius: var(--radius-lg);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  
+  &:hover {
+    background: var(--real2ai-primary);
+    color: white;
+    transform: translateY(-1px);
+  }
+  
+  &:focus {
+    outline: 2px solid var(--real2ai-primary);
+    outline-offset: 2px;
+  }
+}
+
+/* Testimonial Cards */
+.testimonial-card {
+  background: white;
+  border-radius: var(--radius-xl);
+  padding: var(--space-6);
+  box-shadow: var(--shadow-md);
+  border: 1px solid var(--real2ai-gray-200);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  
+  .testimonial-rating {
+    display: flex;
+    gap: var(--space-1);
+    margin-bottom: var(--space-4);
+  }
+  
+  .testimonial-quote {
+    font-style: italic;
+    color: var(--real2ai-gray-700);
+    margin-bottom: var(--space-4);
+    flex-grow: 1;
+    
+    &::before,
+    &::after {
+      content: '"';
+      color: var(--real2ai-primary);
+      font-size: 1.5em;
+    }
+  }
+  
+  .testimonial-author {
+    font-weight: 600;
+    color: var(--real2ai-gray-900);
+    margin-bottom: var(--space-1);
+  }
+  
+  .testimonial-role {
+    font-size: var(--text-sm);
+    color: var(--real2ai-gray-500);
+  }
+}
+
+/* How It Works Section */
+.process-step {
+  position: relative;
+  text-align: center;
+  padding: var(--space-6);
+  
+  .step-number {
+    position: absolute;
+    top: -var(--space-2);
+    right: var(--space-2);
+    width: 2rem;
+    height: 2rem;
+    background: var(--real2ai-primary);
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: var(--text-sm);
+  }
+  
+  .step-icon {
+    width: 4rem;
+    height: 4rem;
+    background: var(--real2ai-gray-100);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--real2ai-primary);
+    margin: 0 auto var(--space-4);
+  }
+  
+  .step-title {
+    font-size: var(--text-xl);
+    font-weight: 600;
+    color: var(--real2ai-gray-900);
+    margin-bottom: var(--space-3);
+  }
+  
+  .step-description {
+    color: var(--real2ai-gray-600);
+    line-height: 1.6;
+  }
+  
+  /* Connection lines between steps */
+  &:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    right: -3rem;
+    width: 3rem;
+    height: 2px;
+    background: var(--real2ai-gray-200);
+    
+    @media (max-width: 768px) {
+      display: none;
+    }
+  }
+}
+
+/* FAQ Section with Improved Usability */
+.faq-item {
+  background: white;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  margin-bottom: var(--space-4);
+  border: 1px solid var(--real2ai-gray-200);
+  overflow: hidden;
+  
+  summary {
+    padding: var(--space-6);
+    cursor: pointer;
+    font-weight: 600;
+    color: var(--real2ai-gray-900);
+    list-style: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    
+    &:hover {
+      background: var(--real2ai-gray-50);
+      color: var(--real2ai-primary);
+    }
+    
+    /* Custom arrow */
+    &::after {
+      content: '▼';
+      transition: transform 0.2s ease;
+      color: var(--real2ai-primary);
+    }
+    
+    &::-webkit-details-marker {
+      display: none;
+    }
+  }
+  
+  &[open] summary::after {
+    transform: rotate(180deg);
+  }
+  
+  .faq-answer {
+    padding: 0 var(--space-6) var(--space-6);
+    color: var(--real2ai-gray-600);
+    line-height: 1.7;
+    border-top: 1px solid var(--real2ai-gray-100);
+    margin-top: var(--space-2);
+    padding-top: var(--space-4);
+  }
+}
+
+/* Responsive Design Breakpoints */
+
+/* Mobile First Approach */
+@media (max-width: 640px) {
+  .marketing-page {
+    padding: 0 var(--space-4);
+  }
+  
+  .hero-section {
+    padding: var(--space-12) 0;
+    text-align: center;
+  }
+  
+  .stats-container {
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--space-6);
+  }
+  
+  .feature-card {
+    padding: var(--space-4);
+  }
+  
+  .process-step {
+    padding: var(--space-4);
+    margin-bottom: var(--space-8);
+  }
+}
+
+/* Tablet Styles */
+@media (min-width: 641px) and (max-width: 1024px) {
+  .stats-container {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .process-step {
+    &:not(:last-child)::after {
+      display: none;
+    }
+  }
+}
+
+/* Desktop Optimizations */
+@media (min-width: 1025px) {
+  .hero-section {
+    padding: var(--space-20) 0;
+  }
+  
+  .stats-container {
+    grid-template-columns: repeat(4, 1fr);
+  }
+  
+  .feature-card {
+    &:hover {
+      transform: translateY(-6px);
+    }
+  }
+}
+
+/* High DPI Display Optimizations */
+@media (min-resolution: 192dpi) {
+  .feature-card-icon,
+  .step-icon {
+    /* Ensure crisp icons on retina displays */
+    image-rendering: -webkit-optimize-contrast;
+  }
+}
+
+/* Print Styles */
+@media print {
+  .marketing-page {
+    background: white !important;
+    color: black !important;
+  }
+  
+  .cta-primary,
+  .cta-secondary {
+    border: 2px solid black !important;
+    background: white !important;
+    color: black !important;
+  }
+}
+
+/* Dark Mode Support (Future Enhancement) */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --real2ai-gray-900: #f9fafb;
+    --real2ai-gray-600: #d1d5db;
+    --real2ai-gray-200: #374151;
+    --real2ai-gray-100: #4b5563;
+    --real2ai-gray-50: #111827;
+  }
+  
+  .marketing-page {
+    background: var(--real2ai-gray-50);
+  }
+  
+  .feature-card,
+  .testimonial-card,
+  .faq-item {
+    background: #1f2937;
+    border-color: #374151;
+  }
+}
+
+/* Accessibility Enhancements */
+
+/* Focus Visible for Better Keyboard Navigation */
+.cta-primary:focus-visible,
+.cta-secondary:focus-visible,
+.feature-card:focus-visible {
+  outline: 3px solid var(--real2ai-primary);
+  outline-offset: 2px;
+}
+
+/* High Contrast Mode Support */
+@media (prefers-contrast: high) {
+  .feature-card,
+  .testimonial-card,
+  .faq-item {
+    border: 2px solid;
+    border-color: var(--real2ai-gray-900);
+  }
+  
+  .cta-primary {
+    border: 2px solid white;
+  }
+}
+
+/* Reduced Motion for Accessibility */
+@media (prefers-reduced-motion: reduce) {
+  .marketing-page {
+    scroll-behavior: auto;
+  }
+  
+  .hero-section {
+    animation: none;
+  }
+  
+  .feature-card:hover,
+  .cta-primary:hover {
+    transform: none;
+  }
+}
+
+/* Performance Optimizations */
+
+/* GPU Acceleration for Smooth Animations */
+.feature-card,
+.cta-primary,
+.process-step {
+  will-change: transform;
+}
+
+/* Optimize repaints */
+.testimonial-card,
+.faq-item {
+  contain: layout style;
+}
+
+/* Font Loading Optimization */
+.hero-title {
+  font-display: swap;
+}

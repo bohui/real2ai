@@ -123,6 +123,9 @@ class DiagramAnalysisNode(BaseNode):
     ) -> bool:
         """Detect if the document contains diagrams or visual elements."""
         try:
+            # Ensure document_metadata is a dict to prevent AttributeError
+            document_metadata = document_metadata or {}
+            
             # Check for image data
             if document_data.get("images") or document_data.get("figures"):
                 return True

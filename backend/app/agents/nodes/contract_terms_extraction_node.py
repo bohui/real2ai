@@ -54,12 +54,28 @@ class ContractTermsExtractionNode(BaseNode):
             full_text = document_metadata.get("full_text", "")
 
             if not full_text:
-                error_msg = "No text available for contract terms extraction"
+                # Enhanced diagnostics for empty document
+                diagnostic_info = {
+                    "document_metadata_keys": list(document_metadata.keys()) if document_metadata else [],
+                    "document_metadata_type": str(type(document_metadata)),
+                    "document_data_keys": list(state.get("document_data", {}).keys()) if state.get("document_data") else [],
+                    "parsing_status": str(state.get("parsing_status", "unknown")),
+                    "document_processing_complete": "document_metadata" in state and isinstance(state.get("document_metadata"), dict),
+                }
+                
+                error_msg = "No text available for contract terms extraction - document processing may have failed"
+                
+                # Log detailed diagnostic information for debugging
+                self._log_warning(
+                    f"Contract terms extraction failed: empty document",
+                    extra=diagnostic_info
+                )
+                
                 return self._handle_node_error(
                     state,
                     Exception(error_msg),
                     error_msg,
-                    {"document_metadata_keys": list(document_metadata.keys())},
+                    diagnostic_info,
                 )
 
             # Extract terms using configured method
