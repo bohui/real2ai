@@ -221,13 +221,22 @@ class DocumentProcessingNode(BaseNode):
                 extraction_confidence * text_quality["score"]
             )
 
-            # Update state with processed data
+            # Update state with processed data (align keys with downstream validators)
+            text_quality_score = (
+                float(text_quality.get("score", 0.0))
+                if isinstance(text_quality, dict)
+                else 0.0
+            )
+
             updated_data = {
+                # Keep detailed metadata (existing consumers rely on this)
                 "document_metadata": {
                     "full_text": extracted_text,
                     "extraction_method": extraction_method,
                     "extraction_confidence": extraction_confidence,
                     "text_quality": text_quality,
+                    # Add flattened score for compatibility with validators expecting this key
+                    "text_quality_score": text_quality_score,
                     "character_count": len(extracted_text),
                     "total_word_count": len(extracted_text.split()),
                     "processing_timestamp": summary.get(
@@ -236,6 +245,19 @@ class DocumentProcessingNode(BaseNode):
                     "enhanced_processing": True,
                     "llm_used": getattr(summary, "llm_used", False),
                 },
+                # Provide top-level quality metrics for report compilation and validation nodes
+                "document_quality_metrics": {
+                    "text_quality_score": text_quality_score,
+                    "extraction_confidence": extraction_confidence,
+                    # Simple completeness proxy based on content length
+                    "completeness_score": (
+                        1.0
+                        if len(extracted_text) >= 1000
+                        else 0.7 if len(extracted_text) >= 300 else 0.4
+                    ),
+                },
+                # Provide top-level extracted_text for backward/compatibility checks
+                "extracted_text": extracted_text,
                 "parsing_status": ProcessingStatus.COMPLETED,
             }
 

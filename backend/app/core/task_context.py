@@ -20,6 +20,7 @@ import asyncio
 
 from app.core.config import get_settings
 from app.core.auth_context import AuthContext
+from app.services.backend_token_service import BackendTokenService
 
 logger = logging.getLogger(__name__)
 
@@ -607,8 +608,36 @@ class TaskContextManager:
         # Get current auth context
         task_context = AuthContext.create_task_context()
 
-        if not task_context.get("user_token"):
+        user_token: Optional[str] = task_context.get("user_token")
+        if not user_token:
             raise ValueError("No user token in current auth context")
+
+        # If the token is a backend-issued token, exchange it for a Supabase access token
+        try:
+            if BackendTokenService.is_backend_token(user_token):
+                exchanged = await BackendTokenService.ensure_supabase_access_token(
+                    user_token
+                )
+                if exchanged:
+                    # Replace token in context with Supabase access token
+                    task_context["user_token"] = exchanged
+                    # Attempt to include refresh token when available
+                    mapping = BackendTokenService.get_mapping(user_token) or {}
+                    if mapping.get("supabase_refresh_token"):
+                        task_context["refresh_token"] = mapping[
+                            "supabase_refresh_token"
+                        ]
+                    logger.info(
+                        "Exchanged backend token for Supabase token in task context"
+                    )
+                else:
+                    logger.warning(
+                        "Failed to exchange backend token for Supabase token before storing task context"
+                    )
+        except Exception as exchange_error:
+            logger.warning(
+                f"Token exchange error while preparing task context: {exchange_error}"
+            )
 
         # Store context
         context_key = await self.store.store_context(task_id, task_context)

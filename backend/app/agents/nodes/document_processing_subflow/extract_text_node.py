@@ -86,7 +86,7 @@ class ExtractTextNode(DocumentProcessingNodeBase):
     async def execute(self, state: DocumentProcessingState) -> DocumentProcessingState:
         """
         Extract text from document with comprehensive analysis and artifact caching.
-        
+
         This method implements the idempotent artifact lookup and storage pattern:
         1. Compute content HMAC and parameters fingerprint
         2. Look up existing text extraction artifact
@@ -152,7 +152,7 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                         state,
                         e,
                         f"Failed to download file or compute HMAC: {str(e)}",
-                        {"storage_path": storage_path}
+                        {"storage_path": storage_path},
                     )
 
             # Get algorithm version and compute parameters fingerprint
@@ -172,7 +172,9 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                 "use_llm": self.use_llm,
                 "ocr_zoom": self._ocr_zoom,
                 "min_text_len_for_ocr": self._min_text_len_for_ocr,
-                "diagram_keywords": sorted(self._diagram_keywords)  # Sort for consistency
+                "diagram_keywords": sorted(
+                    self._diagram_keywords
+                ),  # Sort for consistency
             }
             params_fingerprint = compute_params_fingerprint(params)
 
@@ -183,12 +185,14 @@ class ExtractTextNode(DocumentProcessingNodeBase):
             # Check if artifacts are enabled
             if not settings.enable_artifacts:
                 self._log_info("Artifacts disabled, performing direct text extraction")
-                text_extraction_result = await self._extract_text_with_comprehensive_analysis(
-                    user_client=user_client,
-                    document_id=document_id,
-                    storage_path=storage_path,
-                    file_type=normalized_file_type,
-                    file_content=file_content,
+                text_extraction_result = (
+                    await self._extract_text_with_comprehensive_analysis(
+                        user_client=user_client,
+                        document_id=document_id,
+                        storage_path=storage_path,
+                        file_type=normalized_file_type,
+                        file_content=file_content,
+                    )
                 )
             else:
                 # Try to get existing text artifact
@@ -203,8 +207,8 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                             "artifact_id": str(text_artifact.id),
                             "total_pages": text_artifact.total_pages,
                             "total_words": text_artifact.total_words,
-                            "methods": text_artifact.methods
-                        }
+                            "methods": text_artifact.methods,
+                        },
                     )
 
                     # Get associated page artifacts
@@ -217,25 +221,29 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                         text_artifact, page_artifacts
                     )
                 else:
-                    self._log_info("No existing artifact found, computing text extraction")
-                    
+                    self._log_info(
+                        "No existing artifact found, computing text extraction"
+                    )
+
                     # Compute text extraction
-                    text_extraction_result = await self._extract_text_with_comprehensive_analysis(
-                        user_client=user_client,
-                        document_id=document_id,
-                        storage_path=storage_path,
-                        file_type=normalized_file_type,
-                        file_content=file_content,
+                    text_extraction_result = (
+                        await self._extract_text_with_comprehensive_analysis(
+                            user_client=user_client,
+                            document_id=document_id,
+                            storage_path=storage_path,
+                            file_type=normalized_file_type,
+                            file_content=file_content,
+                        )
                     )
 
                     # Store artifacts if extraction succeeded
                     if text_extraction_result and text_extraction_result.success:
                         await self._store_text_artifacts(
-                            content_hmac, 
-                            algorithm_version, 
+                            content_hmac,
+                            algorithm_version,
                             params_fingerprint,
                             text_extraction_result,
-                            params
+                            params,
                         )
 
             # Validate extraction result
@@ -317,52 +325,66 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                 },
             )
 
-    async def _build_result_from_artifacts(self, text_artifact, page_artifacts) -> TextExtractionResult:
+    async def _build_result_from_artifacts(
+        self, text_artifact, page_artifacts
+    ) -> TextExtractionResult:
         """
         Build TextExtractionResult from stored artifacts.
-        
+
         Args:
             text_artifact: TextExtractionArtifact with full text data
             page_artifacts: List of PageArtifacts
-            
+
         Returns:
             TextExtractionResult reconstructed from artifacts
         """
         try:
             # Download full text from storage
             try:
-                full_text = await self.storage_service.download_text_blob(text_artifact.full_text_uri)
-                
+                full_text = await self.storage_service.download_text_blob(
+                    text_artifact.full_text_uri
+                )
+
                 # Verify integrity
                 if not await self.storage_service.verify_blob_integrity(
-                    text_artifact.full_text_uri, 
-                    text_artifact.full_text_sha256
+                    text_artifact.full_text_uri, text_artifact.full_text_sha256
                 ):
-                    self._log_warning(f"Full text integrity check failed for artifact {text_artifact.id}")
+                    self._log_warning(
+                        f"Full text integrity check failed for artifact {text_artifact.id}"
+                    )
                     # Continue anyway, but log the issue
-                    
+
             except Exception as e:
-                self._log_warning(f"Failed to download full text from {text_artifact.full_text_uri}: {e}")
-                full_text = f"[Error loading full text from artifact {text_artifact.id}]"
-            
+                self._log_warning(
+                    f"Failed to download full text from {text_artifact.full_text_uri}: {e}"
+                )
+                full_text = (
+                    f"[Error loading full text from artifact {text_artifact.id}]"
+                )
+
             # Build pages from page artifacts
             pages = []
             for page_artifact in page_artifacts:
                 try:
                     # Download page text from storage
-                    page_text = await self.storage_service.download_text_blob(page_artifact.page_text_uri)
-                    
+                    page_text = await self.storage_service.download_text_blob(
+                        page_artifact.page_text_uri
+                    )
+
                     # Verify integrity
                     if not await self.storage_service.verify_blob_integrity(
-                        page_artifact.page_text_uri,
-                        page_artifact.page_text_sha256
+                        page_artifact.page_text_uri, page_artifact.page_text_sha256
                     ):
-                        self._log_warning(f"Page text integrity check failed for page {page_artifact.page_number}")
-                        
+                        self._log_warning(
+                            f"Page text integrity check failed for page {page_artifact.page_number}"
+                        )
+
                 except Exception as e:
-                    self._log_warning(f"Failed to download page text from {page_artifact.page_text_uri}: {e}")
+                    self._log_warning(
+                        f"Failed to download page text from {page_artifact.page_text_uri}: {e}"
+                    )
                     page_text = f"[Error loading page {page_artifact.page_number} text]"
-                
+
                 page_extraction = PageExtraction(
                     page_number=page_artifact.page_number,
                     text_content=page_text,
@@ -371,12 +393,13 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                     extraction_method="artifact_reuse",
                     confidence=0.9,  # High confidence for cached results
                     content_analysis=self._make_page_analysis(
-                        page_text, 
-                        has_image=page_artifact.layout and page_artifact.layout.get('has_diagrams', False)
+                        page_text,
+                        has_image=page_artifact.layout
+                        and page_artifact.layout.get("has_diagrams", False),
                     ),
                 )
                 pages.append(page_extraction)
-            
+
             return TextExtractionResult(
                 success=True,
                 full_text=full_text,
@@ -391,12 +414,17 @@ class ExtractTextNode(DocumentProcessingNodeBase):
             self._log_warning(f"Failed to build result from artifacts: {e}")
             raise
 
-    async def _store_text_artifacts(self, content_hmac: str, algorithm_version: int, 
-                                   params_fingerprint: str, result: TextExtractionResult, 
-                                   params: dict):
+    async def _store_text_artifacts(
+        self,
+        content_hmac: str,
+        algorithm_version: int,
+        params_fingerprint: str,
+        result: TextExtractionResult,
+        params: dict,
+    ):
         """
         Store text extraction results as artifacts with real object storage.
-        
+
         Args:
             content_hmac: Content HMAC
             algorithm_version: Algorithm version
@@ -406,10 +434,12 @@ class ExtractTextNode(DocumentProcessingNodeBase):
         """
         try:
             # Upload full text to storage and get URI + SHA256
-            full_text_uri, full_text_sha256 = await self.storage_service.upload_text_blob(
-                result.full_text or "", content_hmac
+            full_text_uri, full_text_sha256 = (
+                await self.storage_service.upload_text_blob(
+                    result.full_text or "", content_hmac
+                )
             )
-            
+
             # Store main text artifact with real URI and hash
             text_artifact = await self.artifacts_repo.insert_text_artifact(
                 content_hmac=content_hmac,
@@ -419,20 +449,27 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                 full_text_sha256=full_text_sha256,
                 total_pages=result.total_pages,
                 total_words=result.total_word_count or 0,
-                methods={"extraction_methods": result.extraction_methods, "params": params},
-                timings={"processing_time": result.processing_time}
+                methods={
+                    "extraction_methods": result.extraction_methods,
+                    "params": params,
+                },
+                timings={"processing_time": result.processing_time},
             )
-            
-            self._log_info(f"Stored text artifact {text_artifact.id} with URI {full_text_uri}")
-            
+
+            self._log_info(
+                f"Stored text artifact {text_artifact.id} with URI {full_text_uri}"
+            )
+
             # Store page artifacts with real storage
             for page in result.pages or []:
                 try:
                     # Upload page text to storage
-                    page_text_uri, page_text_sha256 = await self.storage_service.upload_page_text(
-                        page.text_content or "", content_hmac, page.page_number
+                    page_text_uri, page_text_sha256 = (
+                        await self.storage_service.upload_page_text(
+                            page.text_content or "", content_hmac, page.page_number
+                        )
                     )
-                    
+
                     page_artifact = await self.artifacts_repo.insert_page_artifact(
                         content_hmac=content_hmac,
                         algorithm_version=algorithm_version,
@@ -440,28 +477,40 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                         page_number=page.page_number,
                         page_text_uri=page_text_uri,
                         page_text_sha256=page_text_sha256,
-                        layout=page.content_analysis.layout_features.__dict__ if page.content_analysis else None,
+                        layout=(
+                            page.content_analysis.layout_features.__dict__
+                            if page.content_analysis
+                            else None
+                        ),
                         metrics={
                             "confidence": page.confidence,
                             "word_count": page.word_count,
                             "text_length": page.text_length,
-                            "extraction_method": page.extraction_method
-                        }
+                            "extraction_method": page.extraction_method,
+                        },
                     )
-                    
-                    self._log_info(f"Stored page artifact {page_artifact.id} for page {page.page_number} with URI {page_text_uri}")
-                    
+
+                    self._log_info(
+                        f"Stored page artifact {page_artifact.id} for page {page.page_number} with URI {page_text_uri}"
+                    )
+
                 except Exception as e:
-                    self._log_warning(f"Failed to store page {page.page_number} artifact: {e}")
+                    self._log_warning(
+                        f"Failed to store page {page.page_number} artifact: {e}"
+                    )
                     # Continue with other pages
-                
+
         except Exception as e:
             # Log error but don't fail the overall operation since extraction succeeded
             self._log_warning(f"Failed to store artifacts: {e}")
 
     async def _extract_text_with_comprehensive_analysis(
-        self, user_client, document_id: str, storage_path: str, file_type: str, 
-        file_content: Optional[bytes] = None
+        self,
+        user_client,
+        document_id: str,
+        storage_path: str,
+        file_type: str,
+        file_content: Optional[bytes] = None,
     ) -> TextExtractionResult:
         """
         Extract text from document with comprehensive analysis.

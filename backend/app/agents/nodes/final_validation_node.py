@@ -91,7 +91,9 @@ class FinalValidationNode(BaseNode):
             state["final_validation_result"] = validation_result
             validation_confidence = validation_result.get("overall_confidence", 0.5)
             # Defensive access for confidence_scores
-            state.setdefault("confidence_scores", {})["final_validation"] = validation_confidence
+            state.setdefault("confidence_scores", {})[
+                "final_validation"
+            ] = validation_confidence
 
             # Determine overall validation status
             validation_passed = validation_result.get("validation_passed", False)
@@ -178,6 +180,20 @@ class FinalValidationNode(BaseNode):
 
             # Extract analysis results from state for template variables
             from datetime import datetime, timezone
+
+            # Coalesce None values to satisfy prompt context validation
+            risk_assessment_data = state.get("risk_assessment")
+            if risk_assessment_data is None:
+                risk_assessment_data = {}
+
+            # Prefer canonical key, fall back to compliance_analysis during rendering phase
+            compliance_check_data = state.get("compliance_check")
+            if not compliance_check_data:
+                compliance_check_data = state.get("compliance_analysis") or {}
+
+            # Ensure contract_type is always populated for prompts
+            contract_type_value = state.get("contract_type") or "purchase_agreement"
+
             context = PromptContext(
                 context_type=ContextType.VALIDATION,
                 variables={
@@ -198,7 +214,7 @@ class FinalValidationNode(BaseNode):
                     # Service mapping context requirements (best-effort)
                     "extracted_text": (doc_meta.get("full_text", "") or "")[:8000],
                     "australian_state": state.get("australian_state"),
-                    "contract_type": state.get("contract_type"),
+                    "contract_type": contract_type_value,
                     "user_type": state.get("user_type", "general"),
                     "user_experience_level": state.get(
                         "user_experience_level", "intermediate"
@@ -206,10 +222,11 @@ class FinalValidationNode(BaseNode):
                     # Template-required variables
                     "analysis_type": state.get("analysis_type", "comprehensive"),
                     "user_experience": state.get(
-                        "user_experience", state.get("user_experience_level", "intermediate")
+                        "user_experience",
+                        state.get("user_experience_level", "intermediate"),
                     ),
-                    "risk_assessment": state.get("risk_assessment", {}),
-                    "compliance_check": state.get("compliance_check", {}),
+                    "risk_assessment": risk_assessment_data,
+                    "compliance_check": compliance_check_data,
                     "recommendations": state.get("recommendations", []),
                     "analysis_timestamp": datetime.now(timezone.utc).isoformat(),
                 },
@@ -219,6 +236,9 @@ class FinalValidationNode(BaseNode):
                 template_name="validation/final_output_validation",
                 context=context,
                 service_name="contract_analysis_workflow",
+                # Final validation should not fail hard on missing optional context
+                # Disable strict context validation here to allow graceful fallbacks
+                validate=False,
             )
 
             response = await self._generate_content_with_fallback(

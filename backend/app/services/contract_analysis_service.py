@@ -1101,14 +1101,20 @@ class ContractAnalysisService:
         except Exception:
             pass
 
-        # Always fan out via Redis to the contract session channel
+        # Always fan out via Redis to both the contract_id and session_id channels
         try:
             from app.services.communication.redis_pubsub import publish_progress_sync
 
             message = WebSocketEvents.analysis_progress(
                 contract_id, step, progress_percent, description
             )
-            publish_progress_sync(contract_id, message)
+            # Publish on contract_id channel (DB id) when available
+            if contract_id:
+                publish_progress_sync(contract_id, message)
+            # Also publish on session_id channel (content_hash in our flow) so
+            # document-based WebSocket subscribers receive updates immediately
+            if session_id and session_id != contract_id:
+                publish_progress_sync(session_id, message)
         except Exception as redis_error:
             logger.warning(
                 f"Progress update Redis publish failed for {contract_id}: {redis_error}"

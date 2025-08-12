@@ -223,15 +223,21 @@ async def check_document_cache_status(document_id: str, user_id: str) -> Dict[st
             logger.info(
                 f"Cache HIT FAILED: Previous analysis failed for contract {contract_id}"
             )
+            # Normalize error_details that may be stored as text
+            error_details = analysis.error_details
+            if not isinstance(error_details, dict):
+                error_details = {
+                    "message": str(error_details) if error_details else None
+                }
             return {
                 "cache_status": CacheStatus.FAILED,
                 "document_id": document_id,
                 "content_hash": content_hash,
                 "contract_id": contract_id,
                 "analysis_id": str(analysis.id),
-                "error_message": (analysis.error_details or {}).get(
-                    "message", "Analysis failed"
-                ),
+                "error_message": error_details.get("message")
+                or error_details.get("error_message")
+                or "Analysis failed",
                 "retry_available": True,
                 "message": "Previous analysis failed - retry available",
             }
@@ -766,6 +772,33 @@ async def handle_start_analysis_request(
             f"Analysis task dispatched for document {document_id}, task ID: {task_result['task_id']}"
         )
 
+        # Ensure Redis subscription to newly created contract_id so progress events are forwarded
+        try:
+            new_contract_id = task_result.get("contract_id")
+            if (
+                new_contract_id
+                and new_contract_id not in redis_pubsub_service.subscriptions
+            ):
+
+                async def _forward_from_new_contract(message: Dict[str, Any]):
+                    try:
+                        await websocket_manager.send_message(document_id, message)
+                    except Exception as forward_error:
+                        logger.error(
+                            f"Failed to forward contract pub/sub message (post-dispatch): {forward_error}"
+                        )
+
+                await redis_pubsub_service.subscribe_to_progress(
+                    new_contract_id, _forward_from_new_contract
+                )
+                logger.info(
+                    f"🔗 Subscribed to contract_id channel post-dispatch: {new_contract_id} for document {document_id}"
+                )
+        except Exception as sub_error:
+            logger.warning(
+                f"Could not subscribe to new contract_id channel after dispatch: {sub_error}"
+            )
+
     except Exception as e:
         logger.error(f"Error starting analysis for document {document_id}: {str(e)}")
         await websocket_manager.send_personal_message(
@@ -974,7 +1007,15 @@ async def handle_status_request(
 
         # Get detailed progress from analysis_progress table (user context - RLS enforced)
         progress_repo = AnalysisProgressRepository()
-        progress_data = await progress_repo.get_latest_progress(content_hash, user_id)
+        # Request all fields needed by the frontend to avoid KeyErrors
+        progress_data = await progress_repo.get_latest_progress(
+            content_hash,
+            user_id,
+            columns=(
+                "current_step, progress_percent, step_description, status, "
+                "estimated_completion_minutes, updated_at, total_elapsed_seconds"
+            ),
+        )
 
         if progress_data:
             progress = progress_data
@@ -983,15 +1024,15 @@ async def handle_status_request(
                 "timestamp": datetime.now(UTC).isoformat(),
                 "data": {
                     "contract_id": contract_id,
-                    "current_step": progress["current_step"],
-                    "progress_percent": progress["progress_percent"],
-                    "step_description": progress["step_description"],
-                    "status": progress["status"],
-                    "estimated_completion_minutes": progress[
+                    "current_step": progress.get("current_step", ""),
+                    "progress_percent": progress.get("progress_percent", 0),
+                    "step_description": progress.get("step_description", ""),
+                    "status": progress.get("status", "in_progress"),
+                    "estimated_completion_minutes": progress.get(
                         "estimated_completion_minutes"
-                    ],
-                    "last_updated": progress["updated_at"],
-                    "total_elapsed_seconds": progress["total_elapsed_seconds"],
+                    ),
+                    "last_updated": progress.get("updated_at"),
+                    "total_elapsed_seconds": progress.get("total_elapsed_seconds", 0),
                 },
             }
         else:

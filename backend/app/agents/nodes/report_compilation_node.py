@@ -220,7 +220,7 @@ class ReportCompilationNode(BaseNode):
             # Validate that we have sufficient data for completion
             has_artifacts = self._validate_artifacts_exist(state)
             has_extracted_text = self._validate_extracted_text_exists(state)
-            
+
             # Only mark as completed if we have real artifacts or extracted text
             if has_artifacts or has_extracted_text:
                 # Update state with compiled report and mark overall success
@@ -231,39 +231,41 @@ class ReportCompilationNode(BaseNode):
                 state["error_state"] = None
                 # Use the canonical state key expected by the service layer
                 state["parsing_status"] = ProcessingStatus.COMPLETED
-                
+
                 # Only set 100% progress when we actually complete successfully
                 if "progress" in state and state["progress"]:
                     state["progress"]["percentage"] = 100
-                
+
                 self._log_step_debug(
-                    "Report compilation marked as completed with valid artifacts", 
+                    "Report compilation marked as completed with valid artifacts",
                     state,
                     {
                         "has_artifacts": has_artifacts,
                         "has_extracted_text": has_extracted_text,
-                        "contract_terms_present": bool(state.get("contract_terms"))
-                    }
+                        "contract_terms_present": bool(state.get("contract_terms")),
+                    },
                 )
             else:
                 # Document processing failed - don't mark as completed
                 state["compiled_report"] = compiled_report
                 state["report_data"] = compiled_report
-                state["error_state"] = "Document processing failed - no artifacts or extracted text found"
+                state["error_state"] = (
+                    "Document processing failed - no artifacts or extracted text found"
+                )
                 state["parsing_status"] = ProcessingStatus.FAILED
-                
+
                 # Keep progress at 95% to indicate processing issue
                 if "progress" in state and state["progress"]:
                     state["progress"]["percentage"] = 95
-                
+
                 self._log_step_debug(
-                    "Report compilation failed - insufficient artifacts for completion", 
+                    "Report compilation failed - insufficient artifacts for completion",
                     state,
                     {
                         "has_artifacts": has_artifacts,
                         "has_extracted_text": has_extracted_text,
-                        "available_keys": list(state.keys())
-                    }
+                        "available_keys": list(state.keys()),
+                    },
                 )
 
             # Ensure analysis_results has minimal required aggregates for response builders
@@ -289,10 +291,18 @@ class ReportCompilationNode(BaseNode):
             state["analysis_results"] = analysis_results
 
             # Set compilation data based on validation results
-            processing_completed = (has_artifacts or has_extracted_text)
-            final_status = ProcessingStatus.COMPLETED if processing_completed else ProcessingStatus.FAILED
-            error_state = "" if processing_completed else "Document processing failed - no artifacts or extracted text found"
-            
+            processing_completed = has_artifacts or has_extracted_text
+            final_status = (
+                ProcessingStatus.COMPLETED
+                if processing_completed
+                else ProcessingStatus.FAILED
+            )
+            error_state = (
+                ""
+                if processing_completed
+                else "Document processing failed - no artifacts or extracted text found"
+            )
+
             compilation_data: CompilationData = {
                 "compiled_report": compiled_report,
                 "report_sections": len([k for k, v in compiled_report.items() if v]),
@@ -553,11 +563,11 @@ class ReportCompilationNode(BaseNode):
             )
 
         return notes
-    
+
     def _validate_artifacts_exist(self, state: RealEstateAgentState) -> bool:
         """
         Validate that document processing artifacts were successfully created.
-        
+
         This checks for evidence that document processing completed successfully,
         including extracted text, pages, paragraphs, or diagrams.
         """
@@ -565,76 +575,100 @@ class ReportCompilationNode(BaseNode):
             validation_details = {
                 "document_metadata_present": bool(state.get("document_metadata")),
                 "indicators_found": [],
-                "metadata_scores": {}
+                "metadata_scores": {},
             }
-            
+
             # Check for document metadata indicating successful processing
             doc_metadata = state.get("document_metadata", {})
             if doc_metadata:
                 # Look for extraction indicators
                 text_quality_score = doc_metadata.get("text_quality_score", 0)
                 character_count = doc_metadata.get("character_count", 0)
-                
+
                 validation_details["metadata_scores"] = {
                     "text_quality_score": text_quality_score,
-                    "character_count": character_count
+                    "character_count": character_count,
                 }
-                
+
                 if text_quality_score > 0 and character_count > 0:
-                    validation_details["indicators_found"].append("document_metadata_scores")
+                    validation_details["indicators_found"].append(
+                        "document_metadata_scores"
+                    )
                     self._log_step_debug(
                         "Artifacts validated via document metadata",
                         state,
-                        validation_details
+                        validation_details,
                     )
                     return True
-            
+
             # Check for artifact-related state keys
             artifact_indicators = [
                 "extracted_text",
-                "document_pages", 
+                "document_pages",
                 "document_paragraphs",
                 "document_diagrams",
-                "text_content"
+                "text_content",
+                # Treat text_extraction_result presence as an artifact indicator as well
+                "text_extraction_result",
             ]
-            
+
             for indicator in artifact_indicators:
                 value = state.get(indicator)
                 if value:
                     # Check if it's a non-empty string or list
                     if isinstance(value, str) and len(value.strip()) > 0:
-                        validation_details["indicators_found"].append(f"{indicator}_string")
+                        validation_details["indicators_found"].append(
+                            f"{indicator}_string"
+                        )
                         self._log_step_debug(
                             f"Artifacts validated via {indicator} (string)",
                             state,
-                            {**validation_details, "content_length": len(value)}
+                            {**validation_details, "content_length": len(value)},
                         )
                         return True
                     elif isinstance(value, (list, dict)) and len(value) > 0:
-                        validation_details["indicators_found"].append(f"{indicator}_collection")
+                        validation_details["indicators_found"].append(
+                            f"{indicator}_collection"
+                        )
                         self._log_step_debug(
                             f"Artifacts validated via {indicator} (collection)",
                             state,
-                            {**validation_details, "collection_size": len(value)}
+                            {**validation_details, "collection_size": len(value)},
                         )
                         return True
-            
+                    # Special handling: text_extraction_result object with non-empty full_text
+                    if indicator == "text_extraction_result" and isinstance(
+                        value, dict
+                    ):
+                        full_text = value.get("full_text") or ""
+                        if isinstance(full_text, str) and len(full_text.strip()) > 0:
+                            validation_details["indicators_found"].append(
+                                "text_extraction_result_full_text"
+                            )
+                            self._log_step_debug(
+                                "Artifacts validated via text_extraction_result.full_text",
+                                state,
+                                {
+                                    **validation_details,
+                                    "content_length": len(full_text),
+                                },
+                            )
+                            return True
+
             # Log failure details for debugging
             self._log_step_debug(
-                "No artifacts found - validation failed",
-                state,
-                validation_details
+                "No artifacts found - validation failed", state, validation_details
             )
             return False
-            
+
         except Exception as e:
             self._log_exception(e, context={"validation": "artifacts_exist"})
             return False
-    
+
     def _validate_extracted_text_exists(self, state: RealEstateAgentState) -> bool:
         """
         Validate that text extraction was successful and produced meaningful content.
-        
+
         This is a fallback check for cases where artifacts weren't created but
         text extraction succeeded.
         """
@@ -642,73 +676,88 @@ class ReportCompilationNode(BaseNode):
             validation_details = {
                 "contract_terms_present": bool(state.get("contract_terms")),
                 "found_meaningful_fields": [],
-                "quality_metrics": {}
+                "quality_metrics": {},
             }
-            
+
             # Check contract terms for extracted content
             contract_terms = state.get("contract_terms", {})
             if contract_terms and isinstance(contract_terms, dict):
                 # Look for non-empty fields that indicate successful extraction
                 meaningful_fields = [
                     "purchase_price",
-                    "settlement_date", 
+                    "settlement_date",
                     "property_address",
                     "vendor_name",
-                    "purchaser_name"
+                    "purchaser_name",
                 ]
-                
+
                 found_fields = []
                 for field in meaningful_fields:
                     value = contract_terms.get(field)
                     if value and str(value).strip():
                         found_fields.append(field)
                         validation_details["found_meaningful_fields"].append(field)
-                
+
                 if found_fields:
                     self._log_step_debug(
                         f"Text extraction validated via contract fields: {found_fields}",
                         state,
-                        validation_details
+                        validation_details,
                     )
                     return True
-                
+
+            # Also check text_extraction_result.full_text as a fallback
+            ter = state.get("text_extraction_result")
+            if isinstance(ter, dict):
+                full_text = ter.get("full_text") or ""
+                if isinstance(full_text, str) and len(full_text.strip()) > 100:
+                    self._log_step_debug(
+                        "Text extraction validated via text_extraction_result.full_text",
+                        state,
+                        {"character_count": len(full_text)},
+                    )
+                    return True
+
                 # Check if we have any non-empty contract terms
                 non_empty_terms = [
-                    v for v in contract_terms.values() 
+                    v
+                    for v in contract_terms.values()
                     if v is not None and str(v).strip()
                 ]
                 validation_details["non_empty_terms_count"] = len(non_empty_terms)
-                
+
                 if len(non_empty_terms) >= 3:  # At least 3 meaningful terms
                     self._log_step_debug(
                         f"Text extraction validated via {len(non_empty_terms)} contract terms",
                         state,
-                        validation_details
+                        validation_details,
                     )
                     return True
-            
+
             # Check for document quality metrics indicating successful processing
             doc_quality = state.get("document_quality_metrics", {})
             if doc_quality:
                 extraction_confidence = doc_quality.get("extraction_confidence", 0)
-                validation_details["quality_metrics"]["extraction_confidence"] = extraction_confidence
-                
+                validation_details["quality_metrics"][
+                    "extraction_confidence"
+                ] = extraction_confidence
+
                 if extraction_confidence > 0.3:  # Reasonable extraction confidence
                     self._log_step_debug(
                         f"Text extraction validated via quality confidence: {extraction_confidence}",
                         state,
-                        validation_details
+                        validation_details,
                     )
                     return True
-            
+
             # Log failure details for debugging
             self._log_step_debug(
                 "No meaningful extracted text found - validation failed",
                 state,
-                validation_details
+                validation_details,
             )
             return False
-            
+
         except Exception as e:
             self._log_exception(e, context={"validation": "extracted_text_exists"})
             return False

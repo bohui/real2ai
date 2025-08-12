@@ -19,6 +19,7 @@ from functools import wraps
 
 from fastapi import HTTPException, status
 from app.clients import get_supabase_client
+from app.services.backend_token_service import BackendTokenService
 
 logger = logging.getLogger(__name__)
 
@@ -143,6 +144,30 @@ class AuthContext:
             client = await get_supabase_client()
 
         if token:
+            # Ensure we always use a Supabase access token for DB ops (not backend API tokens)
+            try:
+                if BackendTokenService.is_backend_token(token):
+                    exchanged = await BackendTokenService.ensure_supabase_access_token(
+                        token
+                    )
+                    if exchanged:
+                        token = exchanged
+                        # If we don't have a refresh token yet, try to pull from mapping
+                        if not refresh_token:
+                            mapping = (
+                                BackendTokenService.get_mapping(cls.get_user_token())
+                                or {}
+                            )
+                            refresh_token = mapping.get("supabase_refresh_token")
+                        logger.info(
+                            "Exchanged backend token for Supabase token in authenticated client"
+                        )
+                    else:
+                        logger.warning(
+                            "Failed to exchange backend token for Supabase token in authenticated client"
+                        )
+            except Exception as exchange_error:
+                logger.debug(f"Token exchange skipped due to error: {exchange_error}")
             # Add JWT timing diagnostics
             # try:
             #     from app.utils.jwt_diagnostics import log_jwt_timing_issue
