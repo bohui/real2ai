@@ -37,6 +37,81 @@ from app.services.repositories.documents_repository import DocumentsRepository
 logger = logging.getLogger(__name__)
 
 
+def _extract_root_cause(exception: Exception) -> Exception:
+    """
+    Extract the root cause from an exception chain.
+    
+    Args:
+        exception: The exception to analyze
+        
+    Returns:
+        The root cause exception (the original exception that started the chain)
+    """
+    current = exception
+    while hasattr(current, '__cause__') and current.__cause__ is not None:
+        current = current.__cause__
+    
+    # Also check for __context__ which is used for implicit exception chaining
+    while hasattr(current, '__context__') and current.__context__ is not None:
+        if not hasattr(current, '__cause__') or current.__cause__ is None:
+            # Only follow __context__ if there's no explicit __cause__
+            current = current.__context__
+        else:
+            break
+    
+    return current
+
+
+def _format_exception_chain(exception: Exception) -> List[str]:
+    """
+    Format the full exception chain as a list of strings for logging.
+    
+    Args:
+        exception: The exception to format
+        
+    Returns:
+        List of formatted exception strings showing the full chain
+    """
+    chain = []
+    current = exception
+    seen = set()  # Prevent infinite loops in circular references
+    
+    while current is not None:
+        # Prevent infinite loops
+        exception_id = id(current)
+        if exception_id in seen:
+            break
+        seen.add(exception_id)
+        
+        # Format current exception
+        exc_info = {
+            'type': type(current).__name__,
+            'message': str(current),
+            'module': getattr(type(current), '__module__', 'unknown')
+        }
+        
+        # Add file and line info if available
+        if hasattr(current, '__traceback__') and current.__traceback__:
+            tb = current.__traceback__
+            while tb.tb_next:
+                tb = tb.tb_next  # Get the deepest traceback
+            exc_info['file'] = tb.tb_frame.f_code.co_filename
+            exc_info['line'] = tb.tb_lineno
+            exc_info['function'] = tb.tb_frame.f_code.co_name
+        
+        chain.append(f"{exc_info['type']}: {exc_info['message']} (in {exc_info.get('function', 'unknown')} at {exc_info.get('file', 'unknown')}:{exc_info.get('line', 'unknown')})")
+        
+        # Move to the next exception in the chain
+        if hasattr(current, '__cause__') and current.__cause__ is not None:
+            current = current.__cause__
+        elif hasattr(current, '__context__') and current.__context__ is not None:
+            current = current.__context__
+        else:
+            break
+    
+    return chain
+
+
 # Progress tracking constants
 PROGRESS_STAGES = {
     "document_processing": {
@@ -536,7 +611,24 @@ async def comprehensive_document_analysis(
                 )
 
     except Exception as e:
-        logger.error(f"Comprehensive analysis failed: {str(e)}", exc_info=True)
+        # Enhanced exception logging with full context chain
+        root_cause = _extract_root_cause(e)
+        context_info = {
+            "document_id": document_id,
+            "analysis_id": analysis_id,
+            "contract_id": contract_id,
+            "user_id": user_id,
+            "exception_type": type(e).__name__,
+            "root_cause_type": type(root_cause).__name__,
+            "root_cause_message": str(root_cause),
+            "full_exception_chain": _format_exception_chain(e)
+        }
+        
+        logger.error(
+            f"Comprehensive analysis failed: {str(e)}\nRoot cause: {str(root_cause)}", 
+            exc_info=True,
+            extra=context_info
+        )
 
         # Update progress with error
         try:
@@ -561,6 +653,9 @@ async def comprehensive_document_analysis(
                 except Exception as fetch_err:
                     logger.warning(f"Could not fetch last progress: {fetch_err}")
 
+                # Include root cause in error message for better debugging
+                detailed_error_message = f"{str(e)} | Root cause: {str(root_cause)}"
+                
                 # Update progress preserving the last step and percentage for resume capability
                 await update_analysis_progress(
                     user_id,
@@ -568,21 +663,32 @@ async def comprehensive_document_analysis(
                     progress_percent=last_progress_percent,  # Preserve last progress
                     current_step=f"{last_step}_failed",  # Keep step info with failed suffix
                     step_description=f"Analysis failed at {last_step}. Ready to resume from this point.",
-                    error_message=str(e),
+                    error_message=detailed_error_message,
                 )
 
-            # Update analysis record with error using AnalysesRepository
+            # Update analysis record with enhanced error details
             analyses_repo = AnalysesRepository(use_service_role=True)
             await analyses_repo.update_analysis_status(
                 analysis_id,
                 status="failed",
-                error_details={"error_message": str(e)},
+                error_details={
+                    "error_message": str(e),
+                    "root_cause": str(root_cause),
+                    "exception_type": type(e).__name__,
+                    "root_cause_type": type(root_cause).__name__,
+                    "failed_at_step": last_step if 'last_step' in locals() else "unknown",
+                    "context": context_info
+                },
                 completed_at=datetime.now(timezone.utc),
             )
         except Exception as update_error:
-            logger.error(f"Failed to update error status: {str(update_error)}")
+            logger.error(
+                f"Failed to update error status: {str(update_error)}",
+                exc_info=True,
+                extra={"original_error": str(e), "root_cause": str(root_cause) if 'root_cause' in locals() else "unknown"}
+            )
 
-        # Re-raise for Celery retry logic
+        # Re-raise for Celery retry logic with preserved context
         raise
 
 

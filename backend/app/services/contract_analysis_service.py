@@ -1397,8 +1397,8 @@ async def ensure_contract(
         logger.info(f"Repository: Upserted contract record: {contract.id}")
         return str(contract.id)
     except Exception as repo_error:
-        logger.error(f"Repository contract upsert failed: {repo_error}")
-        raise ValueError("Failed to create or fetch contract record")
+        logger.error(f"Repository contract upsert failed: {repo_error}", exc_info=True)
+        raise ValueError("Failed to create or fetch contract record") from repo_error
 
 
 async def upsert_contract_analysis(
@@ -1426,8 +1426,8 @@ async def upsert_contract_analysis(
         logger.info(f"Repository: Upserted contract analysis: {analysis.id}")
         return str(analysis.id)
     except Exception as repo_error:
-        logger.error(f"Repository analysis upsert failed: {repo_error}")
-        raise ValueError("Failed to create analysis record")
+        logger.error(f"Repository analysis upsert failed: {repo_error}", exc_info=True)
+        raise ValueError("Failed to create analysis record") from repo_error
 
 
 # Service factory function
