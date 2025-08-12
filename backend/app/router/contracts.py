@@ -25,6 +25,8 @@ from app.schema.contract import (
 from app.clients.supabase.client import SupabaseClient
 from app.services.repositories.analyses_repository import AnalysesRepository
 from app.services.repositories.documents_repository import DocumentsRepository
+from app.services.repositories.contracts_repository import ContractsRepository
+from app.services.repositories.user_contract_views_repository import UserContractViewsRepository
 
 logger = logging.getLogger(__name__)
 
@@ -682,19 +684,39 @@ async def _create_contract_record_with_cache(
     user: User,
     content_hash: Optional[str] = None,
 ) -> str:
-    """Create contract record with cache integration."""
-    contract_data = {
-        "content_hash": content_hash,
-        "contract_type": document.get("contract_type", "purchase_agreement"),
-        "australian_state": user.australian_state,
-    }
+    """Create contract record with cache integration using repository pattern."""
+    try:
+        contracts_repo = ContractsRepository()
+        
+        # Extract property address from document if available
+        property_address = None
+        processing_results = document.get("processing_results", {})
+        if isinstance(processing_results, dict):
+            contract_terms = processing_results.get("contract_terms", {})
+            if isinstance(contract_terms, dict):
+                property_address = contract_terms.get("property_address")
+        
+        contract = await contracts_repo.upsert_contract_by_content_hash(
+            content_hash=content_hash,
+            contract_type=document.get("contract_type", "purchase_agreement"),
+            australian_state=user.australian_state,
+            metadata={
+                "property_address": property_address,
+                "file_name": document.get("original_filename", "unknown"),
+                "file_type": document.get("file_type", "pdf"),
+                "user_id": str(user.id)
+            }
+        )
 
-    contract_result = await db_client.database.insert("contracts", contract_data)
+        if not contract.id:
+            raise ValueError("Failed to create contract record via repository")
 
-    if not contract_result.get("success") or not contract_result.get("data"):
-        raise ValueError("Failed to create contract record")
+        logger.info(f"Repository: Created contract record: {contract.id}")
+        return str(contract.id)
 
-    return contract_result["data"]["id"]
+    except Exception as e:
+        logger.error(f"Contract repository create failed for content_hash {content_hash}: {str(e)}")
+        raise ValueError(f"Failed to create contract record: {str(e)}")
 
 
 @retry_database_operation(max_attempts=3)
@@ -847,36 +869,34 @@ async def get_contract_analysis(
             logger.info("AuthContext token check failed (non-fatal)")
 
         # First check if user has access to this contract through user_contract_views
-        access_result = await db_client.database.select(
-            "user_contract_views",
-            columns="content_hash",
-            filters={"user_id": str(user.id)},
+        user_contract_views_repo = UserContractViewsRepository()
+        user_contract_views = await user_contract_views_repo.get_user_contract_views(
+            str(user.id), limit=1000  # Get all user's contract views
         )
 
         user_content_hashes = []
-        if access_result.get("data"):
+        if user_contract_views:
             logger.info(
-                f"user_contract_views rows for user {user.id}: {len(access_result['data'])}"
+                f"user_contract_views rows for user {user.id}: {len(user_contract_views)}"
             )
             user_content_hashes = [
                 view["content_hash"]
-                for view in access_result["data"]
+                for view in user_contract_views
                 if view.get("content_hash")
             ]
 
         # Also check documents table for additional access
-        doc_access_result = await db_client.database.select(
-            "documents", columns="content_hash", filters={"user_id": str(user.id)}
-        )
-
-        if doc_access_result.get("data"):
+        docs_repo = DocumentsRepository()
+        user_documents = await docs_repo.list_user_documents(limit=1000)
+        
+        if user_documents:
             logger.info(
-                f"documents rows for user {user.id}: {len(doc_access_result['data'])}"
+                f"documents rows for user {user.id}: {len(user_documents)}"
             )
             doc_content_hashes = [
-                doc["content_hash"]
-                for doc in doc_access_result["data"]
-                if doc.get("content_hash")
+                doc.content_hash
+                for doc in user_documents
+                if doc.content_hash
             ]
             user_content_hashes.extend(doc_content_hashes)
 
@@ -895,15 +915,13 @@ async def get_contract_analysis(
         user_content_hashes = list(set(user_content_hashes))
 
         # Get contract by ID to get its content_hash
-        contract_result = await db_client.database.select(
-            "contracts", columns="*", filters={"id": contract_id}
-        )
+        contracts_repo = ContractsRepository()
+        contract = await contracts_repo.get_contract_by_id(contract_id)
 
-        if not contract_result.get("data"):
+        if not contract:
             raise HTTPException(status_code=404, detail="Contract not found")
 
-        contract = contract_result["data"][0]
-        content_hash = contract["content_hash"]
+        content_hash = contract.content_hash
         logger.info(
             f"Contract resolved: contract_id={contract_id}, content_hash={content_hash}"
         )
@@ -1043,30 +1061,28 @@ async def delete_contract_analysis(
             await db_client.initialize()
 
         # First check if user has access to this contract through user_contract_views
-        access_result = await db_client.database.select(
-            "user_contract_views",
-            columns="content_hash",
-            filters={"user_id": str(user.id)},
+        user_contract_views_repo = UserContractViewsRepository()
+        user_contract_views = await user_contract_views_repo.get_user_contract_views(
+            str(user.id), limit=1000  # Get all user's contract views
         )
 
         user_content_hashes = []
-        if access_result.get("data"):
+        if user_contract_views:
             user_content_hashes = [
                 view["content_hash"]
-                for view in access_result["data"]
+                for view in user_contract_views
                 if view.get("content_hash")
             ]
 
         # Also check documents table for additional access
-        doc_access_result = await db_client.database.select(
-            "documents", columns="content_hash", filters={"user_id": str(user.id)}
-        )
-
-        if doc_access_result.get("data"):
+        docs_repo = DocumentsRepository()
+        user_documents = await docs_repo.list_user_documents(limit=1000)
+        
+        if user_documents:
             doc_content_hashes = [
-                doc["content_hash"]
-                for doc in doc_access_result["data"]
-                if doc.get("content_hash")
+                doc.content_hash
+                for doc in user_documents
+                if doc.content_hash
             ]
             user_content_hashes.extend(doc_content_hashes)
 
@@ -1079,15 +1095,13 @@ async def delete_contract_analysis(
         user_content_hashes = list(set(user_content_hashes))
 
         # Get contract by ID to get its content_hash
-        contract_result = await db_client.database.select(
-            "contracts", columns="*", filters={"id": contract_id}
-        )
+        contracts_repo = ContractsRepository()
+        contract = await contracts_repo.get_contract_by_id(contract_id)
 
-        if not contract_result.get("data"):
+        if not contract:
             raise HTTPException(status_code=404, detail="Contract not found")
 
-        contract = contract_result["data"][0]
-        content_hash = contract["content_hash"]
+        content_hash = contract.content_hash
 
         # Verify the user has access to this specific content_hash
         if content_hash not in user_content_hashes:
@@ -1096,15 +1110,17 @@ async def delete_contract_analysis(
             )
 
         # Delete user's view of this contract (contracts and analyses are shared resources)
-        view_delete_result = await db_client.database.delete(
-            "user_contract_views",
-            filters={"user_id": str(user.id), "content_hash": content_hash},
-        )
+        # Find and delete the specific contract view by content_hash
+        user_views = await user_contract_views_repo.get_user_contract_views(str(user.id))
+        for view in user_views:
+            if view.get("content_hash") == content_hash:
+                await user_contract_views_repo.delete_contract_view(view["id"])
+                break
 
-        # Also remove user's document if they want to completely remove it
-        doc_delete_result = await db_client.database.delete(
-            "documents", filters={"content_hash": content_hash, "user_id": str(user.id)}
-        )
+        # Also remove user's documents with this content_hash
+        user_docs_with_hash = [doc for doc in user_documents if doc.content_hash == content_hash]
+        for doc in user_docs_with_hash:
+            await docs_repo.delete_document(doc.id)
 
         return {
             "message": "Contract analysis deleted successfully",

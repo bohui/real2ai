@@ -278,7 +278,11 @@ class TestWebSocketsRepositoryMigration:
         mock_docs_repo.get_document.return_value = self.mock_document
         mock_docs_repo.get_user_contract_views.return_value = []  # Empty to test user_contract_views creation
         
+        mock_contract_views_repo = AsyncMock()
+        mock_contract_views_repo.create_contract_view.return_value = True
+        
         with patch('app.router.websockets.DocumentsRepository', return_value=mock_docs_repo), \
+             patch('app.router.websockets.UserContractViewsRepository', return_value=mock_contract_views_repo), \
              patch('app.router.websockets.AuthContext') as mock_auth_ctx:
             
             mock_user_client = AsyncMock()
@@ -293,10 +297,13 @@ class TestWebSocketsRepositoryMigration:
         
         # Verify user_contract_views lookup was called
         mock_docs_repo.get_user_contract_views.assert_called_once_with(self.content_hash, self.user_id, limit=1)
+        
+        # Verify contract view creation was called (since we returned empty list)
+        mock_contract_views_repo.create_contract_view.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_user_client_database_usage_minimized(self):
-        """Test that user_client.database usage is minimized"""
+    async def test_user_client_database_usage_eliminated(self):
+        """Test that user_client.database usage is completely eliminated"""
         
         mock_websocket = AsyncMock()
         
@@ -313,6 +320,8 @@ class TestWebSocketsRepositoryMigration:
              patch('app.router.websockets.AuthContext') as mock_auth_ctx:
             
             mock_user_client = AsyncMock()
+            # Add database mock that should never be called
+            mock_user_client.database = Mock()
             mock_auth_ctx.get_authenticated_client.return_value = mock_user_client
             
             await handle_status_request(
@@ -324,9 +333,8 @@ class TestWebSocketsRepositoryMigration:
         mock_docs_repo.get_user_contract_views.assert_called_once()
         mock_progress_repo.get_latest_progress.assert_called_once()
         
-        # user_client.database should only be used for user_contract_views creation (if needed)
-        # Since we mocked existing views, it should not be called at all
-        assert not hasattr(mock_user_client, 'database') or not getattr(mock_user_client.database, 'called', False)
+        # user_client.database should NEVER be called now that migration is complete
+        mock_user_client.database.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_uuid_conversion_handled(self):

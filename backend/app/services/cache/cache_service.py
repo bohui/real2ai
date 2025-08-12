@@ -12,6 +12,7 @@ from app.clients.supabase.client import SupabaseClient
 from app.core.auth_context import AuthContext
 from app.clients.factory import get_service_supabase_client
 from app.services.repositories.analyses_repository import AnalysesRepository
+from app.services.repositories.contracts_repository import ContractsRepository
 
 logger = logging.getLogger(__name__)
 
@@ -192,18 +193,11 @@ class CacheService:
                 analysis_id = record.get("analysis_id")
                 view_id = record.get("view_id")
 
-                # Get contract_id from shared contracts table (no user_id filter needed)
-                contract_result = await self.db_client.database.select(
-                    "contracts",
-                    columns="id",
-                    filters={"content_hash": content_hash},
-                )
-
-                contract_id = (
-                    contract_result["data"][0]["id"]
-                    if contract_result.get("data")
-                    else None
-                )
+                # Get contract_id from shared contracts table using repository
+                contracts_repo = ContractsRepository()
+                contract = await contracts_repo.get_contract_by_content_hash(content_hash)
+                
+                contract_id = str(contract.id) if contract else None
 
                 logger.info(
                     f"Created user records from cache hit: doc={document_id}, contract={contract_id}, analysis={analysis_id}"
@@ -237,6 +231,7 @@ class CacheService:
             property_hash = self.generate_property_hash(address)
 
             # Check property_data table directly (RLS disabled for caching)
+            # INTENTIONAL EXCEPTION: Direct DB access for cache performance
             cache_result = await self.db_client.database.select(
                 "property_data",
                 columns="*",
@@ -303,23 +298,22 @@ class CacheService:
         try:
             property_hash = self.generate_property_hash(address)
 
-            view_data = {
-                "user_id": user_id,
-                "property_hash": property_hash,
-                "property_address": address,
-                "source": source,
-            }
+            # Log property view using repository
+            from app.services.repositories.user_property_views_repository import UserPropertyViewsRepository
+            
+            property_views_repo = UserPropertyViewsRepository()
+            success = await property_views_repo.create_property_view(
+                user_id=user_id,
+                property_hash=property_hash,
+                property_address=address,
+                source=source
+            )
 
-            # Get user client for RLS
-            # Use isolated client to prevent JWT token race conditions in concurrent tasks
-            user_client = await AuthContext.get_authenticated_client(isolated=True)
-            result = await user_client.database.insert("user_property_views", view_data)
-
-            if result.get("success"):
+            if success:
                 logger.debug(f"Logged property view for user {user_id}: {address}")
                 return True
             else:
-                logger.error(f"Failed to log property view: {result.get('error')}")
+                logger.error("Failed to log property view")
                 return False
 
         except Exception as e:
@@ -453,6 +447,7 @@ class CacheService:
             analyses_stats = await analyses_repo.get_analysis_stats()
 
             # Get property data stats from source table
+            # INTENTIONAL EXCEPTION: Direct DB access for analytics performance
             property_stats = await self.db_client.database.select(
                 "property_data",
                 columns="COUNT(*) as total, AVG(processing_time) as avg_processing_time",

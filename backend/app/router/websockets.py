@@ -54,9 +54,6 @@ async def check_document_cache_status(document_id: str, user_id: str) -> Dict[st
     """
 
     try:
-        # Get authenticated client
-        user_client = await AuthContext.get_authenticated_client(require_auth=True)
-
         # Get document with user context (RLS enforced)
         docs_repo = DocumentsRepository()
         document = await docs_repo.get_document(UUID(document_id))
@@ -922,12 +919,7 @@ async def handle_status_request(
     websocket: WebSocket, document_id: str, contract_id: Optional[str], user_id: str
 ):
     """Handle status request with user context (RLS enforced)."""
-    from app.core.auth_context import AuthContext
-
     try:
-        # Get user-authenticated client (respects RLS)
-        user_client = await AuthContext.get_authenticated_client(require_auth=True)
-
         # First get the content_hash from the document
         docs_repo = DocumentsRepository()
         document = await docs_repo.get_document(UUID(document_id))
@@ -961,16 +953,15 @@ async def handle_status_request(
         if not user_contract_views:
             # Create a user_contract_views entry to ensure access to contracts and analyses
             try:
-                # Need to create user_contract_views entry - using user_client database temporarily
-                # TODO: Create UserContractViewsRepository for this operation
-                await user_client.database.create(
-                    "user_contract_views",
-                    {
-                        "user_id": user_id,
-                        "content_hash": content_hash,
-                        "property_address": getattr(document, "property_address", None),
-                        "source": "upload",
-                    },
+                # Create user_contract_views entry using repository
+                from app.services.repositories.user_contract_views_repository import UserContractViewsRepository
+                
+                contract_views_repo = UserContractViewsRepository()
+                await contract_views_repo.create_contract_view(
+                    user_id=user_id,
+                    content_hash=content_hash,
+                    property_address=getattr(document, "property_address", None),
+                    source="upload"
                 )
                 logger.info(
                     f"Created user_contract_views entry for user {user_id} and content_hash {content_hash}"
@@ -1062,9 +1053,6 @@ async def handle_cancellation_request(
     )
 
     try:
-        # Get authenticated client
-        user_client = await AuthContext.get_authenticated_client(require_auth=True)
-
         # Get the content_hash from the document
         docs_repo = DocumentsRepository()
         document = await docs_repo.get_document(UUID(document_id))
@@ -1185,9 +1173,6 @@ async def _dispatch_analysis_task(
 ) -> Dict[str, str]:
     """Helper function to dispatch analysis task with proper contract/analysis creation."""
     try:
-        # Get authenticated client
-        user_client = await AuthContext.get_authenticated_client(require_auth=True)
-
         # Get document record
         docs_repo = DocumentsRepository()
         document_obj = await docs_repo.get_document(UUID(document_id))
