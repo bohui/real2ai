@@ -121,6 +121,7 @@ class ContentType(str, Enum):
 class DiagramType(str, Enum):
     SITE_PLAN = "site_plan"
     SEWER_DIAGRAM = "sewer_diagram"
+    SERVICE_LOCATION_DIAGRAM = "service_location_diagram"
     FLOOD_MAP = "flood_map"
     BUSHFIRE_MAP = "bushfire_map"
     TITLE_PLAN = "title_plan"
@@ -139,8 +140,6 @@ class EntityType(str, Enum):
     LEGAL_REFERENCE = "legal_reference"
     CONTACT_INFO = "contact_info"
     PROPERTY_DETAILS = "property_details"
-
-
 
 
 # Base Model with Automatic Timestamps
@@ -260,11 +259,19 @@ class Analysis(TimestampedBaseModel):
     )
     agent_version: str = Field(default="1.0", max_length=50)
     status: str = Field(default="pending", max_length=20)
-    result: Optional[Dict[str, Any]] = Field(None, description="Analysis result in JSON format")
-    error_details: Optional[Dict[str, Any]] = Field(None, description="Error details if analysis failed")
+    result: Optional[Dict[str, Any]] = Field(
+        None, description="Analysis result in JSON format"
+    )
+    error_details: Optional[Dict[str, Any]] = Field(
+        None, description="Error details if analysis failed"
+    )
     started_at: Optional[datetime] = Field(None, description="Analysis start time")
-    completed_at: Optional[datetime] = Field(None, description="Analysis completion time")
-    user_id: Optional[UUID] = Field(None, description="User who initiated analysis, null for shared analyses")
+    completed_at: Optional[datetime] = Field(
+        None, description="Analysis completion time"
+    )
+    user_id: Optional[UUID] = Field(
+        None, description="User who initiated analysis, null for shared analyses"
+    )
 
 
 # Artifact Models (Content-Addressed Cache System)
