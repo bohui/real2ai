@@ -7,7 +7,7 @@ It includes common functionality like user authentication, error handling, and m
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from datetime import datetime, timezone
 
 from app.core.auth_context import AuthContext
@@ -157,18 +157,39 @@ class DocumentProcessingNodeBase(ABC):
             isinstance(error, (PermissionError, ValueError)) and "auth" in str(error).lower()
         )
         
+        # Extract root cause and exception chain for better debugging
+        root_cause = self._extract_root_cause(error)
+        exception_chain = self._format_exception_chain(error)
+        
+        # Add root cause information to error details
+        error_details.update({
+            "root_cause_type": type(root_cause).__name__,
+            "root_cause_message": str(root_cause),
+            "exception_chain": exception_chain,
+            "node_location": f"{self.__class__.__module__}.{self.__class__.__name__}"
+        })
+        
         if is_auth_error:
             error_details["error_category"] = "authentication"
             self.logger.error(
-                f"[{self.node_name}] AUTHENTICATION ERROR - {error_message}: {error}",
+                f"[{self.node_name}] AUTHENTICATION ERROR - {error_message}: {error}\nRoot cause: {root_cause}",
                 exc_info=True,
-                extra={"context": context, "auth_error": True}
+                extra={
+                    "context": context, 
+                    "auth_error": True,
+                    "root_cause": str(root_cause),
+                    "exception_chain": exception_chain
+                }
             )
         else:
             self.logger.error(
-                f"[{self.node_name}] {error_message}: {error}",
+                f"[{self.node_name}] {error_message}: {error}\nRoot cause: {root_cause}",
                 exc_info=True,
-                extra={"context": context}
+                extra={
+                    "context": context,
+                    "root_cause": str(root_cause),
+                    "exception_chain": exception_chain
+                }
             )
         
         # Update state with error
@@ -267,6 +288,204 @@ class DocumentProcessingNodeBase(ABC):
             self._log_warning(f"Error checking prerequisites: {e}")
             return False
     
+    def _should_continue_after_error(self, error: Exception, state: DocumentProcessingState) -> bool:
+        """
+        Determine if workflow should continue after an error or fail completely.
+        
+        Args:
+            error: The exception that occurred
+            state: Current processing state
+            
+        Returns:
+            bool: True if workflow should continue with degraded functionality
+        """
+        # Authentication errors should generally stop the workflow
+        if "authentication" in str(error).lower() or "unauthorized" in str(error).lower():
+            return False
+            
+        # Critical system errors should stop the workflow
+        if isinstance(error, (MemoryError, SystemExit, KeyboardInterrupt)):
+            return False
+            
+        # Document not found or access errors should stop workflow
+        if "document not found" in str(error).lower() or "access denied" in str(error).lower():
+            return False
+            
+        # For other errors, allow workflow to continue with degraded functionality
+        return True
+    
+    def _create_fallback_state(self, state: DocumentProcessingState, error: Exception) -> DocumentProcessingState:
+        """
+        Create a fallback state that allows workflow to continue despite errors.
+        
+        Args:
+            state: Current processing state
+            error: The exception that occurred
+            
+        Returns:
+            Updated state with fallback values
+        """
+        fallback_state = state.copy()
+        
+        # Mark as degraded processing
+        fallback_state["degraded_processing"] = True
+        fallback_state["degradation_reason"] = str(error)
+        fallback_state["degraded_nodes"] = fallback_state.get("degraded_nodes", []) + [self.node_name]
+        
+        # Provide minimal fallback data based on node type
+        if "extract" in self.node_name.lower():
+            # Text extraction failed - provide empty but valid structure
+            from app.schema.document import TextExtractionResult
+            fallback_state["text_extraction_result"] = TextExtractionResult(
+                success=False,
+                error=f"Text extraction failed: {str(error)}",
+                full_text="[Text extraction failed - document processing continued with reduced functionality]",
+                pages=[],
+                total_pages=0,
+                extraction_methods=["fallback"],
+                overall_confidence=0.0,
+                processing_time=0.0
+            )
+        elif "validation" in self.node_name.lower():
+            # Validation failed - mark as low quality but continue
+            fallback_state["quality_validation_result"] = {
+                "passed": False,
+                "score": 0.0,
+                "reason": f"Validation failed: {str(error)}",
+                "fallback": True
+            }
+        elif "analysis" in self.node_name.lower():
+            # Analysis failed - provide empty analysis
+            fallback_state["analysis_result"] = {
+                "success": False,
+                "error": str(error),
+                "results": {},
+                "fallback": True
+            }
+        
+        self._log_warning(f"Created fallback state for failed node {self.node_name}: {error}")
+        return fallback_state
+    
+    def _handle_error_with_graceful_degradation(
+        self,
+        state: DocumentProcessingState,
+        error: Exception,
+        error_message: str,
+        context: Optional[Dict[str, Any]] = None
+    ) -> DocumentProcessingState:
+        """
+        Handle errors with graceful degradation - allows workflow to continue when possible.
+        
+        Args:
+            state: Current state
+            error: Exception that occurred
+            error_message: Human-readable error description
+            context: Additional error context
+            
+        Returns:
+            Updated state with error information and possible fallback data
+        """
+        # First, handle the error normally
+        error_state = self._handle_error(state, error, error_message, context)
+        
+        # Then determine if we should try to continue
+        if self._should_continue_after_error(error, state):
+            try:
+                # Create fallback state to allow workflow continuation
+                fallback_state = self._create_fallback_state(error_state, error)
+                
+                # Clear the processing_failed flag to allow continuation
+                fallback_state["processing_failed"] = False
+                fallback_state["node_failed"] = self.node_name  # Track which node failed
+                
+                self._log_info(
+                    f"Graceful degradation: workflow will continue despite {self.node_name} failure",
+                    extra={"error": str(error), "degraded_nodes": fallback_state.get("degraded_nodes", [])}
+                )
+                
+                return fallback_state
+                
+            except Exception as fallback_error:
+                self._log_warning(f"Fallback creation failed: {fallback_error}")
+                # Return the original error state if fallback fails
+                return error_state
+        else:
+            self._log_info(f"Critical error in {self.node_name}, workflow cannot continue")
+            return error_state
+    
     def __repr__(self) -> str:
         """String representation of the node."""
         return f"{self.__class__.__name__}(node_name='{self.node_name}')"
+    
+    def _extract_root_cause(self, exception: Exception) -> Exception:
+        """
+        Extract the root cause from an exception chain.
+        
+        Args:
+            exception: The exception to analyze
+            
+        Returns:
+            The root cause exception (the original exception that started the chain)
+        """
+        current = exception
+        while hasattr(current, '__cause__') and current.__cause__ is not None:
+            current = current.__cause__
+        
+        # Also check for __context__ which is used for implicit exception chaining
+        while hasattr(current, '__context__') and current.__context__ is not None:
+            if not hasattr(current, '__cause__') or current.__cause__ is None:
+                # Only follow __context__ if there's no explicit __cause__
+                current = current.__context__
+            else:
+                break
+        
+        return current
+    
+    def _format_exception_chain(self, exception: Exception) -> List[str]:
+        """
+        Format the full exception chain as a list of strings for logging.
+        
+        Args:
+            exception: The exception to format
+            
+        Returns:
+            List of formatted exception strings showing the full chain
+        """
+        chain = []
+        current = exception
+        seen = set()  # Prevent infinite loops in circular references
+        
+        while current is not None:
+            # Prevent infinite loops
+            exception_id = id(current)
+            if exception_id in seen:
+                break
+            seen.add(exception_id)
+            
+            # Format current exception
+            exc_info = {
+                'type': type(current).__name__,
+                'message': str(current),
+                'module': getattr(type(current), '__module__', 'unknown')
+            }
+            
+            # Add file and line info if available
+            if hasattr(current, '__traceback__') and current.__traceback__:
+                tb = current.__traceback__
+                while tb.tb_next:
+                    tb = tb.tb_next  # Get the deepest traceback
+                exc_info['file'] = tb.tb_frame.f_code.co_filename
+                exc_info['line'] = tb.tb_lineno
+                exc_info['function'] = tb.tb_frame.f_code.co_name
+            
+            chain.append(f"{exc_info['type']}: {exc_info['message']} (in {exc_info.get('function', 'unknown')} at {exc_info.get('file', 'unknown')}:{exc_info.get('line', 'unknown')})")
+            
+            # Move to the next exception in the chain
+            if hasattr(current, '__cause__') and current.__cause__ is not None:
+                current = current.__cause__
+            elif hasattr(current, '__context__') and current.__context__ is not None:
+                current = current.__context__
+            else:
+                break
+        
+        return chain

@@ -424,7 +424,9 @@ class ContractAnalysisWorkflow:
 
         try:
             # If already inside an async loop (unexpected here), run in a thread
-            asyncio.get_running_loop()
+            loop = asyncio.get_running_loop()
+            if loop is None:
+                raise RuntimeError("No running event loop found")
             import concurrent.futures
 
             # Capture the current context (includes LangSmith trace contextvars)
@@ -451,17 +453,38 @@ class ContractAnalysisWorkflow:
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
                 result = executor.submit(run_in_thread).result()
                 return result
-        except RuntimeError:
-            # No running loop; use or create a persistent loop for this workflow instance
+        except (RuntimeError, AttributeError, ImportError) as loop_error:
+            # No running loop, asyncio not available, or loop detection failed
+            logger.debug(f"[Workflow] No running loop detected ({type(loop_error).__name__}: {loop_error}), creating persistent loop")
+            # No running loop; use or create a persistent loop for this workflow instance  
             import asyncio as _asyncio
+            
+            logger.debug(f"[Workflow] Creating persistent event loop for workflow {id(self)}")
 
             if self._event_loop is None or self._event_loop.is_closed():
-                self._event_loop = _asyncio.new_event_loop()
+                try:
+                    self._event_loop = _asyncio.new_event_loop()
+                    logger.debug(f"[Workflow] Created new event loop: {id(self._event_loop)}")
+                except Exception as create_error:
+                    logger.error(f"[Workflow] Failed to create event loop: {create_error}")
+                    raise RuntimeError(f"Cannot create event loop: {create_error}") from create_error
             try:
+                logger.debug(f"[Workflow] Running node coroutine in persistent loop {id(self._event_loop)}")
                 result = self._event_loop.run_until_complete(node_coroutine)
+                logger.debug(f"[Workflow] Node execution completed successfully")
+            except Exception as exec_error:
+                logger.error(f"[Workflow] Node execution failed in persistent loop: {exec_error}")
+                # If the loop is corrupted, recreate it for next time
+                if self._event_loop and not self._event_loop.is_closed():
+                    try:
+                        self._event_loop.close()
+                    except Exception:
+                        pass
+                    self._event_loop = None
+                raise
             finally:
                 # Do not close persistent loop; reuse across nodes
-                pass
+                logger.debug(f"[Workflow] Persistent loop {id(self._event_loop if self._event_loop else 'None')} preserved for reuse")
             try:
                 from app.core.auth_context import AuthContext
 

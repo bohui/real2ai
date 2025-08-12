@@ -191,6 +191,7 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                         document_id=document_id,
                         storage_path=storage_path,
                         file_type=normalized_file_type,
+                        state=state,
                         file_content=file_content,
                     )
                 )
@@ -232,6 +233,7 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                             document_id=document_id,
                             storage_path=storage_path,
                             file_type=normalized_file_type,
+                            state=state,
                             file_content=file_content,
                         )
                     )
@@ -312,7 +314,8 @@ class ExtractTextNode(DocumentProcessingNodeBase):
             return updated_state
 
         except Exception as e:
-            return self._handle_error(
+            # Use graceful degradation to allow workflow to continue if possible
+            return self._handle_error_with_graceful_degradation(
                 state,
                 e,
                 f"Text extraction failed: {str(e)}",
@@ -510,6 +513,7 @@ class ExtractTextNode(DocumentProcessingNodeBase):
         document_id: str,
         storage_path: str,
         file_type: str,
+        state: DocumentProcessingState,
         file_content: Optional[bytes] = None,
     ) -> TextExtractionResult:
         """
@@ -524,6 +528,8 @@ class ExtractTextNode(DocumentProcessingNodeBase):
             document_id: Document ID for logging
             storage_path: Path to file in storage
             file_type: MIME type of the file
+            state: Current processing state for context
+            file_content: Optional pre-downloaded file content
 
         Returns:
             TextExtractionResult with extracted text and analysis

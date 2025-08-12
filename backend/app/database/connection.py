@@ -401,8 +401,17 @@ async def get_service_role_connection() -> AsyncGenerator[asyncpg.Connection, No
         await _setup_service_session(connection)
         yield connection
     finally:
-        await pool.release(connection)
-        logger.debug("[DB] Released service-role connection back to pool")
+        try:
+            await pool.release(connection)
+            logger.debug("[DB] Released service-role connection back to pool")
+        except (RuntimeError, Exception) as e:
+            logger.error(f"Failed to release service role connection: {e}")
+            # Force close if event loop is dead
+            try:
+                if hasattr(connection, 'close') and not connection.is_closed():
+                    connection.close()
+            except Exception:
+                pass  # Ignore final cleanup errors
 
 
 @asynccontextmanager
@@ -451,20 +460,33 @@ async def get_user_connection(
         raise
     finally:
         try:
-            # Reset GUCs in shared mode to prevent bleed-over
-            if settings.db_pool_mode == "shared":
-                await _reset_session_gucs(connection)
+            # Check if we can still run async operations
+            try:
+                # Reset GUCs in shared mode to prevent bleed-over
+                if settings.db_pool_mode == "shared":
+                    await _reset_session_gucs(connection)
+            except (RuntimeError, Exception) as e:
+                # Event loop might be closed or other async context issues
+                logger.warning(f"Failed to reset session GUCs for user {user_id}: {e}")
         except Exception as e:
-            logger.warning(f"Failed to reset session GUCs for user {user_id}: {e}")
+            logger.warning(f"Error in GUC cleanup for user {user_id}: {e}")
 
         try:
+            # Attempt to release connection gracefully
             await pool.release(connection)
             logger.debug(
                 "[DB] Released user connection",
                 extra={"user_id": str(user_id), "pool_mode": settings.db_pool_mode},
             )
-        except Exception as e:
+        except (RuntimeError, Exception) as e:
+            # Event loop closed or connection already released
             logger.error(f"Failed to release connection for user {user_id}: {e}")
+            # In extreme cases, force close the connection if possible
+            try:
+                if hasattr(connection, 'close') and not connection.is_closed():
+                    connection.close()
+            except Exception:
+                pass  # Ignore final cleanup errors
 
 
 async def execute_raw_sql(query: str, *args, user_id: Optional[UUID] = None) -> Any:

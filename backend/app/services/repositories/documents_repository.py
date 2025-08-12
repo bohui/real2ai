@@ -11,6 +11,7 @@ from uuid import UUID
 from dataclasses import dataclass
 from datetime import datetime
 import logging
+import json
 
 from app.database.connection import get_user_connection
 
@@ -199,8 +200,8 @@ class DocumentsRepository:
 
             if error_details is not None:
                 param_count += 1
-                set_clauses.append(f"processing_errors = ${param_count}")
-                params.append(error_details)
+                set_clauses.append(f"processing_errors = ${param_count}::jsonb")
+                params.append(json.dumps(error_details) if error_details is not None else None)
 
             if processing_started_at is not None:
                 param_count += 1
@@ -394,8 +395,8 @@ class DocumentsRepository:
 
             if error_details is not None:
                 param_count += 1
-                set_clauses.append(f"processing_errors = ${param_count}")
-                query_params.append(error_details)
+                set_clauses.append(f"processing_errors = ${param_count}::jsonb")
+                query_params.append(json.dumps(error_details) if error_details is not None else None)
 
             param_count += 1
             query_params.append(document_ids)
@@ -540,10 +541,10 @@ class DocumentsRepository:
             result = await conn.execute(
                 """
                 UPDATE documents 
-                SET processing_results = $1, updated_at = now()
+                SET processing_results = $1::jsonb, updated_at = now()
                 WHERE id = $2
                 """,
-                results,
+                json.dumps(results) if results is not None else None,
                 document_id,
             )
             return result.split()[-1] == "1"
@@ -570,11 +571,11 @@ class DocumentsRepository:
                 result = await conn.execute(
                     """
                     UPDATE documents 
-                    SET processing_status = $1, processing_results = $2, updated_at = now()
+                    SET processing_status = $1, processing_results = $2::jsonb, updated_at = now()
                     WHERE id = $3
                     """,
                     status,
-                    results,
+                    json.dumps(results) if results is not None else None,
                     document_id,
                 )
             else:
