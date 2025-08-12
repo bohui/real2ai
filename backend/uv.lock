@@ -3094,6 +3094,12 @@ test = [
     { name = "responses" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "asyncpg", specifier = "==0.29.0" },
@@ -3154,6 +3160,12 @@ requires-dist = [
     { name = "websockets", specifier = ">=13.0.0" },
 ]
 provides-extras = ["dev", "test", "docs"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=7.4.4" },
+    { name = "pytest-asyncio", specifier = ">=0.23.8" },
+]
 
 [[package]]
 name = "realtime"

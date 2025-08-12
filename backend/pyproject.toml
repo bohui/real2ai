@@ -217,3 +217,9 @@ module = [
     "redis.*",
 ]
 ignore_missing_imports = true
+
+[dependency-groups]
+dev = [
+    "pytest>=7.4.4",
+    "pytest-asyncio>=0.23.8",
+]
