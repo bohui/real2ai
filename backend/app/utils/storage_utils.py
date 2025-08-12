@@ -13,8 +13,13 @@ from app.clients.factory import get_service_supabase_client
 class ArtifactStorageService:
     """Service for storing and retrieving text artifacts from object storage"""
     
-    def __init__(self):
-        self.bucket_name = "document-artifacts"
+    def __init__(self, bucket_name: str = "documents"):
+        """Initialize storage service with configurable bucket name.
+        
+        Args:
+            bucket_name: Name of the storage bucket to use (default: 'documents')
+        """
+        self.bucket_name = bucket_name
     
     async def upload_text_blob(self, content: str, content_hmac: str) -> Tuple[str, str]:
         """
@@ -42,8 +47,19 @@ class ArtifactStorageService:
         client = await get_service_supabase_client()
         
         try:
+            # Verify bucket exists before upload
+            try:
+                storage_client = client.storage().from_(self.bucket_name)
+                # Try to list bucket contents to verify access
+                storage_client.list()
+            except Exception as bucket_error:
+                raise RuntimeError(
+                    f"Storage bucket '{self.bucket_name}' not found or not accessible: {bucket_error}. "
+                    f"Please ensure the bucket exists in Supabase storage."
+                )
+            
             # Upload file content
-            result = client.storage().from_(self.bucket_name).upload(
+            result = storage_client.upload(
                 path=storage_path,
                 file=content_bytes,
                 file_options={
@@ -60,7 +76,11 @@ class ArtifactStorageService:
             return uri, sha256_hash
             
         except Exception as e:
-            raise RuntimeError(f"Storage upload failed for {storage_path}: {e}")
+            # Provide more helpful error context
+            error_msg = f"Storage upload failed for {storage_path}: {e}"
+            if "bucket not found" in str(e).lower():
+                error_msg += f" (Verify '{self.bucket_name}' bucket exists in Supabase)"
+            raise RuntimeError(error_msg)
     
     async def download_text_blob(self, uri: str) -> str:
         """
@@ -194,7 +214,18 @@ class ArtifactStorageService:
         client = await get_service_supabase_client()
         
         try:
-            result = client.storage().from_(self.bucket_name).upload(
+            # Verify bucket exists before upload
+            try:
+                storage_client = client.storage().from_(self.bucket_name)
+                # Try to list bucket contents to verify access
+                storage_client.list()
+            except Exception as bucket_error:
+                raise RuntimeError(
+                    f"Storage bucket '{self.bucket_name}' not found or not accessible: {bucket_error}. "
+                    f"Please ensure the bucket exists in Supabase storage."
+                )
+            
+            result = storage_client.upload(
                 path=storage_path,
                 file=content_bytes,
                 file_options={
@@ -210,7 +241,11 @@ class ArtifactStorageService:
             return uri, sha256_hash
             
         except Exception as e:
-            raise RuntimeError(f"Paragraph text upload failed for {storage_path}: {e}")
+            # Provide more helpful error context
+            error_msg = f"Paragraph text upload failed for {storage_path}: {e}"
+            if "bucket not found" in str(e).lower():
+                error_msg += f" (Verify '{self.bucket_name}' bucket exists in Supabase)"
+            raise RuntimeError(error_msg)
     
     async def cleanup_orphaned_blobs(self, active_uris: list[str]) -> int:
         """

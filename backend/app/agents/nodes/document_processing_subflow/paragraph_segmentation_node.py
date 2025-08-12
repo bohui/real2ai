@@ -61,7 +61,8 @@ class ParagraphSegmentationNode(DocumentProcessingNodeBase):
     def __init__(self):
         super().__init__("paragraph_segmentation")
         self.artifacts_repo = ArtifactsRepository()
-        self.storage_service = ArtifactStorageService()
+        # Use 'documents' bucket to match the rest of the application
+        self.storage_service = ArtifactStorageService(bucket_name="documents")
         
         # Get configuration
         settings = get_settings()

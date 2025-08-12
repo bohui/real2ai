@@ -74,7 +74,8 @@ class ExtractTextNode(DocumentProcessingNodeBase):
         if not self.artifacts_repo:
             self.artifacts_repo = ArtifactsRepository()
         if not self.storage_service:
-            self.storage_service = ArtifactStorageService()
+            # Use 'documents' bucket to match application configuration
+            self.storage_service = ArtifactStorageService(bucket_name="documents")
 
     async def cleanup(self):
         """Clean up artifacts repository connection"""
