@@ -32,6 +32,13 @@ const normalizeStepKey = (step: string): string => {
       return "generating_recommendations";
     case "compile_report":
       return "compiling_report";
+    // Newer backend step names to align with UI
+    case "validate_final_output":
+      // Treat final validation as our finalizing/compiling step in UI
+      return "compiling_report";
+    case "analyze_contract_diagrams":
+      // Map to closest existing UI phase
+      return "extracting_terms";
     default:
       return step;
   }
@@ -137,7 +144,9 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
         contractType,
         state,
       );
-      logger.upload("Upload API response received", { documentId: response.document_id });
+      logger.upload("Upload API response received", {
+        documentId: response.document_id,
+      });
 
       // Get document details
       logger.debug("Fetching document details");
@@ -225,13 +234,17 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
         australian_state: state,
       });
 
-      logger.info("Contract prepared successfully", { contractId: response.contract_id });
+      logger.info("Contract prepared successfully", {
+        contractId: response.contract_id,
+      });
 
       // Connect WebSocket immediately with the contract_id
       logger.websocket("Connecting WebSocket for real-time updates");
       await get().connectWebSocket(response.contract_id);
 
-      logger.info("Contract prepared and WebSocket connected", { contractId: response.contract_id });
+      logger.info("Contract prepared and WebSocket connected", {
+        contractId: response.contract_id,
+      });
       return response.contract_id;
     } catch (error: unknown) {
       console.error(
@@ -274,7 +287,9 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
     }
 
     // Disconnect existing connection
-    logger.websocket("Disconnecting any existing WebSocket connection (connectDocumentWebSocket)");
+    logger.websocket(
+      "Disconnecting any existing WebSocket connection (connectDocumentWebSocket)",
+    );
     get().disconnectWebSocket();
 
     // Use connection manager to prevent duplicate connections
@@ -410,7 +425,9 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
           if (
             data.data?.status === "completed" ||
             progressData.progress_percent >= 100 ||
-            progressData.current_step === "analysis_complete"
+            progressData.current_step === "analysis_complete" ||
+            // Backend emits final validation step at ~95%. Treat this as completion trigger to fetch results.
+            data.data?.current_step === "validate_final_output"
           ) {
             const cid = data.data?.contract_id || get().currentContractId;
             if (cid) {
@@ -701,7 +718,8 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
           if (
             data.data?.status === "completed" ||
             progressData.progress_percent >= 100 ||
-            progressData.current_step === "analysis_complete"
+            progressData.current_step === "analysis_complete" ||
+            data.data?.current_step === "validate_final_output"
           ) {
             console.log(
               "🧾 Progress indicates completion (contract), fetching results for:",
