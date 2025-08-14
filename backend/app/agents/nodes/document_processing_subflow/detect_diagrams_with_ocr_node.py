@@ -63,6 +63,7 @@ class DetectDiagramsWithOCRNode(DocumentProcessingNodeBase):
         try:
             document_id = state.get("document_id")
             storage_path = state.get("storage_path")
+            local_tmp_path = state.get("local_tmp_path")
             text_extraction_result = state.get("text_extraction_result")
 
             if not document_id or not storage_path:
@@ -75,7 +76,11 @@ class DetectDiagramsWithOCRNode(DocumentProcessingNodeBase):
 
             logger.info(
                 f"Starting per-page OCR-based diagram detection for document {document_id}",
-                extra={"document_id": document_id, "storage_path": storage_path},
+                extra={
+                    "document_id": document_id,
+                    "storage_path": storage_path,
+                    "local_tmp_exists": bool(local_tmp_path),
+                },
             )
 
             # Load settings and check if diagram detection is enabled
@@ -155,9 +160,33 @@ class DetectDiagramsWithOCRNode(DocumentProcessingNodeBase):
                         ).startswith("llm_ocr_hint_page_"):
                             page_no = getattr(va, "page_number", None)
                             if isinstance(page_no, int) and page_no >= 1:
-                                d_type = (getattr(va, "diagram_meta", {}) or {}).get(
-                                    "type", "unknown"
-                                )
+                                # diagram_meta can be a dict-like object, a Pydantic model, or a JSON string
+                                raw_meta = getattr(va, "diagram_meta", None)
+                                meta_dict = {}
+                                try:
+                                    if raw_meta is None:
+                                        meta_dict = {}
+                                    elif isinstance(raw_meta, str):
+                                        import json as _json
+
+                                        try:
+                                            meta_dict = _json.loads(raw_meta) or {}
+                                        except Exception:
+                                            meta_dict = {}
+                                    elif hasattr(raw_meta, "model_dump"):
+                                        # Pydantic v2 BaseModel
+                                        meta_dict = raw_meta.model_dump() or {}
+                                    elif hasattr(raw_meta, "dict"):
+                                        # Pydantic v1 BaseModel
+                                        meta_dict = raw_meta.dict() or {}
+                                    elif isinstance(raw_meta, dict):
+                                        meta_dict = raw_meta
+                                    else:
+                                        meta_dict = {}
+                                except Exception:
+                                    meta_dict = {}
+
+                                d_type = (meta_dict or {}).get("type", "unknown")
                                 existing_llm_hints[page_no] = d_type or "unknown"
                     if existing_llm_hints:
                         logger.info(
@@ -570,6 +599,20 @@ class DetectDiagramsWithOCRNode(DocumentProcessingNodeBase):
             File content as bytes
         """
         try:
+            # Prefer local tmp path if present in state to avoid re-downloading
+            try:
+                state = getattr(self, "_current_state", {}) or {}
+                local_tmp_path = state.get("local_tmp_path")
+                if local_tmp_path:
+                    import os
+
+                    if os.path.exists(local_tmp_path):
+                        with open(local_tmp_path, "rb") as f:
+                            data = f.read()
+                        return data
+            except Exception:
+                pass
+
             # Prefer authenticated user client for binary download from configured bucket
             try:
                 user_client = await self.get_user_client()

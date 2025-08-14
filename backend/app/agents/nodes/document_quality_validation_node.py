@@ -146,6 +146,12 @@ class DocumentQualityValidationNode(BaseNode):
         try:
             from app.core.prompts import PromptContext, ContextType
 
+            # Provide defaults for required context variables expected by templates/service mapping
+            australian_state_value = (metadata or {}).get("australian_state") or "NSW"
+            document_type_value = (metadata or {}).get("document_type") or "contract"
+            extraction_method_value = (metadata or {}).get("extraction_method") or "ocr"
+            analysis_timestamp_value = datetime.now(UTC).isoformat()
+
             context = PromptContext(
                 context_type=ContextType.VALIDATION,
                 variables={
@@ -158,6 +164,20 @@ class DocumentQualityValidationNode(BaseNode):
                         "key_terms_presence",
                         "readability",
                     ],
+                    # Template-required variables
+                    "australian_state": australian_state_value,
+                    "document_type": document_type_value,
+                    "extraction_method": extraction_method_value,
+                    "analysis_timestamp": analysis_timestamp_value,
+                    # Service mapping required variables (best-effort defaults)
+                    "extracted_text": text[:2000],
+                    "contract_type": (metadata or {}).get("contract_type")
+                    or "purchase_agreement",
+                    "user_type": (metadata or {}).get("user_type") or "general",
+                    "user_experience_level": (metadata or {}).get(
+                        "user_experience_level"
+                    )
+                    or "intermediate",
                 },
             )
 

@@ -42,6 +42,7 @@ class DocumentProcessingState(TypedDict):
     - algorithm_version: Version of processing algorithm
     - params_fingerprint: Fingerprint of processing parameters
     - text_extraction_result: Results from text extraction
+    - local_tmp_path: Local temp file path for the document (to avoid re-downloads)
     - diagram_processing_result: Results from diagram processing
 
     Output fields:
@@ -68,6 +69,7 @@ class DocumentProcessingState(TypedDict):
     content_hmac: Optional[str]
     algorithm_version: Optional[int]
     params_fingerprint: Optional[str]
+    local_tmp_path: Optional[str]
     text_extraction_result: Optional[Dict[str, Any]]
     diagram_processing_result: Optional[Dict[str, Any]]
 

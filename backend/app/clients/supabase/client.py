@@ -369,11 +369,11 @@ class SupabaseClient(BaseClient):
                     f"Could not check storage headers: {header_debug_error}"
                 )
 
-            # Upload file using Supabase storage API
+            # Upload file using Supabase storage API (run sync SDK call in a thread)
             self.logger.info(
                 f"Attempting upload with storage.from_('{bucket}').upload('{path}', file)"
             )
-            result = storage.from_(bucket).upload(path, file)
+            result = await asyncio.to_thread(storage.from_(bucket).upload, path, file)
 
             self.logger.info(f"File uploaded successfully to '{path}': {result}")
             return {"success": True, "path": path}
@@ -601,9 +601,9 @@ class SupabaseClient(BaseClient):
             # Get storage client
             storage = self.storage()
 
-            # List files using Supabase storage API
+            # List files using Supabase storage API (wrap sync SDK in thread)
             # The correct method is storage.from_(bucket).list(path=prefix)
-            result = storage.from_(bucket).list(path=prefix or "")
+            result = await asyncio.to_thread(storage.from_(bucket).list, prefix or "")
 
             files = []
             for item in result:
@@ -641,9 +641,11 @@ class SupabaseClient(BaseClient):
             # Get storage client
             storage = self.storage()
 
-            # Generate signed URL using Supabase storage API
+            # Generate signed URL using Supabase storage API (wrap sync SDK in thread)
             # The correct method is storage.from_(bucket).create_signed_url(path, expires_in)
-            result = storage.from_(bucket).create_signed_url(path, expires_in)
+            result = await asyncio.to_thread(
+                storage.from_(bucket).create_signed_url, path, expires_in
+            )
 
             self.logger.debug(f"Generated signed URL for '{path}'")
             return result.signed_url
@@ -660,9 +662,9 @@ class SupabaseClient(BaseClient):
             # Get storage client
             storage = self.storage()
 
-            # Get file info using Supabase storage API
+            # Get file info using Supabase storage API (wrap sync SDK in thread)
             # The correct method is storage.from_(bucket).list(path=path)
-            result = storage.from_(bucket).list(path=path)
+            result = await asyncio.to_thread(storage.from_(bucket).list, path)
 
             if not result:
                 raise ValueError(f"File not found: {path}")

@@ -67,7 +67,9 @@ class ArtifactStorageService:
                 file_options={
                     "content-type": "text/plain; charset=utf-8",
                     "cache-control": "3600",  # Cache for 1 hour
-                    "upsert": True,
+                    # Some SDK versions require header values to be strings
+                    # so ensure 'upsert' is passed as a string
+                    "upsert": "true",
                 },
             )
 
@@ -180,7 +182,7 @@ class ArtifactStorageService:
                     file_options={
                         "content-type": "text/plain; charset=utf-8",
                         "cache-control": "3600",
-                        "upsert": True,
+                        "upsert": "true",
                     },
                 )
             )
@@ -233,7 +235,7 @@ class ArtifactStorageService:
                 file_options={
                     "content-type": "text/markdown; charset=utf-8",
                     "cache-control": "3600",
-                    "upsert": True,
+                    "upsert": "true",
                 },
             )
 
@@ -285,7 +287,7 @@ class ArtifactStorageService:
                 file_options={
                     "content-type": "image/jpeg",
                     "cache-control": "86400",  # Cache for 24 hours
-                    "upsert": True,
+                    "upsert": "true",
                 },
             )
 
@@ -337,7 +339,7 @@ class ArtifactStorageService:
                 file_options={
                     "content-type": "application/json; charset=utf-8",
                     "cache-control": "3600",
-                    "upsert": True,
+                    "upsert": "true",
                 },
             )
 
@@ -404,7 +406,7 @@ class ArtifactStorageService:
                 file_options={
                     "content-type": content_type,
                     "cache-control": "86400",  # Cache for 24 hours
-                    "upsert": True,
+                    "upsert": "true",
                 },
             )
 

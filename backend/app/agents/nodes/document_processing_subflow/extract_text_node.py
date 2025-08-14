@@ -6,6 +6,8 @@ into a dedicated node for the document processing subflow.
 """
 
 from typing import Dict, Any, List, Optional, Tuple
+import os
+import tempfile
 from datetime import datetime, timezone
 
 from app.agents.subflows.document_processing_workflow import DocumentProcessingState
@@ -148,6 +150,25 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                     )
                     content_hmac = compute_content_hmac(file_content)
                     updated_state["content_hmac"] = content_hmac
+                    # Save a local tmp copy for downstream reuse (to avoid re-downloads)
+                    try:
+                        tmp_dir = tempfile.mkdtemp(prefix="r2a_doc_")
+                        file_name = (
+                            os.path.basename(storage_path) or f"{content_hmac}.bin"
+                        )
+                        local_path = os.path.join(tmp_dir, file_name)
+                        with open(local_path, "wb") as f:
+                            f.write(file_content)
+                        updated_state["local_tmp_path"] = local_path
+                        self._log_debug(
+                            f"Saved local tmp copy at {local_path}",
+                            local_tmp_path=local_path,
+                        )
+                    except Exception as tmp_err:
+                        self._log_debug(
+                            f"Failed to save local tmp copy: {tmp_err}",
+                            storage_path=storage_path,
+                        )
                     self._log_info(f"Computed content HMAC: {content_hmac}")
                 except Exception as e:
                     return self._handle_error(

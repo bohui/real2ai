@@ -184,6 +184,19 @@ class ContractTermsExtractionNode(BaseNode):
 
             # Get document metadata for context
             document_metadata = state.get("document_metadata", {})
+            # Required context for service mapping
+            australian_state_value = (
+                state.get("australian_state")
+                or document_metadata.get("australian_state")
+                or "NSW"
+            )
+            contract_type_value = state.get("contract_type") or "purchase_agreement"
+            user_type_value = state.get("user_type") or "general"
+            user_experience_level_value = (
+                state.get("user_experience_level")
+                or state.get("user_experience")
+                or "intermediate"
+            )
 
             context = PromptContext(
                 context_type=ContextType.EXTRACTION,
@@ -191,9 +204,11 @@ class ContractTermsExtractionNode(BaseNode):
                     "extracted_text": text[:8000],  # Limit for LLM processing
                     "document_metadata": document_metadata,
                     "extraction_type": "contract_terms",
-                    "contract_type": "property_contract",
-                    "user_type": "general",
-                    "user_experience_level": "intermediate",
+                    # Service mapping required variables
+                    "australian_state": australian_state_value,
+                    "contract_type": contract_type_value,
+                    "user_type": user_type_value,
+                    "user_experience_level": user_experience_level_value,
                     "extraction_timestamp": datetime.now(UTC).isoformat(),
                 },
             )
