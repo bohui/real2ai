@@ -305,19 +305,34 @@ Please provide a JSON response with the following structure:
             try:
                 from app.agents.tools.compliance import calculate_stamp_duty
 
-                stamp_duty_result = calculate_stamp_duty.invoke(
-                    {"contract_terms": contract_terms, "state": australian_state}
-                )
+                # Extract purchase price for stamp duty calc
+                purchase_price_raw = contract_terms.get("purchase_price")
+                try:
+                    purchase_price_val = None
+                    if isinstance(purchase_price_raw, (int, float)):
+                        purchase_price_val = float(purchase_price_raw)
+                    elif isinstance(purchase_price_raw, str):
+                        cleaned = (
+                            purchase_price_raw.replace("$", "").replace(",", "").strip()
+                        )
+                        purchase_price_val = float(cleaned) if cleaned else None
+                except Exception:
+                    purchase_price_val = None
+
+                stamp_duty_result = {}
+                if purchase_price_val is not None and australian_state:
+                    stamp_duty_result = calculate_stamp_duty.invoke(
+                        {
+                            "purchase_price": purchase_price_val,
+                            "state": australian_state,
+                        }
+                    )
 
                 compliance_checks.append(
                     {
                         "requirement": "stamp_duty_calculation",
-                        "status": (
-                            "compliant"
-                            if stamp_duty_result.get("calculated", False)
-                            else "unknown"
-                        ),
-                        "details": f"Estimated stamp duty: {stamp_duty_result.get('amount', 'N/A')}",
+                        "status": ("compliant" if stamp_duty_result else "unknown"),
+                        "details": f"Estimated stamp duty: {stamp_duty_result.get('total_duty', 'N/A')}",
                         "confidence": 0.8,
                     }
                 )

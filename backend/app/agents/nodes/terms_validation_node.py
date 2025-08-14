@@ -55,24 +55,34 @@ class TermsValidationNode(BaseNode):
                     state,
                     Exception("No contract terms available for validation"),
                     "No contract terms available for validation",
-                    {"state_keys": list(state.keys())}
+                    {"state_keys": list(state.keys())},
                 )
 
             # Perform validation
             use_llm = self.use_llm_config.get("terms_validation", True)
-            
+
             if use_llm:
                 try:
-                    validation_result = await self._validate_terms_completeness_with_llm(contract_terms)
+                    validation_result = (
+                        await self._validate_terms_completeness_with_llm(contract_terms)
+                    )
                 except Exception as llm_error:
-                    self._log_exception(llm_error, state, {"fallback_enabled": self.enable_fallbacks})
-                    
+                    self._log_exception(
+                        llm_error, state, {"fallback_enabled": self.enable_fallbacks}
+                    )
+
                     if self.enable_fallbacks:
-                        validation_result = await self._validate_terms_completeness_rule_based(contract_terms)
+                        validation_result = (
+                            await self._validate_terms_completeness_rule_based(
+                                contract_terms
+                            )
+                        )
                     else:
                         raise llm_error
             else:
-                validation_result = await self._validate_terms_completeness_rule_based(contract_terms)
+                validation_result = await self._validate_terms_completeness_rule_based(
+                    contract_terms
+                )
 
             # Update state with validation results
             state["terms_validation_result"] = validation_result
@@ -94,7 +104,7 @@ class TermsValidationNode(BaseNode):
                 self._log_step_debug(
                     f"Terms validation passed (confidence: {validation_confidence:.2f})",
                     state,
-                    {"validation_result": validation_result}
+                    {"validation_result": validation_result},
                 )
                 return self.update_state_step(
                     state, "terms_validation_passed", data=validation_data
@@ -103,13 +113,13 @@ class TermsValidationNode(BaseNode):
                 self._log_step_debug(
                     f"Terms validation failed (confidence: {validation_confidence:.2f})",
                     state,
-                    {"validation_result": validation_result}
+                    {"validation_result": validation_result},
                 )
                 return self.update_state_step(
                     state,
                     "terms_validation_failed",
                     error=f"Terms validation below threshold (confidence: {validation_confidence:.2f})",
-                    data=validation_data
+                    data=validation_data,
                 )
 
         except Exception as e:
@@ -117,7 +127,7 @@ class TermsValidationNode(BaseNode):
                 state,
                 e,
                 f"Terms validation failed: {str(e)}",
-                {"use_llm": self.use_llm_config.get("terms_validation", True)}
+                {"use_llm": self.use_llm_config.get("terms_validation", True)},
             )
 
     async def _validate_terms_completeness_with_llm(
@@ -133,19 +143,26 @@ class TermsValidationNode(BaseNode):
                     "contract_terms": contract_terms,
                     "validation_type": "terms_completeness",
                     "required_fields": [
-                        "purchase_price", "settlement_date", "deposit_amount",
-                        "property_address", "vendor_details", "purchaser_details"
+                        "purchase_price",
+                        "settlement_date",
+                        "deposit_amount",
+                        "property_address",
+                        "vendor_details",
+                        "purchaser_details",
                     ],
                     "validation_criteria": [
-                        "field_presence", "data_quality", "consistency", "completeness"
-                    ]
-                }
+                        "field_presence",
+                        "data_quality",
+                        "consistency",
+                        "completeness",
+                    ],
+                },
             )
 
             rendered_prompt = await self.prompt_manager.render(
-                template_name="validation/terms_completeness",
+                template_name="validation/terms_completeness_validation",
                 context=context,
-                service_name="contract_analysis_workflow"
+                service_name="contract_analysis_workflow",
             )
 
             response = await self._generate_content_with_fallback(
@@ -154,7 +171,9 @@ class TermsValidationNode(BaseNode):
 
             # Parse LLM response
             if self.structured_parsers.get("terms_validation"):
-                parsing_result = self.structured_parsers["terms_validation"].parse(response)
+                parsing_result = self.structured_parsers["terms_validation"].parse(
+                    response
+                )
                 if parsing_result.success and parsing_result.data:
                     return parsing_result.data
 
@@ -168,7 +187,9 @@ class TermsValidationNode(BaseNode):
         except Exception as e:
             self._log_exception(e, context={"validation_method": "llm"})
             if self.enable_fallbacks:
-                return await self._validate_terms_completeness_rule_based(contract_terms)
+                return await self._validate_terms_completeness_rule_based(
+                    contract_terms
+                )
             raise
 
     async def _validate_terms_completeness_rule_based(
@@ -178,19 +199,41 @@ class TermsValidationNode(BaseNode):
         try:
             from app.agents.tools.validation import validate_contract_terms_completeness
 
-            validation_result = validate_contract_terms_completeness.invoke({
-                "contract_terms": contract_terms
-            })
+            # Determine context inputs expected by the tool
+            australian_state = None
+            contract_type = None
+            try:
+                # Attempt to resolve from state dict if available
+                australian_state = state.get("australian_state")  # type: ignore[name-defined]
+                contract_type = state.get("contract_type")  # type: ignore[name-defined]
+            except Exception:
+                pass
+
+            validation_result = validate_contract_terms_completeness.invoke(
+                {
+                    "contract_terms": contract_terms,
+                    "australian_state": australian_state or "",
+                    "contract_type": contract_type or "purchase_agreement",
+                }
+            )
 
             # Enhance validation result with additional analysis
             required_fields = [
-                "purchase_price", "settlement_date", "deposit_amount",
-                "property_address", "vendor_details", "purchaser_details"
+                "purchase_price",
+                "settlement_date",
+                "deposit_amount",
+                "property_address",
+                "vendor_details",
+                "purchaser_details",
             ]
-            
-            present_fields = [field for field in required_fields if contract_terms.get(field)]
-            missing_fields = [field for field in required_fields if not contract_terms.get(field)]
-            
+
+            present_fields = [
+                field for field in required_fields if contract_terms.get(field)
+            ]
+            missing_fields = [
+                field for field in required_fields if not contract_terms.get(field)
+            ]
+
             completeness_score = len(present_fields) / len(required_fields)
 
             enhanced_result = {
@@ -201,7 +244,9 @@ class TermsValidationNode(BaseNode):
                 "required_field_count": len(required_fields),
                 "validation_issues": validation_result.get("issues", []),
                 "improvement_suggestions": validation_result.get("suggestions", []),
-                "overall_confidence": validation_result.get("confidence", completeness_score),
+                "overall_confidence": validation_result.get(
+                    "confidence", completeness_score
+                ),
                 "validation_method": "rule_based",
             }
 

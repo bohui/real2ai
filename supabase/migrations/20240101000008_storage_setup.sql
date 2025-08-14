@@ -15,7 +15,18 @@ VALUES (
         'application/pdf',
         'application/msword',
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        'text/plain'
+        'text/plain',
+        -- App artifacts
+        'text/markdown',
+        'application/json',
+        -- Images used for page previews and diagram extraction
+        'image/jpeg',
+        'image/jpg',
+        'image/png',
+        'image/gif',
+        'image/svg+xml',
+        'image/webp',
+        'image/tiff'
     ]
 ) ON CONFLICT (id) DO UPDATE SET
     file_size_limit = EXCLUDED.file_size_limit,

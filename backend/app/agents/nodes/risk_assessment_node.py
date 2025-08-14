@@ -49,26 +49,28 @@ class RiskAssessmentNode(BaseNode):
             # Get required data
             contract_terms = state.get("contract_terms", {})
             compliance_analysis = state.get("compliance_analysis", {})
-            
+
             if not contract_terms:
                 return self._handle_node_error(
                     state,
                     Exception("No contract terms available for risk assessment"),
                     "No contract terms available for risk assessment",
-                    {"available_keys": list(state.keys())}
+                    {"available_keys": list(state.keys())},
                 )
 
             # Perform risk assessment
             use_llm = self.use_llm_config.get("risk_assessment", True)
-            
+
             if use_llm:
                 try:
                     risk_result = await self._assess_risks_with_llm(
                         contract_terms, compliance_analysis
                     )
                 except Exception as llm_error:
-                    self._log_exception(llm_error, state, {"fallback_enabled": self.enable_fallbacks})
-                    
+                    self._log_exception(
+                        llm_error, state, {"fallback_enabled": self.enable_fallbacks}
+                    )
+
                     if self.enable_fallbacks:
                         risk_result = await self._assess_risks_rule_based(
                             contract_terms, compliance_analysis
@@ -100,7 +102,7 @@ class RiskAssessmentNode(BaseNode):
             self._log_step_debug(
                 f"Risk assessment completed (overall score: {overall_risk_score:.2f}, confidence: {risk_confidence:.2f})",
                 state,
-                {"risk_factors": len(risk_result.get("risk_factors", []))}
+                {"risk_factors": len(risk_result.get("risk_factors", []))},
             )
 
             return self.update_state_step(
@@ -109,16 +111,11 @@ class RiskAssessmentNode(BaseNode):
 
         except Exception as e:
             return self._handle_node_error(
-                state,
-                e,
-                f"Risk assessment failed: {str(e)}",
-                {"use_llm": use_llm}
+                state, e, f"Risk assessment failed: {str(e)}", {"use_llm": use_llm}
             )
 
     async def _assess_risks_with_llm(
-        self, 
-        contract_terms: Dict[str, Any], 
-        compliance_analysis: Dict[str, Any]
+        self, contract_terms: Dict[str, Any], compliance_analysis: Dict[str, Any]
     ) -> Dict[str, Any]:
         """Assess risks using LLM analysis."""
         try:
@@ -131,18 +128,25 @@ class RiskAssessmentNode(BaseNode):
                     "compliance_analysis": compliance_analysis,
                     "analysis_type": "risk_assessment",
                     "risk_categories": [
-                        "financial", "legal", "operational", "market", "regulatory"
+                        "financial",
+                        "legal",
+                        "operational",
+                        "market",
+                        "regulatory",
                     ],
                     "assessment_criteria": [
-                        "probability", "impact", "mitigation", "confidence"
-                    ]
-                }
+                        "probability",
+                        "impact",
+                        "mitigation",
+                        "confidence",
+                    ],
+                },
             )
 
             rendered_prompt = await self.prompt_manager.render(
-                template_name="analysis/risk_assessment",
+                template_name="analysis/risk_analysis_structured",
                 context=context,
-                service_name="contract_analysis_workflow"
+                service_name="contract_analysis_workflow",
             )
 
             response = await self._generate_content_with_fallback(
@@ -151,7 +155,9 @@ class RiskAssessmentNode(BaseNode):
 
             # Parse structured response
             if self.structured_parsers.get("risk_analysis"):
-                parsing_result = self.structured_parsers["risk_analysis"].parse(response)
+                parsing_result = self.structured_parsers["risk_analysis"].parse(
+                    response
+                )
                 if parsing_result.success and parsing_result.data:
                     return parsing_result.data
 
@@ -161,32 +167,58 @@ class RiskAssessmentNode(BaseNode):
                 return risk_result
 
             # Final fallback to rule-based assessment
-            return await self._assess_risks_rule_based(contract_terms, compliance_analysis)
+            return await self._assess_risks_rule_based(
+                contract_terms, compliance_analysis
+            )
 
         except Exception as e:
             self._log_exception(e, context={"assessment_method": "llm"})
             if self.enable_fallbacks:
-                return await self._assess_risks_rule_based(contract_terms, compliance_analysis)
+                return await self._assess_risks_rule_based(
+                    contract_terms, compliance_analysis
+                )
             raise
 
     async def _assess_risks_rule_based(
-        self, 
-        contract_terms: Dict[str, Any], 
-        compliance_analysis: Dict[str, Any]
+        self,
+        contract_terms: Dict[str, Any],
+        compliance_analysis: Dict[str, Any],
+        state: Optional[RealEstateAgentState] = None,
     ) -> Dict[str, Any]:
         """Assess risks using rule-based analysis."""
         try:
             from app.agents.tools.analysis import comprehensive_risk_scoring_system
 
             # Use comprehensive risk scoring tool
-            risk_scoring_result = comprehensive_risk_scoring_system.invoke({
-                "contract_terms": contract_terms,
-                "compliance_analysis": compliance_analysis
-            })
+            # Determine state and optional user profile from workflow state
+            # Resolve state from provided workflow state dict if available
+            australian_state = None
+            if isinstance(state, dict):
+                australian_state = state.get("australian_state")
+            user_profile = {
+                "experience": (
+                    state.get("user_experience_level")
+                    if isinstance(state, dict)
+                    else None
+                ),
+                "user_type": (
+                    state.get("user_type") if isinstance(state, dict) else None
+                ),
+            }
+
+            risk_scoring_result = comprehensive_risk_scoring_system.invoke(
+                {
+                    "contract_terms": contract_terms,
+                    "state": australian_state or "",
+                    "user_profile": user_profile,
+                }
+            )
 
             # Enhance with additional risk analysis
-            risk_factors = self._identify_rule_based_risks(contract_terms, compliance_analysis)
-            
+            risk_factors = self._identify_rule_based_risks(
+                contract_terms, compliance_analysis
+            )
+
             # Calculate risk scores
             risk_categories = self._categorize_risks(risk_factors)
             overall_risk_level = self._determine_risk_level(risk_factors)
@@ -195,8 +227,10 @@ class RiskAssessmentNode(BaseNode):
                 "risk_factors": risk_factors,
                 "risk_categories": risk_categories,
                 "overall_risk_level": overall_risk_level,
-                "risk_score": risk_scoring_result.get("overall_score", 0.5),
-                "mitigation_strategies": self._generate_mitigation_strategies(risk_factors),
+                "risk_score": risk_scoring_result.get("overall_risk_score", 0.5),
+                "mitigation_strategies": self._generate_mitigation_strategies(
+                    risk_factors
+                ),
                 "priority_risks": self._identify_priority_risks(risk_factors),
                 "overall_confidence": 0.8,  # High confidence in rule-based assessment
                 "assessment_method": "rule_based",
@@ -221,9 +255,7 @@ class RiskAssessmentNode(BaseNode):
             }
 
     def _identify_rule_based_risks(
-        self, 
-        contract_terms: Dict[str, Any], 
-        compliance_analysis: Dict[str, Any]
+        self, contract_terms: Dict[str, Any], compliance_analysis: Dict[str, Any]
     ) -> List[Dict[str, Any]]:
         """Identify risks using rule-based logic."""
         risk_factors = []
@@ -232,52 +264,62 @@ class RiskAssessmentNode(BaseNode):
         purchase_price = contract_terms.get("purchase_price")
         if purchase_price:
             try:
-                price_value = float(str(purchase_price).replace("$", "").replace(",", ""))
+                price_value = float(
+                    str(purchase_price).replace("$", "").replace(",", "")
+                )
                 if price_value > 1000000:
-                    risk_factors.append({
-                        "category": "financial",
-                        "type": "high_value_transaction",
-                        "description": f"High-value transaction (${price_value:,.0f})",
-                        "probability": 0.3,
-                        "impact": 0.8,
-                        "risk_score": 0.24,
-                        "confidence": 0.9
-                    })
+                    risk_factors.append(
+                        {
+                            "category": "financial",
+                            "type": "high_value_transaction",
+                            "description": f"High-value transaction (${price_value:,.0f})",
+                            "probability": 0.3,
+                            "impact": 0.8,
+                            "risk_score": 0.24,
+                            "confidence": 0.9,
+                        }
+                    )
             except (ValueError, TypeError):
-                risk_factors.append({
-                    "category": "financial",
-                    "type": "price_validation_error",
-                    "description": "Unable to validate purchase price format",
-                    "probability": 0.6,
-                    "impact": 0.4,
-                    "risk_score": 0.24,
-                    "confidence": 0.8
-                })
+                risk_factors.append(
+                    {
+                        "category": "financial",
+                        "type": "price_validation_error",
+                        "description": "Unable to validate purchase price format",
+                        "probability": 0.6,
+                        "impact": 0.4,
+                        "risk_score": 0.24,
+                        "confidence": 0.8,
+                    }
+                )
 
         # Compliance-based risks
         if compliance_analysis:
             compliance_score = compliance_analysis.get("compliance_score", 1.0)
             if compliance_score < 0.8:
-                risk_factors.append({
-                    "category": "legal",
-                    "type": "compliance_issues",
-                    "description": f"Compliance concerns identified (score: {compliance_score:.2f})",
-                    "probability": 0.7,
-                    "impact": 0.8,
-                    "risk_score": 0.56,
-                    "confidence": 0.9
-                })
+                risk_factors.append(
+                    {
+                        "category": "legal",
+                        "type": "compliance_issues",
+                        "description": f"Compliance concerns identified (score: {compliance_score:.2f})",
+                        "probability": 0.7,
+                        "impact": 0.8,
+                        "risk_score": 0.56,
+                        "confidence": 0.9,
+                    }
+                )
 
         return risk_factors
 
-    def _categorize_risks(self, risk_factors: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
+    def _categorize_risks(
+        self, risk_factors: List[Dict[str, Any]]
+    ) -> Dict[str, List[Dict[str, Any]]]:
         """Categorize risks by type."""
         categories = {
             "financial": [],
             "legal": [],
             "operational": [],
             "regulatory": [],
-            "market": []
+            "market": [],
         }
 
         for risk in risk_factors:
@@ -305,7 +347,9 @@ class RiskAssessmentNode(BaseNode):
         else:
             return "low"
 
-    def _generate_mitigation_strategies(self, risk_factors: List[Dict[str, Any]]) -> List[str]:
+    def _generate_mitigation_strategies(
+        self, risk_factors: List[Dict[str, Any]]
+    ) -> List[str]:
         """Generate mitigation strategies for identified risks."""
         strategies = []
         risk_types = set(risk.get("type", "") for risk in risk_factors)
@@ -314,7 +358,7 @@ class RiskAssessmentNode(BaseNode):
             if "financial" in risk_type or "high_value" in risk_type:
                 strategies.append("Consider obtaining professional financial advice")
                 strategies.append("Ensure adequate financing is secured")
-            
+
             if "compliance" in risk_type or "regulatory" in risk_type:
                 strategies.append("Obtain legal review of compliance requirements")
 
@@ -323,15 +367,15 @@ class RiskAssessmentNode(BaseNode):
 
         return list(set(strategies))  # Remove duplicates
 
-    def _identify_priority_risks(self, risk_factors: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def _identify_priority_risks(
+        self, risk_factors: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
         """Identify the highest priority risks."""
         # Sort by risk score (probability * impact)
         sorted_risks = sorted(
-            risk_factors, 
-            key=lambda x: x.get("risk_score", 0), 
-            reverse=True
+            risk_factors, key=lambda x: x.get("risk_score", 0), reverse=True
         )
-        
+
         # Return top 3 highest risks
         return sorted_risks[:3]
 

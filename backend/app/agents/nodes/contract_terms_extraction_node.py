@@ -74,7 +74,7 @@ class ContractTermsExtractionNode(BaseNode):
 
                 # Log detailed diagnostic information for debugging
                 # Use getattr for defensive access in case method is missing
-                log_warning = getattr(self, '_log_warning', None)
+                log_warning = getattr(self, "_log_warning", None)
                 if log_warning:
                     log_warning(
                         f"Contract terms extraction failed: empty document",
@@ -83,7 +83,7 @@ class ContractTermsExtractionNode(BaseNode):
                 else:
                     logger.warning(
                         f"Contract terms extraction failed: empty document",
-                        extra=diagnostic_info
+                        extra=diagnostic_info,
                     )
 
                 return self._handle_node_error(
@@ -145,7 +145,9 @@ class ContractTermsExtractionNode(BaseNode):
             # Update state with extracted terms
             state["contract_terms"] = contract_terms
             # Defensive access for confidence_scores
-            state.setdefault("confidence_scores", {})["contract_extraction"] = confidence_score
+            state.setdefault("confidence_scores", {})[
+                "contract_extraction"
+            ] = confidence_score
 
             extraction_data = {
                 "contract_terms": contract_terms,
@@ -199,13 +201,13 @@ class ContractTermsExtractionNode(BaseNode):
             # Use fragment-based prompts if enabled
             if self.extraction_config.get("use_fragments", True):
                 rendered_prompt = await self.prompt_manager.render(
-                    template_name="extraction/contract_terms_structured",
+                    template_name="analysis/contract_structure",
                     context=context,
                     service_name="contract_analysis_workflow",
                 )
             else:
                 rendered_prompt = await self.prompt_manager.render(
-                    template_name="extraction/contract_terms_basic",
+                    template_name="contract_analysis_base",
                     context=context,
                     service_name="contract_analysis_workflow",
                 )
@@ -268,8 +270,13 @@ class ContractTermsExtractionNode(BaseNode):
             from app.agents.tools.domain import extract_australian_contract_terms
 
             # Use domain-specific extraction tool
+            # Determine state for extraction if available in workflow state
+            australian_state = (
+                state.get("australian_state") if isinstance(state, dict) else None
+            )
+
             extraction_result = extract_australian_contract_terms.invoke(
-                {"contract_text": text, "extraction_config": self.extraction_config}
+                {"document_text": text, "state": australian_state or ""}
             )
 
             if isinstance(extraction_result, dict):

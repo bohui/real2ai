@@ -40,10 +40,10 @@ class ArtifactStorageService:
         # Compute SHA256 hash
         sha256_hash = hashlib.sha256(content_bytes).hexdigest()
 
-        # Generate storage path: artifacts/text/{hmac_prefix}/{uuid}.txt
+        # Generate storage path: artifacts/{hmac_prefix}/text/{uuid}.txt
         hmac_prefix = content_hmac[:8]  # Use first 8 chars for directory structure
         file_uuid = str(uuid4())
-        storage_path = f"artifacts/text/{hmac_prefix}/{file_uuid}.txt"
+        storage_path = f"artifacts/{hmac_prefix}/text/{file_uuid}.txt"
 
         # Upload to Supabase Storage
         client = await get_service_supabase_client()
@@ -164,12 +164,9 @@ class ArtifactStorageService:
         # Compute SHA256 hash
         sha256_hash = hashlib.sha256(content_bytes).hexdigest()
 
-        # Generate storage path: artifacts/pages/{hmac_prefix}/page_{num}_{uuid}.txt
+        # Generate storage path: artifacts/{hmac_prefix}/pages/p{page}/content.txt
         hmac_prefix = content_hmac[:8]
-        file_uuid = str(uuid4())
-        storage_path = (
-            f"artifacts/pages/{hmac_prefix}/page_{page_number}_{file_uuid}.txt"
-        )
+        storage_path = f"artifacts/{hmac_prefix}/pages/p{page_number}/content.txt"
 
         client = await get_service_supabase_client()
 

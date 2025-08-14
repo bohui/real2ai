@@ -11,7 +11,8 @@ from fastapi import HTTPException
 
 from app.core.config import get_settings
 from app.core.prompts.service_mixin import PromptEnabledService
-from app.core.langsmith_config import langsmith_trace
+from app.core.langsmith_config import langsmith_trace, get_langsmith_config
+from langsmith.run_helpers import trace
 from app.core.prompts.output_parser import create_parser, ParsingResult
 from app.services.base.user_aware_service import UserAwareService
 from app.models.contract_state import ProcessingStatus, AustralianState, ContractType
@@ -25,7 +26,7 @@ from app.clients.base.exceptions import (
 from google.genai.types import Content, Part, GenerateContentConfig, SafetySetting
 import asyncio
 
-from backend.app.schema.document import GeminiPageExtractionResult, DiagramHint
+from app.schema.document import GeminiPageExtractionResult, DiagramHint
 
 logger = logging.getLogger(__name__)
 
@@ -679,15 +680,90 @@ Focus on accuracy and completeness. Extract all visible text content."""
                 response_schema=TextDiagramInsightList,
             )
 
-            # Execute model call (single LLM call)
-            response = await asyncio.get_event_loop().run_in_executor(
-                None,
-                lambda: self.gemini_service.gemini_client.client.models.generate_content(
-                    model=self.gemini_service.gemini_client.config.model_name,
-                    contents=[content],
-                    config=generate_config,
-                ),
-            )
+            # Execute model call (single LLM call) with detailed LangSmith nested trace
+            config = get_langsmith_config()
+            model_name = self.gemini_service.gemini_client.config.model_name
+            if config.enabled:
+                with trace(
+                    name="gemini_generate_content",
+                    run_type="llm",
+                    project_name=config.project_name,
+                    metadata={
+                        "function": "extract_text_diagram_insight",
+                        "module": __name__,
+                        "client_name": "GeminiClient",
+                    },
+                ) as llm_run:
+                    # Record critical inputs
+                    llm_run.inputs = {
+                        "model": model_name,
+                        "prompt": rendered_prompt[:4000],
+                        "mime_type": mime_type,
+                        "generation_config": {
+                            "temperature": generate_config.temperature,
+                            "top_p": generate_config.top_p,
+                            "max_output_tokens": generate_config.max_output_tokens,
+                            "seed": generate_config.seed,
+                            "response_mime_type": generate_config.response_mime_type,
+                            "response_schema": (
+                                getattr(
+                                    generate_config, "response_schema", None
+                                ).__name__
+                                if getattr(generate_config, "response_schema", None)
+                                else None
+                            ),
+                        },
+                    }
+
+                    response = await asyncio.get_event_loop().run_in_executor(
+                        None,
+                        lambda: self.gemini_service.gemini_client.client.models.generate_content(
+                            model=model_name,
+                            contents=[content],
+                            config=generate_config,
+                        ),
+                    )
+
+                    # Extract usage metadata if present
+                    usage = getattr(response, "usage_metadata", None) or getattr(
+                        response, "usageMetadata", None
+                    )
+                    usage_dict = None
+                    if usage is not None:
+                        # Try attribute or dict access patterns
+                        prompt_tokens = (
+                            getattr(usage, "prompt_token_count", None)
+                            or usage.get("prompt_token_count", None)
+                            if hasattr(usage, "get")
+                            else getattr(usage, "prompt_token_count", None)
+                        )
+                        candidates_tokens = getattr(
+                            usage, "candidates_token_count", None
+                        ) or (
+                            usage.get("candidates_token_count", None)
+                            if hasattr(usage, "get")
+                            else None
+                        )
+                        total_tokens = getattr(usage, "total_token_count", None) or (
+                            usage.get("total_token_count", None)
+                            if hasattr(usage, "get")
+                            else None
+                        )
+                        usage_dict = {
+                            "prompt_token_count": prompt_tokens,
+                            "candidates_token_count": candidates_tokens,
+                            "total_token_count": total_tokens,
+                        }
+                    # We'll fill outputs after parsing text below using ai_text
+            else:
+                response = await asyncio.get_event_loop().run_in_executor(
+                    None,
+                    lambda: self.gemini_service.gemini_client.client.models.generate_content(
+                        model=model_name,
+                        contents=[content],
+                        config=generate_config,
+                    ),
+                )
 
             ai_text = (
                 response.candidates[0].content.parts[0].text
@@ -705,6 +781,22 @@ Focus on accuracy and completeness. Extract all visible text content."""
                 output_parser=parser,
                 use_retry=True,
             )
+
+            # If we opened a nested run, record outputs now
+            if "llm_run" in locals():
+                try:
+                    llm_run.outputs = {
+                        "response_length": len(ai_text or ""),
+                        "response_preview": (ai_text or "")[:200],
+                        **(
+                            {"usage": usage_dict}
+                            if "usage_dict" in locals() and usage_dict
+                            else {}
+                        ),
+                    }
+                except Exception:
+                    # Avoid disrupting main flow if tracing output fails
+                    pass
 
             if parsing_result.success and parsing_result.parsed_data:
                 model: TextDiagramInsightList = parsing_result.parsed_data

@@ -108,6 +108,7 @@ class ExtractTextNode(DocumentProcessingNodeBase):
             storage_path = state.get("storage_path")
             file_type = state.get("file_type")
             content_hmac = state.get("content_hmac")
+            updated_state = state.copy()
 
             if not all([document_id, storage_path, file_type]):
                 return self._handle_error(
@@ -146,6 +147,7 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                         bucket=self.storage_bucket, path=storage_path
                     )
                     content_hmac = compute_content_hmac(file_content)
+                    updated_state["content_hmac"] = content_hmac
                     self._log_info(f"Computed content HMAC: {content_hmac}")
                 except Exception as e:
                     return self._handle_error(
@@ -182,6 +184,11 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                 f"Artifact parameters: algorithm_version={algorithm_version}, params_fingerprint={params_fingerprint[:12]}..."
             )
 
+            # Make params and version available to downstream steps immediately
+            # so that any artifact writes (e.g., OCR diagram hints) have a valid fingerprint
+            updated_state["algorithm_version"] = algorithm_version
+            updated_state["params_fingerprint"] = params_fingerprint
+
             # Check if artifacts are enabled
             if not settings.enable_artifacts:
                 self._log_info("Artifacts disabled, performing direct text extraction")
@@ -191,8 +198,9 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                         document_id=document_id,
                         storage_path=storage_path,
                         file_type=normalized_file_type,
-                        state=state,
+                        state=updated_state,
                         file_content=file_content,
+                        content_hmac=content_hmac,
                     )
                 )
             else:
@@ -233,7 +241,7 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                             document_id=document_id,
                             storage_path=storage_path,
                             file_type=normalized_file_type,
-                            state=state,
+                            state=updated_state,
                             file_content=file_content,
                         )
                     )
@@ -286,7 +294,7 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                 )
 
             # Update state with extraction result and artifact metadata
-            updated_state = state.copy()
+
             updated_state["text_extraction_result"] = text_extraction_result
             updated_state["content_hmac"] = content_hmac
             updated_state["algorithm_version"] = algorithm_version
@@ -825,7 +833,7 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                                             )
                                             diagram_key = f"llm_ocr_hint_page_{idx+1}_{hint_index:02d}"
                                             await self.artifacts_repo.insert_unified_visual_artifact(
-                                                content_hmac=state.get("content_hmac"),
+                                                content_hmac=state["content_hmac"],
                                                 algorithm_version=get_settings().artifacts_algorithm_version,
                                                 params_fingerprint=state.get(
                                                     "params_fingerprint"
@@ -861,7 +869,7 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                                         )
                                         diagram_key = f"llm_ocr_hint_page_{idx+1}"
                                         await self.artifacts_repo.insert_unified_visual_artifact(
-                                            content_hmac=state.get("content_hmac"),
+                                            content_hmac=state["content_hmac"],
                                             algorithm_version=get_settings().artifacts_algorithm_version,
                                             params_fingerprint=state.get(
                                                 "params_fingerprint"

@@ -91,6 +91,7 @@ class TextExtractionResult(SchemaBase):
     total_pages: Optional[int] = None
     total_word_count: Optional[int] = None
     overall_confidence: Optional[float] = None
+    processing_time: float = 0.0
 
 
 class DiagramPageSummary(SchemaBase):

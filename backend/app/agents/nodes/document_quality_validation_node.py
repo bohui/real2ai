@@ -162,7 +162,7 @@ class DocumentQualityValidationNode(BaseNode):
             )
 
             rendered_prompt = await self.prompt_manager.render(
-                template_name="validation/document_quality",
+                template_name="validation/document_quality_validation",
                 context=context,
                 service_name="contract_analysis_workflow",
             )
@@ -196,21 +196,45 @@ class DocumentQualityValidationNode(BaseNode):
                 {"document_text": text, "document_metadata": metadata}
             )
 
+            # Convert pydantic model to dict safely
+            try:
+                validation_dict = (
+                    validation_result.model_dump()
+                    if hasattr(validation_result, "model_dump")
+                    else dict(validation_result)
+                )
+            except Exception:
+                # Fallback: best-effort attribute extraction
+                validation_dict = {
+                    k: getattr(validation_result, k)
+                    for k in [
+                        "text_quality_score",
+                        "completeness_score",
+                        "readability_score",
+                        "key_terms_coverage",
+                        "extraction_confidence",
+                        "issues_identified",
+                        "improvement_suggestions",
+                        "overall_confidence",
+                    ]
+                    if hasattr(validation_result, k)
+                }
+
             # Enhance with additional metrics
             words = text.split()
             quality_metrics = {
-                "text_quality_score": validation_result.get("text_quality_score", 0.7),
-                "completeness_score": validation_result.get("completeness_score", 0.7),
-                "readability_score": validation_result.get("readability_score", 0.7),
-                "key_terms_coverage": validation_result.get("key_terms_coverage", 0.7),
-                "extraction_confidence": validation_result.get(
+                "text_quality_score": validation_dict.get("text_quality_score", 0.7),
+                "completeness_score": validation_dict.get("completeness_score", 0.7),
+                "readability_score": validation_dict.get("readability_score", 0.7),
+                "key_terms_coverage": validation_dict.get("key_terms_coverage", 0.7),
+                "extraction_confidence": validation_dict.get(
                     "extraction_confidence", 0.7
                 ),
-                "issues_identified": validation_result.get("issues_identified", []),
-                "improvement_suggestions": validation_result.get(
+                "issues_identified": validation_dict.get("issues_identified", []),
+                "improvement_suggestions": validation_dict.get(
                     "improvement_suggestions", []
                 ),
-                "overall_confidence": validation_result.get("overall_confidence", 0.7),
+                "overall_confidence": validation_dict.get("overall_confidence", 0.7),
                 "metrics": {
                     "word_count": len(words),
                     "character_count": len(text),

@@ -4,6 +4,10 @@ Main Supabase client implementation.
 
 import logging
 from typing import Any, Dict, Optional, List
+import asyncio
+import aiohttp
+import time
+from urllib.parse import urlsplit, urlunsplit
 from supabase import create_client, Client
 from postgrest import APIError
 
@@ -381,24 +385,190 @@ class SupabaseClient(BaseClient):
 
     async def download_file(self, bucket: str, path: str) -> bytes:
         """Download a file from Supabase storage."""
+        # Resilient download with signed URL + aiohttp (longer timeout, retries),
+        # with fallback to the SDK's direct download.
+        self.logger.debug(f"Downloading file from bucket '{bucket}' at path '{path}'")
+
+        # Determine effective timeout (allow larger for big PDFs)
+        effective_timeout_seconds = max(getattr(self.config, "timeout", 30), 120)
+        max_retries = max(getattr(self.config, "max_retries", 3), 3)
+        backoff_factor = max(getattr(self.config, "backoff_factor", 1.0), 1.0)
+
+        last_error: Optional[Exception] = None
+
+        # Attempt 1: Signed URL + aiohttp streaming download
+        for attempt in range(max_retries + 1):
+            try:
+                # Generate a short-lived signed URL
+                storage = self.storage()
+                signed = storage.from_(bucket).create_signed_url(path, 600)
+
+                # Try multiple shapes: attribute, dict, nested
+                signed_url = None
+                try:
+                    # Common attribute
+                    signed_url = getattr(signed, "signed_url", None)
+                    # Alternative attributes
+                    if not signed_url:
+                        signed_url = getattr(signed, "signedURL", None)
+                    if not signed_url:
+                        signed_url = getattr(signed, "signedUrl", None)
+                    # Dict-like
+                    if not signed_url and isinstance(signed, dict):
+                        for key in ("signed_url", "signedURL", "signedUrl"):
+                            if key in signed:
+                                signed_url = signed[key]
+                                break
+                        # Try nested under 'data'
+                        if not signed_url and isinstance(signed.get("data"), dict):
+                            for key in ("signed_url", "signedURL", "signedUrl"):
+                                if key in signed["data"]:
+                                    signed_url = signed["data"][key]
+                                    break
+                    # Object with 'data' attr
+                    if (
+                        not signed_url
+                        and hasattr(signed, "data")
+                        and isinstance(getattr(signed, "data"), dict)
+                    ):
+                        data_obj = getattr(signed, "data")
+                        for key in ("signed_url", "signedURL", "signedUrl"):
+                            if key in data_obj:
+                                signed_url = data_obj[key]
+                                break
+                except Exception as extraction_err:
+                    self.logger.debug(
+                        f"Signed URL extraction raised: {type(extraction_err).__name__}: {extraction_err}"
+                    )
+
+                if not signed_url:
+                    # Log response shape for debugging, with redaction
+                    try:
+                        shape_info = {
+                            "type": type(signed).__name__,
+                            "has_signed_url_attr": hasattr(signed, "signed_url"),
+                            "has_signedURL_attr": hasattr(signed, "signedURL"),
+                            "has_signedUrl_attr": hasattr(signed, "signedUrl"),
+                            "has_data_attr": hasattr(signed, "data"),
+                            "is_dict": isinstance(signed, dict),
+                            "keys": (
+                                list(signed.keys())[:10]
+                                if isinstance(signed, dict)
+                                else None
+                            ),
+                        }
+                        self.logger.debug(
+                            f"create_signed_url response shape: {shape_info}"
+                        )
+                    except Exception as log_err:
+                        self.logger.debug(
+                            f"Unable to log signed response shape: {type(log_err).__name__}: {log_err}"
+                        )
+                    raise RuntimeError("Failed to generate signed URL for download")
+
+                # Normalize host for local environments: replace localhost/127.0.0.1
+                # with the configured Supabase URL host (e.g., host.docker.internal)
+                try:
+                    cfg_parts = urlsplit(self.config.url)
+                    su_parts = urlsplit(signed_url)
+                    if su_parts.hostname in ("localhost", "127.0.0.1", "0.0.0.0"):
+                        normalized = urlunsplit(
+                            (
+                                cfg_parts.scheme or su_parts.scheme,
+                                cfg_parts.netloc,
+                                su_parts.path,
+                                su_parts.query,
+                                su_parts.fragment,
+                            )
+                        )
+                        self.logger.debug(
+                            f"Normalized signed URL host from {su_parts.netloc} to {cfg_parts.netloc}"
+                        )
+                        signed_url = normalized
+                except Exception as norm_err:
+                    self.logger.debug(
+                        f"Signed URL normalization skipped: {type(norm_err).__name__}: {norm_err}"
+                    )
+
+                # Use aiohttp with generous timeout
+                timeout = aiohttp.ClientTimeout(
+                    total=effective_timeout_seconds,
+                    connect=min(15, effective_timeout_seconds),
+                    sock_read=effective_timeout_seconds,
+                )
+
+                start_time = time.time()
+                async with aiohttp.ClientSession(timeout=timeout) as session:
+                    async with session.get(signed_url) as resp:
+                        if resp.status == 404:
+                            raise FileNotFoundError(f"File not found: {bucket}/{path}")
+                        if resp.status in (401, 403):
+                            raise PermissionError(
+                                f"Access denied for: {bucket}/{path} (status {resp.status})"
+                            )
+                        if resp.status >= 400:
+                            text = await resp.text()
+                            raise RuntimeError(
+                                f"HTTP {resp.status} while downloading {bucket}/{path}: {text[:200]}"
+                            )
+
+                        # Stream into memory
+                        data = bytearray()
+                        async for chunk in resp.content.iter_chunked(1 << 20):  # 1MB
+                            if chunk:
+                                data.extend(chunk)
+
+                duration = time.time() - start_time
+                try:
+                    # Redact token in logs if present
+                    redacted_url = signed_url
+                    if isinstance(redacted_url, str) and "token=" in redacted_url:
+                        redacted_url = (
+                            redacted_url.split("token=")[0] + "token=[REDACTED]"
+                        )
+                except Exception:
+                    redacted_url = "<unavailable>"
+                self.logger.info(
+                    f"Downloaded {bucket}/{path} via signed URL in {duration:.2f}s, size={len(data)} bytes (url={redacted_url})"
+                )
+                return bytes(data)
+
+            except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+                last_error = e
+                if attempt < max_retries:
+                    delay = backoff_factor * (2**attempt)
+                    self.logger.warning(
+                        f"Signed URL download attempt {attempt+1}/{max_retries+1} failed for {bucket}/{path}: {e}. Retrying in {delay:.1f}s"
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+                break
+            except Exception as e:
+                # Non-retryable or fatal — break to fallback
+                last_error = e
+                self.logger.warning(
+                    f"Signed URL path failed for {bucket}/{path}: {e}. Will try SDK fallback."
+                )
+                break
+
+        # Fallback: SDK direct download (may block; run in thread to avoid event loop blocking)
         try:
-            self.logger.debug(
-                f"Downloading file from bucket '{bucket}' at path '{path}'"
-            )
-
-            # Get storage client
             storage = self.storage()
-
-            # Download file using Supabase storage API
-            # The correct method is storage.from_(bucket).download(path)
-            result = storage.from_(bucket).download(path)
-
-            self.logger.debug(f"File downloaded successfully from '{path}'")
+            self.logger.info(
+                f"Falling back to SDK download for {bucket}/{path} (timeout may be limited)"
+            )
+            result = await asyncio.to_thread(storage.from_(bucket).download, path)
+            self.logger.debug(
+                f"File downloaded successfully from '{path}' via SDK fallback"
+            )
             return result
-
         except Exception as e:
-            self.logger.error(f"Failed to download file from '{path}': {e}")
-            raise ValueError(f"Failed to download file: {str(e)}")
+            self.logger.error(
+                f"Failed to download file from '{path}' (signed URL + SDK fallback): {e}. Last signed-url error: {last_error}"
+            )
+            raise ValueError(
+                f"Failed to download file: {str(e) if str(e) else type(e).__name__}"
+            )
 
     async def delete_file(self, bucket: str, path: str) -> bool:
         """Delete a file from Supabase storage."""
