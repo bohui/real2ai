@@ -9,7 +9,7 @@ with integrated JWT-based authentication.
 from typing import Dict, List, Optional, Any
 from uuid import UUID
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, date
 import logging
 import json
 
@@ -537,6 +537,22 @@ class DocumentsRepository:
         Returns:
             True if update successful, False otherwise
         """
+        # Local helper to safely serialize complex objects (datetimes, UUIDs, Pydantic models)
+        def _json_default(obj: Any):
+            try:
+                # Pydantic v2 models
+                if hasattr(obj, "model_dump") and callable(getattr(obj, "model_dump")):
+                    return obj.model_dump()
+            except Exception:
+                pass
+
+            if isinstance(obj, (datetime, date)):
+                return obj.isoformat()
+            if isinstance(obj, UUID):
+                return str(obj)
+            # Fallback to string representation
+            return str(obj)
+
         async with get_user_connection(self.user_id) as conn:
             result = await conn.execute(
                 """
@@ -544,7 +560,7 @@ class DocumentsRepository:
                 SET processing_results = $1::jsonb, updated_at = now()
                 WHERE id = $2
                 """,
-                json.dumps(results) if results is not None else None,
+                json.dumps(results, default=_json_default) if results is not None else None,
                 document_id,
             )
             return result.split()[-1] == "1"
@@ -575,7 +591,7 @@ class DocumentsRepository:
                     WHERE id = $3
                     """,
                     status,
-                    json.dumps(results) if results is not None else None,
+                    json.dumps(results, default=_json_default) if results is not None else None,
                     document_id,
                 )
             else:

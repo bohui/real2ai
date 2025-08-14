@@ -18,24 +18,21 @@ MIN_IMAGE_DIMENSION = 1000
 
 class ImageProcessor:
     """Processes images for OCR operations."""
-    
+
     def __init__(self, gemini_client):
         self.client = gemini_client
         self.prompt_generator = PromptGenerator()
         self.confidence_calculator = ConfidenceCalculator()
         self.text_enhancer = TextEnhancer()
-        
+
     async def extract_from_image(
-        self, 
-        image_content: bytes, 
-        content_type: str, 
-        **kwargs
+        self, image_content: bytes, content_type: str, **kwargs
     ) -> Dict[str, Any]:
         """Extract text from image using Gemini OCR."""
         try:
             # Enhance image if enabled
-            config = kwargs.get('config', {})
-            if config.get('enable_image_enhancement', False):
+            config = kwargs.get("config", {})
+            if config.get("enable_image_enhancement", False):
                 enhanced_image = await self.enhance_image(image_content, content_type)
             else:
                 enhanced_image = image_content
@@ -50,18 +47,18 @@ class ImageProcessor:
             content = Content(
                 parts=[
                     Part.from_text(text=prompt),
-                    Part.from_data(data=enhanced_image, mime_type=mime_type),
+                    Part.from_bytes(data=enhanced_image, mime_type=mime_type),
                 ]
             )
 
             # Send to Gemini for OCR
             response = await self.client.generate_content(content)
 
-            extracted_text = response.get('text', '') if response else ''
+            extracted_text = response.get("text", "") if response else ""
             confidence = self.confidence_calculator.calculate_confidence(extracted_text)
 
             # Apply text enhancement if enabled
-            if config.get('enable_text_enhancement', False) and extracted_text:
+            if config.get("enable_text_enhancement", False) and extracted_text:
                 enhanced_text = await self.text_enhancer.enhance_extracted_text(
                     extracted_text, **kwargs
                 )
@@ -74,7 +71,7 @@ class ImageProcessor:
                 "character_count": len(extracted_text),
                 "word_count": len(extracted_text.split()) if extracted_text else 0,
                 "processing_details": {
-                    "image_enhanced": config.get('enable_image_enhancement', False),
+                    "image_enhanced": config.get("enable_image_enhancement", False),
                     "content_type": content_type,
                 },
             }

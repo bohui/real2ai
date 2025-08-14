@@ -651,7 +651,7 @@ Focus on accuracy and completeness. Extract all visible text content."""
             content = Content(
                 parts=[
                     Part.from_text(text=rendered_prompt),
-                    Part.from_data(data=file_content, mime_type=mime_type),
+                    Part.from_bytes(data=file_content, mime_type=mime_type),
                 ]
             )
 
@@ -942,7 +942,6 @@ Focus on accuracy and completeness. Extract all visible text content."""
             "line_count": line_count,
             "average_word_length": round(average_word_length, 2),
         }
-
 
 
 # Usage example and migration guide

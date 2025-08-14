@@ -21,13 +21,13 @@ NATIVE_TEXT_CONFIDENCE = 0.95
 
 class PDFProcessor:
     """Processes PDF documents for OCR operations."""
-    
+
     def __init__(self, gemini_client):
         self.client = gemini_client
         self.prompt_generator = PromptGenerator()
         self.confidence_calculator = ConfidenceCalculator()
         self.text_enhancer = TextEnhancer()
-        
+
     async def extract_from_pdf(self, pdf_content: bytes, **kwargs) -> Dict[str, Any]:
         """Extract text from PDF using Gemini OCR."""
         try:
@@ -78,8 +78,8 @@ class PDFProcessor:
             )
 
             # Apply text enhancement if enabled
-            config = kwargs.get('config', {})
-            if config.get('enable_text_enhancement', False) and combined_text:
+            config = kwargs.get("config", {})
+            if config.get("enable_text_enhancement", False) and combined_text:
                 enhanced_text = await self.text_enhancer.enhance_extracted_text(
                     combined_text, **kwargs
                 )
@@ -121,14 +121,14 @@ class PDFProcessor:
             content = Content(
                 parts=[
                     Part.from_text(text=prompt),
-                    Part.from_data(data=img_data, mime_type="image/png"),
+                    Part.from_bytes(data=img_data, mime_type="image/png"),
                 ]
             )
 
             # Send to Gemini for OCR
             response = await self.client.generate_content(content)
 
-            extracted_text = response.get('text', '') if response else ''
+            extracted_text = response.get("text", "") if response else ""
             confidence = self.confidence_calculator.calculate_confidence(extracted_text)
 
             return {

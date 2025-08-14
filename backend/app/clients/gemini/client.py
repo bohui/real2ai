@@ -457,8 +457,10 @@ class GeminiClient(BaseClient):
         try:
             # Create multimodal content
             parts = [
-                Part.from_text(text=analysis_context.get("prompt", "Analyze this image")),
-                Part.from_data(data=content, mime_type=content_type),
+                Part.from_text(
+                    text=analysis_context.get("prompt", "Analyze this image")
+                ),
+                Part.from_bytes(data=content, mime_type=content_type),
             ]
             content_obj = Content(parts=parts)
 
