@@ -151,9 +151,11 @@ class AlreadyProcessedCheckNode(DocumentProcessingNodeBase):
                 "artifact_text_id": getattr(document_obj, 'artifact_text_id', None)
             }
             
-            # Check if document has been processed (using lowercase status values)
+            # Check if document has been processed
+            from app.models.supabase_models import DocumentStatus
+            
             processing_status = document.get("processing_status")
-            if processing_status not in ["basic_complete", "analysis_complete"]:
+            if processing_status not in [DocumentStatus.BASIC_COMPLETE, DocumentStatus.ANALYSIS_COMPLETE]:
                 return None
                 
             # Check for artifacts presence using repositories
@@ -165,10 +167,40 @@ class AlreadyProcessedCheckNode(DocumentProcessingNodeBase):
             if not content_hash:
                 return None
                 
+            # Compute content_hmac by downloading and hashing file content
+            storage_path = document.get("storage_path")
+            if not storage_path:
+                return None
+                
+            try:
+                # Download file content from storage to compute proper content_hmac
+                file_content = await user_client.storage.download(
+                    bucket="documents", path=storage_path
+                )
+                if not isinstance(file_content, (bytes, bytearray)):
+                    # Some clients may return str; convert to bytes
+                    file_content = bytes(file_content, 'utf-8') if isinstance(file_content, str) else bytes(file_content)
+                
+                # Compute SHA256 hash of file content
+                import hashlib
+                content_hmac = hashlib.sha256(file_content).hexdigest()
+                
+                # Verify it matches stored content_hash (optional validation)
+                if content_hmac != content_hash:
+                    self._log_warning(
+                        f"Content hash mismatch: computed={content_hmac[:12]}..., stored={content_hash[:12]}... for document {document_id}"
+                    )
+                    # Continue with computed hash for artifact queries
+                    
+            except Exception as e:
+                self._log_warning(f"Failed to download file content for hash computation: {e}")
+                # Fallback to stored content_hash if download fails
+                content_hmac = content_hash
+                
             # Query for page artifacts (text content)
-            page_artifacts = await artifacts_repo.get_page_artifacts_by_content_hmac(content_hash)
+            page_artifacts = await artifacts_repo.get_page_artifacts_by_content_hmac(content_hmac)
             # Query for diagram artifacts  
-            diagram_artifacts = await artifacts_repo.get_diagram_artifacts_by_content_hmac(content_hash)
+            diagram_artifacts = await artifacts_repo.get_diagram_artifacts_by_content_hmac(content_hmac)
             
             # Document is considered processed if it has at least one page artifact
             if not page_artifacts:
@@ -198,7 +230,7 @@ class AlreadyProcessedCheckNode(DocumentProcessingNodeBase):
                     try:
                         from app.utils.storage_utils import ArtifactStorageService
                         storage_service = ArtifactStorageService()
-                        page_text = await storage_service.download_text_content(artifact.page_text_uri)
+                        page_text = await storage_service.download_text_blob(artifact.page_text_uri)
                         if page_text:
                             page_texts.append(page_text)
                     except Exception as e:
