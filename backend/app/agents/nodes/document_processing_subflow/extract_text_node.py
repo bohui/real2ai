@@ -742,33 +742,29 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                 # Selective OCR for low-text/scanned pages (LLM first, PyTesseract fallback)
                 # Only run OCR when there's insufficient text AND visual content that might contain text
                 settings = get_settings()
-                should_ocr = settings.enable_selective_ocr or (
+                should_ocr = (
                     is_low_text and (has_images or has_diagram_kw)
+                    if settings.enable_selective_ocr
+                    else False
                 )
                 trigger_label = (
-                    "settings.enable_selective_ocr"
-                    if settings.enable_selective_ocr
+                    "low_text_and_images"
+                    if (is_low_text and has_images)
                     else (
-                        "low_text_and_images"
-                        if (is_low_text and has_images)
-                        else (
-                            "low_text_and_diagram_keywords"
-                            if (is_low_text and has_diagram_kw)
-                            else "no_trigger"
-                        )
+                        "low_text_and_diagram_keywords"
+                        if (is_low_text and has_diagram_kw)
+                        else "no_trigger"
                     )
                 )
 
                 self._log_info(
                     f"Selective OCR decision for page {idx + 1}",
-                    extra={
-                        "is_low_text": is_low_text,
-                        "has_images": has_images,
-                        "has_diagram_kw": has_diagram_kw,
-                        "min_text_len_for_ocr": self._min_text_len_for_ocr,
-                        "should_ocr": should_ocr,
-                        "trigger": trigger_label,
-                    },
+                    is_low_text=is_low_text,
+                    has_images=has_images,
+                    has_diagram_kw=has_diagram_kw,
+                    min_text_len_for_ocr=self._min_text_len_for_ocr,
+                    should_ocr=should_ocr,
+                    trigger=trigger_label,
                 )
 
                 if should_ocr:

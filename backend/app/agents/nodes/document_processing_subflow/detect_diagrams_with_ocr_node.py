@@ -5,7 +5,6 @@ This node uses Gemini OCR with the PROMPT_DIAGRAMS_ONLY template to detect
 diagrams in document pages using individual page JPGs, not the full document.
 """
 
-import logging
 import asyncio
 from typing import Dict, Any, Optional, List
 
@@ -17,8 +16,6 @@ from app.core.langsmith_config import langsmith_trace
 from app.services.ai.gemini_ocr_service import GeminiOCRService
 from app.prompts.schema.diagram_detection_schema import DiagramDetectionItem
 from app.models.supabase_models import DiagramType
-
-logger = logging.getLogger(__name__)
 
 
 class DetectDiagramsWithOCRNode(DocumentProcessingNodeBase):
@@ -74,13 +71,11 @@ class DetectDiagramsWithOCRNode(DocumentProcessingNodeBase):
                     "Text extraction must be completed before diagram detection"
                 )
 
-            logger.info(
+            self._log_info(
                 f"Starting per-page OCR-based diagram detection for document {document_id}",
-                extra={
-                    "document_id": document_id,
-                    "storage_path": storage_path,
-                    "local_tmp_exists": bool(local_tmp_path),
-                },
+                document_id=document_id,
+                storage_path=storage_path,
+                local_tmp_exists=bool(local_tmp_path),
             )
 
             # Load settings and check if diagram detection is enabled
@@ -89,7 +84,7 @@ class DetectDiagramsWithOCRNode(DocumentProcessingNodeBase):
             settings = get_settings()
 
             if not settings.diagram_detection_enabled:
-                logger.info("Diagram detection disabled, skipping")
+                self._log_info("Diagram detection disabled, skipping")
                 state["diagram_processing_result"] = {
                     "success": True,
                     "diagrams": [],
@@ -109,7 +104,7 @@ class DetectDiagramsWithOCRNode(DocumentProcessingNodeBase):
             # Get pages from text extraction result
             pages = text_extraction_result.pages or []
             if not pages:
-                logger.warning("No pages found in text extraction result")
+                self._log_warning("No pages found in text extraction result")
                 state["diagram_processing_result"] = {
                     "success": True,
                     "diagrams": [],
@@ -124,7 +119,7 @@ class DetectDiagramsWithOCRNode(DocumentProcessingNodeBase):
             # Apply max_diagram_pages limit for cost control
             max_diagram_pages = getattr(settings, "max_diagram_pages", 10)
             if len(pages) > max_diagram_pages:
-                logger.info(
+                self._log_info(
                     f"Limiting diagram detection to {max_diagram_pages} pages (total: {len(pages)})"
                 )
                 # Use first N pages for processing
@@ -189,12 +184,14 @@ class DetectDiagramsWithOCRNode(DocumentProcessingNodeBase):
                                 d_type = (meta_dict or {}).get("type", "unknown")
                                 existing_llm_hints[page_no] = d_type or "unknown"
                     if existing_llm_hints:
-                        logger.info(
+                        self._log_info(
                             "Found existing LLM OCR diagram hints; will skip OCR for those pages",
-                            extra={"hint_pages": sorted(existing_llm_hints.keys())},
+                            hint_pages=sorted(existing_llm_hints.keys()),
                         )
             except Exception as hint_err:
-                logger.warning(f"Failed to load existing LLM diagram hints: {hint_err}")
+                self._log_warning(
+                    f"Failed to load existing LLM diagram hints: {hint_err}"
+                )
 
             # Store state for use in JPG persistence
             self._current_state = state
@@ -248,23 +245,21 @@ class DetectDiagramsWithOCRNode(DocumentProcessingNodeBase):
             if hasattr(self, "_current_state"):
                 delattr(self, "_current_state")
 
-            logger.info(
+            self._log_info(
                 f"Diagram detection completed successfully",
-                extra={
-                    "document_id": document_id,
-                    "diagrams_detected": len(all_diagrams),
-                    "pages_processed": len(pages),
-                    "diagram_types": [d.type for d in all_diagrams],
-                },
+                document_id=document_id,
+                diagrams_detected=len(all_diagrams),
+                pages_processed=len(pages),
+                diagram_types=[d.type for d in all_diagrams],
             )
 
             return state
 
         except Exception as e:
-            logger.error(
+            self._log_error(
                 f"Diagram detection failed: {e}",
                 exc_info=True,
-                extra={"document_id": state.get("document_id")},
+                document_id=state.get("document_id"),
             )
 
             state["error"] = f"Diagram detection failed: {str(e)}"
@@ -327,28 +322,24 @@ class DetectDiagramsWithOCRNode(DocumentProcessingNodeBase):
                     all_diagrams.append(
                         DiagramDetectionItem(type=hint_type, page=page_number)
                     )
-                    logger.info(
+                    self._log_info(
                         f"Skipping OCR for page {page_number} due to existing LLM hint",
-                        extra={
-                            "document_id": document_id,
-                            "hint_type": hint_type,
-                            "reason": "llm_ocr_hint_artifact",
-                        },
+                        document_id=document_id,
+                        hint_type=hint_type,
+                        reason="llm_ocr_hint_artifact",
                     )
                 else:
                     pages_to_process.append(page_number)
-                    logger.info(
+                    self._log_info(
                         f"Page {page_number} selected for diagram detection",
-                        extra={
-                            "document_id": document_id,
-                            "has_diagrams_flag": has_diagrams_flag,
-                            "has_low_text": has_low_text,
-                            "has_diagram_keywords": has_diagram_keywords,
-                        },
+                        document_id=document_id,
+                        has_diagrams_flag=has_diagrams_flag,
+                        has_low_text=has_low_text,
+                        has_diagram_keywords=has_diagram_keywords,
                     )
 
         if not pages_to_process:
-            logger.info(
+            self._log_info(
                 f"No pages selected for diagram detection for document {document_id}"
             )
             return all_diagrams
@@ -368,23 +359,19 @@ class DetectDiagramsWithOCRNode(DocumentProcessingNodeBase):
 
                 except Exception as e:
                     if retry_count < max_retries - 1:
-                        logger.warning(
+                        self._log_warning(
                             f"Failed to process page {page_number} for diagrams (attempt {retry_count + 1}/{max_retries}): {e}. Retrying in {retry_delay}s",
-                            extra={
-                                "document_id": document_id,
-                                "page_number": page_number,
-                                "retry_count": retry_count + 1,
-                            },
+                            document_id=document_id,
+                            page_number=page_number,
+                            retry_count=retry_count + 1,
                         )
                         await asyncio.sleep(retry_delay)
                         retry_delay *= 2  # Exponential backoff
                     else:
-                        logger.error(
+                        self._log_error(
                             f"Failed to process page {page_number} for diagrams after {max_retries} attempts: {e}",
-                            extra={
-                                "document_id": document_id,
-                                "page_number": page_number,
-                            },
+                            document_id=document_id,
+                            page_number=page_number,
                         )
                         # Don't add diagrams for this page, continue to next page
 
@@ -450,13 +437,11 @@ class DetectDiagramsWithOCRNode(DocumentProcessingNodeBase):
                         DiagramDetectionItem(type=diag_type, page=page_number)
                     )
 
-            logger.info(
+            self._log_info(
                 f"Page {page_number} diagram detection: {len(page_diagrams)} diagrams found",
-                extra={
-                    "document_id": document_id,
-                    "page_number": page_number,
-                    "diagram_types": [d.type for d in page_diagrams],
-                },
+                document_id=document_id,
+                page_number=page_number,
+                diagram_types=[d.type for d in page_diagrams],
             )
 
             # Persist detected diagrams as unified visual artifacts to enable reuse
@@ -498,7 +483,7 @@ class DetectDiagramsWithOCRNode(DocumentProcessingNodeBase):
                             )
                         self._log_info(
                             f"Persisted {len(page_diagrams)} OCR diagram artifact(s) for page {page_number}",
-                            extra={"page": page_number},
+                            page=page_number,
                         )
                 except Exception as persist_err:
                     self._log_warning(
@@ -508,9 +493,10 @@ class DetectDiagramsWithOCRNode(DocumentProcessingNodeBase):
             return page_diagrams
 
         except Exception as e:
-            logger.error(
+            self._log_error(
                 f"Failed to detect diagrams for page {page_number}: {e}",
-                extra={"document_id": document_id, "page_number": page_number},
+                document_id=document_id,
+                page_number=page_number,
             )
             return []
 
@@ -547,7 +533,7 @@ class DetectDiagramsWithOCRNode(DocumentProcessingNodeBase):
             return jpg_bytes
 
         except Exception as e:
-            logger.error(f"Failed to render page {page_number} to JPG: {e}")
+            self._log_error(f"Failed to render page {page_number} to JPG: {e}")
             raise
 
     def _validate_diagram_data(
@@ -569,7 +555,7 @@ class DetectDiagramsWithOCRNode(DocumentProcessingNodeBase):
                 # Validate diagram type
                 diagram_type = diagram.get("type", "unknown")
                 if diagram_type not in [dt.value for dt in DiagramType]:
-                    logger.warning(
+                    self._log_warning(
                         f"Invalid diagram type: {diagram_type}, using 'unknown'"
                     )
                     diagram_type = "unknown"
@@ -577,13 +563,15 @@ class DetectDiagramsWithOCRNode(DocumentProcessingNodeBase):
                 # Validate page number
                 page_number = diagram.get("page", 1)
                 if not isinstance(page_number, int) or page_number < 1:
-                    logger.warning(f"Invalid page number: {page_number}, using 1")
+                    self._log_warning(f"Invalid page number: {page_number}, using 1")
                     page_number = 1
 
                 validated_diagrams.append({"type": diagram_type, "page": page_number})
 
             except Exception as e:
-                logger.warning(f"Skipping invalid diagram data: {diagram}, error: {e}")
+                self._log_warning(
+                    f"Skipping invalid diagram data: {diagram}, error: {e}"
+                )
                 continue
 
         return validated_diagrams
@@ -640,7 +628,7 @@ class DetectDiagramsWithOCRNode(DocumentProcessingNodeBase):
             return file_content
 
         except Exception as e:
-            logger.error(
+            self._log_error(
                 f"Failed to read file from storage: {storage_path}, error: {e}"
             )
             raise

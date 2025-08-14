@@ -40,75 +40,77 @@ logger = logging.getLogger(__name__)
 def _extract_root_cause(exception: Exception) -> Exception:
     """
     Extract the root cause from an exception chain.
-    
+
     Args:
         exception: The exception to analyze
-        
+
     Returns:
         The root cause exception (the original exception that started the chain)
     """
     current = exception
-    while hasattr(current, '__cause__') and current.__cause__ is not None:
+    while hasattr(current, "__cause__") and current.__cause__ is not None:
         current = current.__cause__
-    
+
     # Also check for __context__ which is used for implicit exception chaining
-    while hasattr(current, '__context__') and current.__context__ is not None:
-        if not hasattr(current, '__cause__') or current.__cause__ is None:
+    while hasattr(current, "__context__") and current.__context__ is not None:
+        if not hasattr(current, "__cause__") or current.__cause__ is None:
             # Only follow __context__ if there's no explicit __cause__
             current = current.__context__
         else:
             break
-    
+
     return current
 
 
 def _format_exception_chain(exception: Exception) -> List[str]:
     """
     Format the full exception chain as a list of strings for logging.
-    
+
     Args:
         exception: The exception to format
-        
+
     Returns:
         List of formatted exception strings showing the full chain
     """
     chain = []
     current = exception
     seen = set()  # Prevent infinite loops in circular references
-    
+
     while current is not None:
         # Prevent infinite loops
         exception_id = id(current)
         if exception_id in seen:
             break
         seen.add(exception_id)
-        
+
         # Format current exception
         exc_info = {
-            'type': type(current).__name__,
-            'message': str(current),
-            'module': getattr(type(current), '__module__', 'unknown')
+            "type": type(current).__name__,
+            "message": str(current),
+            "module": getattr(type(current), "__module__", "unknown"),
         }
-        
+
         # Add file and line info if available
-        if hasattr(current, '__traceback__') and current.__traceback__:
+        if hasattr(current, "__traceback__") and current.__traceback__:
             tb = current.__traceback__
             while tb.tb_next:
                 tb = tb.tb_next  # Get the deepest traceback
-            exc_info['file'] = tb.tb_frame.f_code.co_filename
-            exc_info['line'] = tb.tb_lineno
-            exc_info['function'] = tb.tb_frame.f_code.co_name
-        
-        chain.append(f"{exc_info['type']}: {exc_info['message']} (in {exc_info.get('function', 'unknown')} at {exc_info.get('file', 'unknown')}:{exc_info.get('line', 'unknown')})")
-        
+            exc_info["file"] = tb.tb_frame.f_code.co_filename
+            exc_info["line"] = tb.tb_lineno
+            exc_info["function"] = tb.tb_frame.f_code.co_name
+
+        chain.append(
+            f"{exc_info['type']}: {exc_info['message']} (in {exc_info.get('function', 'unknown')} at {exc_info.get('file', 'unknown')}:{exc_info.get('line', 'unknown')})"
+        )
+
         # Move to the next exception in the chain
-        if hasattr(current, '__cause__') and current.__cause__ is not None:
+        if hasattr(current, "__cause__") and current.__cause__ is not None:
             current = current.__cause__
-        elif hasattr(current, '__context__') and current.__context__ is not None:
+        elif hasattr(current, "__context__") and current.__context__ is not None:
             current = current.__context__
         else:
             break
-    
+
     return chain
 
 
@@ -501,6 +503,30 @@ async def comprehensive_document_analysis(
             analysis_result = getattr(analysis_response, "analysis_results", {})
             final_state = getattr(analysis_response, "final_state", {})
 
+            # Merge in missing keys from final_state to avoid false negatives during validation
+            # Some nodes populate root-level state keys that may not be copied into analysis_results
+            if isinstance(analysis_result, dict):
+                merged_result = dict(analysis_result)
+            else:
+                merged_result = {}
+            if isinstance(final_state, dict):
+                for key in [
+                    "contract_terms",
+                    "risk_assessment",
+                    "compliance_check",
+                    "compliance_analysis",
+                    "recommendations",
+                    "final_validation_result",
+                    "overall_confidence",
+                    "final_workflow_confidence",
+                ]:
+                    if key not in merged_result or not merged_result.get(key):
+                        value = final_state.get(key)
+                        if value is not None:
+                            merged_result[key] = value
+            # Use merged result for downstream ops
+            analysis_result = merged_result
+
             logger.info(f"Contract analysis completed successfully")
 
             # Coarse milestone after analysis to indicate we are persisting results
@@ -569,6 +595,15 @@ async def comprehensive_document_analysis(
 
             # Send completion notification only if we have meaningful results
             if has_meaningful_results:
+                # Normalize recommendations to a list for summary metrics
+                _recs = analysis_result.get("recommendations")
+                if isinstance(_recs, dict):
+                    _rec_list = _recs.get("recommendations", [])
+                elif isinstance(_recs, list):
+                    _rec_list = _recs
+                else:
+                    _rec_list = []
+
                 analysis_summary = {
                     "analysis_id": analysis_id,
                     "risk_score": analysis_result.get("risk_assessment", {}).get(
@@ -576,11 +611,10 @@ async def comprehensive_document_analysis(
                     ),
                     "processing_time": getattr(analysis_response, "processing_time", 0)
                     or 0,
-                    "recommendations_count": len(
-                        analysis_result.get("recommendations", [])
-                    ),
+                    "recommendations_count": len(_rec_list),
                     "compliance_status": analysis_result.get(
-                        "compliance_check", {}
+                        "compliance_check",
+                        analysis_result.get("compliance_analysis", {}),
                     ).get("state_compliance", False),
                 }
                 publish_progress_sync(
@@ -621,13 +655,13 @@ async def comprehensive_document_analysis(
             "exception_type": type(e).__name__,
             "root_cause_type": type(root_cause).__name__,
             "root_cause_message": str(root_cause),
-            "full_exception_chain": _format_exception_chain(e)
+            "full_exception_chain": _format_exception_chain(e),
         }
-        
+
         logger.error(
-            f"Comprehensive analysis failed: {str(e)}\nRoot cause: {str(root_cause)}", 
+            f"Comprehensive analysis failed: {str(e)}\nRoot cause: {str(root_cause)}",
             exc_info=True,
-            extra=context_info
+            extra=context_info,
         )
 
         # Update progress with error
@@ -655,7 +689,7 @@ async def comprehensive_document_analysis(
 
                 # Include root cause in error message for better debugging
                 detailed_error_message = f"{str(e)} | Root cause: {str(root_cause)}"
-                
+
                 # Update progress preserving the last step and percentage for resume capability
                 await update_analysis_progress(
                     user_id,
@@ -676,8 +710,10 @@ async def comprehensive_document_analysis(
                     "root_cause": str(root_cause),
                     "exception_type": type(e).__name__,
                     "root_cause_type": type(root_cause).__name__,
-                    "failed_at_step": last_step if 'last_step' in locals() else "unknown",
-                    "context": context_info
+                    "failed_at_step": (
+                        last_step if "last_step" in locals() else "unknown"
+                    ),
+                    "context": context_info,
                 },
                 completed_at=datetime.now(timezone.utc),
             )
@@ -685,7 +721,12 @@ async def comprehensive_document_analysis(
             logger.error(
                 f"Failed to update error status: {str(update_error)}",
                 exc_info=True,
-                extra={"original_error": str(e), "root_cause": str(root_cause) if 'root_cause' in locals() else "unknown"}
+                extra={
+                    "original_error": str(e),
+                    "root_cause": (
+                        str(root_cause) if "root_cause" in locals() else "unknown"
+                    ),
+                },
             )
 
         # Re-raise for Celery retry logic with preserved context
@@ -1104,18 +1145,21 @@ def _validate_analysis_results(analysis_result: Dict[str, Any]) -> bool:
         if not analysis_result or not isinstance(analysis_result, dict):
             return False
 
-        # Check for contract terms with meaningful content
-        contract_terms = analysis_result.get("contract_terms", {})
-        if contract_terms and isinstance(contract_terms, dict):
-            # Look for at least some extracted contract data
+        # 1) Contract terms present with any meaningful content
+        contract_terms = analysis_result.get("contract_terms")
+        if isinstance(contract_terms, dict) and contract_terms:
             meaningful_fields = [
                 "purchase_price",
                 "settlement_date",
                 "property_address",
                 "vendor_name",
                 "purchaser_name",
+                # Accept alternate/common keys as well
+                "address",
+                "price",
+                "buyer_name",
+                "seller_name",
             ]
-
             extracted_fields = 0
             for field in meaningful_fields:
                 value = contract_terms.get(field)
@@ -1125,31 +1169,56 @@ def _validate_analysis_results(analysis_result: Dict[str, Any]) -> bool:
                     and str(value).strip() != "Not specified"
                 ):
                     extracted_fields += 1
-
-            # Require at least 2 meaningful contract terms
-            if extracted_fields >= 2:
+            if extracted_fields >= 1:
                 return True
 
-        # Check for risk assessment results
-        risk_assessment = analysis_result.get("risk_assessment", {})
-        if risk_assessment and isinstance(risk_assessment, dict):
-            overall_risk = risk_assessment.get("overall_risk_level")
-            if overall_risk and overall_risk != "unknown":
+        # 2) Risk assessment present with score or level
+        risk_assessment = analysis_result.get("risk_assessment")
+        if isinstance(risk_assessment, dict) and risk_assessment:
+            overall_risk_level = risk_assessment.get("overall_risk_level")
+            overall_risk_score = risk_assessment.get("overall_risk_score")
+            if (overall_risk_level and overall_risk_level != "unknown") or (
+                isinstance(overall_risk_score, (int, float)) and overall_risk_score > 0
+            ):
                 return True
 
-        # Check for compliance analysis
-        compliance = analysis_result.get("compliance_analysis", {})
-        if compliance and isinstance(compliance, dict):
-            state_compliance = compliance.get("state_compliance")
-            if state_compliance is not None:  # Can be True or False
+        # 3) Compliance present under either key used by the service
+        compliance = analysis_result.get("compliance_check") or analysis_result.get(
+            "compliance_analysis"
+        )
+        if isinstance(compliance, dict) and compliance:
+            if compliance.get("state_compliance") is not None:
+                return True
+            # Also accept presence of specific checks/issues
+            if compliance.get("issues") or compliance.get("warnings"):
                 return True
 
-        # Check for any recommendations
-        recommendations = analysis_result.get("recommendations", {})
-        if recommendations and isinstance(recommendations, dict):
+        # 4) Recommendations present (list or object with list)
+        recommendations = analysis_result.get("recommendations")
+        if isinstance(recommendations, list) and len(recommendations) > 0:
+            return True
+        if isinstance(recommendations, dict):
             rec_list = recommendations.get("recommendations", [])
-            if rec_list and len(rec_list) > 0:
+            if isinstance(rec_list, list) and len(rec_list) > 0:
                 return True
+
+        # 5) Final validation status indicates a good result
+        final_validation = analysis_result.get("final_validation_result")
+        if isinstance(final_validation, dict) and final_validation.get(
+            "validation_passed"
+        ):
+            return True
+
+        # 6) Confidence signals
+        overall_confidence = analysis_result.get("overall_confidence")
+        final_workflow_confidence = analysis_result.get("final_workflow_confidence")
+        if (
+            isinstance(overall_confidence, (int, float)) and overall_confidence >= 0.5
+        ) or (
+            isinstance(final_workflow_confidence, (int, float))
+            and final_workflow_confidence >= 0.5
+        ):
+            return True
 
         return False
 

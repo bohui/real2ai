@@ -64,7 +64,7 @@ class RiskAssessmentNode(BaseNode):
             if use_llm:
                 try:
                     risk_result = await self._assess_risks_with_llm(
-                        contract_terms, compliance_analysis
+                        contract_terms, compliance_analysis, state
                     )
                 except Exception as llm_error:
                     self._log_exception(
@@ -115,15 +115,54 @@ class RiskAssessmentNode(BaseNode):
             )
 
     async def _assess_risks_with_llm(
-        self, contract_terms: Dict[str, Any], compliance_analysis: Dict[str, Any]
+        self,
+        contract_terms: Dict[str, Any],
+        compliance_analysis: Dict[str, Any],
+        state: Optional[RealEstateAgentState] = None,
     ) -> Dict[str, Any]:
         """Assess risks using LLM analysis."""
         try:
             from app.core.prompts import PromptContext, ContextType
 
+            # Safely derive required context variables for service validation and templates
+            document_metadata: Dict[str, Any] = {}
+            if isinstance(state, dict):
+                document_metadata = state.get("document_metadata", {}) or {}
+
+            extracted_text_value = (
+                (
+                    document_metadata.get("full_text")
+                    or (state or {}).get("extracted_text")
+                    or ""
+                )
+                if isinstance(state, dict)
+                else ""
+            )
+
+            australian_state_value = (
+                state.get("australian_state") if isinstance(state, dict) else None
+            ) or "NSW"
+            contract_type_value = (
+                state.get("contract_type") if isinstance(state, dict) else None
+            ) or "purchase_agreement"
+            user_type_value = (
+                state.get("user_type") if isinstance(state, dict) else None
+            ) or "general"
+            user_experience_level_value = (
+                (
+                    state.get("user_experience_level")
+                    if isinstance(state, dict)
+                    else None
+                )
+                or (state.get("user_experience") if isinstance(state, dict) else None)
+                or "intermediate"
+            )
+
+            # Build prompt context including both service mapping requirements and template requirements
             context = PromptContext(
                 context_type=ContextType.ANALYSIS,
                 variables={
+                    # Existing analysis inputs
                     "contract_terms": contract_terms,
                     "compliance_analysis": compliance_analysis,
                     "analysis_type": "risk_assessment",
@@ -140,6 +179,18 @@ class RiskAssessmentNode(BaseNode):
                         "mitigation",
                         "confidence",
                     ],
+                    # Service 'contract_analysis_workflow' required variables
+                    "extracted_text": (extracted_text_value or "")[:8000],
+                    "australian_state": australian_state_value,
+                    "contract_type": contract_type_value,
+                    "user_type": user_type_value,
+                    "user_experience_level": user_experience_level_value,
+                    # Template 'analysis/risk_analysis_structured' required variables
+                    "document_content": (extracted_text_value or "")[:8000],
+                    # Use a sensible default focus; template supports specific branches
+                    "analysis_focus": "compliance",
+                    # Optional template variable for nicer rendering
+                    "user_experience": user_experience_level_value,
                 },
             )
 
@@ -175,7 +226,7 @@ class RiskAssessmentNode(BaseNode):
             self._log_exception(e, context={"assessment_method": "llm"})
             if self.enable_fallbacks:
                 return await self._assess_risks_rule_based(
-                    contract_terms, compliance_analysis
+                    contract_terms, compliance_analysis, state
                 )
             raise
 

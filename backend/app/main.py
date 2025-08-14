@@ -15,6 +15,7 @@ from asyncio import AbstractEventLoop
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 from app.core.config import get_settings
+from app.core.logging_config import configure_logging
 
 # Configure logging to respect LOG_LEVEL from environment or settings
 settings = get_settings()
@@ -22,8 +23,8 @@ settings = get_settings()
 level_name = os.getenv("LOG_LEVEL", settings.log_level or "INFO").upper()
 log_level = getattr(logging, level_name, logging.INFO)
 
-# Configure root logging level (may be a no-op if handlers already exist under uvicorn)
-logging.basicConfig(level=log_level)
+# Configure logging with JSON formatter that preserves `extra` fields
+configure_logging(level=log_level, use_json=True)
 
 # Ensure key loggers follow the configured level even if basicConfig was a no-op
 for logger_name in (
@@ -125,15 +126,19 @@ async def lifespan(app: FastAPI) -> Any:
     # Validate production security configuration
     if settings.environment == "production":
         logger.info("Validating production security configuration...")
-        
+
         # Validate CORS origins in production
         allowed_origins_env = os.getenv("ALLOWED_ORIGINS", "")
         if not allowed_origins_env or "localhost" in allowed_origins_env:
-            logger.critical("CRITICAL: ALLOWED_ORIGINS must be configured for production")
+            logger.critical(
+                "CRITICAL: ALLOWED_ORIGINS must be configured for production"
+            )
             logger.critical("Current origins include localhost or are empty")
-            logger.critical("Set ALLOWED_ORIGINS environment variable with production domains only")
+            logger.critical(
+                "Set ALLOWED_ORIGINS environment variable with production domains only"
+            )
             raise RuntimeError("Invalid ALLOWED_ORIGINS configuration for production")
-        
+
         logger.info("Production security configuration validated successfully")
 
     # Validate JWT configuration on startup

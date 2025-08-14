@@ -9,14 +9,16 @@ from typing import Dict, List, Optional, Any
 from uuid import UUID
 from dataclasses import dataclass
 from datetime import datetime
+import json
 import asyncpg
 
 from app.database.connection import get_user_connection
 
 
-@dataclass  
+@dataclass
 class DocumentPage:
     """Document page model"""
+
     document_id: UUID
     page_number: int
     artifact_page_id: UUID
@@ -29,6 +31,7 @@ class DocumentPage:
 @dataclass
 class DocumentDiagram:
     """Document diagram model"""
+
     document_id: UUID
     page_number: int
     diagram_key: str
@@ -41,7 +44,7 @@ class DocumentDiagram:
 class UserDocsRepository:
     """
     Repository for user-scoped document processing data.
-    
+
     FIXED: Now uses proper context managers for all database operations
     instead of storing connections. This ensures connections are properly
     released back to the pool instead of being closed.
@@ -50,10 +53,10 @@ class UserDocsRepository:
     def __init__(self, user_id: UUID):
         """
         Initialize user docs repository.
-        
+
         Args:
             user_id: User ID for scoped operations
-            
+
         Note: No stored connection! Each method uses its own context manager
         for proper connection pool management.
         """
@@ -69,17 +72,17 @@ class UserDocsRepository:
         document_id: UUID,
         artifact_text_id: UUID,
         total_pages: Optional[int] = None,
-        total_word_count: Optional[int] = None
+        total_word_count: Optional[int] = None,
     ) -> bool:
         """
         Update document with artifact reference and aggregated metrics.
-        
+
         Args:
             document_id: Document ID
             artifact_text_id: Text extraction artifact ID
             total_pages: Total page count
             total_word_count: Total word count
-            
+
         Returns:
             True if update successful, False otherwise
         """
@@ -93,10 +96,14 @@ class UserDocsRepository:
                     total_word_count = COALESCE($3, total_word_count)
                 WHERE id = $4 AND user_id = $5
                 """,
-                artifact_text_id, total_pages, total_word_count, document_id, self.user_id
+                artifact_text_id,
+                total_pages,
+                total_word_count,
+                document_id,
+                self.user_id,
             )
-            
-            return result.split()[-1] == '1'  # Check if exactly one row was updated
+
+            return result.split()[-1] == "1"  # Check if exactly one row was updated
 
     async def update_document_processing_status(
         self,
@@ -104,7 +111,7 @@ class UserDocsRepository:
         processing_status: str,
         processing_started_at: Optional[datetime] = None,
         processing_completed_at: Optional[datetime] = None,
-        processing_errors: Optional[Dict[str, Any]] = None
+        processing_errors: Optional[Dict[str, Any]] = None,
     ) -> bool:
         """
         Update document processing status.
@@ -115,7 +122,7 @@ class UserDocsRepository:
             processing_started_at: When processing started
             processing_completed_at: When processing completed
             processing_errors: Any processing errors
-            
+
         Returns:
             True if update successful, False otherwise
         """
@@ -124,36 +131,39 @@ class UserDocsRepository:
             set_clauses = ["processing_status = $1"]
             params = [processing_status]
             param_count = 1
-            
+
             if processing_started_at is not None:
                 param_count += 1
-                set_clauses.append(f"processing_started_at = COALESCE(processing_started_at, ${param_count})")
+                set_clauses.append(
+                    f"processing_started_at = COALESCE(processing_started_at, ${param_count})"
+                )
                 params.append(processing_started_at)
-                
+
             if processing_completed_at is not None:
                 param_count += 1
                 set_clauses.append(f"processing_completed_at = ${param_count}")
                 params.append(processing_completed_at)
-                
+
             if processing_errors is not None:
                 param_count += 1
                 set_clauses.append(f"processing_errors = ${param_count}")
-                params.append(processing_errors)
-                
+                # Ensure proper JSON encoding
+                params.append(json.dumps(processing_errors))
+
             # Add WHERE clause parameters
             param_count += 1
             params.append(document_id)
             param_count += 1
             params.append(self.user_id)
-            
+
             query = f"""
                 UPDATE documents 
                 SET {', '.join(set_clauses)}
                 WHERE id = ${param_count - 1} AND user_id = ${param_count}
             """
-            
+
             result = await conn.execute(query, *params)
-            return result.split()[-1] == '1'
+            return result.split()[-1] == "1"
 
     # ================================
     # DOCUMENT PAGES
@@ -165,18 +175,18 @@ class UserDocsRepository:
         page_number: int,
         artifact_page_id: UUID,
         annotations: Optional[Dict[str, Any]] = None,
-        flags: Optional[Dict[str, Any]] = None
+        flags: Optional[Dict[str, Any]] = None,
     ) -> DocumentPage:
         """
         Upsert document page reference with artifact ID.
-        
+
         Args:
             document_id: Document ID
             page_number: Page number (1-based)
             artifact_page_id: Reference to artifact page
             annotations: User-specific annotations
             flags: User-specific flags
-            
+
         Returns:
             DocumentPage (existing or newly created)
         """
@@ -195,17 +205,21 @@ class UserDocsRepository:
                 RETURNING document_id, page_number, artifact_page_id, 
                           annotations, flags, created_at, updated_at
                 """,
-                document_id, page_number, artifact_page_id, annotations, flags
+                document_id,
+                page_number,
+                artifact_page_id,
+                json.dumps(annotations) if annotations is not None else None,
+                json.dumps(flags) if flags is not None else None,
             )
-            
+
             return DocumentPage(
-                document_id=row['document_id'],
-                page_number=row['page_number'],
-                artifact_page_id=row['artifact_page_id'],
-                annotations=row['annotations'],
-                flags=row['flags'],
-                created_at=row['created_at'],
-                updated_at=row['updated_at']
+                document_id=row["document_id"],
+                page_number=row["page_number"],
+                artifact_page_id=row["artifact_page_id"],
+                annotations=row["annotations"],
+                flags=row["flags"],
+                created_at=row["created_at"],
+                updated_at=row["updated_at"],
             )
 
     async def get_document_pages(self, document_id: UUID) -> List[DocumentPage]:
@@ -219,18 +233,18 @@ class UserDocsRepository:
                 WHERE document_id = $1
                 ORDER BY page_number
                 """,
-                document_id
+                document_id,
             )
-            
+
             return [
                 DocumentPage(
-                    document_id=row['document_id'],
-                    page_number=row['page_number'],
-                    artifact_page_id=row['artifact_page_id'],
-                    annotations=row['annotations'],
-                    flags=row['flags'],
-                    created_at=row['created_at'],
-                    updated_at=row['updated_at']
+                    document_id=row["document_id"],
+                    page_number=row["page_number"],
+                    artifact_page_id=row["artifact_page_id"],
+                    annotations=row["annotations"],
+                    flags=row["flags"],
+                    created_at=row["created_at"],
+                    updated_at=row["updated_at"],
                 )
                 for row in rows
             ]
@@ -245,18 +259,18 @@ class UserDocsRepository:
         page_number: int,
         diagram_key: str,
         artifact_diagram_id: UUID,
-        annotations: Optional[Dict[str, Any]] = None
+        annotations: Optional[Dict[str, Any]] = None,
     ) -> DocumentDiagram:
         """
         Upsert document diagram reference with artifact ID.
-        
+
         Args:
             document_id: Document ID
             page_number: Page number
             diagram_key: Diagram identifier
             artifact_diagram_id: Reference to artifact diagram
             annotations: User-specific annotations
-            
+
         Returns:
             DocumentDiagram (existing or newly created)
         """
@@ -273,17 +287,21 @@ class UserDocsRepository:
                 RETURNING document_id, page_number, diagram_key, artifact_diagram_id,
                           annotations, created_at, updated_at
                 """,
-                document_id, page_number, diagram_key, artifact_diagram_id, annotations
+                document_id,
+                page_number,
+                diagram_key,
+                artifact_diagram_id,
+                json.dumps(annotations) if annotations is not None else None,
             )
-            
+
             return DocumentDiagram(
-                document_id=row['document_id'],
-                page_number=row['page_number'],
-                diagram_key=row['diagram_key'],
-                artifact_diagram_id=row['artifact_diagram_id'],
-                annotations=row['annotations'],
-                created_at=row['created_at'],
-                updated_at=row['updated_at']
+                document_id=row["document_id"],
+                page_number=row["page_number"],
+                diagram_key=row["diagram_key"],
+                artifact_diagram_id=row["artifact_diagram_id"],
+                annotations=row["annotations"],
+                created_at=row["created_at"],
+                updated_at=row["updated_at"],
             )
 
     async def get_document_diagrams(self, document_id: UUID) -> List[DocumentDiagram]:
@@ -297,18 +315,18 @@ class UserDocsRepository:
                 WHERE document_id = $1
                 ORDER BY page_number, diagram_key
                 """,
-                document_id
+                document_id,
             )
-            
+
             return [
                 DocumentDiagram(
-                    document_id=row['document_id'],
-                    page_number=row['page_number'],
-                    diagram_key=row['diagram_key'],
-                    artifact_diagram_id=row['artifact_diagram_id'],
-                    annotations=row['annotations'],
-                    created_at=row['created_at'],
-                    updated_at=row['updated_at']
+                    document_id=row["document_id"],
+                    page_number=row["page_number"],
+                    diagram_key=row["diagram_key"],
+                    artifact_diagram_id=row["artifact_diagram_id"],
+                    annotations=row["annotations"],
+                    created_at=row["created_at"],
+                    updated_at=row["updated_at"],
                 )
                 for row in rows
             ]
@@ -318,65 +336,61 @@ class UserDocsRepository:
     # ================================
 
     async def batch_upsert_document_pages(
-        self,
-        document_id: UUID,
-        page_data: List[Dict[str, Any]]
+        self, document_id: UUID, page_data: List[Dict[str, Any]]
     ) -> List[DocumentPage]:
         """
         Batch upsert multiple document pages.
-        
+
         Args:
             document_id: Document ID
             page_data: List of page data dictionaries with keys:
                       page_number, artifact_page_id, annotations (optional), flags (optional)
-                      
+
         Returns:
             List of DocumentPage objects
         """
         if not page_data:
             return []
-            
+
         results = []
         for page in page_data:
             result = await self.upsert_document_page(
                 document_id=document_id,
-                page_number=page['page_number'],
-                artifact_page_id=page['artifact_page_id'],
-                annotations=page.get('annotations'),
-                flags=page.get('flags')
+                page_number=page["page_number"],
+                artifact_page_id=page["artifact_page_id"],
+                annotations=page.get("annotations"),
+                flags=page.get("flags"),
             )
             results.append(result)
-            
+
         return results
-    
+
     async def batch_upsert_document_diagrams(
-        self,
-        document_id: UUID,
-        diagram_data: List[Dict[str, Any]]
+        self, document_id: UUID, diagram_data: List[Dict[str, Any]]
     ) -> List[DocumentDiagram]:
         """
         Batch upsert multiple document diagrams.
-        
+
         Args:
             document_id: Document ID
             diagram_data: List of diagram data dictionaries with keys:
                          page_number, diagram_key, artifact_diagram_id, annotations (optional)
-                         
+
         Returns:
             List of DocumentDiagram objects
         """
         if not diagram_data:
             return []
-            
+
         results = []
         for diagram in diagram_data:
             result = await self.upsert_document_diagram(
                 document_id=document_id,
-                page_number=diagram['page_number'],
-                diagram_key=diagram['diagram_key'],
-                artifact_diagram_id=diagram['artifact_diagram_id'],
-                annotations=diagram.get('annotations')
+                page_number=diagram["page_number"],
+                diagram_key=diagram["diagram_key"],
+                artifact_diagram_id=diagram["artifact_diagram_id"],
+                annotations=diagram.get("annotations"),
             )
             results.append(result)
-            
+
         return results

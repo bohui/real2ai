@@ -629,12 +629,25 @@ async def execute_raw_sql(query: str, *args, user_id: Optional[UUID] = None) -> 
     Returns:
         Query result
     """
-    if user_id is not None or AuthContext.get_user_id():
-        async with get_user_connection(user_id) as connection:
-            return await connection.execute(query, *args)
-    else:
-        async with get_service_role_connection() as connection:
-            return await connection.execute(query, *args)
+    # Basic retry on transient connection issues
+    max_attempts = 3
+    for attempt in range(max_attempts):
+        try:
+            if user_id is not None or AuthContext.get_user_id():
+                async with get_user_connection(user_id) as connection:
+                    return await connection.execute(query, *args)
+            else:
+                async with get_service_role_connection() as connection:
+                    return await connection.execute(query, *args)
+        except asyncpg.exceptions.ConnectionDoesNotExistError:
+            logger.error(
+                "Connection closed during execute; retrying (%s/%s)",
+                attempt + 1,
+                max_attempts,
+            )
+            if attempt == max_attempts - 1:
+                raise
+            await asyncio.sleep(0.1 * (attempt + 1))
 
 
 async def fetch_raw_sql(query: str, *args, user_id: Optional[UUID] = None) -> list:
@@ -649,12 +662,24 @@ async def fetch_raw_sql(query: str, *args, user_id: Optional[UUID] = None) -> li
     Returns:
         List of query results
     """
-    if user_id is not None or AuthContext.get_user_id():
-        async with get_user_connection(user_id) as connection:
-            return await connection.fetch(query, *args)
-    else:
-        async with get_service_role_connection() as connection:
-            return await connection.fetch(query, *args)
+    max_attempts = 3
+    for attempt in range(max_attempts):
+        try:
+            if user_id is not None or AuthContext.get_user_id():
+                async with get_user_connection(user_id) as connection:
+                    return await connection.fetch(query, *args)
+            else:
+                async with get_service_role_connection() as connection:
+                    return await connection.fetch(query, *args)
+        except asyncpg.exceptions.ConnectionDoesNotExistError:
+            logger.error(
+                "Connection closed during fetch; retrying (%s/%s)",
+                attempt + 1,
+                max_attempts,
+            )
+            if attempt == max_attempts - 1:
+                raise
+            await asyncio.sleep(0.1 * (attempt + 1))
 
 
 async def fetchrow_raw_sql(query: str, *args, user_id: Optional[UUID] = None) -> Any:
@@ -669,9 +694,21 @@ async def fetchrow_raw_sql(query: str, *args, user_id: Optional[UUID] = None) ->
     Returns:
         Single query result row
     """
-    if user_id is not None or AuthContext.get_user_id():
-        async with get_user_connection(user_id) as connection:
-            return await connection.fetchrow(query, *args)
-    else:
-        async with get_service_role_connection() as connection:
-            return await connection.fetchrow(query, *args)
+    max_attempts = 3
+    for attempt in range(max_attempts):
+        try:
+            if user_id is not None or AuthContext.get_user_id():
+                async with get_user_connection(user_id) as connection:
+                    return await connection.fetchrow(query, *args)
+            else:
+                async with get_service_role_connection() as connection:
+                    return await connection.fetchrow(query, *args)
+        except asyncpg.exceptions.ConnectionDoesNotExistError:
+            logger.error(
+                "Connection closed during fetchrow; retrying (%s/%s)",
+                attempt + 1,
+                max_attempts,
+            )
+            if attempt == max_attempts - 1:
+                raise
+            await asyncio.sleep(0.1 * (attempt + 1))

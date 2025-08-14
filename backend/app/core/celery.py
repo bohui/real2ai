@@ -5,9 +5,13 @@ Centralized Celery setup for the application
 
 from celery import Celery
 from app.core.config import get_settings
+from app.core.logging_config import configure_logging
 
 # Get settings
 settings = get_settings()
+
+# Ensure Celery workers use the same JSON logging formatter and level
+configure_logging(level=get_settings().log_level, use_json=True)
 
 # Create Celery app instance
 celery_app = Celery(

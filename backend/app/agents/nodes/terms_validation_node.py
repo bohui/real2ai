@@ -137,6 +137,13 @@ class TermsValidationNode(BaseNode):
         try:
             from app.core.prompts import PromptContext, ContextType
 
+            # Provide required service/template context with safe defaults
+            australian_state_value = "NSW"
+            contract_type_value = "purchase_agreement"
+            user_type_value = "general"
+            user_experience_level_value = "intermediate"
+            analysis_timestamp_value = datetime.now(UTC).isoformat()
+
             context = PromptContext(
                 context_type=ContextType.VALIDATION,
                 variables={
@@ -156,6 +163,16 @@ class TermsValidationNode(BaseNode):
                         "consistency",
                         "completeness",
                     ],
+                    # Service mapping required variables
+                    "extracted_text": "",  # not needed for this step
+                    "australian_state": australian_state_value,
+                    "contract_type": contract_type_value,
+                    "user_type": user_type_value,
+                    "user_experience_level": user_experience_level_value,
+                    # Template-required timestamp alias (some templates expect this)
+                    "analysis_timestamp": analysis_timestamp_value,
+                    # Some templates use 'user_experience'
+                    "user_experience": user_experience_level_value,
                 },
             )
 
@@ -200,20 +217,15 @@ class TermsValidationNode(BaseNode):
             from app.agents.tools.validation import validate_contract_terms_completeness
 
             # Determine context inputs expected by the tool
-            australian_state = None
-            contract_type = None
-            try:
-                # Attempt to resolve from state dict if available
-                australian_state = state.get("australian_state")  # type: ignore[name-defined]
-                contract_type = state.get("contract_type")  # type: ignore[name-defined]
-            except Exception:
-                pass
+            # No access to workflow state here; provide conservative defaults
+            australian_state = "NSW"
+            contract_type = "purchase_agreement"
 
             validation_result = validate_contract_terms_completeness.invoke(
                 {
                     "contract_terms": contract_terms,
-                    "australian_state": australian_state or "",
-                    "contract_type": contract_type or "purchase_agreement",
+                    "australian_state": australian_state,
+                    "contract_type": contract_type,
                 }
             )
 
@@ -236,17 +248,29 @@ class TermsValidationNode(BaseNode):
 
             completeness_score = len(present_fields) / len(required_fields)
 
+            # Map tool output to ContractTermsValidationOutput-compatible shape
+            terms_validated = {name: name in present_fields for name in required_fields}
+            overall_confidence = float(
+                validation_result.get("confidence", completeness_score)
+            )
+
             enhanced_result = {
+                "terms_validated": terms_validated,
+                "missing_mandatory_terms": validation_result.get(
+                    "missing_terms", missing_fields
+                ),
+                "incomplete_terms": validation_result.get("incomplete_terms", []),
+                "validation_confidence": overall_confidence,
+                "state_specific_requirements": validation_result.get(
+                    "state_requirements", {}
+                ),
+                "recommendations": validation_result.get("recommendations", []),
+                # Keep legacy fields for internal summaries
                 "completeness_score": completeness_score,
                 "present_fields": present_fields,
                 "missing_fields": missing_fields,
                 "field_count": len(contract_terms),
                 "required_field_count": len(required_fields),
-                "validation_issues": validation_result.get("issues", []),
-                "improvement_suggestions": validation_result.get("suggestions", []),
-                "overall_confidence": validation_result.get(
-                    "confidence", completeness_score
-                ),
                 "validation_method": "rule_based",
             }
 

@@ -152,11 +152,51 @@ class DocumentQualityValidationNode(BaseNode):
             extraction_method_value = (metadata or {}).get("extraction_method") or "ocr"
             analysis_timestamp_value = datetime.now(UTC).isoformat()
 
+            # Sanitize metadata to avoid oversized prompts (remove large text blobs)
+            def _sanitize_metadata(data: Dict[str, Any]) -> Dict[str, Any]:
+                if not isinstance(data, dict):
+                    return {}
+                drop_keys = {
+                    "full_text",
+                    "pages",
+                    "page_texts",
+                    "raw_text",
+                    "extracted_text",
+                    "content",
+                    "original_pages",
+                }
+                sanitized: Dict[str, Any] = {}
+                for key, value in data.items():
+                    if key in drop_keys:
+                        continue
+                    if isinstance(value, str):
+                        sanitized[key] = value[:1000] + (
+                            "..." if len(value) > 1000 else ""
+                        )
+                    elif isinstance(value, list):
+                        sanitized[key] = value[:50]
+                    elif isinstance(value, dict):
+                        # Shallow sanitize nested dicts to avoid huge payloads
+                        nested: Dict[str, Any] = {}
+                        for nk, nv in value.items():
+                            if nk in drop_keys:
+                                continue
+                            if isinstance(nv, str):
+                                nested[nk] = nv[:500] + ("..." if len(nv) > 500 else "")
+                            # Skip deeply nested large structures
+                        if nested:
+                            sanitized[key] = nested
+                    else:
+                        sanitized[key] = value
+                return sanitized
+
+            sanitized_metadata = _sanitize_metadata(metadata or {})
+
             context = PromptContext(
                 context_type=ContextType.VALIDATION,
                 variables={
                     "document_text": text[:2000],  # Limit for LLM processing
-                    "document_metadata": metadata,
+                    "document_metadata": sanitized_metadata,
                     "validation_type": "document_quality",
                     "quality_criteria": [
                         "text_clarity",

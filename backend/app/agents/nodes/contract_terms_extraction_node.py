@@ -213,7 +213,7 @@ class ContractTermsExtractionNode(BaseNode):
                 },
             )
 
-            # Use fragment-based prompts if enabled
+            # Use fragment-based prompts if enabled; ensure we always pass required context defaults
             if self.extraction_config.get("use_fragments", True):
                 rendered_prompt = await self.prompt_manager.render(
                     template_name="analysis/contract_structure",
@@ -244,10 +244,19 @@ class ContractTermsExtractionNode(BaseNode):
                         if parsing_result.success and parsing_result.data:
                             return parsing_result.data
 
-                    # Fallback to JSON parsing
+                    # Fallback to JSON parsing with braces recovery
                     contract_terms = self._safe_json_parse(response)
                     if contract_terms:
                         return contract_terms
+
+                    # Attempt to extract JSON substring if the model returned extra text
+                    import re
+
+                    json_snippets = re.findall(r"\{[\s\S]*\}", response)
+                    for snippet in json_snippets:
+                        parsed = self._safe_json_parse(snippet)
+                        if parsed:
+                            return parsed
 
                     if attempt < max_retries:
                         self._log_step_debug(
