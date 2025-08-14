@@ -473,25 +473,27 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                         )
                     )
 
-                    page_artifact = await self.artifacts_repo.insert_unified_page_artifact(
-                        content_hmac=content_hmac,
-                        algorithm_version=algorithm_version,
-                        params_fingerprint=params_fingerprint,
-                        page_number=page.page_number,
-                        page_text_uri=page_text_uri,
-                        page_text_sha256=page_text_sha256,
-                        content_type="text",
-                        layout=(
-                            page.content_analysis.layout_features.__dict__
-                            if page.content_analysis
-                            else None
-                        ),
-                        metrics={
-                            "confidence": page.confidence,
-                            "word_count": page.word_count,
-                            "text_length": page.text_length,
-                            "extraction_method": page.extraction_method,
-                        },
+                    page_artifact = (
+                        await self.artifacts_repo.insert_unified_page_artifact(
+                            content_hmac=content_hmac,
+                            algorithm_version=algorithm_version,
+                            params_fingerprint=params_fingerprint,
+                            page_number=page.page_number,
+                            page_text_uri=page_text_uri,
+                            page_text_sha256=page_text_sha256,
+                            content_type="text",
+                            layout=(
+                                page.content_analysis.layout_features.__dict__
+                                if page.content_analysis
+                                else None
+                            ),
+                            metrics={
+                                "confidence": page.confidence,
+                                "word_count": page.word_count,
+                                "text_length": page.text_length,
+                                "extraction_method": page.extraction_method,
+                            },
+                        )
                     )
 
                     self._log_info(
@@ -698,23 +700,33 @@ class ExtractTextNode(DocumentProcessingNodeBase):
 
                 # Selective OCR for low-text/scanned pages (LLM first, PyTesseract fallback)
                 settings = get_settings()
-                if settings.enable_selective_ocr and (is_low_text or has_images or has_diagram_kw):
+                if settings.enable_selective_ocr and (
+                    is_low_text or has_images or has_diagram_kw
+                ):
                     ocr_text = ""
                     ocr_method = method
-                    
+
                     # Try LLM OCR first if enabled
                     if self.use_llm and gemini_service:
                         try:
                             # Render page image at higher DPI
                             png_bytes = self._render_page_png(page, zoom=self._ocr_zoom)
-                            llm_result = await gemini_service.extract_text_diagram_insight(
-                                file_content=png_bytes,
-                                file_type="png",
-                                filename=f"page_{idx+1}.png",
-                                analysis_focus="ocr",
-                                australian_state=state.get("australian_state", "NSW"),
-                                contract_type=state.get("contract_type", "purchase_agreement"),
-                                document_type=state.get("document_type", "contract"),
+                            llm_result = (
+                                await gemini_service.extract_text_diagram_insight(
+                                    file_content=png_bytes,
+                                    file_type="png",
+                                    filename=f"page_{idx+1}.png",
+                                    analysis_focus="ocr",
+                                    australian_state=state.get(
+                                        "australian_state", "NSW"
+                                    ),
+                                    contract_type=state.get(
+                                        "contract_type", "purchase_agreement"
+                                    ),
+                                    document_type=state.get(
+                                        "document_type", "contract"
+                                    ),
+                                )
                             )
                             llm_text = (llm_result or {}).get("text", "")
                             if len(llm_text.strip()) > len(raw_text.strip()):
@@ -722,7 +734,9 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                                 ocr_method = "gemini_ocr"
                             # If LLM indicated diagram, mark later in analysis
                             has_images = has_images or bool(
-                                (llm_result or {}).get("diagram_hint", {}).get("is_diagram")
+                                (llm_result or {})
+                                .get("diagram_hint", {})
+                                .get("is_diagram")
                             )
                             if (
                                 (llm_result or {})
@@ -735,21 +749,29 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                             self._log_warning(
                                 f"Gemini OCR failed on page {idx+1}, trying PyTesseract fallback: {e}"
                             )
-                    
+
                     # PyTesseract fallback for scanned pages if LLM OCR failed or unavailable
-                    if not ocr_text and is_low_text and settings.enable_tesseract_fallback:
+                    if (
+                        not ocr_text
+                        and is_low_text
+                        and settings.enable_tesseract_fallback
+                    ):
                         try:
                             # Render page image for PyTesseract
                             png_bytes = self._render_page_png(page, zoom=self._ocr_zoom)
-                            tesseract_text = await self._extract_text_with_tesseract(png_bytes)
-                            if tesseract_text and len(tesseract_text.strip()) > len(raw_text.strip()):
+                            tesseract_text = await self._extract_text_with_tesseract(
+                                png_bytes
+                            )
+                            if tesseract_text and len(tesseract_text.strip()) > len(
+                                raw_text.strip()
+                            ):
                                 ocr_text = tesseract_text
                                 ocr_method = "tesseract_ocr"
                         except Exception as e:
                             self._log_warning(
                                 f"PyTesseract OCR failed on page {idx+1}: {e}"
                             )
-                    
+
                     # Use OCR text if it's better than native text
                     if ocr_text:
                         text_to_use = ocr_text
@@ -804,7 +826,9 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                 total_word_count=0,
             )
 
-    async def _extract_image_text_basic(self, file_content: bytes, state: DocumentProcessingState) -> tuple[str, str]:
+    async def _extract_image_text_basic(
+        self, file_content: bytes, state: DocumentProcessingState
+    ) -> tuple[str, str]:
         """Basic OCR text extraction from images."""
         try:
             settings = get_settings()
@@ -828,7 +852,7 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                 except Exception as e:
                     self._log_warning(f"LLM OCR unavailable, falling back: {e}")
                     # Fall through to tesseract
-            
+
             # Try basic Tesseract OCR if enabled
             if settings.enable_tesseract_fallback:
                 try:
@@ -886,10 +910,10 @@ class ExtractTextNode(DocumentProcessingNodeBase):
     async def _extract_text_with_tesseract(self, image_bytes: bytes) -> str:
         """
         Extract text from image bytes using PyTesseract.
-        
+
         Args:
             image_bytes: Image data as bytes
-            
+
         Returns:
             Extracted text string
         """
@@ -897,15 +921,15 @@ class ExtractTextNode(DocumentProcessingNodeBase):
             import pytesseract
             from PIL import Image
             from io import BytesIO
-            
+
             # Open image from bytes
             image = Image.open(BytesIO(image_bytes))
-            
+
             # Extract text using pytesseract
             text = pytesseract.image_to_string(image)
-            
+
             return text.strip()
-            
+
         except ImportError:
             self._log_warning("PyTesseract not available for OCR fallback")
             return ""
