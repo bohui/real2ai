@@ -8,9 +8,10 @@ Usage examples:
   python clear_data.py --yes                    # non-interactive, safe delete mode
   python clear_data.py --truncate --yes         # fast TRUNCATE CASCADE across selected tables
   python clear_data.py --tables documents,contracts --yes  # clear subset in dependency-safe order
-  python clear_data.py --yes                    # clear database + storage bucket (default)
+  python clear_data.py --yes                    # clear database + storage buckets (documents,artifacts,reports default)
   python clear_data.py --no-storage --yes       # clear database only, skip storage
-  python clear_data.py --storage-bucket documents --yes  # clear specific bucket
+  python clear_data.py --storage-buckets documents,artifacts,reports --yes  # clear multiple buckets
+  python clear_data.py --storage-bucket documents --yes  # clear single bucket (legacy)
 """
 
 import os
@@ -327,15 +328,21 @@ class DatabaseCleaner:
             logger.error(f"Storage cleanup failed: {e}")
             return 0
 
-    async def clear_with_delete(self, tables: Sequence[str]) -> None:
+    async def clear_with_delete(self, tables: Sequence[str], storage_buckets: list[str] | None = None) -> None:
         """Delete rows in dependency-safe order.
 
         This avoids unintended cascading into unrelated tables.
         """
         # Clear storage first if enabled
         if self.clear_storage:
-            logger.info("🗂️  Clearing storage bucket...")
-            await self.clear_storage_bucket()
+            buckets_to_clear = storage_buckets or ["documents", "artifacts", "reports"]
+            logger.info(f"🗂️  Clearing storage buckets: {', '.join(buckets_to_clear)}")
+            total_deleted = 0
+            for bucket in buckets_to_clear:
+                deleted = await self.clear_storage_bucket(bucket)
+                total_deleted += deleted
+            if total_deleted > 0:
+                logger.info(f"✅ Total storage files deleted: {total_deleted}")
 
         # Import here to avoid heavy imports when not needed and prevent circular imports
         try:
@@ -377,7 +384,7 @@ class DatabaseCleaner:
                     logger.error(f"Error clearing table {table}: {e}")
 
     async def clear_with_truncate(
-        self, tables: Sequence[str], restart_identity: bool = True
+        self, tables: Sequence[str], restart_identity: bool = True, storage_buckets: list[str] | None = None
     ) -> None:
         """Fast truncate with CASCADE across selected tables.
 
@@ -385,8 +392,14 @@ class DatabaseCleaner:
         """
         # Clear storage first if enabled
         if self.clear_storage:
-            logger.info("🗂️  Clearing storage bucket...")
-            await self.clear_storage_bucket()
+            buckets_to_clear = storage_buckets or ["documents", "artifacts", "reports"]
+            logger.info(f"🗂️  Clearing storage buckets: {', '.join(buckets_to_clear)}")
+            total_deleted = 0
+            for bucket in buckets_to_clear:
+                deleted = await self.clear_storage_bucket(bucket)
+                total_deleted += deleted
+            if total_deleted > 0:
+                logger.info(f"✅ Total storage files deleted: {total_deleted}")
 
         # Import here to avoid heavy imports when not needed and prevent circular imports
         try:
@@ -434,7 +447,8 @@ Examples:
   python clear_data.py --tables documents,contracts --yes
   python clear_data.py --yes
   python clear_data.py --no-storage --yes
-  python clear_data.py --storage-bucket documents --yes
+  python clear_data.py --storage-buckets documents,artifacts,reports --yes
+  python clear_data.py --storage-bucket documents --yes  # legacy single bucket
         """,
     )
 
@@ -465,9 +479,13 @@ Examples:
         help="Skip storage bucket clearing",
     )
     parser.add_argument(
+        "--storage-buckets",
+        default="documents,artifacts,reports",
+        help="Comma-separated list of storage buckets to clear (default: documents,artifacts,reports)",
+    )
+    parser.add_argument(
         "--storage-bucket",
-        default="documents",
-        help="Storage bucket to clear (default: documents)",
+        help="Single storage bucket to clear (deprecated: use --storage-buckets)",
     )
     parser.add_argument(
         "--yes",
@@ -617,10 +635,19 @@ async def main() -> None:
             print(f"  - {t}")
         print(f"\nMode: {mode}")
         
-        if args.storage:
-            print(f"\n🗂️  Storage bucket '{args.storage_bucket}' will also be cleared (ALL FILES DELETED)")
+        # Handle storage bucket arguments - support both old and new formats
+        if args.storage_bucket:
+            # Legacy single bucket mode
+            buckets_to_clear = [args.storage_bucket]
         else:
-            print(f"\n🗂️  Storage bucket will NOT be cleared (use --storage to enable)")
+            # Default or multi-bucket mode
+            buckets_to_clear = [b.strip() for b in args.storage_buckets.split(",") if b.strip()]
+        
+        if args.storage:
+            buckets_text = ", ".join([f"'{b}'" for b in buckets_to_clear])
+            print(f"\n🗂️  Storage buckets {buckets_text} will also be cleared (ALL FILES DELETED)")
+        else:
+            print(f"\n🗂️  Storage buckets will NOT be cleared (use --storage to enable)")
         
         confirm = input("Type 'CLEAR' to confirm: ")
         if confirm.strip() != "CLEAR":
@@ -633,13 +660,21 @@ async def main() -> None:
         clear_storage=args.storage
     )
 
+    # Handle storage bucket arguments - support both old and new formats  
+    if args.storage_bucket:
+        # Legacy single bucket mode
+        buckets_to_clear = [args.storage_bucket]
+    else:
+        # Default or multi-bucket mode
+        buckets_to_clear = [b.strip() for b in args.storage_buckets.split(",") if b.strip()]
+
     try:
         if args.truncate:
             await cleaner.clear_with_truncate(
-                tables, restart_identity=not args.no_restart_identity
+                tables, restart_identity=not args.no_restart_identity, storage_buckets=buckets_to_clear
             )
         else:
-            await cleaner.clear_with_delete(tables)
+            await cleaner.clear_with_delete(tables, storage_buckets=buckets_to_clear)
         logger.info("✅ Data clearing completed successfully")
     except Exception as e:
         logger.error(f"❌ Data clearing failed: {e}")

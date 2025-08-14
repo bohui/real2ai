@@ -132,7 +132,7 @@ class TestDatabaseCleaner:
         """Test clear_storage_bucket when storage clearing is disabled"""
         cleaner = DatabaseCleaner(db_url="test://url", clear_storage=False)
         
-        result = await cleaner.clear_storage_bucket()
+        result = await cleaner.clear_storage_bucket("documents")
         
         assert result == 0
 
@@ -148,7 +148,7 @@ class TestDatabaseCleaner:
             mock_client.storage.return_value.from_.return_value = mock_storage
             mock_get_client.return_value = mock_client
             
-            result = await cleaner.clear_storage_bucket()
+            result = await cleaner.clear_storage_bucket("documents")
             
             assert result == 0
 
@@ -171,7 +171,7 @@ class TestDatabaseCleaner:
             mock_client.storage.return_value.from_.return_value = mock_storage
             mock_get_client.return_value = mock_client
             
-            result = await cleaner.clear_storage_bucket()
+            result = await cleaner.clear_storage_bucket("documents")
             
             assert result == 2
             mock_storage.remove.assert_called()
@@ -182,7 +182,7 @@ class TestDatabaseCleaner:
         cleaner = DatabaseCleaner(db_url="test://url", clear_storage=True)
         
         with patch("scripts.clear_data.get_service_supabase_client", side_effect=ImportError):
-            result = await cleaner.clear_storage_bucket()
+            result = await cleaner.clear_storage_bucket("documents")
             
             assert result == 0
 
@@ -198,7 +198,7 @@ class TestDatabaseCleaner:
             mock_client.storage.return_value.from_.return_value = mock_storage
             mock_get_client.return_value = mock_client
             
-            result = await cleaner.clear_storage_bucket()
+            result = await cleaner.clear_storage_bucket("documents")
             
             assert result == 0
 
@@ -215,9 +215,13 @@ class TestDatabaseCleaner:
             mock_conn.return_value = mock_context
             mock_context.__aenter__.return_value = AsyncMock()
             
-            await cleaner.clear_with_delete([])
+            await cleaner.clear_with_delete([], storage_buckets=["documents", "artifacts", "reports"])
             
-            mock_clear_storage.assert_called_once()
+            # Should be called three times - once for each bucket
+            assert mock_clear_storage.call_count == 3
+            mock_clear_storage.assert_any_call("documents")
+            mock_clear_storage.assert_any_call("artifacts")
+            mock_clear_storage.assert_any_call("reports")
 
     @pytest.mark.asyncio
     async def test_clear_with_truncate_calls_storage_clear(self):
@@ -232,9 +236,13 @@ class TestDatabaseCleaner:
             mock_conn.return_value = mock_context
             mock_context.__aenter__.return_value = AsyncMock()
             
-            await cleaner.clear_with_truncate([])
+            await cleaner.clear_with_truncate([], storage_buckets=["documents", "artifacts", "reports"])
             
-            mock_clear_storage.assert_called_once()
+            # Should be called three times - once for each bucket
+            assert mock_clear_storage.call_count == 3
+            mock_clear_storage.assert_any_call("documents")
+            mock_clear_storage.assert_any_call("artifacts")
+            mock_clear_storage.assert_any_call("reports")
 
     @pytest.mark.asyncio
     async def test_clear_with_delete_skips_storage_when_disabled(self):
