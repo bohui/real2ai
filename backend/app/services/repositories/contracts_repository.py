@@ -117,7 +117,7 @@ class ContractsRepository:
                 row = await conn.fetchrow(
                     "SELECT id FROM contracts WHERE content_hash = $1", content_hash
                 )
-            return row["id"] if row else None
+        return row["id"] if row else None
 
     async def get_contract_by_content_hash(
         self, content_hash: str
@@ -166,6 +166,25 @@ class ContractsRepository:
                 created_at=row["created_at"],
                 updated_at=row["updated_at"],
             )
+
+    async def get_contracts_by_content_hash(
+        self, content_hash: str, limit: int = 1
+    ) -> List[Contract]:
+        """
+        Backwards-compatible wrapper that returns a list of contracts for a
+        given content hash. The underlying schema enforces uniqueness on
+        content_hash, so at most one item will be returned.
+
+        Args:
+            content_hash: SHA-256 hash of contract content
+            limit: Maximum number of contracts to return (kept for API
+                   compatibility; effectively 0 or 1 will be returned)
+
+        Returns:
+            List containing the matching Contract, or an empty list.
+        """
+        contract = await self.get_contract_by_content_hash(content_hash)
+        return ([contract] if contract else [])[: max(0, limit)]
 
     async def get_contract_by_id(self, contract_id: UUID) -> Optional[Contract]:
         """
