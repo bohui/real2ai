@@ -129,12 +129,16 @@ class UpdateMetricsNode(DocumentProcessingNodeBase):
 
             # Prepare update data (ensure JSON-serializable values)
             processing_completed_at = datetime.now(timezone.utc).isoformat()
+            
+            # Prepare text extraction metadata (excluding full_text)
             try:
                 text_extraction_dict = (
                     text_extraction_result.model_dump()
                     if hasattr(text_extraction_result, "model_dump")
                     else dict(text_extraction_result)
                 )
+                # Remove full_text from processing_results to avoid redundant storage
+                text_extraction_dict.pop("full_text", None)
             except Exception:
                 # Best-effort fallback
                 text_extraction_dict = (
@@ -142,6 +146,9 @@ class UpdateMetricsNode(DocumentProcessingNodeBase):
                     if hasattr(text_extraction_result, "__dict__")
                     else str(text_extraction_result)
                 )
+                # Remove full_text if it exists
+                if isinstance(text_extraction_dict, dict):
+                    text_extraction_dict.pop("full_text", None)
 
             # diagram_processing_result may already be a dict; if it's a pydantic model, convert
             if hasattr(diagram_processing_result, "model_dump"):
@@ -155,7 +162,7 @@ class UpdateMetricsNode(DocumentProcessingNodeBase):
                 diagram_processing_serializable = diagram_processing_result
 
             update_data = {
-                "full_text": text_extraction_result.full_text,
+                # full_text is NOT saved here - it's stored in artifacts_full_text via ExtractTextNode
                 "total_pages": total_pages,
                 "total_word_count": total_word_count,
                 "total_text_length": total_text_length,
@@ -166,7 +173,7 @@ class UpdateMetricsNode(DocumentProcessingNodeBase):
                 "text_extraction_method": primary_method,
                 "processing_completed_at": processing_completed_at,
                 "processing_results": {
-                    "text_extraction": text_extraction_dict,
+                    "text_extraction": text_extraction_dict,  # full_text excluded
                     "diagram_processing": diagram_processing_serializable,
                 },
             }
