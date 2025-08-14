@@ -649,10 +649,11 @@ Focus on accuracy and completeness. Extract all visible text content."""
                 else f"image/{file_type.lower()}"
             )
             content = Content(
+                role="user",
                 parts=[
                     Part.from_text(text=rendered_prompt),
                     Part.from_bytes(data=file_content, mime_type=mime_type),
-                ]
+                ],
             )
 
             # Execute model call (single LLM call)

@@ -634,9 +634,14 @@ class ExtractTextNode(DocumentProcessingNodeBase):
 
                 doc = pymupdf.open(stream=file_content, filetype="pdf")
                 text = ""
+                pages_count = 0
                 for page in doc:
                     text += page.get_text()
+                    pages_count += 1
                 doc.close()
+                self._log_info(
+                    f"Basic PDF extraction via PyMuPDF", extra={"pages": pages_count}
+                )
                 return text, "pdf_pymupdf"
             except ImportError:
                 pass
@@ -650,6 +655,10 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                 text = ""
                 for page in reader.pages:
                     text += page.extract_text()
+                self._log_info(
+                    f"Basic PDF extraction via pypdf",
+                    extra={"pages": len(reader.pages)},
+                )
                 return text, "pdf_pypdf"
             except ImportError:
                 pass
@@ -676,6 +685,9 @@ class ExtractTextNode(DocumentProcessingNodeBase):
 
                     gemini_service = GeminiOCRService()
                     await gemini_service.initialize()
+                    self._log_info(
+                        "Initialized GeminiOCRService for hybrid PDF extraction"
+                    )
                 except Exception as e:
                     self._log_warning(
                         f"Failed to initialize GeminiOCRService, continuing without VLM: {e}"
@@ -699,16 +711,51 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                 has_diagram_kw = self._has_diagram_keywords(raw_text)
 
                 # Selective OCR for low-text/scanned pages (LLM first, PyTesseract fallback)
+                # Only run OCR when there's insufficient text AND visual content that might contain text
                 settings = get_settings()
-                if settings.enable_selective_ocr and (
-                    is_low_text or has_images or has_diagram_kw
-                ):
+                should_ocr = settings.enable_selective_ocr or (
+                    is_low_text and (has_images or has_diagram_kw)
+                )
+                trigger_label = (
+                    "settings.enable_selective_ocr"
+                    if settings.enable_selective_ocr
+                    else (
+                        "low_text_and_images"
+                        if (is_low_text and has_images)
+                        else (
+                            "low_text_and_diagram_keywords"
+                            if (is_low_text and has_diagram_kw)
+                            else "no_trigger"
+                        )
+                    )
+                )
+
+                self._log_info(
+                    f"Selective OCR decision for page {idx + 1}",
+                    extra={
+                        "is_low_text": is_low_text,
+                        "has_images": has_images,
+                        "has_diagram_kw": has_diagram_kw,
+                        "min_text_len_for_ocr": self._min_text_len_for_ocr,
+                        "should_ocr": should_ocr,
+                        "trigger": trigger_label,
+                    },
+                )
+
+                if should_ocr:
                     ocr_text = ""
                     ocr_method = method
 
                     # Try LLM OCR first if enabled
                     if self.use_llm and gemini_service:
                         try:
+                            self._log_info(
+                                f"Invoking Gemini OCR for page {idx + 1}",
+                                extra={
+                                    "trigger": trigger_label,
+                                    "use_llm": self.use_llm,
+                                },
+                            )
                             # Render page image at higher DPI
                             png_bytes = self._render_page_png(page, zoom=self._ocr_zoom)
                             llm_result = (
@@ -732,6 +779,10 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                             if len(llm_text.strip()) > len(raw_text.strip()):
                                 ocr_text = llm_text
                                 ocr_method = "gemini_ocr"
+                                self._log_info(
+                                    f"Gemini OCR chosen for page {idx + 1}",
+                                    extra={"chars": len(ocr_text)},
+                                )
                             # If LLM indicated diagram, mark later in analysis
                             has_images = has_images or bool(
                                 (llm_result or {})
@@ -749,6 +800,15 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                             self._log_warning(
                                 f"Gemini OCR failed on page {idx+1}, trying PyTesseract fallback: {e}"
                             )
+                    else:
+                        self._log_info(
+                            f"Skipping Gemini OCR for page {idx + 1}",
+                            extra={
+                                "use_llm": self.use_llm,
+                                "service_available": bool(gemini_service),
+                                "trigger": trigger_label,
+                            },
+                        )
 
                     # PyTesseract fallback for scanned pages if LLM OCR failed or unavailable
                     if (
@@ -757,6 +817,13 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                         and settings.enable_tesseract_fallback
                     ):
                         try:
+                            self._log_info(
+                                f"Attempting Tesseract OCR fallback for page {idx + 1}",
+                                extra={
+                                    "is_low_text": is_low_text,
+                                    "fallback_enabled": settings.enable_tesseract_fallback,
+                                },
+                            )
                             # Render page image for PyTesseract
                             png_bytes = self._render_page_png(page, zoom=self._ocr_zoom)
                             tesseract_text = await self._extract_text_with_tesseract(
@@ -767,6 +834,10 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                             ):
                                 ocr_text = tesseract_text
                                 ocr_method = "tesseract_ocr"
+                                self._log_info(
+                                    f"Tesseract OCR chosen for page {idx + 1}",
+                                    extra={"chars": len(ocr_text)},
+                                )
                         except Exception as e:
                             self._log_warning(
                                 f"PyTesseract OCR failed on page {idx+1}: {e}"

@@ -373,7 +373,7 @@ class GeminiClient(BaseClient):
         """
         try:
             # Create content for the prompt
-            content = genai.types.Content(parts=[genai.types.Part(text=prompt)])
+            content = genai.types.Content(role="user", parts=[genai.types.Part(text=prompt)])
 
             # Create generation config
             generation_config = GenerateContentConfig(
@@ -462,7 +462,7 @@ class GeminiClient(BaseClient):
                 ),
                 Part.from_bytes(data=content, mime_type=content_type),
             ]
-            content_obj = Content(parts=parts)
+            content_obj = Content(role="user", parts=parts)
 
             # Generate analysis
             import asyncio
