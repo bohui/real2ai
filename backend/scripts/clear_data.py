@@ -8,6 +8,8 @@ Usage examples:
   python clear_data.py --yes                    # non-interactive, safe delete mode
   python clear_data.py --truncate --yes         # fast TRUNCATE CASCADE across selected tables
   python clear_data.py --tables documents,contracts --yes  # clear subset in dependency-safe order
+  python clear_data.py --storage --yes          # clear database + storage bucket
+  python clear_data.py --storage --storage-bucket documents --yes  # clear specific bucket
 """
 
 import os
@@ -144,6 +146,7 @@ def normalize_tables(tables_arg: str | None) -> List[str]:
 class DatabaseCleaner:
     db_url: str | None
     use_service_role: bool = True
+    clear_storage: bool = False
 
     async def _table_exists(self, conn: asyncpg.Connection, table: str) -> bool:
         """Check table existence without raising when missing.
@@ -176,11 +179,114 @@ class DatabaseCleaner:
             logger.debug(f"Count failed for {table}: {e}")
             return -1
 
+    async def clear_storage_bucket(self, bucket_name: str = "documents") -> int:
+        """
+        Clear all files from the specified storage bucket.
+
+        Args:
+            bucket_name: Name of the storage bucket to clear (default: 'documents')
+
+        Returns:
+            Number of files deleted
+        """
+        if not self.clear_storage:
+            logger.info("Storage clearing disabled, skipping bucket cleanup")
+            return 0
+
+        try:
+            # Import here to avoid heavy imports when not needed
+            from app.clients.factory import get_service_supabase_client
+
+            client = await get_service_supabase_client()
+            storage_client = client.storage().from_(bucket_name)
+
+            # List all files in the bucket
+            try:
+                files_result = storage_client.list()
+                if not files_result:
+                    logger.info(f"Storage bucket '{bucket_name}' is already empty")
+                    return 0
+
+                files_deleted = 0
+                
+                # Delete files in batches to avoid overwhelming the API
+                batch_size = 100
+                all_files = []
+                
+                # Recursively collect all files
+                def collect_files(items, prefix=""):
+                    nonlocal all_files
+                    for item in items:
+                        if hasattr(item, 'name'):
+                            full_path = f"{prefix}/{item.name}" if prefix else item.name
+                            # If it's a directory, list its contents
+                            if not item.name.endswith('/') and '.' in item.name:
+                                all_files.append(full_path)
+                            else:
+                                # Try to list subdirectory
+                                try:
+                                    sub_items = storage_client.list(full_path)
+                                    if sub_items:
+                                        collect_files(sub_items, full_path)
+                                except Exception:
+                                    # If can't list as directory, treat as file
+                                    all_files.append(full_path)
+                
+                collect_files(files_result)
+                
+                if not all_files:
+                    logger.info(f"No files found in storage bucket '{bucket_name}'")
+                    return 0
+
+                logger.info(f"Found {len(all_files)} files to delete from storage bucket '{bucket_name}'")
+
+                # Delete files in batches
+                for i in range(0, len(all_files), batch_size):
+                    batch = all_files[i:i + batch_size]
+                    try:
+                        # Delete batch of files
+                        delete_result = storage_client.remove(batch)
+                        if delete_result:
+                            files_deleted += len(batch)
+                            logger.info(f"Deleted {len(batch)} files from storage (batch {i//batch_size + 1})")
+                    except Exception as e:
+                        logger.warning(f"Failed to delete batch {i//batch_size + 1}: {e}")
+                        # Try deleting files individually
+                        for file_path in batch:
+                            try:
+                                storage_client.remove([file_path])
+                                files_deleted += 1
+                            except Exception as file_e:
+                                logger.warning(f"Failed to delete file {file_path}: {file_e}")
+
+                logger.info(f"✅ Deleted {files_deleted} files from storage bucket '{bucket_name}'")
+                return files_deleted
+
+            except Exception as e:
+                if "bucket not found" in str(e).lower() or "not found" in str(e).lower():
+                    logger.info(f"Storage bucket '{bucket_name}' not found, skipping storage cleanup")
+                    return 0
+                else:
+                    logger.error(f"Failed to list files in storage bucket '{bucket_name}': {e}")
+                    return 0
+
+        except ImportError:
+            logger.warning("Supabase client not available, skipping storage cleanup")
+            return 0
+        except Exception as e:
+            logger.error(f"Storage cleanup failed: {e}")
+            return 0
+
     async def clear_with_delete(self, tables: Sequence[str]) -> None:
         """Delete rows in dependency-safe order.
 
         This avoids unintended cascading into unrelated tables.
         """
+        # Clear storage first if enabled
+        if self.clear_storage:
+            logger.info("🗂️  Clearing storage bucket...")
+            await self.clear_storage_bucket()
+
         # Import here to avoid heavy imports when not needed
         from app.database.connection import get_service_role_connection
 
@@ -222,6 +328,11 @@ class DatabaseCleaner:
 
         Note: CASCADE may remove referencing rows in other tables; use with care.
         """
+        # Clear storage first if enabled
+        if self.clear_storage:
+            logger.info("🗂️  Clearing storage bucket...")
+            await self.clear_storage_bucket()
+
         from app.database.connection import get_service_role_connection
 
         connection_ctx = (
@@ -260,6 +371,8 @@ Examples:
   python clear_data.py --yes
   python clear_data.py --truncate --yes
   python clear_data.py --tables documents,contracts --yes
+  python clear_data.py --storage --yes
+  python clear_data.py --storage --storage-bucket documents --yes
         """,
     )
 
@@ -276,6 +389,16 @@ Examples:
         "--no-restart-identity",
         action="store_true",
         help="When using --truncate, do not RESTART IDENTITY",
+    )
+    parser.add_argument(
+        "--storage",
+        action="store_true",
+        help="Also clear storage bucket (removes all uploaded files)",
+    )
+    parser.add_argument(
+        "--storage-bucket",
+        default="documents",
+        help="Storage bucket to clear (default: documents)",
     )
     parser.add_argument(
         "--yes",
@@ -415,12 +538,20 @@ async def main() -> None:
         for t in tables:
             print(f"  - {t}")
         print(f"\nMode: {mode}")
+        
+        if args.storage:
+            print(f"\n🗂️  Storage bucket '{args.storage_bucket}' will also be cleared (ALL FILES DELETED)")
+        
         confirm = input("Type 'CLEAR' to confirm: ")
         if confirm.strip() != "CLEAR":
             print("Operation cancelled")
             return
 
-    cleaner = DatabaseCleaner(db_url=db_url, use_service_role=use_service_role)
+    cleaner = DatabaseCleaner(
+        db_url=db_url, 
+        use_service_role=use_service_role,
+        clear_storage=args.storage
+    )
 
     try:
         if args.truncate:
