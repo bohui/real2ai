@@ -19,6 +19,7 @@ Complete guide to all environment variables used in Real2.AI platform.
 | `SUPABASE_URL` | **Yes** | - | Supabase project URL |
 | `SUPABASE_ANON_KEY` | **Yes** | - | Supabase anonymous key |
 | `SUPABASE_SERVICE_KEY` | **Yes** | - | Supabase service role key |
+| `SUPABASE_JWT_SECRET` | Prod: **Yes** | - | Supabase JWT secret used by backend to verify HS256 access tokens for DB RLS |
 | `DATABASE_URL` | No | - | Direct PostgreSQL connection URL (for local development) |
 
 ### AI Services Configuration
@@ -140,6 +141,7 @@ DEBUG=true
 SUPABASE_URL=https://your-dev-project.supabase.co
 SUPABASE_ANON_KEY=your-dev-anon-key
 SUPABASE_SERVICE_KEY=your-dev-service-key
+SUPABASE_JWT_SECRET=your-dev-supabase-jwt-secret
 OPENAI_API_KEY=sk-your-openai-dev-key
 GEMINI_API_KEY=your-gemini-dev-key
 CELERY_BROKER_URL=redis://localhost:6379/0
@@ -162,6 +164,7 @@ LOG_LEVEL=INFO
 SUPABASE_URL=https://your-prod-project.supabase.co
 SUPABASE_ANON_KEY=your-prod-anon-key
 SUPABASE_SERVICE_KEY=your-prod-service-key
+SUPABASE_JWT_SECRET=your-prod-supabase-jwt-secret
 OPENAI_API_KEY=sk-your-openai-prod-key
 GEMINI_API_KEY=your-gemini-prod-key
 LANGSMITH_API_KEY=ls-your-langsmith-key

@@ -208,17 +208,19 @@ class ConnectionPoolManager:
 
         if settings.database_url:
             return settings.database_url
-        
+
         # In production, DATABASE_URL is required (validated at startup)
         if settings.environment == "production":
             raise ValueError(
                 "DATABASE_URL is required in production environment. "
                 "Service key DSN fallback is not allowed."
             )
-        
+
         # Non-production: Log warning and use fallback
         logger.error("DATABASE_URL not configured - using service key fallback")
-        logger.warning("Security risk: Consider using proper DATABASE_URL instead of service key")
+        logger.warning(
+            "Security risk: Consider using proper DATABASE_URL instead of service key"
+        )
 
         # Fallback: Extract database URL from Supabase URL (legacy, non-production only)
         supabase_url = settings.supabase_url.replace("https://", "").replace(
@@ -312,20 +314,122 @@ async def _setup_user_session(
             from app.core.config import get_settings
 
             settings = get_settings()
+
+            # Debug diagnostics (no secrets)
+            try:
+                unverified_header = jwt.get_unverified_header(user_token)
+            except Exception as header_error:
+                unverified_header = {"_error": str(header_error)}
+            try:
+                unverified_claims = jwt.decode(
+                    user_token, options={"verify_signature": False}
+                )
+            except Exception as claims_error:
+                unverified_claims = {"_error": str(claims_error)}
+
+            exp_ts = (
+                unverified_claims.get("exp")
+                if isinstance(unverified_claims, dict)
+                else None
+            )
+            now_ts = int(time.time())
+            ttl_seconds = (exp_ts - now_ts) if isinstance(exp_ts, int) else None
+
+            # Compute a short fingerprint of the secret for diagnostics (non-reversible)
+            try:
+                import hashlib
+
+                secret_fingerprint = (
+                    hashlib.sha256(
+                        (settings.supabase_jwt_secret or "").encode("utf-8")
+                    ).hexdigest()[:8]
+                    if settings.supabase_jwt_secret
+                    else None
+                )
+            except Exception:
+                secret_fingerprint = None
+
+            logger.debug(
+                "[DB][JWT] Token diagnostics before verification",
+                extra={
+                    "user_id": str(user_id),
+                    "token_len": len(user_token),
+                    "has_supabase_jwt_secret": bool(settings.supabase_jwt_secret),
+                    "supabase_jwt_secret_len": (
+                        len(settings.supabase_jwt_secret)
+                        if settings.supabase_jwt_secret
+                        else 0
+                    ),
+                    "supabase_jwt_secret_sha256_8": secret_fingerprint,
+                    "header_alg": (
+                        unverified_header.get("alg")
+                        if isinstance(unverified_header, dict)
+                        else None
+                    ),
+                    "header_kid": (
+                        unverified_header.get("kid")
+                        if isinstance(unverified_header, dict)
+                        else None
+                    ),
+                    "claim_iss": (
+                        unverified_claims.get("iss")
+                        if isinstance(unverified_claims, dict)
+                        else None
+                    ),
+                    "claim_aud": (
+                        unverified_claims.get("aud")
+                        if isinstance(unverified_claims, dict)
+                        else None
+                    ),
+                    "claim_sub": (
+                        unverified_claims.get("sub")
+                        if isinstance(unverified_claims, dict)
+                        else None
+                    ),
+                    "claim_role": (
+                        unverified_claims.get("role")
+                        if isinstance(unverified_claims, dict)
+                        else None
+                    ),
+                    "token_ttl_seconds": ttl_seconds,
+                },
+            )
+
             # Verify token signature before setting RLS context
             if not settings.supabase_jwt_secret:
                 logger.error("JWT secret not configured - cannot verify token for RLS")
                 raise ValueError("JWT verification not configured")
-            
+
+            header_alg = (
+                unverified_header.get("alg")
+                if isinstance(unverified_header, dict)
+                else None
+            )
+            if header_alg and header_alg.upper() != "HS256":
+                logger.warning(
+                    f"[DB][JWT] Token alg is {header_alg}; only HS256 is supported"
+                )
+
             try:
-                # Verify token with Supabase JWT secret
+                # Verify token with Supabase JWT secret (disable audience check)
                 claims = jwt.decode(
-                    user_token, 
-                    settings.supabase_jwt_secret, 
-                    algorithms=["HS256"]
+                    user_token,
+                    settings.supabase_jwt_secret,
+                    algorithms=["HS256"],
+                    options={"verify_aud": False},
+                )
+                logger.debug(
+                    "[DB][JWT] Token verified with HS256",
+                    extra={
+                        "user_id": str(user_id),
+                        "claim_sub": claims.get("sub"),
+                        "claim_role": claims.get("role"),
+                    },
                 )
             except jwt.InvalidTokenError as e:
-                logger.error(f"Token verification failed for user {user_id}: {e}")
+                logger.error(
+                    f"[DB][JWT] HS256 verification failed: {e}. user_id={user_id}, alg={header_alg}, token_len={len(user_token)}"
+                )
                 raise ValueError(f"Invalid token: {e}")
 
             # Set session GUCs for RLS
@@ -432,7 +536,7 @@ async def get_service_role_connection() -> AsyncGenerator[asyncpg.Connection, No
             logger.error(f"Failed to release service role connection: {e}")
             # Force close if event loop is dead
             try:
-                if hasattr(connection, 'close') and not connection.is_closed():
+                if hasattr(connection, "close") and not connection.is_closed():
                     connection.close()
             except Exception:
                 pass  # Ignore final cleanup errors
@@ -479,7 +583,7 @@ async def get_user_connection(
     except Exception as e:
         logger.error(
             f"Error using user connection for user {user_id}: {e}",
-            extra={"user_id": str(user_id), "error_type": type(e).__name__}
+            extra={"user_id": str(user_id), "error_type": type(e).__name__},
         )
         raise
     finally:
@@ -507,7 +611,7 @@ async def get_user_connection(
             logger.error(f"Failed to release connection for user {user_id}: {e}")
             # In extreme cases, force close the connection if possible
             try:
-                if hasattr(connection, 'close') and not connection.is_closed():
+                if hasattr(connection, "close") and not connection.is_closed():
                     connection.close()
             except Exception:
                 pass  # Ignore final cleanup errors
