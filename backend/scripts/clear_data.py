@@ -8,8 +8,9 @@ Usage examples:
   python clear_data.py --yes                    # non-interactive, safe delete mode
   python clear_data.py --truncate --yes         # fast TRUNCATE CASCADE across selected tables
   python clear_data.py --tables documents,contracts --yes  # clear subset in dependency-safe order
-  python clear_data.py --storage --yes          # clear database + storage bucket
-  python clear_data.py --storage --storage-bucket documents --yes  # clear specific bucket
+  python clear_data.py --yes                    # clear database + storage bucket (default)
+  python clear_data.py --no-storage --yes       # clear database only, skip storage
+  python clear_data.py --storage-bucket documents --yes  # clear specific bucket
 """
 
 import os
@@ -88,11 +89,6 @@ DEFAULT_TABLE_ORDER: List[str] = [
     # User-scoped document processing tables (depend on documents)
     "user_document_diagrams",
     "user_document_pages",
-    # Legacy document-derived tables (may still exist in some databases)
-    "document_analyses",
-    "document_diagrams",
-    "document_entities",
-    "document_pages",
     # Task registry and checkpoints
     "task_checkpoints",
     "task_registry",
@@ -194,8 +190,13 @@ class DatabaseCleaner:
             return 0
 
         try:
-            # Import here to avoid heavy imports when not needed
-            from app.clients.factory import get_service_supabase_client
+            # Import here to avoid heavy imports when not needed and prevent circular imports
+            try:
+                from app.clients.factory import get_service_supabase_client
+            except ImportError as import_error:
+                logger.warning(f"Cannot import Supabase client factory: {import_error}")
+                logger.info("Storage clearing disabled due to import issues")
+                return 0
 
             client = await get_service_supabase_client()
             storage_client = client.storage().from_(bucket_name)
@@ -203,6 +204,8 @@ class DatabaseCleaner:
             # List all files in the bucket
             try:
                 files_result = storage_client.list()
+                logger.debug(f"Storage list result: {files_result} (type: {type(files_result)})")
+                
                 if not files_result:
                     logger.info(f"Storage bucket '{bucket_name}' is already empty")
                     return 0
@@ -213,29 +216,76 @@ class DatabaseCleaner:
                 batch_size = 100
                 all_files = []
                 
-                # Recursively collect all files
+                # Recursively collect all files with improved logic
                 def collect_files(items, prefix=""):
                     nonlocal all_files
+                    logger.debug(f"Processing {len(items)} items in prefix '{prefix}'")
+                    
                     for item in items:
+                        logger.debug(f"Processing item: {item} (type: {type(item)})")
+                        
                         if hasattr(item, 'name'):
-                            full_path = f"{prefix}/{item.name}" if prefix else item.name
-                            # If it's a directory, list its contents
-                            if not item.name.endswith('/') and '.' in item.name:
+                            item_name = item.name
+                            full_path = f"{prefix}/{item_name}" if prefix else item_name
+                            
+                            # Check if this looks like a file (has extension) or directory
+                            is_likely_file = '.' in item_name and not item_name.endswith('/')
+                            
+                            if is_likely_file:
                                 all_files.append(full_path)
+                                logger.debug(f"Added file: {full_path}")
                             else:
-                                # Try to list subdirectory
+                                # Could be a directory, try to list it
                                 try:
                                     sub_items = storage_client.list(full_path)
                                     if sub_items:
+                                        logger.debug(f"Found subdirectory '{full_path}' with {len(sub_items)} items")
                                         collect_files(sub_items, full_path)
-                                except Exception:
+                                    else:
+                                        # Empty directory or actually a file without extension
+                                        all_files.append(full_path)
+                                        logger.debug(f"Added as file (no extension): {full_path}")
+                                except Exception as e:
                                     # If can't list as directory, treat as file
                                     all_files.append(full_path)
+                                    logger.debug(f"Added as file (list failed): {full_path}, error: {e}")
+                        else:
+                            # Item doesn't have name attribute - might be dict or other format
+                            logger.debug(f"Item without name attribute: {item}")
+                            if isinstance(item, dict):
+                                name = item.get('name') or item.get('key') or str(item)
+                                full_path = f"{prefix}/{name}" if prefix else name
+                                
+                                # Check if this appears to be a directory (no file extension)
+                                is_likely_file = '.' in name and not name.endswith('/')
+                                
+                                if is_likely_file:
+                                    all_files.append(full_path)
+                                    logger.debug(f"Added dict file: {full_path}")
+                                else:
+                                    # Could be a directory, try to list it
+                                    try:
+                                        sub_items = storage_client.list(full_path)
+                                        if sub_items:
+                                            logger.debug(f"Found dict subdirectory '{full_path}' with {len(sub_items)} items")
+                                            collect_files(sub_items, full_path)
+                                        else:
+                                            # Empty directory or actually a file without extension
+                                            all_files.append(full_path)
+                                            logger.debug(f"Added dict item as file (no extension): {full_path}")
+                                    except Exception as e:
+                                        # If can't list as directory, treat as file
+                                        all_files.append(full_path)
+                                        logger.debug(f"Added dict item as file (list failed): {full_path}, error: {e}")
+                            else:
+                                # Try to convert to string
+                                all_files.append(str(item))
+                                logger.debug(f"Added string item: {str(item)}")
                 
                 collect_files(files_result)
                 
                 if not all_files:
-                    logger.info(f"No files found in storage bucket '{bucket_name}'")
+                    logger.info(f"No files found in storage bucket '{bucket_name}' after processing")
                     return 0
 
                 logger.info(f"Found {len(all_files)} files to delete from storage bucket '{bucket_name}'")
@@ -287,8 +337,13 @@ class DatabaseCleaner:
             logger.info("🗂️  Clearing storage bucket...")
             await self.clear_storage_bucket()
 
-        # Import here to avoid heavy imports when not needed
-        from app.database.connection import get_service_role_connection
+        # Import here to avoid heavy imports when not needed and prevent circular imports
+        try:
+            from app.database.connection import get_service_role_connection
+        except ImportError as import_error:
+            logger.error(f"Cannot import database connection utilities: {import_error}")
+            logger.error("Cannot proceed with database clearing due to import issues")
+            return
 
         connection_ctx = (
             get_service_role_connection()
@@ -333,7 +388,13 @@ class DatabaseCleaner:
             logger.info("🗂️  Clearing storage bucket...")
             await self.clear_storage_bucket()
 
-        from app.database.connection import get_service_role_connection
+        # Import here to avoid heavy imports when not needed and prevent circular imports
+        try:
+            from app.database.connection import get_service_role_connection
+        except ImportError as import_error:
+            logger.error(f"Cannot import database connection utilities: {import_error}")
+            logger.error("Cannot proceed with database truncate due to import issues")
+            return
 
         connection_ctx = (
             get_service_role_connection()
@@ -371,8 +432,9 @@ Examples:
   python clear_data.py --yes
   python clear_data.py --truncate --yes
   python clear_data.py --tables documents,contracts --yes
-  python clear_data.py --storage --yes
-  python clear_data.py --storage --storage-bucket documents --yes
+  python clear_data.py --yes
+  python clear_data.py --no-storage --yes
+  python clear_data.py --storage-bucket documents --yes
         """,
     )
 
@@ -393,7 +455,14 @@ Examples:
     parser.add_argument(
         "--storage",
         action="store_true",
-        help="Also clear storage bucket (removes all uploaded files)",
+        default=True,
+        help="Clear storage bucket (removes all uploaded files) - enabled by default",
+    )
+    parser.add_argument(
+        "--no-storage",
+        action="store_false",
+        dest="storage",
+        help="Skip storage bucket clearing",
     )
     parser.add_argument(
         "--storage-bucket",
@@ -405,6 +474,11 @@ Examples:
         "-y",
         action="store_true",
         help="Skip interactive confirmation",
+    )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Enable debug logging for storage operations",
     )
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
@@ -426,6 +500,10 @@ Examples:
 
 async def main() -> None:
     args = parse_args()
+    
+    # Enable debug logging if requested
+    if args.debug:
+        logging.getLogger().setLevel(logging.DEBUG)
 
     def _build_db_url_from_supabase_env() -> str | None:
         supabase_url = os.getenv("SUPABASE_URL", "").strip()
@@ -541,6 +619,8 @@ async def main() -> None:
         
         if args.storage:
             print(f"\n🗂️  Storage bucket '{args.storage_bucket}' will also be cleared (ALL FILES DELETED)")
+        else:
+            print(f"\n🗂️  Storage bucket will NOT be cleared (use --storage to enable)")
         
         confirm = input("Type 'CLEAR' to confirm: ")
         if confirm.strip() != "CLEAR":

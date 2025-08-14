@@ -19,7 +19,6 @@ from functools import wraps
 
 from fastapi import HTTPException, status
 from app.clients import get_supabase_client
-from app.services.backend_token_service import BackendTokenService
 
 logger = logging.getLogger(__name__)
 
@@ -113,25 +112,25 @@ class AuthContext:
     def get_current_context(cls):
         """
         Get current authentication context as object.
-        
+
         Returns:
             SimpleNamespace: Object containing current auth context with attributes:
                 - user_id: Current user ID
-                - user_email: Current user email  
+                - user_email: Current user email
                 - token: Current JWT token
                 - metadata: Current auth metadata
                 - refresh_token: Current refresh token
                 - is_authenticated: Boolean indicating if user is authenticated
         """
         from types import SimpleNamespace
-        
+
         return SimpleNamespace(
             user_id=cls.get_user_id(),
-            user_email=cls.get_user_email(), 
+            user_email=cls.get_user_email(),
             token=cls.get_user_token(),
             metadata=cls.get_auth_metadata(),
             refresh_token=cls.get_refresh_token(),
-            is_authenticated=cls.is_authenticated()
+            is_authenticated=cls.is_authenticated(),
         )
 
     @classmethod
@@ -171,8 +170,13 @@ class AuthContext:
         if token:
             # Ensure we always use a Supabase access token for DB ops (not backend API tokens)
             try:
-                if BackendTokenService.is_backend_token(token):
-                    exchanged = await BackendTokenService.ensure_supabase_access_token(
+                # Lazy import to avoid circular dependency at module import time
+                from app.services.backend_token_service import (
+                    BackendTokenService as _BackendTokenService,
+                )
+
+                if _BackendTokenService.is_backend_token(token):
+                    exchanged = await _BackendTokenService.ensure_supabase_access_token(
                         token
                     )
                     if exchanged:
@@ -180,7 +184,7 @@ class AuthContext:
                         # If we don't have a refresh token yet, try to pull from mapping
                         if not refresh_token:
                             mapping = (
-                                BackendTokenService.get_mapping(cls.get_user_token())
+                                _BackendTokenService.get_mapping(cls.get_user_token())
                                 or {}
                             )
                             refresh_token = mapping.get("supabase_refresh_token")

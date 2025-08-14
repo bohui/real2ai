@@ -5,14 +5,53 @@ WebSocket service for Real2.AI real-time updates with PromptManager integration
 import json
 import asyncio
 import logging
-from typing import Dict, List, Any, Optional
-from datetime import datetime, timezone
+from typing import Dict, List, Any, Optional, Iterable
+from datetime import datetime, date, timezone
+from decimal import Decimal
+from uuid import UUID
 from fastapi import WebSocket, WebSocketDisconnect
 
 from app.core.prompts.service_mixin import PromptEnabledService
 from app.models.contract_state import AustralianState, ContractType
 
 logger = logging.getLogger(__name__)
+
+
+def _json_default(value: Any):
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    if isinstance(value, UUID):
+        return str(value)
+    if isinstance(value, Decimal):
+        # Prefer float for JSON compatibility
+        return float(value)
+    if isinstance(value, set):
+        return list(value)
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    # Last-resort stringification to avoid runtime errors
+    return str(value)
+
+
+def _safe_json_dumps(payload: Any) -> str:
+    return json.dumps(payload, default=_json_default)
+
+
+def _make_json_safe(payload: Any) -> Any:
+    """Recursively convert payload to JSON-safe types."""
+    if isinstance(payload, dict):
+        return {k: _make_json_safe(v) for k, v in payload.items()}
+    if isinstance(payload, list):
+        return [_make_json_safe(v) for v in payload]
+    if isinstance(payload, tuple):
+        return [_make_json_safe(v) for v in payload]
+    if isinstance(payload, set):
+        return [_make_json_safe(v) for v in payload]
+    try:
+        _ = json.dumps(payload)
+        return payload
+    except TypeError:
+        return _json_default(payload)
 
 
 class ConnectionManager:
@@ -64,7 +103,7 @@ class ConnectionManager:
         history.append(now)
         return True
 
-    def disconnect(self, websocket: WebSocket):
+    async def disconnect(self, websocket: WebSocket):
         """Disconnect a WebSocket"""
         if websocket in self.active_connections:
             self.active_connections.remove(websocket)
@@ -72,10 +111,12 @@ class ConnectionManager:
             logger.info(
                 f"WebSocket disconnected. Total connections: {len(self.active_connections)}"
             )
+        else:
+            logger.warning("WebSocket not found in active connections")
 
     async def send_personal_message(
         self, message: Dict[str, Any], websocket: WebSocket
-    ):
+    ) -> bool:
         """Send message to specific WebSocket with enhanced error handling and state validation"""
         try:
             if websocket in self.active_connections:
@@ -86,19 +127,25 @@ class ConnectionManager:
                         logger.warning(
                             "WebSocket personal send throttled due to rate limit"
                         )
-                        return
-                    await websocket.send_text(json.dumps(message))
+                        return False
+                    # Sanitize payload for JSON compatibility, then send via send_json to match tests
+                    safe_message = _make_json_safe(message)
+                    await websocket.send_json(safe_message)
+                    return True
                 else:
                     logger.warning(
                         f"WebSocket not in CONNECTED state: {websocket.client_state.name}"
                     )
-                    self.disconnect(websocket)
+                    await self.disconnect(websocket)
+                    return False
             else:
                 logger.warning("Attempted to send message to inactive WebSocket")
+                return False
         except Exception as e:
             logger.error(f"Error sending personal message: {str(e)}")
             # Remove the problematic connection to prevent further issues
-            self.disconnect(websocket)
+            await self.disconnect(websocket)
+            return False
 
     async def broadcast(self, message: Dict[str, Any]):
         """Broadcast message to all connected WebSockets with state validation"""
@@ -106,7 +153,7 @@ class ConnectionManager:
             logger.debug("No active connections for broadcast")
             return
 
-        message_str = json.dumps(message)
+        message_str = _safe_json_dumps(message)
         disconnected = []
         successful_sends = 0
 
@@ -128,7 +175,7 @@ class ConnectionManager:
 
         # Clean up disconnected connections
         for connection in disconnected:
-            self.disconnect(connection)
+            await self.disconnect(connection)
 
         logger.debug(
             f"Broadcast completed: {successful_sends} successful, {len(disconnected)} failed"
@@ -141,7 +188,28 @@ class ConnectionManager:
                 await connection.close()
             except Exception as e:
                 logger.error(f"Error closing connection: {str(e)}")
-            self.disconnect(connection)
+            await self.disconnect(connection)
+
+    async def broadcast_message(self, message: Dict[str, Any]):
+        """Compatibility method expected by unit tests: broadcast using send_json."""
+        if not self.active_connections:
+            logger.debug("No active connections for broadcast_message")
+            return
+        safe_message = _make_json_safe(message)
+        disconnected: List[WebSocket] = []
+        for connection in self.active_connections.copy():
+            try:
+                if connection in self.active_connections:
+                    await connection.send_json(safe_message)
+                else:
+                    logger.warning(
+                        "Skipped broadcast_message to connection not in active list"
+                    )
+            except Exception as e:
+                logger.error(f"Error broadcasting (send_json) to connection: {str(e)}")
+                disconnected.append(connection)
+        for connection in disconnected:
+            await self.disconnect(connection)
 
 
 class WebSocketManager:
@@ -163,11 +231,11 @@ class WebSocketManager:
         manager = self.get_manager(session_id)
         await manager.connect(websocket, metadata)
 
-    def disconnect(self, websocket: WebSocket, session_id: str):
+    async def disconnect(self, websocket: WebSocket, session_id: str):
         """Disconnect WebSocket from session"""
         if session_id in self.managers:
             manager = self.managers[session_id]
-            manager.disconnect(websocket)
+            await manager.disconnect(websocket)
 
             # Clean up empty managers
             if not manager.active_connections:

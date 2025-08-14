@@ -586,7 +586,7 @@ async def document_analysis_websocket(
     finally:
         # Cleanup - disconnect from manager and clear auth context
         if user:  # Only cleanup if we had a successful authentication
-            websocket_manager.disconnect(websocket, document_id)
+            await websocket_manager.disconnect(websocket, document_id)
             logger.info(f"WebSocket cleanup completed for document {document_id}")
 
         # Note: We intentionally do not unsubscribe the Redis channel here to avoid
