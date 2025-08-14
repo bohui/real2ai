@@ -225,6 +225,7 @@ class GeminiPageExtractionResult(SchemaBase):
     text: str = ""
     confidence: float = 0.0
     diagram_hint: Optional[DiagramHint] = None
+    diagram_hints: List[DiagramHint] = Field(default_factory=list)
 
 
 class TextExtractionOverview(SchemaBase):

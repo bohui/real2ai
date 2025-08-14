@@ -775,7 +775,7 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                                     ),
                                 )
                             )
-                            llm_text = (llm_result or {}).get("text", "")
+                            llm_text = (llm_result.text or "") if llm_result else ""
                             if len(llm_text.strip()) > len(raw_text.strip()):
                                 ocr_text = llm_text
                                 ocr_method = "gemini_ocr"
@@ -783,16 +783,122 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                                     f"Gemini OCR chosen for page {idx + 1}",
                                     extra={"chars": len(ocr_text)},
                                 )
-                            # If LLM indicated diagram, mark later in analysis
-                            has_images = has_images or bool(
-                                (llm_result or {})
-                                .get("diagram_hint", {})
-                                .get("is_diagram")
-                            )
-                            if (
-                                (llm_result or {})
-                                .get("diagram_hint", {})
-                                .get("diagram_type")
+                            # If LLM indicated diagram(s), mark later in analysis
+                            has_images = False
+                            try:
+                                # Prefer multiple hints if available
+                                hints = getattr(llm_result, "diagram_hints", None) or []
+                                if hints:
+                                    has_images = any(
+                                        getattr(h, "is_diagram", False) for h in hints
+                                    )
+                                else:
+                                    has_images = bool(
+                                        getattr(
+                                            getattr(llm_result, "diagram_hint", None),
+                                            "is_diagram",
+                                            False,
+                                        )
+                                    )
+                            except Exception:
+                                has_images = False
+
+                            # Persist artifact hints so downstream diagram detection can skip duplicate API calls
+                            if has_images:
+                                try:
+                                    # Ensure repository is initialized
+                                    if not self.artifacts_repo:
+                                        await self.initialize()
+
+                                    # Persist per-hint artifacts
+                                    persisted_any = False
+                                    hints = (
+                                        getattr(llm_result, "diagram_hints", None) or []
+                                    )
+                                    if hints:
+                                        for hint_index, h in enumerate(hints, start=1):
+                                            if not getattr(h, "is_diagram", False):
+                                                continue
+                                            diagram_type = (
+                                                getattr(h, "diagram_type", None)
+                                                or "unknown"
+                                            )
+                                            diagram_key = f"llm_ocr_hint_page_{idx+1}_{hint_index:02d}"
+                                            await self.artifacts_repo.insert_unified_visual_artifact(
+                                                content_hmac=state.get("content_hmac"),
+                                                algorithm_version=get_settings().artifacts_algorithm_version,
+                                                params_fingerprint=state.get(
+                                                    "params_fingerprint"
+                                                )
+                                                or "",
+                                                page_number=idx + 1,
+                                                diagram_key=diagram_key,
+                                                artifact_type="diagram",
+                                                diagram_meta={
+                                                    "type": diagram_type,
+                                                    "confidence": float(
+                                                        getattr(
+                                                            llm_result,
+                                                            "confidence",
+                                                            0.0,
+                                                        )
+                                                        or 0.0
+                                                    ),
+                                                    "detection_method": "llm_ocr_hint",
+                                                },
+                                            )
+                                            persisted_any = True
+                                    else:
+                                        diagram_type = (
+                                            getattr(
+                                                getattr(
+                                                    llm_result, "diagram_hint", None
+                                                ),
+                                                "diagram_type",
+                                                None,
+                                            )
+                                            or "unknown"
+                                        )
+                                        diagram_key = f"llm_ocr_hint_page_{idx+1}"
+                                        await self.artifacts_repo.insert_unified_visual_artifact(
+                                            content_hmac=state.get("content_hmac"),
+                                            algorithm_version=get_settings().artifacts_algorithm_version,
+                                            params_fingerprint=state.get(
+                                                "params_fingerprint"
+                                            )
+                                            or "",
+                                            page_number=idx + 1,
+                                            diagram_key=diagram_key,
+                                            artifact_type="diagram",
+                                            diagram_meta={
+                                                "type": diagram_type,
+                                                "confidence": float(
+                                                    getattr(
+                                                        llm_result, "confidence", 0.0
+                                                    )
+                                                    or 0.0
+                                                ),
+                                                "detection_method": "llm_ocr_hint",
+                                            },
+                                        )
+                                        persisted_any = True
+
+                                    if persisted_any:
+                                        self._log_info(
+                                            f"Stored LLM OCR diagram hint(s) for page {idx + 1}",
+                                            extra={
+                                                "hint_count": len(hints) if hints else 1
+                                            },
+                                        )
+                                except Exception as persist_err:
+                                    # Do not fail text extraction if persisting hint fails
+                                    self._log_warning(
+                                        f"Failed to persist LLM OCR diagram hint for page {idx + 1}: {persist_err}"
+                                    )
+                            if getattr(
+                                getattr(llm_result, "diagram_hint", None),
+                                "diagram_type",
+                                None,
                             ):
                                 # Attach as hint via analysis
                                 pass

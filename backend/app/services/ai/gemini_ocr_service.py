@@ -22,8 +22,10 @@ from app.clients.base.exceptions import (
     ClientConnectionError,
     ClientQuotaExceededError,
 )
-from google.genai.types import Content, Part, GenerateContentConfig
+from google.genai.types import Content, Part, GenerateContentConfig, SafetySetting
 import asyncio
+
+from backend.app.schema.document import GeminiPageExtractionResult, DiagramHint
 
 logger = logging.getLogger(__name__)
 
@@ -602,7 +604,7 @@ Focus on accuracy and completeness. Extract all visible text content."""
         australian_state: Optional[str] = None,
         contract_type: Optional[str] = None,
         document_type: Optional[str] = None,
-    ) -> Dict[str, Any]:
+    ) -> GeminiPageExtractionResult:
         """Lightweight helper to get OCR text and diagram type (if applicable) via a single LLM call.
 
         Returns a dict with keys:
@@ -621,10 +623,11 @@ Focus on accuracy and completeness. Extract all visible text content."""
 
             # Use centralized schema for structured output
             from app.prompts.schema.text_diagram_insight_schema import (
-                TextDiagramInsight,
+                TextDiagramInsightList,
+                DiagramHintItem,
             )
 
-            parser = create_parser(TextDiagramInsight)
+            parser = create_parser(TextDiagramInsightList)
 
             # Render prompt using PromptManager with format instructions
             rendered_prompt = await self.render_with_parser(
@@ -655,6 +658,26 @@ Focus on accuracy and completeness. Extract all visible text content."""
                     Part.from_bytes(data=file_content, mime_type=mime_type),
                 ],
             )
+            generate_config = GenerateContentConfig(
+                temperature=0.2,
+                top_p=1,
+                seed=0,
+                max_output_tokens=65535,
+                safety_settings=[
+                    SafetySetting(
+                        category="HARM_CATEGORY_HATE_SPEECH", threshold="OFF"
+                    ),
+                    SafetySetting(
+                        category="HARM_CATEGORY_DANGEROUS_CONTENT", threshold="OFF"
+                    ),
+                    SafetySetting(
+                        category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold="OFF"
+                    ),
+                    SafetySetting(category="HARM_CATEGORY_HARASSMENT", threshold="OFF"),
+                ],
+                response_mime_type="application/json",
+                response_schema=TextDiagramInsightList,
+            )
 
             # Execute model call (single LLM call)
             response = await asyncio.get_event_loop().run_in_executor(
@@ -662,7 +685,7 @@ Focus on accuracy and completeness. Extract all visible text content."""
                 lambda: self.gemini_service.gemini_client.client.models.generate_content(
                     model=self.gemini_service.gemini_client.config.model_name,
                     contents=[content],
-                    config=GenerateContentConfig(),
+                    config=generate_config,
                 ),
             )
 
@@ -684,33 +707,46 @@ Focus on accuracy and completeness. Extract all visible text content."""
             )
 
             if parsing_result.success and parsing_result.parsed_data:
-                model: TextDiagramInsight = parsing_result.parsed_data
-                return {
-                    "text": (model.text or "").strip(),
-                    "confidence": float(model.confidence or 0.0),
-                    "diagram_hint": {
-                        "is_diagram": bool(model.is_diagram),
-                        "diagram_type": model.diagram_type,
-                    },
-                }
+                model: TextDiagramInsightList = parsing_result.parsed_data
+                hints: List[DiagramHint] = []
+                for item in model.diagrams or []:
+                    # tolerate schema variance
+                    is_diag = bool(getattr(item, "is_diagram", False))
+                    d_type = getattr(item, "diagram_type", None)
+                    hints.append(DiagramHint(is_diagram=is_diag, diagram_type=d_type))
+
+                primary_hint = (
+                    hints[0]
+                    if hints
+                    else DiagramHint(is_diagram=False, diagram_type=None)
+                )
+
+                return GeminiPageExtractionResult(
+                    text=(model.text or "").strip(),
+                    confidence=float(model.confidence or 0.0),
+                    diagram_hint=primary_hint,
+                    diagram_hints=hints,
+                )
 
             # Fallback on parse failure
             raw = parsing_result.raw_output or ""
-            return {
-                "text": raw if isinstance(raw, str) else "",
-                "confidence": 0.0,
-                "diagram_hint": {"is_diagram": False, "diagram_type": None},
-            }
+            return GeminiPageExtractionResult(
+                text=raw if isinstance(raw, str) else "",
+                confidence=0.0,
+                diagram_hint=DiagramHint(is_diagram=False, diagram_type=None),
+                diagram_hints=[],
+            )
 
         except HTTPException:
             raise
         except Exception as e:
             logger.warning(f"extract_text_diagram_insight failed for {filename}: {e}")
-            return {
-                "text": "",
-                "confidence": 0.0,
-                "diagram_hint": {"is_diagram": False, "diagram_type": None},
-            }
+            return GeminiPageExtractionResult(
+                text="",
+                confidence=0.0,
+                diagram_hint=DiagramHint(is_diagram=False, diagram_type=None),
+                diagram_hints=[],
+            )
 
     async def _handle_parsing_failure(
         self, ai_response: Dict[str, Any], parsing_result: ParsingResult, filename: str

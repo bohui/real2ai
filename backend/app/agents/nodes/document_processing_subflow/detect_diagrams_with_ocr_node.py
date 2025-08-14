@@ -15,11 +15,7 @@ from app.agents.nodes.document_processing_subflow.base_node import (
 from app.agents.subflows.document_processing_workflow import DocumentProcessingState
 from app.core.langsmith_config import langsmith_trace
 from app.services.ai.gemini_ocr_service import GeminiOCRService
-from app.core.prompts.output_parser import create_parser
-from app.prompts.schema.diagram_detection_schema import (
-    DiagramDetectionResponse,
-    DiagramDetectionItem,
-)
+from app.prompts.schema.diagram_detection_schema import DiagramDetectionItem
 from app.models.supabase_models import DiagramType
 
 logger = logging.getLogger(__name__)
@@ -40,8 +36,8 @@ class DetectDiagramsWithOCRNode(DocumentProcessingNodeBase):
     def __init__(self):
         super().__init__("detect_diagrams_with_ocr")
         self.ocr_service = None
-        self.parser = create_parser(DiagramDetectionResponse)
         # Configuration will be loaded from settings
+        self.artifacts_repo = None
 
     async def _initialize_services(self):
         """Initialize OCR service if not already initialized"""
@@ -129,12 +125,54 @@ class DetectDiagramsWithOCRNode(DocumentProcessingNodeBase):
                 # Use first N pages for processing
                 pages = pages[:max_diagram_pages]
 
+            # Prepare existing LLM OCR diagram hints to avoid duplicate API calls
+            existing_llm_hints: Dict[int, str] = {}
+            content_hmac = state.get("content_hmac")
+            algorithm_version = state.get("algorithm_version")
+            params_fingerprint = state.get("params_fingerprint")
+
+            try:
+                if (
+                    content_hmac
+                    and algorithm_version is not None
+                    and params_fingerprint
+                ):
+                    if not self.artifacts_repo:
+                        from app.services.repositories.artifacts_repository import (
+                            ArtifactsRepository,
+                        )
+
+                        self.artifacts_repo = ArtifactsRepository()
+
+                    visual_artifacts = (
+                        await self.artifacts_repo.get_all_visual_artifacts(
+                            content_hmac, algorithm_version, params_fingerprint
+                        )
+                    )
+                    for va in visual_artifacts:
+                        if getattr(va, "artifact_type", "diagram") == "diagram" and str(
+                            getattr(va, "diagram_key", "")
+                        ).startswith("llm_ocr_hint_page_"):
+                            page_no = getattr(va, "page_number", None)
+                            if isinstance(page_no, int) and page_no >= 1:
+                                d_type = (getattr(va, "diagram_meta", {}) or {}).get(
+                                    "type", "unknown"
+                                )
+                                existing_llm_hints[page_no] = d_type or "unknown"
+                    if existing_llm_hints:
+                        logger.info(
+                            "Found existing LLM OCR diagram hints; will skip OCR for those pages",
+                            extra={"hint_pages": sorted(existing_llm_hints.keys())},
+                        )
+            except Exception as hint_err:
+                logger.warning(f"Failed to load existing LLM diagram hints: {hint_err}")
+
             # Store state for use in JPG persistence
             self._current_state = state
 
             # Process diagrams per-page with retries
             all_diagrams = await self._process_pages_for_diagrams(
-                document_id, storage_path, pages, settings
+                document_id, storage_path, pages, settings, existing_llm_hints
             )
 
             # Store diagram processing results in state (canonical field)
@@ -209,29 +247,13 @@ class DetectDiagramsWithOCRNode(DocumentProcessingNodeBase):
 
             return state
 
-    def _create_diagram_detection_prompt(self) -> str:
-        """
-        Create diagram detection prompt based on gemini_client_cli.py
-
-        Returns:
-            Formatted prompt for diagram detection
-        """
-        return """Diagram detection only
-
-Goal
-- Return ONLY a JSON object with one key: diagram (array)
-- Each item: {"type": one of [site_plan, sewer_diagram, service_location_diagram, flood_map, bushfire_map, title_plan, survey_diagram, floor_plan, elevation, unknown], "page": integer}
-- Identify all visual elements that correspond to diagrams/images in the document
-- Do not include any other keys or textual content
-
-Notes
-- Use 'unknown' if unsure
-- Page numbers are 1-based
-- Only include actual diagrams, plans, maps, and technical drawings
-- Exclude text-only pages, headers, footers, and decorative elements"""
-
     async def _process_pages_for_diagrams(
-        self, document_id: str, storage_path: str, pages: List[Dict[str, Any]], settings
+        self,
+        document_id: str,
+        storage_path: str,
+        pages: List[Dict[str, Any]],
+        settings,
+        existing_llm_hints: Optional[Dict[int, str]] = None,
     ) -> List[DiagramDetectionItem]:
         """
         Process pages for diagram detection using per-page approach.
@@ -244,7 +266,7 @@ Notes
         Returns:
             List of detected diagrams with types and page numbers
         """
-        all_diagrams = []
+        all_diagrams: List[DiagramDetectionItem] = []
         pages_to_process = []
 
         # Filter pages that are candidates for diagram detection using actual schema fields
@@ -270,16 +292,31 @@ Notes
                 has_diagram_keywords = has_diagrams_flag
 
             if has_diagrams_flag or has_low_text or has_diagram_keywords:
-                pages_to_process.append(page_number)
-                logger.info(
-                    f"Page {page_number} selected for diagram detection",
-                    extra={
-                        "document_id": document_id,
-                        "has_diagrams_flag": has_diagrams_flag,
-                        "has_low_text": has_low_text,
-                        "has_diagram_keywords": has_diagram_keywords,
-                    },
-                )
+                # If we already have an LLM OCR hint for this page, reuse it and skip OCR
+                if existing_llm_hints and page_number in existing_llm_hints:
+                    hint_type = existing_llm_hints.get(page_number) or "unknown"
+                    all_diagrams.append(
+                        DiagramDetectionItem(type=hint_type, page=page_number)
+                    )
+                    logger.info(
+                        f"Skipping OCR for page {page_number} due to existing LLM hint",
+                        extra={
+                            "document_id": document_id,
+                            "hint_type": hint_type,
+                            "reason": "llm_ocr_hint_artifact",
+                        },
+                    )
+                else:
+                    pages_to_process.append(page_number)
+                    logger.info(
+                        f"Page {page_number} selected for diagram detection",
+                        extra={
+                            "document_id": document_id,
+                            "has_diagrams_flag": has_diagrams_flag,
+                            "has_low_text": has_low_text,
+                            "has_diagram_keywords": has_diagram_keywords,
+                        },
+                    )
 
         if not pages_to_process:
             logger.info(
@@ -345,21 +382,44 @@ Notes
             # Persist rendered JPG as artifact for reuse (if we have artifact metadata in state)
             await self._persist_page_jpg_if_needed(page_jpg_bytes, page_number)
 
-            # Call OCR service for diagram detection on this page
-            diagram_prompt = self._create_diagram_detection_prompt()
-            detection_result = await self._detect_diagrams_with_page_jpg(
-                page_jpg_bytes, page_number, diagram_prompt
+            # Use shared Gemini OCR service with PromptManager to detect diagram for this page
+            # Reuse the same structured method as text OCR, focusing the analysis on diagram detection
+            state = getattr(self, "_current_state", {}) or {}
+            llm_result = await self.ocr_service.extract_text_diagram_insight(
+                file_content=page_jpg_bytes,
+                file_type="jpg",
+                filename=f"page_{page_number}.jpg",
+                analysis_focus="diagram_detection",
+                australian_state=state.get("australian_state"),
+                contract_type=state.get("contract_type"),
+                document_type=state.get("document_type"),
             )
 
-            # Parse response and filter results for this page
-            diagram_data = await self._parse_diagram_response(detection_result)
-
-            # Filter diagrams to only include this page and update page numbers
             page_diagrams = []
-            for diagram in diagram_data.diagram:
-                # Update page number to match actual page being processed
-                page_diagram = DiagramDetectionItem(type=diagram.type, page=page_number)
-                page_diagrams.append(page_diagram)
+            # Prefer multiple hints if available
+            hints = getattr(llm_result, "diagram_hints", None) or []
+            if hints:
+                for h in hints:
+                    if getattr(h, "is_diagram", False):
+                        d_type = getattr(h, "diagram_type", None) or "unknown"
+                        page_diagrams.append(
+                            DiagramDetectionItem(type=d_type, page=page_number)
+                        )
+            else:
+                if getattr(
+                    getattr(llm_result, "diagram_hint", None), "is_diagram", False
+                ):
+                    diag_type = (
+                        getattr(
+                            getattr(llm_result, "diagram_hint", None),
+                            "diagram_type",
+                            None,
+                        )
+                        or "unknown"
+                    )
+                    page_diagrams.append(
+                        DiagramDetectionItem(type=diag_type, page=page_number)
+                    )
 
             logger.info(
                 f"Page {page_number} diagram detection: {len(page_diagrams)} diagrams found",
@@ -369,6 +429,52 @@ Notes
                     "diagram_types": [d.type for d in page_diagrams],
                 },
             )
+
+            # Persist detected diagrams as unified visual artifacts to enable reuse
+            if page_diagrams:
+                try:
+                    state = getattr(self, "_current_state", {}) or {}
+                    content_hmac = state.get("content_hmac")
+                    algorithm_version = state.get("algorithm_version")
+                    params_fingerprint = state.get("params_fingerprint")
+
+                    if (
+                        content_hmac
+                        and algorithm_version is not None
+                        and params_fingerprint
+                    ):
+                        if not self.artifacts_repo:
+                            from app.services.repositories.artifacts_repository import (
+                                ArtifactsRepository,
+                            )
+
+                            self.artifacts_repo = ArtifactsRepository()
+
+                        for seq_index, diagram_item in enumerate(
+                            page_diagrams, start=1
+                        ):
+                            diagram_key = f"diagram_page_{page_number}_{diagram_item.type}_{seq_index:02d}"
+                            await self.artifacts_repo.insert_unified_visual_artifact(
+                                content_hmac=content_hmac,
+                                algorithm_version=algorithm_version,
+                                params_fingerprint=params_fingerprint,
+                                page_number=page_number,
+                                diagram_key=diagram_key,
+                                artifact_type="diagram",
+                                diagram_meta={
+                                    "type": diagram_item.type,
+                                    "detection_method": "ocr_detection",
+                                    "source": "gemini",
+                                },
+                            )
+                        self._log_info(
+                            f"Persisted {len(page_diagrams)} OCR diagram artifact(s) for page {page_number}",
+                            extra={"page": page_number},
+                        )
+                except Exception as persist_err:
+                    self._log_warning(
+                        f"Failed to persist OCR diagram artifacts for page {page_number}: {persist_err}"
+                    )
 
             return page_diagrams
 
@@ -414,99 +520,6 @@ Notes
         except Exception as e:
             logger.error(f"Failed to render page {page_number} to JPG: {e}")
             raise
-
-    async def _detect_diagrams_with_page_jpg(
-        self, page_jpg_bytes: bytes, page_number: int, prompt: str
-    ) -> Dict[str, Any]:
-        """
-        Call OCR service for diagram detection using page JPG.
-
-        Args:
-            page_jpg_bytes: JPG bytes for the page
-            page_number: Page number being processed
-            prompt: Diagram detection prompt
-
-        Returns:
-            Raw OCR service response
-        """
-        try:
-            # Use Gemini service directly for diagram detection with custom prompt
-            from google.genai.types import Content, Part, GenerateContentConfig
-
-            # Create content with page image and custom prompt
-            page_content = Part.from_bytes(data=page_jpg_bytes, mime_type="image/jpeg")
-            prompt_part = Part.from_text(text=prompt)
-            contents = [Content(role="user", parts=[page_content, prompt_part])]
-
-            # Configure generation for structured output
-            config = GenerateContentConfig(
-                temperature=0,
-                top_p=1,
-                seed=0,
-                max_output_tokens=1024,  # Smaller for per-page processing
-                safety_settings=[
-                    {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "OFF"},
-                    {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "OFF"},
-                    {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "OFF"},
-                    {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "OFF"},
-                ],
-            )
-
-            # Call Gemini service
-            response = await self.ocr_service.gemini_service.client.agenerate_content(
-                contents=contents, config=config
-            )
-
-            return {
-                "content": response.text,
-                "candidates": response.candidates,
-                "usage_metadata": response.usage_metadata,
-            }
-
-        except Exception as e:
-            logger.error(
-                f"OCR service call failed for page {page_number}: {e}", exc_info=True
-            )
-            raise
-
-    async def _parse_diagram_response(
-        self, ocr_response: Dict[str, Any]
-    ) -> DiagramDetectionResponse:
-        """
-        Parse OCR response using structured output parser.
-
-        Args:
-            ocr_response: Raw response from OCR service
-
-        Returns:
-            Parsed and validated diagram detection data
-        """
-        try:
-            # Extract content from OCR response
-            content = ocr_response.get("content", ocr_response.get("result", ""))
-
-            if not content:
-                logger.warning(
-                    "No content in OCR response, returning empty diagram list"
-                )
-                return DiagramDetectionResponse(diagram=[])
-
-            # Parse using structured parser
-            parsing_result = await self.parser.parse(content)
-
-            if not parsing_result.success:
-                logger.warning(
-                    f"Failed to parse diagram response: {parsing_result.error_message}",
-                    extra={"raw_content": content[:500]},
-                )
-                return DiagramDetectionResponse(diagram=[])
-
-            return parsing_result.data
-
-        except Exception as e:
-            logger.error(f"Failed to parse diagram response: {e}", exc_info=True)
-            # Return empty result rather than failing the whole workflow
-            return DiagramDetectionResponse(diagram=[])
 
     def _validate_diagram_data(
         self, diagrams: List[Dict[str, Any]]
@@ -647,20 +660,10 @@ Notes
 
                     storage_service = ArtifactStorageService()
 
-                    # Generate JPG storage path
-                    jpg_filename = f"page_{page_number}.jpg"
-                    jpg_uri = await storage_service.upload_page_jpg(
-                        content_hmac,
-                        algorithm_version,
-                        params_fingerprint,
-                        page_number,
-                        page_jpg_bytes,
+                    # Upload JPG image to storage
+                    jpg_uri, jpg_sha256 = await storage_service.upload_page_image_jpg(
+                        page_jpg_bytes, content_hmac, page_number
                     )
-
-                    # Calculate SHA256 for integrity
-                    import hashlib
-
-                    jpg_sha256 = hashlib.sha256(page_jpg_bytes).hexdigest()
 
                     # Persist as unified diagram artifact with artifact_type='image_jpg'
                     if not hasattr(self, "artifacts_repo") or not self.artifacts_repo:
@@ -672,13 +675,12 @@ Notes
 
                     diagram_key = f"page_jpg_{page_number}"
 
-                    await self.artifacts_repo.insert_diagram_artifact(
+                    await self.artifacts_repo.insert_unified_visual_artifact(
                         content_hmac=content_hmac,
                         algorithm_version=algorithm_version,
                         params_fingerprint=params_fingerprint,
                         page_number=page_number,
                         diagram_key=diagram_key,
-                        diagram_meta={"rendered_for": "ocr_detection", "zoom": "2.0x"},
                         artifact_type="image_jpg",
                         image_uri=jpg_uri,
                         image_sha256=jpg_sha256,
@@ -687,6 +689,7 @@ Notes
                             "quality": "high",
                             "dpi": "144",
                         },
+                        diagram_meta={"rendered_for": "ocr_detection", "zoom": "2.0x"},
                     )
 
                     self._log_info(
