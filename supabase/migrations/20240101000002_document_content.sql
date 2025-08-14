@@ -1,7 +1,7 @@
 -- Artifact tables (shared, RLS disabled) and user-scoped processing tables (RLS enabled)
 
 -- Shared artifacts
-CREATE TABLE IF NOT EXISTS text_extraction_artifacts (
+CREATE TABLE IF NOT EXISTS artifacts_full_text (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     content_hmac text NOT NULL,
     algorithm_version int NOT NULL,
@@ -16,8 +16,8 @@ CREATE TABLE IF NOT EXISTS text_extraction_artifacts (
     UNIQUE (content_hmac, algorithm_version, params_fingerprint)
 );
 
-CREATE INDEX IF NOT EXISTS idx_text_extraction_artifacts_lookup
-    ON text_extraction_artifacts (content_hmac, algorithm_version, params_fingerprint);
+CREATE INDEX IF NOT EXISTS idx_artifacts_full_text_lookup
+    ON artifacts_full_text (content_hmac, algorithm_version, params_fingerprint);
 
 CREATE TABLE IF NOT EXISTS artifact_pages (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -29,12 +29,16 @@ CREATE TABLE IF NOT EXISTS artifact_pages (
     page_text_sha256 text NOT NULL,
     layout jsonb,
     metrics jsonb,
+    content_type text DEFAULT 'text' CHECK (content_type IN ('text', 'markdown', 'json_metadata')),
     created_at timestamptz DEFAULT now(),
     UNIQUE (content_hmac, algorithm_version, params_fingerprint, page_number)
 );
 
 CREATE INDEX IF NOT EXISTS idx_artifact_pages_lookup
     ON artifact_pages (content_hmac, algorithm_version, params_fingerprint);
+
+CREATE INDEX IF NOT EXISTS idx_artifact_pages_content_type 
+    ON artifact_pages (content_hmac, algorithm_version, params_fingerprint, content_type);
 
 CREATE TABLE IF NOT EXISTS artifact_diagrams (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -44,6 +48,10 @@ CREATE TABLE IF NOT EXISTS artifact_diagrams (
     page_number int NOT NULL,
     diagram_key text NOT NULL,
     diagram_meta jsonb NOT NULL,
+    artifact_type text DEFAULT 'diagram' CHECK (artifact_type IN ('diagram', 'image_jpg', 'image_png')),
+    image_uri text,
+    image_sha256 text,
+    image_metadata jsonb DEFAULT '{}',
     created_at timestamptz DEFAULT now(),
     UNIQUE (content_hmac, algorithm_version, params_fingerprint, page_number, diagram_key)
 );
@@ -51,53 +59,43 @@ CREATE TABLE IF NOT EXISTS artifact_diagrams (
 CREATE INDEX IF NOT EXISTS idx_artifact_diagrams_lookup
     ON artifact_diagrams (content_hmac, algorithm_version, params_fingerprint);
 
-CREATE TABLE IF NOT EXISTS artifact_paragraphs (
-    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    content_hmac text NOT NULL,
-    algorithm_version int NOT NULL,
-    params_fingerprint text NOT NULL,
-    page_number int NOT NULL,
-    paragraph_index int NOT NULL,
-    paragraph_text_uri text NOT NULL,
-    paragraph_text_sha256 text NOT NULL,
-    features jsonb,
-    created_at timestamptz DEFAULT now(),
-    UNIQUE (content_hmac, algorithm_version, params_fingerprint, page_number, paragraph_index)
-);
+CREATE INDEX IF NOT EXISTS idx_artifact_diagrams_artifact_type
+    ON artifact_diagrams (content_hmac, algorithm_version, params_fingerprint, artifact_type);
+
 
 -- Add data integrity constraints
 DO $$
 BEGIN
-  -- Check constraints for text_extraction_artifacts
+  -- Check constraints for artifacts_full_text
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.check_constraints 
-    WHERE constraint_name = 'chk_text_extraction_artifacts_content_hmac_length'
+    WHERE constraint_name = 'chk_artifacts_full_text_content_hmac_length'
   ) THEN
-    EXECUTE 'ALTER TABLE text_extraction_artifacts ADD CONSTRAINT chk_text_extraction_artifacts_content_hmac_length 
+    EXECUTE 'ALTER TABLE artifacts_full_text ADD CONSTRAINT chk_artifacts_full_text_content_hmac_length 
              CHECK (length(content_hmac) = 64 AND content_hmac ~ ''^[a-f0-9]+$'')';
   END IF;
   
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.check_constraints 
-    WHERE constraint_name = 'chk_text_extraction_artifacts_params_fingerprint_length'
+    WHERE constraint_name = 'chk_artifacts_full_text_params_fingerprint_length'
   ) THEN
-    EXECUTE 'ALTER TABLE text_extraction_artifacts ADD CONSTRAINT chk_text_extraction_artifacts_params_fingerprint_length 
+    EXECUTE 'ALTER TABLE artifacts_full_text ADD CONSTRAINT chk_artifacts_full_text_params_fingerprint_length 
              CHECK (length(params_fingerprint) = 64 AND params_fingerprint ~ ''^[a-f0-9]+$'')';
   END IF;
   
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.check_constraints 
-    WHERE constraint_name = 'chk_text_extraction_artifacts_sha256_length'
+    WHERE constraint_name = 'chk_artifacts_full_text_sha256_length'
   ) THEN
-    EXECUTE 'ALTER TABLE text_extraction_artifacts ADD CONSTRAINT chk_text_extraction_artifacts_sha256_length 
+    EXECUTE 'ALTER TABLE artifacts_full_text ADD CONSTRAINT chk_artifacts_full_text_sha256_length 
              CHECK (length(full_text_sha256) = 64 AND full_text_sha256 ~ ''^[a-f0-9]+$'')';
   END IF;
   
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.check_constraints 
-    WHERE constraint_name = 'chk_text_extraction_artifacts_positive_counts'
+    WHERE constraint_name = 'chk_artifacts_full_text_positive_counts'
   ) THEN
-    EXECUTE 'ALTER TABLE text_extraction_artifacts ADD CONSTRAINT chk_text_extraction_artifacts_positive_counts 
+    EXECUTE 'ALTER TABLE artifacts_full_text ADD CONSTRAINT chk_artifacts_full_text_positive_counts 
              CHECK (total_pages >= 0 AND total_words >= 0 AND algorithm_version > 0)';
   END IF;
 
@@ -118,23 +116,6 @@ BEGIN
              CHECK (length(page_text_sha256) = 64 AND page_text_sha256 ~ ''^[a-f0-9]+$'')';
   END IF;
 
-  -- Check constraints for artifact_paragraphs
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.check_constraints 
-    WHERE constraint_name = 'chk_artifact_paragraphs_indices_non_negative'
-  ) THEN
-    EXECUTE 'ALTER TABLE artifact_paragraphs ADD CONSTRAINT chk_artifact_paragraphs_indices_non_negative 
-             CHECK (page_number > 0 AND paragraph_index >= 0)';
-  END IF;
-  
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.check_constraints 
-    WHERE constraint_name = 'chk_artifact_paragraphs_sha256_length'
-  ) THEN
-    EXECUTE 'ALTER TABLE artifact_paragraphs ADD CONSTRAINT chk_artifact_paragraphs_sha256_length 
-             CHECK (length(paragraph_text_sha256) = 64 AND paragraph_text_sha256 ~ ''^[a-f0-9]+$'')';
-  END IF;
-
   -- Check constraints for artifact_diagrams
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.check_constraints 
@@ -143,24 +124,39 @@ BEGIN
     EXECUTE 'ALTER TABLE artifact_diagrams ADD CONSTRAINT chk_artifact_diagrams_page_number_positive 
              CHECK (page_number > 0)';
   END IF;
+
+  -- Check constraints for unified artifact_diagrams image fields
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.check_constraints 
+    WHERE constraint_name = 'chk_artifact_diagrams_image_fields_consistency'
+  ) THEN
+    EXECUTE 'ALTER TABLE artifact_diagrams ADD CONSTRAINT chk_artifact_diagrams_image_fields_consistency 
+             CHECK (
+                 (artifact_type = ''diagram'' AND image_uri IS NULL AND image_sha256 IS NULL) OR
+                 (artifact_type IN (''image_jpg'', ''image_png'') AND image_uri IS NOT NULL AND image_sha256 IS NOT NULL)
+             )';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.check_constraints 
+    WHERE constraint_name = 'chk_artifact_diagrams_image_sha256_length'
+  ) THEN
+    EXECUTE 'ALTER TABLE artifact_diagrams ADD CONSTRAINT chk_artifact_diagrams_image_sha256_length 
+             CHECK (image_sha256 IS NULL OR (length(image_sha256) = 64 AND image_sha256 ~ ''^[a-f0-9]+$''))';
+  END IF;
 END $$;
 
 -- RLS configuration for artifact tables (service role only)
-ALTER TABLE text_extraction_artifacts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE artifacts_full_text ENABLE ROW LEVEL SECURITY;
 ALTER TABLE artifact_pages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE artifact_diagrams ENABLE ROW LEVEL SECURITY;
-ALTER TABLE artifact_paragraphs ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Service role only access to text_extraction_artifacts" 
-    ON text_extraction_artifacts FOR ALL 
+CREATE POLICY "Service role only access to artifacts_full_text" 
+    ON artifacts_full_text FOR ALL 
     USING (auth.jwt() ->> 'role' = 'service_role');
 
 CREATE POLICY "Service role only access to artifact_pages" 
     ON artifact_pages FOR ALL 
-    USING (auth.jwt() ->> 'role' = 'service_role');
-
-CREATE POLICY "Service role only access to artifact_paragraphs" 
-    ON artifact_paragraphs FOR ALL 
     USING (auth.jwt() ->> 'role' = 'service_role');
 
 CREATE POLICY "Service role only access to artifact_diagrams" 
@@ -168,19 +164,17 @@ CREATE POLICY "Service role only access to artifact_diagrams"
     USING (auth.jwt() ->> 'role' = 'service_role');
 
 -- Revoke direct access to artifact tables from regular users
-REVOKE ALL ON TABLE text_extraction_artifacts FROM anon;
-REVOKE ALL ON TABLE text_extraction_artifacts FROM authenticated;
+REVOKE ALL ON TABLE artifacts_full_text FROM anon;
+REVOKE ALL ON TABLE artifacts_full_text FROM authenticated;
 REVOKE ALL ON TABLE artifact_pages FROM anon;
 REVOKE ALL ON TABLE artifact_pages FROM authenticated;
-REVOKE ALL ON TABLE artifact_paragraphs FROM anon;
-REVOKE ALL ON TABLE artifact_paragraphs FROM authenticated;
 REVOKE ALL ON TABLE artifact_diagrams FROM anon;
 REVOKE ALL ON TABLE artifact_diagrams FROM authenticated;
 
 -- Documents reference to artifacts with foreign key constraint
 ALTER TABLE documents ADD COLUMN IF NOT EXISTS artifact_text_id uuid;
 
--- Add foreign key constraint for documents -> text_extraction_artifacts
+-- Add foreign key constraint for documents -> artifacts_full_text
 -- Use ON DELETE SET NULL to handle graceful artifact cleanup
 DO $$
 BEGIN
@@ -191,7 +185,7 @@ BEGIN
     AND table_name = 'documents'
   ) THEN
     EXECUTE 'ALTER TABLE documents ADD CONSTRAINT documents_artifact_text_fk 
-             FOREIGN KEY (artifact_text_id) REFERENCES text_extraction_artifacts(id) 
+             FOREIGN KEY (artifact_text_id) REFERENCES artifacts_full_text(id) 
              ON DELETE SET NULL';
   END IF;
 END $$;
@@ -241,21 +235,9 @@ CREATE TABLE IF NOT EXISTS user_document_diagrams (
     PRIMARY KEY (document_id, page_number, diagram_key)
 );
 
-CREATE TABLE IF NOT EXISTS user_document_paragraphs (
-    document_id uuid NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
-    page_number int NOT NULL,
-    paragraph_index int NOT NULL,
-    artifact_paragraph_id uuid NOT NULL REFERENCES artifact_paragraphs(id),
-    annotations jsonb,
-    created_at timestamptz DEFAULT now(),
-    updated_at timestamptz DEFAULT now(),
-    PRIMARY KEY (document_id, page_number, paragraph_index)
-);
-
 -- RLS and policies for user document tables
 ALTER TABLE user_document_pages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_document_diagrams ENABLE ROW LEVEL SECURITY;
-ALTER TABLE user_document_paragraphs ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Users can manage own document pages" 
     ON user_document_pages FOR ALL 
@@ -281,22 +263,9 @@ CREATE POLICY "Users can manage own document diagrams"
         )
     );
 
-CREATE POLICY "Users can manage own document paragraphs" 
-    ON user_document_paragraphs FOR ALL 
-    USING (
-        auth.jwt() ->> 'role' = 'service_role'
-        OR 
-        EXISTS (
-            SELECT 1 FROM documents d 
-            WHERE d.id = user_document_paragraphs.document_id 
-            AND d.user_id = auth.uid()
-        )
-    );
-
 -- Indexes for user document tables
 CREATE INDEX IF NOT EXISTS idx_user_document_pages_doc ON user_document_pages(document_id, page_number);
 CREATE INDEX IF NOT EXISTS idx_user_document_diagrams_doc ON user_document_diagrams(document_id, page_number);
-CREATE INDEX IF NOT EXISTS idx_user_document_paragraphs_doc ON user_document_paragraphs(document_id, page_number);
 
 -- Processing runs and steps
 CREATE TABLE IF NOT EXISTS document_processing_runs (
@@ -374,16 +343,17 @@ CREATE TRIGGER update_user_document_diagrams_updated_at
     BEFORE UPDATE ON user_document_diagrams 
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-CREATE TRIGGER update_user_document_paragraphs_updated_at 
-    BEFORE UPDATE ON user_document_paragraphs 
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
 -- Comments for artifact security policies
-COMMENT ON POLICY "Service role only access to text_extraction_artifacts" ON text_extraction_artifacts IS 'Only service role can access text extraction artifacts - shared cached data for content-addressed storage';
-COMMENT ON POLICY "Service role only access to artifact_pages" ON artifact_pages IS 'Only service role can access artifact pages - shared cached data for content-addressed storage';
-COMMENT ON POLICY "Service role only access to artifact_paragraphs" ON artifact_paragraphs IS 'Only service role can access artifact paragraphs - shared cached data for content-addressed storage';
-COMMENT ON POLICY "Service role only access to artifact_diagrams" ON artifact_diagrams IS 'Only service role can access artifact diagrams - shared cached data for content-addressed storage';
+COMMENT ON POLICY "Service role only access to artifacts_full_text" ON artifacts_full_text IS 'Only service role can access full text artifacts - shared cached data for content-addressed storage';
+COMMENT ON POLICY "Service role only access to artifact_pages" ON artifact_pages IS 'Only service role can access artifact pages - shared cached data for content-addressed storage with unified content types';
+COMMENT ON POLICY "Service role only access to artifact_diagrams" ON artifact_diagrams IS 'Only service role can access artifact diagrams - shared cached data for content-addressed storage with unified artifact types';
 COMMENT ON POLICY "Users can manage own document pages" ON user_document_pages IS 'Users can manage document pages for their own documents via foreign key relationship';
 COMMENT ON POLICY "Users can manage own document diagrams" ON user_document_diagrams IS 'Users can manage document diagrams for their own documents via foreign key relationship';
-COMMENT ON POLICY "Users can manage own document paragraphs" ON user_document_paragraphs IS 'Users can manage document paragraphs for their own documents via foreign key relationship';
+
+-- Comments for unified artifact columns
+COMMENT ON COLUMN artifact_pages.content_type IS 'Discriminates between text, markdown, and JSON metadata artifacts';
+COMMENT ON COLUMN artifact_diagrams.artifact_type IS 'Discriminates between diagrams, JPG images, and PNG images';
+COMMENT ON COLUMN artifact_diagrams.image_uri IS 'URI for image artifacts (when artifact_type is image_*)';
+COMMENT ON COLUMN artifact_diagrams.image_sha256 IS 'SHA256 hash for image artifacts';
+COMMENT ON COLUMN artifact_diagrams.image_metadata IS 'Metadata for image artifacts';
 

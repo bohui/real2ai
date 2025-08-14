@@ -10,16 +10,14 @@ import json
 
 from app.services.repositories.artifacts_repository import (
     ArtifactsRepository,
-    TextExtractionArtifact,
+    FullTextArtifact,
     PageArtifact,
     DiagramArtifact,
-    ParagraphArtifact,
 )
 from app.services.repositories.user_docs_repository import (
     UserDocsRepository,
     DocumentPage,
     DocumentDiagram,
-    DocumentParagraph,
 )
 from app.services.repositories.runs_repository import (
     RunsRepository,
@@ -49,7 +47,7 @@ class TestArtifactsRepository:
         self.params_fingerprint = "b" * 64
 
     @pytest.mark.asyncio
-    async def test_get_text_artifact_found(self):
+    async def test_get_full_text_artifact_found(self):
         """Test getting existing text artifact"""
         mock_connection = AsyncMock()
         mock_row = {
@@ -68,39 +66,39 @@ class TestArtifactsRepository:
         mock_connection.fetchrow.return_value = mock_row
         
         with patch.object(self.repo, '_get_connection', return_value=mock_connection):
-            result = await self.repo.get_text_artifact(
+            result = await self.repo.get_full_text_artifact(
                 self.content_hmac, self.algorithm_version, self.params_fingerprint
             )
             
         assert result is not None
-        assert isinstance(result, TextExtractionArtifact)
+        assert isinstance(result, FullTextArtifact)
         assert result.content_hmac == self.content_hmac
         assert result.total_pages == 10
         assert result.total_words == 1000
 
     @pytest.mark.asyncio
-    async def test_get_text_artifact_not_found(self):
+    async def test_get_full_text_artifact_not_found(self):
         """Test getting non-existent text artifact"""
         mock_connection = AsyncMock()
         mock_connection.fetchrow.return_value = None
         
         with patch.object(self.repo, '_get_connection', return_value=mock_connection):
-            result = await self.repo.get_text_artifact(
+            result = await self.repo.get_full_text_artifact(
                 self.content_hmac, self.algorithm_version, self.params_fingerprint
             )
             
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_get_text_artifact_invalid_hmac(self):
+    async def test_get_full_text_artifact_invalid_hmac(self):
         """Test getting text artifact with invalid HMAC"""
         with pytest.raises(ValueError, match="Invalid content HMAC"):
-            await self.repo.get_text_artifact(
+            await self.repo.get_full_text_artifact(
                 "invalid", self.algorithm_version, self.params_fingerprint
             )
 
     @pytest.mark.asyncio
-    async def test_insert_text_artifact_success(self):
+    async def test_insert_full_text_artifact_success(self):
         """Test inserting new text artifact"""
         mock_connection = AsyncMock()
         mock_transaction = AsyncMock()
@@ -123,7 +121,7 @@ class TestArtifactsRepository:
         mock_connection.fetchrow.return_value = mock_row
         
         with patch.object(self.repo, '_get_connection', return_value=mock_connection):
-            result = await self.repo.insert_text_artifact(
+            result = await self.repo.insert_full_text_artifact(
                 content_hmac=self.content_hmac,
                 algorithm_version=self.algorithm_version,
                 params_fingerprint=self.params_fingerprint,
@@ -136,7 +134,7 @@ class TestArtifactsRepository:
             )
             
         assert result is not None
-        assert isinstance(result, TextExtractionArtifact)
+        assert isinstance(result, FullTextArtifact)
         assert result.id == artifact_id
         assert result.total_pages == 10
 

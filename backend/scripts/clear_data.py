@@ -84,7 +84,6 @@ DEFAULT_TABLE_ORDER: List[str] = [
     # Contract analysis data that depends on contracts/content_hash
     "analyses",
     # User-scoped document processing tables (depend on documents)
-    "user_document_paragraphs",
     "user_document_diagrams",
     "user_document_pages",
     # Legacy document-derived tables (may still exist in some databases)
@@ -112,10 +111,9 @@ DEFAULT_TABLE_ORDER: List[str] = [
     "contracts",
     "documents",
     # Shared artifact tables (content-addressed cache - no foreign keys)
-    "artifact_paragraphs",
     "artifact_diagrams",
     "artifact_pages",
-    "text_extraction_artifacts",
+    "artifacts_full_text",
     # Other shared tables
     "usage_logs",
 ]

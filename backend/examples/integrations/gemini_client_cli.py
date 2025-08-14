@@ -86,6 +86,19 @@ class DocumentSummary(BaseModel):
     diagram: list[Diagram]
 
 
+class DocumentSummaryMarkdown(BaseModel):
+    content_md: str
+    diagram: list[Diagram]
+
+
+class DocumentContentMarkdown(BaseModel):
+    content_md: str
+
+
+class DiagramList(BaseModel):
+    diagram: list[Diagram]
+
+
 def configure_logging(verbose: bool) -> None:
     level = logging.DEBUG if verbose else logging.INFO
     logging.basicConfig(
@@ -138,7 +151,27 @@ def to_jsonable(obj: Any) -> Any:
     return str(obj)
 
 
-PROMPT = """
+PROMPT_DOTSOCR = """
+Please output the layout information from the PDF image, including each layout element's bbox, its category, and the corresponding text content within the bbox.
+
+1. Bbox format: [x1, y1, x2, y2]
+
+2. Layout Categories: The possible categories are ['Caption', 'Footnote', 'Formula', 'List-item', 'Page-footer', 'Page-header', 'Picture', 'Section-header', 'Table', 'Text', 'Title'].
+
+3. Text Extraction & Formatting Rules:
+    - Picture: For the 'Picture' category, the text field should be omitted.
+    - Formula: Format its text as LaTeX.
+    - Table: Format its text as HTML.
+    - All Others (Text, Title, etc.): Format their text as Markdown.
+
+4. Constraints:
+    - The output text must be the original text from the image, with no translation.
+    - All layout elements must be sorted according to human reading order.
+
+5. Final Output: The entire output must be a single JSON object."""
+
+
+PROMPT_HTML = """
 # PDF to HTML Conversion with Citation Structure and Diagram Detection
 
 ## Primary Task
@@ -269,7 +302,116 @@ Analyze the PDF and create a comprehensive JSON array containing all visual elem
 - Ensure accessibility with proper alt text for images
 """
 
+
+PROMPT_MD = """
+PDF to Markdown with layout metadata and diagram indexing
+
+Goal
+- Produce a single JSON object matching the schema {"content_md": string, "diagram": [{"type": string, "page": number}]}
+- The string field must contain the full document as Markdown (content_md)
+- The array must list all detected diagrams/images with their classified type and page (diagram)
+
+Text extraction and layout rules
+- Read in human reading order
+- Categories and formatting:
+  - Title/Section-header/Text/Caption/Footnote/List-item -> Markdown
+  - Formula -> LaTeX ($...$ or $$...$$)
+  - Table -> GitHub Markdown table
+  - Picture -> do not OCR text
+- Preserve paragraphs, lists, headings (map Title→#, Section-header→##/###), footnotes as Markdown
+- When available, include lightweight layout metadata as HTML comments on their own line immediately before the element:
+  <!-- page: {page_number} bbox: [x1,y1,x2,y2] category: {Category} -->
+
+Diagram detection and cross-referencing
+- Detect and classify all visual elements that are diagrams/images
+- Allowed types (must use exactly one of): site_plan, sewer_diagram, service_location_diagram, flood_map, bushfire_map, title_plan, survey_diagram, floor_plan, elevation, unknown
+- For every detected diagram, insert a one-line placeholder in content_md at the correct position:
+  [diagram:id=fig-XXX type=TYPE page=P]
+  - Optional caption on the next line if present in the source
+- For each placeholder, add one entry to the diagram array with the same TYPE and P (page)
+- Ensure every diagram listed in the array has exactly one matching placeholder in content_md
+
+Output format
+- Return a single JSON object that conforms to the schema DocumentSummaryMarkdown:
+  - content_md: the full Markdown with placeholders, headings, lists, tables, formulas, and layout comments
+  - diagram: a list of objects {"type": TYPE, "page": P}
+- Do not add any extra fields
+
+Example (illustrative only)
+{
+  "content_md": "# Document Title\n\n<!-- page: 1 bbox: [10,20,590,70] category: Title -->\n\n## Section\n\n<!-- page: 1 bbox: [12,90,585,160] category: Text -->\nParagraph text...\n\n[diagram:id=fig-001 type=floor_plan page=3]\nOptional caption here.\n\n",
+  "diagram": [
+    {"type": "floor_plan", "page": 3}
+  ]
+}
+"""
+
+PROMPT_MD_LAYOUT_ONLY = """
+    PDF to Markdown conversion (layout only, compact)
+
+    Goal
+    - Return ONLY a JSON object with one field: content_md (string)
+    - Produce full document as Markdown in human reading order
+
+    Formatting rules
+    - Caption/Title/Section-header/Text/Caption/Footnote/List-item/Page-footer/Page-header -> Markdown
+    - Formula -> LaTeX ($...$ or $$...$$)
+    - Table -> GitHub Markdown table
+    - Preserve paragraphs, lists, heading levels (#, ##, ###), and footnotes
+    - Optionally include page numbers as HTML comments on their own line like: <!-- page: X -->
+      but DO NOT include bbox
+
+    Output schema
+    - JSON with exactly one key: content_md
+    - No other fields
+    """
+PROMPT_DIAGRAMS_ONLY = """
+    Diagram detection only
+
+    Goal
+    - Return ONLY a JSON object with one key: diagram (array)
+    - Each item: {"type": one of [site_plan, sewer_diagram, service_location_diagram, flood_map, bushfire_map, title_plan, survey_diagram, floor_plan, elevation, unknown], "page": integer}
+    - Identify all visual elements that correspond to diagrams/images in the document
+    - Do not include any other keys or textual content
+
+    Notes
+    - Use 'unknown' if unsure
+    - Page numbers are 1-based
+    """
+
+PROMPT_MD_LAYOUT_ONLY_V2 = """
+    PDF to Markdown conversion from PDF and provided plain text (layout-focused, compact)
+
+    Output
+    - Return ONLY the Markdown string as plain text (no JSON, no code fences, no extra commentary)
+
+    Inputs
+    - You are given: (1) the PDF content, and (2) the full plain text extracted via MuPDF
+    - Use the MuPDF text as the authoritative source for textual content
+    - Use the PDF to infer structure (headings, lists, tables) and reading order
+
+    Formatting rules
+    - Map headings: Title -> #, Section-header -> ##/### as appropriate
+    - Preserve paragraphs and list structure in Markdown
+    - Formula -> LaTeX ($...$ or $$...$$)
+    - Tables -> GitHub Markdown tables
+    - Footnotes, captions -> Markdown
+    - You MAY include page references as HTML comments on their own line: <!-- page: X -->
+    - DO NOT include any bounding boxes or coordinates
+    - DO NOT include any diagram/image placeholders
+
+    Constraints
+    - Output must be a single Markdown string only
+    - No JSON keys or additional fields
+    """
+
+PROMPT = PROMPT_MD
 file_path = "../test_files/1690959428-7812-ContractforSale.pdf"
+mime_type = "application/pdf"
+full_text_path = "../test_files/contract.txt"
+
+# file_path = "../test_files/diagram1.png"
+# mime_type = "image/png"
 
 
 async def run_with_doc():
@@ -277,17 +419,151 @@ async def run_with_doc():
     with open(file_path, "rb") as f:
         file_bytes = f.read()
     # Create the document content
-    document_content = Part.from_bytes(data=file_bytes, mime_type="application/pdf")
-    prompt_content = Part.from_text(text=PROMPT)
+    document_content = Part.from_bytes(data=file_bytes, mime_type=mime_type)
+    client = await get_gemini_client()
 
-    contents = [
-        Content(role="user", parts=[document_content, prompt_content]),
-    ]
-    generate_summary_config = GenerateContentConfig(
-        temperature=1,
+    # 0) Generate Markdown layout-only as a raw string using MuPDF text as input context
+    mupdf_text = ""
+    try:
+        if os.path.exists(full_text_path):
+            with open(full_text_path, "r", encoding="utf-8", errors="ignore") as ft:
+                mupdf_text = ft.read()
+    except Exception:
+        mupdf_text = ""
+
+    ### Still truncated at the end, just ignore this logic at the moment
+    if mupdf_text:
+        v2_prompt = Part.from_text(text=PROMPT_MD_LAYOUT_ONLY_V2)
+        v2_text_part = Part.from_text(
+            text=f"MuPDF full text (use for content fidelity):\n\n{mupdf_text}"
+        )
+        v2_contents = [
+            Content(role="user", parts=[document_content, v2_text_part, v2_prompt])
+        ]
+        v2_config = GenerateContentConfig(
+            temperature=0.2,
+            top_p=1,
+            seed=0,
+            max_output_tokens=65535,
+            safety_settings=[
+                SafetySetting(category="HARM_CATEGORY_HATE_SPEECH", threshold="OFF"),
+                SafetySetting(
+                    category="HARM_CATEGORY_DANGEROUS_CONTENT", threshold="OFF"
+                ),
+                SafetySetting(
+                    category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold="OFF"
+                ),
+                SafetySetting(category="HARM_CATEGORY_HARASSMENT", threshold="OFF"),
+            ],
+            response_mime_type="text/plain",
+        )
+
+        v2_result = client.client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=v2_contents,
+            config=v2_config,
+        )
+        layout_only_md = v2_result.text
+        with open("../test_files/contract_layout_only.md", "w") as f:
+            f.write(layout_only_md)
+
+    # prompt = Part.from_text(text=PROMPT_MD)
+    # contents = [Content(role="user", parts=[document_content, prompt])]
+    # generate_summary_config = GenerateContentConfig(
+    #     temperature=0.2,
+    #     top_p=1,
+    #     seed=0,
+    #     max_output_tokens=65535,
+    #     safety_settings=[
+    #         SafetySetting(category="HARM_CATEGORY_HATE_SPEECH", threshold="OFF"),
+    #         SafetySetting(category="HARM_CATEGORY_DANGEROUS_CONTENT", threshold="OFF"),
+    #         SafetySetting(category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold="OFF"),
+    #         SafetySetting(category="HARM_CATEGORY_HARASSMENT", threshold="OFF"),
+    #     ],
+    #     response_mime_type="application/json",
+    #     response_schema=DocumentSummaryMarkdown,
+    # )
+    # result_text = client.client.models.generate_content(
+    #     model="gemini-2.5-flash",
+    #     contents=contents,
+    #     config=generate_summary_config,
+    # )
+    # dict_result = json.loads(result_text.text)
+    # with open("../test_files/contract_summary.html", "w") as f:
+    #     f.write(dict_result["content_html"])
+
+    # print(dict_result["diagram"])
+    # print(result_text.text)
+
+    # 1) Generate Markdown content only (no bbox, no diagram placeholders)
+    # PROMPT_MD_LAYOUT_ONLY = """
+    # PDF to Markdown conversion (layout only, compact)
+
+    # Goal
+    # - Return ONLY a JSON object with one field: content_md (string)
+    # - Produce full document as Markdown in human reading order
+
+    # Formatting rules
+    # - Caption/Title/Section-header/Text/Caption/Footnote/List-item/Page-footer/Page-header -> Markdown
+    # - Formula -> LaTeX ($...$ or $$...$$)
+    # - Table -> GitHub Markdown table
+    # - Preserve paragraphs, lists, heading levels (#, ##, ###), and footnotes
+    # - Optionally include page numbers as HTML comments on their own line like: <!-- page: X -->
+    #   but DO NOT include bbox
+
+    # Output schema
+    # - JSON with exactly one key: content_md
+    # - No other fields
+    # """
+
+    # md_prompt = Part.from_text(text=PROMPT_MD_LAYOUT_ONLY)
+    # md_contents = [Content(role="user", parts=[document_content, md_prompt])]
+    # md_config = GenerateContentConfig(
+    #     temperature=0.2,
+    #     top_p=1,
+    #     seed=0,
+    #     max_output_tokens=65535,
+    #     safety_settings=[
+    #         SafetySetting(category="HARM_CATEGORY_HATE_SPEECH", threshold="OFF"),
+    #         SafetySetting(category="HARM_CATEGORY_DANGEROUS_CONTENT", threshold="OFF"),
+    #         SafetySetting(category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold="OFF"),
+    #         SafetySetting(category="HARM_CATEGORY_HARASSMENT", threshold="OFF"),
+    #     ],
+    #     response_mime_type="application/json",
+    #     response_schema=DocumentContentMarkdown,
+    # )
+
+    # md_result = client.client.models.generate_content(
+    #     model="gemini-2.5-flash",
+    #     contents=md_contents,
+    #     config=md_config,
+    # )
+    # md_obj = json.loads(md_result.text)
+    # with open("../test_files/contract_summary.md", "w") as f:
+    #     f.write(md_obj["content_md"])
+
+    # 2) Detect diagrams only
+    PROMPT_DIAGRAMS_ONLY = """
+    Diagram detection only
+
+    Goal
+    - Return ONLY a JSON object with one key: diagram (array)
+    - Each item: {"type": one of [site_plan, sewer_diagram, service_location_diagram, flood_map, bushfire_map, title_plan, survey_diagram, floor_plan, elevation, unknown], "page": integer}
+    - Identify all visual elements that correspond to diagrams/images in the document
+    - Do not include any other keys or textual content
+
+    Notes
+    - Use 'unknown' if unsure
+    - Page numbers are 1-based
+    """
+
+    diag_prompt = Part.from_text(text=PROMPT_DIAGRAMS_ONLY)
+    diag_contents = [Content(role="user", parts=[document_content, diag_prompt])]
+    diag_config = GenerateContentConfig(
+        temperature=0,
         top_p=1,
         seed=0,
-        max_output_tokens=65535,
+        max_output_tokens=8192,
         safety_settings=[
             SafetySetting(category="HARM_CATEGORY_HATE_SPEECH", threshold="OFF"),
             SafetySetting(category="HARM_CATEGORY_DANGEROUS_CONTENT", threshold="OFF"),
@@ -295,22 +571,23 @@ async def run_with_doc():
             SafetySetting(category="HARM_CATEGORY_HARASSMENT", threshold="OFF"),
         ],
         response_mime_type="application/json",
-        response_schema=DocumentSummary,
+        response_schema=DiagramList,
     )
 
-    client = await get_gemini_client()
-
-    result_text = client.client.models.generate_content(
+    diag_result = client.client.models.generate_content(
         model="gemini-2.5-flash",
-        contents=contents,
-        config=generate_summary_config,
+        contents=diag_contents,
+        config=diag_config,
     )
-    dict_result = json.loads(result_text.text)
-    with open("../test_files/contract_summary.html", "w") as f:
-        f.write(dict_result["content_html"])
+    diag_obj = json.loads(diag_result.text)
 
-    print(dict_result["diagram"])
-    print(result_text.text)
+    with open("../test_files/contract_summary.diagrams.json", "w") as f:
+        json.dump(diag_obj, f, ensure_ascii=False, indent=2)
+
+    print(diag_obj.get("diagram", []))
+    # For debugging
+    # print(md_result.text)
+    # print(diag_result.text)
 
 
 async def run_generate(args: argparse.Namespace) -> Dict[str, Any]:

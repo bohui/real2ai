@@ -138,7 +138,6 @@ class AlreadyProcessedCheckNode(DocumentProcessingNodeBase):
             document = {
                 "id": str(document_obj.id),
                 "australian_state": getattr(document_obj, 'australian_state', None),
-                "full_text": getattr(document_obj, 'full_text', None),
                 "total_pages": getattr(document_obj, 'total_pages', None),
                 "total_word_count": getattr(document_obj, 'total_word_count', None),
                 "extraction_confidence": getattr(document_obj, 'extraction_confidence', None),
@@ -148,17 +147,31 @@ class AlreadyProcessedCheckNode(DocumentProcessingNodeBase):
                 "original_filename": document_obj.original_filename,
                 "file_type": document_obj.file_type,
                 "storage_path": document_obj.storage_path,
-                "content_hash": document_obj.content_hash
+                "content_hash": document_obj.content_hash,
+                "artifact_text_id": getattr(document_obj, 'artifact_text_id', None)
             }
             
-            # Check if document has been processed
+            # Check if document has been processed (using lowercase status values)
             processing_status = document.get("processing_status")
-            if processing_status not in ["BASIC_COMPLETE", "COMPLETE"]:
+            if processing_status not in ["basic_complete", "analysis_complete"]:
                 return None
                 
-            # Check for required processed fields
-            full_text = document.get("full_text")
-            if not full_text or len(full_text.strip()) < 50:
+            # Check for artifacts presence using repositories
+            from app.services.repositories.artifacts_repository import ArtifactsRepository
+            artifacts_repo = ArtifactsRepository()
+            
+            # Check if there are page artifacts or diagram artifacts
+            content_hash = document.get("content_hash")
+            if not content_hash:
+                return None
+                
+            # Query for page artifacts (text content)
+            page_artifacts = await artifacts_repo.get_page_artifacts_by_content_hmac(content_hash)
+            # Query for diagram artifacts  
+            diagram_artifacts = await artifacts_repo.get_diagram_artifacts_by_content_hmac(content_hash)
+            
+            # Document is considered processed if it has at least one page artifact
+            if not page_artifacts:
                 return None
                 
             # Get australian_state from document or related contract
@@ -174,6 +187,29 @@ class AlreadyProcessedCheckNode(DocumentProcessingNodeBase):
             if not australian_state:
                 return None
                 
+            # Reconstruct full text from page artifacts
+            full_text = ""
+            if page_artifacts:
+                # Sort by page number and concatenate text
+                sorted_artifacts = sorted(page_artifacts, key=lambda x: x.page_number)
+                page_texts = []
+                for artifact in sorted_artifacts:
+                    # Download text content from storage
+                    try:
+                        from app.utils.storage_utils import ArtifactStorageService
+                        storage_service = ArtifactStorageService()
+                        page_text = await storage_service.download_text_content(artifact.page_text_uri)
+                        if page_text:
+                            page_texts.append(page_text)
+                    except Exception as e:
+                        self._log_warning(f"Failed to download page text for artifact {artifact.id}: {e}")
+                
+                full_text = "\n\n".join(page_texts)
+            
+            # Fallback if no text could be reconstructed
+            if not full_text:
+                full_text = "[Previously processed document - text content not available]"
+                
             # Build ProcessedDocumentSummary
             return ProcessedDocumentSummary(
                 success=True,
@@ -182,7 +218,7 @@ class AlreadyProcessedCheckNode(DocumentProcessingNodeBase):
                 full_text=full_text,
                 character_count=len(full_text),
                 total_word_count=document.get("total_word_count") or len(full_text.split()),
-                total_pages=document.get("total_pages") or 1,
+                total_pages=document.get("total_pages") or len(page_artifacts),
                 extraction_method=document.get("text_extraction_method") or "unknown",
                 extraction_confidence=document.get("extraction_confidence") or 0.0,
                 processing_timestamp=(

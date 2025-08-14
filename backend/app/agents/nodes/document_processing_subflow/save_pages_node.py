@@ -44,10 +44,8 @@ class SavePagesNode(DocumentProcessingNodeBase):
     async def cleanup(self):
         """Clean up repository connections"""
         if self.user_docs_repo:
-            await self.user_docs_repo.close()
             self.user_docs_repo = None
         if self.artifacts_repo:
-            await self.artifacts_repo.close()
             self.artifacts_repo = None
     
     async def execute(self, state: DocumentProcessingState) -> DocumentProcessingState:
@@ -140,8 +138,8 @@ class SavePagesNode(DocumentProcessingNodeBase):
                 }
             )
             
-            # Get page artifacts for mapping
-            page_artifacts = await self.artifacts_repo.get_page_artifacts(
+            # Get page artifacts for mapping using unified method
+            page_artifacts = await self.artifacts_repo.get_all_page_artifacts(
                 content_hmac, algorithm_version, params_fingerprint
             )
             
@@ -163,11 +161,15 @@ class SavePagesNode(DocumentProcessingNodeBase):
                 annotations = {}
                 if page_analysis:
                     annotations = {
-                        "content_types": page_analysis.content_types,
-                        "primary_content_type": page_analysis.primary_type,
-                        "extraction_confidence": page.confidence,
-                        "extraction_method": page.extraction_method,
-                        "quality_indicators": page_analysis.quality_indicators.__dict__ if page_analysis.quality_indicators else None,
+                        "content_types": getattr(page_analysis, 'content_types', []),
+                        "primary_content_type": getattr(page_analysis, 'primary_type', None),
+                        "extraction_confidence": getattr(page, 'confidence', 0.0),
+                        "extraction_method": getattr(page, 'extraction_method', 'unknown'),
+                        "quality_indicators": (
+                            page_analysis.quality_indicators.__dict__ 
+                            if hasattr(page_analysis, 'quality_indicators') and page_analysis.quality_indicators 
+                            else None
+                        ),
                     }
                 
                 # Flags for processing state

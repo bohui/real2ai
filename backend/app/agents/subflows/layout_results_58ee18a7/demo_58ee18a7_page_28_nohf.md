@@ -1,0 +1,16 @@
+(b) a bid by or on behalf of an executor or administrator may be made to purchase in that capacity,
+
+(c) before the commencement of the auction, the auctioneer must announce that bids to purchase the interest of another co-owner or to purchase as executor or administrator may be made by or on behalf of the seller,
+
+(d) before the commencement of the auction, the auctioneer must announce the bidder registration number of all co-owners, executors or administrators or a person registered to bid on behalf of a co-owner, executor or administrator.
+
+(4) The following condition, in addition to the conditions prescribed by subsection (1), is prescribed as applicable to the sale by auction of livestock—
+
+The purchaser of livestock must pay the stock and station agent who conducted the auction, or under whose immediate and direct supervision the auction was conducted, or the vendor, the full amount of the purchase price—
+
+(a) if the amount can reasonably be determined immediately after the fall of the hammer—
+before the close of the next business day following the auction, or
+
+(b) if the amount cannot reasonably be determined immediately after the fall of the hammer—before the close of the next business day following determination of the amount, or
+
+(c) if some other time for payment is specified in a written agreement between the purchaser and the agent, or the purchaser and the vendor, made before the fall of the hammer—before or at the time specified in the agreement.

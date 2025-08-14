@@ -214,7 +214,6 @@ class Document(TimestampedBaseModel):
     text_extraction_method: Optional[str] = Field(None, max_length=100)
 
     # Document content metrics
-    full_text: Optional[str] = None
     total_pages: int = Field(default=0, ge=0)
     total_text_length: int = Field(default=0, ge=0)
     total_word_count: int = Field(default=0, ge=0)
@@ -232,7 +231,7 @@ class Document(TimestampedBaseModel):
 
     # Artifact reference (added via ALTER TABLE in migration)
     artifact_text_id: Optional[UUID] = Field(
-        None, description="Reference to text extraction artifact"
+        None, description="Reference to full text artifact"
     )
 
 
@@ -275,8 +274,8 @@ class Analysis(TimestampedBaseModel):
 
 
 # Artifact Models (Content-Addressed Cache System)
-class TextExtractionArtifact(BaseModel):
-    """Text extraction artifacts for content-addressed caching"""
+class FullTextArtifact(BaseModel):
+    """Full text artifacts for content-addressed caching"""
 
     id: UUID = Field(..., description="Artifact UUID")
     content_hmac: str = Field(
@@ -325,20 +324,6 @@ class ArtifactDiagram(BaseModel):
     created_at: Optional[datetime] = Field(None, description="Creation timestamp")
 
 
-class ArtifactParagraph(BaseModel):
-    """Paragraph artifacts for content-addressed caching"""
-
-    id: UUID = Field(..., description="Paragraph artifact UUID")
-    content_hmac: str = Field(..., description="Content HMAC")
-    algorithm_version: int = Field(..., description="Algorithm version")
-    params_fingerprint: str = Field(..., description="Parameter fingerprint")
-    page_number: int = Field(..., description="Page number")
-    paragraph_index: int = Field(..., description="Paragraph index within page")
-    paragraph_text_uri: str = Field(..., description="URI to paragraph text storage")
-    paragraph_text_sha256: str = Field(..., description="SHA256 hash of paragraph text")
-    features: Optional[Dict[str, Any]] = Field(None, description="Paragraph features")
-    created_at: Optional[datetime] = Field(None, description="Creation timestamp")
-
 
 # User-Document Association Models
 class UserDocumentPage(TimestampedBaseModel):
@@ -362,17 +347,6 @@ class UserDocumentDiagram(TimestampedBaseModel):
     )
     annotations: Optional[Dict[str, Any]] = Field(None, description="User annotations")
 
-
-class UserDocumentParagraph(TimestampedBaseModel):
-    """User-specific document paragraph associations"""
-
-    document_id: UUID = Field(..., description="Reference to documents.id")
-    page_number: int = Field(..., description="Page number")
-    paragraph_index: int = Field(..., description="Paragraph index")
-    artifact_paragraph_id: UUID = Field(
-        ..., description="Reference to artifact_paragraphs.id"
-    )
-    annotations: Optional[Dict[str, Any]] = Field(None, description="User annotations")
 
 
 class UsageLog(TimestampedBaseModel):

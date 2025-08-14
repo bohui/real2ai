@@ -827,7 +827,7 @@ class DatabaseSeeder:
                 artifact_id = str(uuid.uuid4())
                 await conn.execute(
                     """
-                    INSERT INTO text_extraction_artifacts (
+                    INSERT INTO artifacts_full_text (
                         id, content_hmac, algorithm_version, params_fingerprint,
                         full_text_uri, full_text_sha256, total_pages, total_words, methods
                     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
@@ -855,7 +855,7 @@ class DatabaseSeeder:
                     """
                     UPDATE documents 
                     SET artifact_text_id = (
-                        SELECT id FROM text_extraction_artifacts 
+                        SELECT id FROM artifacts_full_text 
                         WHERE content_hmac = $2 
                         AND algorithm_version = $3 
                         AND params_fingerprint = $4
@@ -909,39 +909,6 @@ class DatabaseSeeder:
                         ),
                     )
 
-                # Create sample paragraph artifacts
-                for page_num in range(1, 4):
-                    for para_idx in range(3):  # 3 paragraphs per page
-                        para_id = str(uuid.uuid4())
-                        await conn.execute(
-                            """
-                            INSERT INTO artifact_paragraphs (
-                                id, content_hmac, algorithm_version, params_fingerprint,
-                                page_number, paragraph_index, paragraph_text_uri, paragraph_text_sha256, features
-                            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-                            ON CONFLICT (content_hmac, algorithm_version, params_fingerprint, page_number, paragraph_index) DO NOTHING
-                            """,
-                            para_id,
-                            content_hmac,
-                            algorithm_version,
-                            params_fingerprint,
-                            page_num,
-                            para_idx,
-                            f"s3://artifacts/paragraphs/{content_hmac}_p{page_num}_para{para_idx}.txt",
-                            hashlib.sha256(
-                                f"paragraph_text_{i}_{page_num}_{para_idx}".encode()
-                            ).hexdigest(),
-                            json.dumps(
-                                {
-                                    "clause_type": (
-                                        "general" if para_idx == 0 else "specific"
-                                    ),
-                                    "importance": "high" if para_idx == 1 else "medium",
-                                    "risk_indicators": [],
-                                }
-                            ),
-                        )
-
                 # Create user document associations
                 for page_num in range(1, 4):
                     await conn.execute(
@@ -957,23 +924,6 @@ class DatabaseSeeder:
                         page_num,
                         content_hmac,
                     )
-
-                    # Create paragraph associations
-                    for para_idx in range(3):
-                        await conn.execute(
-                            """
-                            INSERT INTO user_document_paragraphs (
-                                document_id, page_number, paragraph_index, artifact_paragraph_id
-                            )
-                            SELECT $1, $2, $3, id FROM artifact_paragraphs 
-                            WHERE content_hmac = $4 AND page_number = $2 AND paragraph_index = $3
-                            ON CONFLICT DO NOTHING
-                            """,
-                            doc["id"],
-                            page_num,
-                            para_idx,
-                            content_hmac,
-                        )
 
                 logger.info(
                     f"Created artifact data for document {doc['original_filename']}"

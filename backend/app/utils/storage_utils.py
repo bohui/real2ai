@@ -186,30 +186,29 @@ class ArtifactStorageService:
         except Exception as e:
             raise RuntimeError(f"Page text upload failed for {storage_path}: {e}")
     
-    async def upload_paragraph_text(self, paragraph_text: str, content_hmac: str, 
-                                  page_number: int, paragraph_index: int) -> Tuple[str, str]:
+    async def upload_page_markdown(
+        self, 
+        markdown_bytes: bytes, 
+        content_hmac: str, 
+        page_number: int
+    ) -> Tuple[str, str]:
         """
-        Upload paragraph-specific text content.
+        Upload markdown content for external OCR processing.
         
         Args:
-            paragraph_text: Paragraph text content
+            markdown_bytes: Markdown content as bytes
             content_hmac: Document content HMAC
-            page_number: Page number (1-based)
-            paragraph_index: Paragraph index (0-based)
+            page_number: Page number (0-based from OCR)
             
         Returns:
             Tuple of (uri, sha256_hash)
         """
-        # Convert to bytes
-        content_bytes = paragraph_text.encode('utf-8')
-        
         # Compute SHA256 hash
-        sha256_hash = hashlib.sha256(content_bytes).hexdigest()
+        sha256_hash = hashlib.sha256(markdown_bytes).hexdigest()
         
-        # Generate storage path
+        # Generate storage path: artifacts/{hmac}/pages/p{page}/content.md
         hmac_prefix = content_hmac[:8]
-        file_uuid = str(uuid4())
-        storage_path = f"artifacts/paragraphs/{hmac_prefix}/p{page_number}_{paragraph_index}_{file_uuid}.txt"
+        storage_path = f"artifacts/{hmac_prefix}/pages/p{page_number}/content.md"
         
         client = await get_service_supabase_client()
         
@@ -217,7 +216,6 @@ class ArtifactStorageService:
             # Verify bucket exists before upload
             try:
                 storage_client = client.storage().from_(self.bucket_name)
-                # Try to list bucket contents to verify access
                 storage_client.list()
             except Exception as bucket_error:
                 raise RuntimeError(
@@ -227,25 +225,198 @@ class ArtifactStorageService:
             
             result = storage_client.upload(
                 path=storage_path,
-                file=content_bytes,
+                file=markdown_bytes,
                 file_options={
-                    "content-type": "text/plain; charset=utf-8",
+                    "content-type": "text/markdown; charset=utf-8",
                     "cache-control": "3600"
                 }
             )
             
             if not result:
-                raise RuntimeError(f"Failed to upload paragraph text: {storage_path}")
+                raise RuntimeError(f"Failed to upload markdown: {storage_path}")
             
             uri = f"supabase://{self.bucket_name}/{storage_path}"
             return uri, sha256_hash
             
         except Exception as e:
-            # Provide more helpful error context
-            error_msg = f"Paragraph text upload failed for {storage_path}: {e}"
-            if "bucket not found" in str(e).lower():
-                error_msg += f" (Verify '{self.bucket_name}' bucket exists in Supabase)"
-            raise RuntimeError(error_msg)
+            raise RuntimeError(f"Markdown upload failed for {storage_path}: {e}")
+    
+    async def upload_page_image_jpg(
+        self,
+        image_bytes: bytes,
+        content_hmac: str,
+        page_number: int
+    ) -> Tuple[str, str]:
+        """
+        Upload JPG image for external OCR processing.
+        
+        Args:
+            image_bytes: JPG image as bytes
+            content_hmac: Document content HMAC
+            page_number: Page number (0-based from OCR)
+            
+        Returns:
+            Tuple of (uri, sha256_hash)
+        """
+        # Compute SHA256 hash
+        sha256_hash = hashlib.sha256(image_bytes).hexdigest()
+        
+        # Generate storage path: artifacts/{hmac}/pages/p{page}/image.jpg
+        hmac_prefix = content_hmac[:8]
+        storage_path = f"artifacts/{hmac_prefix}/pages/p{page_number}/image.jpg"
+        
+        client = await get_service_supabase_client()
+        
+        try:
+            # Verify bucket exists before upload
+            try:
+                storage_client = client.storage().from_(self.bucket_name)
+                storage_client.list()
+            except Exception as bucket_error:
+                raise RuntimeError(
+                    f"Storage bucket '{self.bucket_name}' not found or not accessible: {bucket_error}. "
+                    f"Please ensure the bucket exists in Supabase storage."
+                )
+            
+            result = storage_client.upload(
+                path=storage_path,
+                file=image_bytes,
+                file_options={
+                    "content-type": "image/jpeg",
+                    "cache-control": "86400"  # Cache for 24 hours
+                }
+            )
+            
+            if not result:
+                raise RuntimeError(f"Failed to upload JPG image: {storage_path}")
+            
+            uri = f"supabase://{self.bucket_name}/{storage_path}"
+            return uri, sha256_hash
+            
+        except Exception as e:
+            raise RuntimeError(f"JPG upload failed for {storage_path}: {e}")
+    
+    async def upload_page_json(
+        self,
+        json_bytes: bytes,
+        content_hmac: str,
+        page_number: int
+    ) -> Tuple[str, str]:
+        """
+        Upload JSON metadata for external OCR processing.
+        
+        Args:
+            json_bytes: JSON content as bytes
+            content_hmac: Document content HMAC
+            page_number: Page number (0-based from OCR)
+            
+        Returns:
+            Tuple of (uri, sha256_hash)
+        """
+        # Compute SHA256 hash
+        sha256_hash = hashlib.sha256(json_bytes).hexdigest()
+        
+        # Generate storage path: artifacts/{hmac}/pages/p{page}/metadata.json
+        hmac_prefix = content_hmac[:8]
+        storage_path = f"artifacts/{hmac_prefix}/pages/p{page_number}/metadata.json"
+        
+        client = await get_service_supabase_client()
+        
+        try:
+            # Verify bucket exists before upload
+            try:
+                storage_client = client.storage().from_(self.bucket_name)
+                storage_client.list()
+            except Exception as bucket_error:
+                raise RuntimeError(
+                    f"Storage bucket '{self.bucket_name}' not found or not accessible: {bucket_error}. "
+                    f"Please ensure the bucket exists in Supabase storage."
+                )
+            
+            result = storage_client.upload(
+                path=storage_path,
+                file=json_bytes,
+                file_options={
+                    "content-type": "application/json; charset=utf-8",
+                    "cache-control": "3600"
+                }
+            )
+            
+            if not result:
+                raise RuntimeError(f"Failed to upload JSON metadata: {storage_path}")
+            
+            uri = f"supabase://{self.bucket_name}/{storage_path}"
+            return uri, sha256_hash
+            
+        except Exception as e:
+            raise RuntimeError(f"JSON upload failed for {storage_path}: {e}")
+    
+    async def upload_diagram_image(
+        self,
+        image_bytes: bytes,
+        content_hmac: str,
+        page_number: int,
+        sha256: str,
+        ext: str
+    ) -> Tuple[str, str]:
+        """
+        Upload extracted diagram image.
+        
+        Args:
+            image_bytes: Image bytes
+            content_hmac: Document content HMAC
+            page_number: Page number the diagram was found on
+            sha256: SHA256 hash of the image
+            ext: File extension (png, jpg, etc.)
+            
+        Returns:
+            Tuple of (uri, sha256_hash)
+        """
+        # Generate storage path: diagrams/{hmac}/p{page}/{sha256}.{ext}
+        hmac_prefix = content_hmac[:8]
+        storage_path = f"diagrams/{hmac_prefix}/p{page_number}/{sha256}.{ext}"
+        
+        # Determine content type
+        content_type_map = {
+            'png': 'image/png',
+            'jpg': 'image/jpeg',
+            'jpeg': 'image/jpeg',
+            'gif': 'image/gif',
+            'svg': 'image/svg+xml',
+            'webp': 'image/webp'
+        }
+        content_type = content_type_map.get(ext.lower(), 'application/octet-stream')
+        
+        client = await get_service_supabase_client()
+        
+        try:
+            # Verify bucket exists before upload
+            try:
+                storage_client = client.storage().from_(self.bucket_name)
+                storage_client.list()
+            except Exception as bucket_error:
+                raise RuntimeError(
+                    f"Storage bucket '{self.bucket_name}' not found or not accessible: {bucket_error}. "
+                    f"Please ensure the bucket exists in Supabase storage."
+                )
+            
+            result = storage_client.upload(
+                path=storage_path,
+                file=image_bytes,
+                file_options={
+                    "content-type": content_type,
+                    "cache-control": "86400"  # Cache for 24 hours
+                }
+            )
+            
+            if not result:
+                raise RuntimeError(f"Failed to upload diagram image: {storage_path}")
+            
+            uri = f"supabase://{self.bucket_name}/{storage_path}"
+            return uri, sha256
+            
+        except Exception as e:
+            raise RuntimeError(f"Diagram upload failed for {storage_path}: {e}")
     
     async def cleanup_orphaned_blobs(self, active_uris: list[str]) -> int:
         """

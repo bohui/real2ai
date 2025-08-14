@@ -38,18 +38,6 @@ class DocumentDiagram:
     updated_at: Optional[datetime] = None
 
 
-@dataclass
-class DocumentParagraph:
-    """Document paragraph model"""
-    document_id: UUID
-    page_number: int
-    paragraph_index: int
-    artifact_paragraph_id: UUID
-    annotations: Optional[Dict[str, Any]] = None
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
-
-
 class UserDocsRepository:
     """
     Repository for user-scoped document processing data.
@@ -326,84 +314,6 @@ class UserDocsRepository:
             ]
 
     # ================================
-    # DOCUMENT PARAGRAPHS (OPTIONAL)
-    # ================================
-
-    async def upsert_document_paragraph(
-        self,
-        document_id: UUID,
-        page_number: int,
-        paragraph_index: int,
-        artifact_paragraph_id: UUID,
-        annotations: Optional[Dict[str, Any]] = None
-    ) -> DocumentParagraph:
-        """
-        Upsert document paragraph reference with artifact ID.
-        
-        Args:
-            document_id: Document ID
-            page_number: Page number
-            paragraph_index: Paragraph index within page
-            artifact_paragraph_id: Reference to artifact paragraph
-            annotations: User-specific annotations
-            
-        Returns:
-            DocumentParagraph (existing or newly created)
-        """
-        async with get_user_connection(self.user_id) as conn:
-            row = await conn.fetchrow(
-                """
-                INSERT INTO user_document_paragraphs (
-                    document_id, page_number, paragraph_index, artifact_paragraph_id, annotations
-                ) VALUES ($1, $2, $3, $4, $5)
-                ON CONFLICT (document_id, page_number, paragraph_index) DO UPDATE SET
-                    artifact_paragraph_id = EXCLUDED.artifact_paragraph_id,
-                    annotations = COALESCE(user_document_paragraphs.annotations, EXCLUDED.annotations),
-                    updated_at = now()
-                RETURNING document_id, page_number, paragraph_index, artifact_paragraph_id,
-                          annotations, created_at, updated_at
-                """,
-                document_id, page_number, paragraph_index, artifact_paragraph_id, annotations
-            )
-            
-            return DocumentParagraph(
-                document_id=row['document_id'],
-                page_number=row['page_number'],
-                paragraph_index=row['paragraph_index'],
-                artifact_paragraph_id=row['artifact_paragraph_id'],
-                annotations=row['annotations'],
-                created_at=row['created_at'],
-                updated_at=row['updated_at']
-            )
-
-    async def get_document_paragraphs(self, document_id: UUID) -> List[DocumentParagraph]:
-        """Get all paragraphs for a document."""
-        async with get_user_connection(self.user_id) as conn:
-            rows = await conn.fetch(
-                """
-                SELECT document_id, page_number, paragraph_index, artifact_paragraph_id,
-                       annotations, created_at, updated_at
-                FROM user_document_paragraphs
-                WHERE document_id = $1
-                ORDER BY page_number, paragraph_index
-                """,
-                document_id
-            )
-            
-            return [
-                DocumentParagraph(
-                    document_id=row['document_id'],
-                    page_number=row['page_number'],
-                    paragraph_index=row['paragraph_index'],
-                    artifact_paragraph_id=row['artifact_paragraph_id'],
-                    annotations=row['annotations'],
-                    created_at=row['created_at'],
-                    updated_at=row['updated_at']
-                )
-                for row in rows
-            ]
-
-    # ================================
     # BATCH OPERATIONS
     # ================================
 
@@ -439,70 +349,6 @@ class UserDocsRepository:
             
         return results
     
-    async def batch_upsert_document_paragraphs(
-        self,
-        document_id: UUID,
-        paragraph_data: List[Dict[str, Any]]
-    ) -> List[DocumentParagraph]:
-        """
-        Batch upsert multiple document paragraphs efficiently.
-
-        Args:
-            document_id: Document ID
-            paragraph_data: List of paragraph data dictionaries with keys:
-                          page_number, paragraph_index, artifact_paragraph_id, annotations (optional)
-                          
-        Returns:
-            List of DocumentParagraph objects
-        """
-        if not paragraph_data:
-            return []
-        
-        async with get_user_connection(self.user_id) as conn:
-            # Prepare data for batch insert - match individual upsert pattern
-            insert_values = []
-            for para in paragraph_data:
-                insert_values.append((
-                    document_id,
-                    para['page_number'],
-                    para['paragraph_index'], 
-                    para['artifact_paragraph_id'],
-                    para.get('annotations')
-                ))
-            
-            # Batch upsert with UNNEST - match individual upsert SQL pattern
-            rows = await conn.fetch(
-                """
-                INSERT INTO user_document_paragraphs (
-                    document_id, page_number, paragraph_index, artifact_paragraph_id, annotations
-                )
-                SELECT * FROM UNNEST($1::uuid[], $2::int[], $3::int[], $4::uuid[], $5::jsonb[])
-                ON CONFLICT (document_id, page_number, paragraph_index) DO UPDATE SET
-                    artifact_paragraph_id = EXCLUDED.artifact_paragraph_id,
-                    annotations = COALESCE(user_document_paragraphs.annotations, EXCLUDED.annotations),
-                    updated_at = now()
-                RETURNING document_id, page_number, paragraph_index, artifact_paragraph_id,
-                          annotations, created_at, updated_at
-                """,
-                [v[0] for v in insert_values],  # document_ids
-                [v[1] for v in insert_values],  # page_numbers
-                [v[2] for v in insert_values],  # paragraph_indices
-                [v[3] for v in insert_values],  # artifact_paragraph_ids
-                [v[4] for v in insert_values]   # annotations
-            )
-            
-            return [
-                DocumentParagraph(
-                    document_id=row['document_id'],
-                    page_number=row['page_number'],
-                    paragraph_index=row['paragraph_index'],
-                    artifact_paragraph_id=row['artifact_paragraph_id'],
-                    annotations=row['annotations'],
-                    created_at=row['created_at'],
-                    updated_at=row['updated_at']
-                ) for row in rows
-            ]
-
     async def batch_upsert_document_diagrams(
         self,
         document_id: UUID,

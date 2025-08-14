@@ -33,7 +33,6 @@ CREATE TABLE documents (
     overall_quality_score FLOAT DEFAULT 0.0,
     extraction_confidence FLOAT DEFAULT 0.0,
     text_extraction_method VARCHAR(100),
-    full_text TEXT,
     total_pages INTEGER DEFAULT 0,
     total_text_length INTEGER DEFAULT 0,
     total_word_count INTEGER DEFAULT 0,

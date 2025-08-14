@@ -1,0 +1,21 @@
+34. Normally, the Purchaser acknowledges that he is purchasing the property in its present condition and state of repair subject to all defects latent and patent subject to any infestations and dilapidations and subject to all existing services and further, as the result of his own enquiries and inspections and not as the result of any representation made by or on behalf of the Vendor, AND subject to the rights of the Purchaser pursuant to S.52A(2)(b) of the Conveyancing Act, 1919, the Purchaser shall not make any requisition or claim for compensation arising out of any of the matters referred to in this condition.
+
+35. Should the Vendor require the release of part of or all of the deposit to allow the Vendor to use such monies as a deposit and stamp duty on a property which the Vendor intends to buy, then the Purchaser authorizes the release of all or part of the deposit for such purpose and the Purchaser shall not be entitled in such circumstances to make any claim for loss of interest that may otherwise have been earned on the deposit.
+
+36. The following amendments apply to this Contract:-
+
+36.1 Provision 3; delete.
+
+36.2 Clause 7.1.1 is amended by deleting the words and figures "5% of the price" ad inserting in lieu thereof "1% of the price".
+
+36.3 Clause 8; delete and insert in lieu thereof "The Vendor may rescind if the Vendor is unwilling to comply with a requisition objection or claim and serves a notice of intention to rescind on the Purchaser and the Purchaser does not serve a notice waiving the requisition objection or claim within fourteen (14) days after that service."
+
+36.4 Clause 14.4; delete and replace with the following clause:- "The parties must adjust land tax for the year current at the adjustment date by adjusting on the amount paid by the Vendor or assessed as liable to be paid by the Vendor".
+
+36.5 Clause 14.4.2; delete and replace with the following clause:- "By adjusting the amount that has been paid or assessed to be paid by the Vendor".
+
+36.7 Clause 16.8; delete.
+
+36.8 Clause 23.13 and 23.14; delete and replace with the following clause:- "The Vendor authorises the Purchaser to obtain a Section 184 Strata Scheme Certificate from the Owners Corporation. A copy of this certificate must be furnished to the Vendor's representative before completion."
+
+37. Should either party prior to completion die, become mentally ill or be declared bankrupt, being a Company, prior to completion have a petition for the winding

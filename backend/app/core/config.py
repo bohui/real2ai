@@ -114,6 +114,12 @@ class Settings(BaseSettings):
     ocr_daily_cost_limit_usd: float = 100.0
     ocr_user_cost_limit_usd: float = 10.0
 
+    # Per-page Processing Settings (from refactor document)
+    enable_selective_ocr: bool = True
+    max_diagram_pages: int = 10
+    diagram_detection_enabled: bool = True
+    enable_tesseract_fallback: bool = True
+
     # Monitoring
     sentry_dsn: Optional[str] = None
     log_level: str = "INFO"

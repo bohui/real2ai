@@ -32,7 +32,7 @@ This PRD specifies a robust, idempotent, and secure design for sharing derived d
 
 ### 5.2 Storage Layers
 - Shared artifacts (service-role only):
-  - `text_extraction_artifacts`: keyed by `(content_hmac, algorithm_version, params_fingerprint)`
+  - `artifacts_full_text`: keyed by `(content_hmac, algorithm_version, params_fingerprint)`
   - `artifact_pages`: keyed by `(content_hmac, algorithm_version, params_fingerprint, page_number)`
   - `artifact_paragraphs`: keyed by `(content_hmac, algorithm_version, params_fingerprint, page_number, paragraph_index)`
   - `artifact_diagrams`: keyed by `(content_hmac, algorithm_version, params_fingerprint, page_number, diagram_key)`
@@ -65,7 +65,7 @@ This PRD specifies a robust, idempotent, and secure design for sharing derived d
 ## 6. Data Model
 ### 6.1 Shared Artifact Tables (service-role)
 ```sql
-CREATE TABLE text_extraction_artifacts (
+CREATE TABLE artifacts_full_text (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   content_hmac text NOT NULL,
   algorithm_version int NOT NULL,
@@ -198,7 +198,7 @@ CREATE TABLE IF NOT EXISTS document_processing_steps (
 - MarkProcessingStartedNode
   - Set processing_status='processing' if not in a terminal state; set processing_started_at if null.
 - ExtractTextNode
-  - Lookup text_extraction_artifacts by (content_hmac, algorithm_version, params_fingerprint).
+  - Lookup artifacts_full_text by (content_hmac, algorithm_version, params_fingerprint).
   - If exists: reuse; else compute and insert; use advisory lock on content_hmac to reduce stampede.
   - Materialize page artifacts similarly (compute missing pages only).
 - SavePagesNode
@@ -238,8 +238,8 @@ All nodes write a small progress record: steps(status, minimal state ids) for UX
    - Create SQL migrations for 6.1, 6.2, 6.3 tables. Add RLS policies for user tables; keep artifacts service-role only.
 3) Repository Layer
    - `app/services/repositories/artifacts_repository.py`:
-     - `get_text_artifact(key)`
-     - `insert_text_artifact(...)` with ON CONFLICT DO NOTHING then SELECT
+     - `get_full_text_artifact(key)`
+     - `insert_full_text_artifact(...)` with ON CONFLICT DO NOTHING then SELECT
      - same for pages/diagrams/paragraphs
    - `app/services/repositories/user_docs_repository.py`:
      - `upsert_document_page(document_id, page_number, artifact_page_id)`
@@ -301,14 +301,14 @@ All nodes write a small progress record: steps(status, minimal state ids) for UX
 ## 15. Appendix: Pseudocode for ExtractTextNode
 ```python
 # Pseudocode
-artifact = artifacts_repo.get_text_artifact(content_hmac, algo_ver, params_fp)
+artifact = artifacts_repo.get_full_text_artifact(content_hmac, algo_ver, params_fp)
 if not artifact:
     with acquire_advisory_lock(content_hmac):
-        artifact = artifacts_repo.get_text_artifact(content_hmac, algo_ver, params_fp)
+        artifact = artifacts_repo.get_full_text_artifact(content_hmac, algo_ver, params_fp)
         if not artifact:
             result = compute_text_and_pages(file_bytes, config)
             text_uri, page_uris = store_to_object_storage(result)
-            artifact = artifacts_repo.insert_text_artifact(..., text_uri, ...)
+            artifact = artifacts_repo.insert_full_text_artifact(..., text_uri, ...)
             for page in result.pages:
                 artifacts_repo.insert_page_artifact(...)
 # hydrate user tables

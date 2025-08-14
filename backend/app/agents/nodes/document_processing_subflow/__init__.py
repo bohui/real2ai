@@ -9,10 +9,8 @@ from .fetch_document_node import FetchDocumentRecordNode
 from .already_processed_check_node import AlreadyProcessedCheckNode
 from .mark_processing_started_node import MarkProcessingStartedNode
 from .extract_text_node import ExtractTextNode
-from .paragraph_segmentation_node import ParagraphSegmentationNode
-from .save_paragraphs_node import SaveParagraphsNode
+from .detect_diagrams_with_ocr_node import DetectDiagramsWithOCRNode
 from .save_pages_node import SavePagesNode
-from .aggregate_diagrams_node import AggregateDiagramsNode
 from .save_diagrams_node import SaveDiagramsNode
 from .update_metrics_node import UpdateMetricsNode
 from .mark_basic_complete_node import MarkBasicCompleteNode
@@ -24,10 +22,8 @@ __all__ = [
     "AlreadyProcessedCheckNode", 
     "MarkProcessingStartedNode",
     "ExtractTextNode",
-    "ParagraphSegmentationNode",
-    "SaveParagraphsNode",
+    "DetectDiagramsWithOCRNode",
     "SavePagesNode",
-    "AggregateDiagramsNode",
     "SaveDiagramsNode", 
     "UpdateMetricsNode",
     "MarkBasicCompleteNode",

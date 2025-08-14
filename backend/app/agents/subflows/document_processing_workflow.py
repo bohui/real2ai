@@ -38,10 +38,12 @@ class DocumentProcessingState(TypedDict):
     - storage_path: Path to document in storage
     - file_type: Detected file type
     - content_hash: Content hash for deduplication
+    - content_hmac: HMAC for artifact key generation
+    - algorithm_version: Version of processing algorithm
+    - params_fingerprint: Fingerprint of processing parameters
     - text_extraction_result: Results from text extraction
+    - diagram_detection_result: Results from OCR-based diagram detection
     - diagram_processing_result: Results from diagram processing
-    - paragraphs: List[{artifact_id, paragraph_index, page_spans, start_offset, end_offset}]
-    - paragraph_artifacts: List of ParagraphArtifact metadata
 
     Output fields:
     - processed_summary: Final ProcessedDocumentSummary result
@@ -64,7 +66,11 @@ class DocumentProcessingState(TypedDict):
     # Working state
     storage_path: Optional[str]
     file_type: Optional[str]
+    content_hmac: Optional[str]
+    algorithm_version: Optional[int]
+    params_fingerprint: Optional[str]
     text_extraction_result: Optional[Dict[str, Any]]
+    diagram_detection_result: Optional[Dict[str, Any]]
     diagram_processing_result: Optional[Dict[str, Any]]
 
     # Output
@@ -128,10 +134,8 @@ class DocumentProcessingWorkflow:
             AlreadyProcessedCheckNode,
             MarkProcessingStartedNode,
             ExtractTextNode,
-            ParagraphSegmentationNode,
-            SaveParagraphsNode,
+            DetectDiagramsWithOCRNode,
             SavePagesNode,
-            AggregateDiagramsNode,
             SaveDiagramsNode,
             UpdateMetricsNode,
             MarkBasicCompleteNode,
@@ -146,10 +150,8 @@ class DocumentProcessingWorkflow:
         self.extract_text_node = ExtractTextNode(
             use_llm=self.use_llm_document_processing
         )
-        self.paragraph_segmentation_node = ParagraphSegmentationNode()
-        self.save_paragraphs_node = SaveParagraphsNode()
+        self.detect_diagrams_with_ocr_node = DetectDiagramsWithOCRNode()
         self.save_pages_node = SavePagesNode()
-        self.aggregate_diagrams_node = AggregateDiagramsNode()
         self.save_diagrams_node = SaveDiagramsNode()
         self.update_metrics_node = UpdateMetricsNode()
         self.mark_basic_complete_node = MarkBasicCompleteNode()
@@ -162,10 +164,8 @@ class DocumentProcessingWorkflow:
             "already_processed_check": self.already_processed_check_node,
             "mark_processing_started": self.mark_processing_started_node,
             "extract_text": self.extract_text_node,
-            "paragraph_segmentation": self.paragraph_segmentation_node,
-            "save_paragraphs": self.save_paragraphs_node,
+            "detect_diagrams_with_ocr": self.detect_diagrams_with_ocr_node,
             "save_pages": self.save_pages_node,
-            "aggregate_diagrams": self.aggregate_diagrams_node,
             "save_diagrams": self.save_diagrams_node,
             "update_metrics": self.update_metrics_node,
             "mark_basic_complete": self.mark_basic_complete_node,
@@ -178,10 +178,8 @@ class DocumentProcessingWorkflow:
         workflow.add_node("already_processed_check", self.already_processed_check)
         workflow.add_node("mark_processing_started", self.mark_processing_started)
         workflow.add_node("extract_text", self.extract_text)
-        workflow.add_node("paragraph_segmentation", self.paragraph_segmentation)
-        workflow.add_node("save_paragraphs", self.save_paragraphs)
+        workflow.add_node("detect_diagrams_with_ocr", self.detect_diagrams_with_ocr)
         workflow.add_node("save_pages", self.save_pages)
-        workflow.add_node("aggregate_diagrams", self.aggregate_diagrams)
         workflow.add_node("save_diagrams", self.save_diagrams)
         workflow.add_node("update_metrics", self.update_metrics)
         workflow.add_node("mark_basic_complete", self.mark_basic_complete)
@@ -212,16 +210,18 @@ class DocumentProcessingWorkflow:
         workflow.add_conditional_edges(
             "extract_text",
             self.check_extraction_success,
-            {"success": "paragraph_segmentation", "error": "error_handling"},
+            {"success": "detect_diagrams_with_ocr", "error": "error_handling"},
         )
 
-        # Paragraph processing pipeline
-        workflow.add_edge("paragraph_segmentation", "save_paragraphs")
-        workflow.add_edge("save_paragraphs", "save_pages")
+        # Conditional edge from detect_diagrams_with_ocr
+        workflow.add_conditional_edges(
+            "detect_diagrams_with_ocr",
+            self.check_processing_success,
+            {"success": "save_pages", "error": "error_handling"},
+        )
 
         # Success pipeline
-        workflow.add_edge("save_pages", "aggregate_diagrams")
-        workflow.add_edge("aggregate_diagrams", "save_diagrams")
+        workflow.add_edge("save_pages", "save_diagrams")
         workflow.add_edge("save_diagrams", "update_metrics")
         workflow.add_edge("update_metrics", "mark_basic_complete")
         workflow.add_edge("mark_basic_complete", "build_summary")
@@ -261,19 +261,12 @@ class DocumentProcessingWorkflow:
         """Extract text from document using appropriate method."""
         return await self.extract_text_node.execute(state)
 
-    @langsmith_trace(name="paragraph_segmentation", run_type="tool")
-    async def paragraph_segmentation(
+    @langsmith_trace(name="detect_diagrams_with_ocr", run_type="tool")
+    async def detect_diagrams_with_ocr(
         self, state: DocumentProcessingState
     ) -> DocumentProcessingState:
-        """Segment document text into paragraphs and create artifacts."""
-        return await self.paragraph_segmentation_node.execute(state)
-
-    @langsmith_trace(name="save_paragraphs", run_type="tool")
-    async def save_paragraphs(
-        self, state: DocumentProcessingState
-    ) -> DocumentProcessingState:
-        """Save user paragraph references to database."""
-        return await self.save_paragraphs_node.execute(state)
+        """Detect diagrams using OCR service."""
+        return await self.detect_diagrams_with_ocr_node.execute(state)
 
     @langsmith_trace(name="save_pages", run_type="tool")
     async def save_pages(
@@ -281,13 +274,6 @@ class DocumentProcessingWorkflow:
     ) -> DocumentProcessingState:
         """Save page-level analysis results to database."""
         return await self.save_pages_node.execute(state)
-
-    @langsmith_trace(name="aggregate_diagrams", run_type="tool")
-    async def aggregate_diagrams(
-        self, state: DocumentProcessingState
-    ) -> DocumentProcessingState:
-        """Aggregate diagram detection results from pages."""
-        return await self.aggregate_diagrams_node.execute(state)
 
     @langsmith_trace(name="save_diagrams", run_type="tool")
     async def save_diagrams(
@@ -342,6 +328,13 @@ class DocumentProcessingWorkflow:
         else:
             return "success"
 
+    def check_processing_success(self, state: DocumentProcessingState) -> str:
+        """Check if processing step was successful."""
+        if state.get("error"):
+            return "error"
+        else:
+            return "success"
+
     @langsmith_trace(name="document_processing_workflow", run_type="chain")
     async def process_document(
         self, 
@@ -380,6 +373,7 @@ class DocumentProcessingWorkflow:
                 storage_path=None,
                 file_type=None,
                 text_extraction_result=None,
+                diagram_detection_result=None,
                 diagram_processing_result=None,
                 processed_summary=None,
                 error=None,

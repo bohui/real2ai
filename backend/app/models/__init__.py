@@ -14,15 +14,13 @@ from .supabase_models import (
     Analysis,
     
     # Artifact Models
-    TextExtractionArtifact,
+    FullTextArtifact,
     ArtifactPage,
     ArtifactDiagram,
-    ArtifactParagraph,
     
     # User Document Models
     UserDocumentPage,
     UserDocumentDiagram,
-    UserDocumentParagraph,
     
     # User Tracking Models
     UserContractView,
@@ -86,15 +84,13 @@ __all__ = [
     "Analysis",
     
     # Artifact Models
-    "TextExtractionArtifact",
+    "FullTextArtifact",
     "ArtifactPage",
     "ArtifactDiagram",
-    "ArtifactParagraph",
     
     # User Document Models
     "UserDocumentPage",
     "UserDocumentDiagram",
-    "UserDocumentParagraph",
     
     # User Tracking Models
     "UserContractView",
