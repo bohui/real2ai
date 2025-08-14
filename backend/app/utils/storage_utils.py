@@ -110,7 +110,7 @@ class ArtifactStorageService:
         
         try:
             # Download file content
-            file_data = await client.storage.download(bucket=bucket, path=path)
+            file_data = await client.download_file(bucket=bucket, path=path)
             
             if not file_data:
                 raise RuntimeError(f"No data returned from storage: {uri}")

@@ -560,7 +560,7 @@ Notes
             # Prefer authenticated user client for binary download from configured bucket
             try:
                 user_client = await self.get_user_client()
-                file_content = await user_client.storage.download(
+                file_content = await user_client.download_file(
                     bucket="documents", path=storage_path
                 )
                 if not isinstance(file_content, (bytes, bytearray)):

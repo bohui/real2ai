@@ -539,7 +539,7 @@ class ExtractTextNode(DocumentProcessingNodeBase):
             # Download file content from storage if not provided
             if file_content is None:
                 try:
-                    file_content = await user_client.storage.download(
+                    file_content = await user_client.download_file(
                         bucket="documents", path=storage_path
                     )
                 except Exception as e:

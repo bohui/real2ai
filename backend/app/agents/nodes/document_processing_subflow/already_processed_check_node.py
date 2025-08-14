@@ -174,7 +174,7 @@ class AlreadyProcessedCheckNode(DocumentProcessingNodeBase):
                 
             try:
                 # Download file content from storage to compute proper content_hmac
-                file_content = await user_client.storage.download(
+                file_content = await user_client.download_file(
                     bucket="documents", path=storage_path
                 )
                 if not isinstance(file_content, (bytes, bytearray)):
