@@ -11,9 +11,9 @@ from app.clients.factory import get_service_supabase_client
 
 
 class ArtifactStorageService:
-    """Service for storing and retrieving text artifacts from object storage"""
+    """Service for storing and retrieving artifacts from object storage"""
 
-    def __init__(self, bucket_name: str = "documents"):
+    def __init__(self, bucket_name: str = "artifacts"):
         """Initialize storage service with configurable bucket name.
 
         Args:
@@ -40,10 +40,10 @@ class ArtifactStorageService:
         # Compute SHA256 hash
         sha256_hash = hashlib.sha256(content_bytes).hexdigest()
 
-        # Generate storage path: artifacts/{hmac_prefix}/text/{uuid}.txt
-        hmac_prefix = content_hmac[:8]  # Use first 8 chars for directory structure
+        # Generate storage path: artifacts/{full_hmac}/pages/{uuid}.txt
+        # Use full HMAC for folder to group all artifacts for a document
         file_uuid = str(uuid4())
-        storage_path = f"artifacts/{hmac_prefix}/text/{file_uuid}.txt"
+        storage_path = f"{content_hmac}/pages/{file_uuid}.txt"
 
         # Upload to Supabase Storage
         client = await get_service_supabase_client()
@@ -67,6 +67,7 @@ class ArtifactStorageService:
                 file_options={
                     "content-type": "text/plain; charset=utf-8",
                     "cache-control": "3600",  # Cache for 1 hour
+                    "upsert": True,
                 },
             )
 
@@ -164,9 +165,8 @@ class ArtifactStorageService:
         # Compute SHA256 hash
         sha256_hash = hashlib.sha256(content_bytes).hexdigest()
 
-        # Generate storage path: artifacts/{hmac_prefix}/pages/p{page}/content.txt
-        hmac_prefix = content_hmac[:8]
-        storage_path = f"artifacts/{hmac_prefix}/pages/p{page_number}/content.txt"
+        # Generate storage path: artifacts/{full_hmac}/pages/p{page}.txt
+        storage_path = f"{content_hmac}/pages/p{page_number}.txt"
 
         client = await get_service_supabase_client()
 
@@ -180,6 +180,7 @@ class ArtifactStorageService:
                     file_options={
                         "content-type": "text/plain; charset=utf-8",
                         "cache-control": "3600",
+                        "upsert": True,
                     },
                 )
             )
@@ -210,9 +211,8 @@ class ArtifactStorageService:
         # Compute SHA256 hash
         sha256_hash = hashlib.sha256(markdown_bytes).hexdigest()
 
-        # Generate storage path: artifacts/{hmac}/pages/p{page}/content.md
-        hmac_prefix = content_hmac[:8]
-        storage_path = f"artifacts/{hmac_prefix}/pages/p{page_number}/content.md"
+        # Generate storage path: artifacts/{full_hmac}/pages/p{page}.md
+        storage_path = f"{content_hmac}/pages/p{page_number}.md"
 
         client = await get_service_supabase_client()
 
@@ -233,6 +233,7 @@ class ArtifactStorageService:
                 file_options={
                     "content-type": "text/markdown; charset=utf-8",
                     "cache-control": "3600",
+                    "upsert": True,
                 },
             )
 
@@ -262,9 +263,8 @@ class ArtifactStorageService:
         # Compute SHA256 hash
         sha256_hash = hashlib.sha256(image_bytes).hexdigest()
 
-        # Generate storage path: artifacts/{hmac}/pages/p{page}/image.jpg
-        hmac_prefix = content_hmac[:8]
-        storage_path = f"artifacts/{hmac_prefix}/pages/p{page_number}/image.jpg"
+        # Generate storage path: artifacts/{full_hmac}/diagrams/p{page}-image.jpg
+        storage_path = f"{content_hmac}/diagrams/p{page_number}-image.jpg"
 
         client = await get_service_supabase_client()
 
@@ -285,6 +285,7 @@ class ArtifactStorageService:
                 file_options={
                     "content-type": "image/jpeg",
                     "cache-control": "86400",  # Cache for 24 hours
+                    "upsert": True,
                 },
             )
 
@@ -314,9 +315,8 @@ class ArtifactStorageService:
         # Compute SHA256 hash
         sha256_hash = hashlib.sha256(json_bytes).hexdigest()
 
-        # Generate storage path: artifacts/{hmac}/pages/p{page}/metadata.json
-        hmac_prefix = content_hmac[:8]
-        storage_path = f"artifacts/{hmac_prefix}/pages/p{page_number}/metadata.json"
+        # Generate storage path: artifacts/{full_hmac}/pages/p{page}-metadata.json
+        storage_path = f"{content_hmac}/pages/p{page_number}-metadata.json"
 
         client = await get_service_supabase_client()
 
@@ -337,6 +337,7 @@ class ArtifactStorageService:
                 file_options={
                     "content-type": "application/json; charset=utf-8",
                     "cache-control": "3600",
+                    "upsert": True,
                 },
             )
 
@@ -370,9 +371,8 @@ class ArtifactStorageService:
         Returns:
             Tuple of (uri, sha256_hash)
         """
-        # Generate storage path: diagrams/{hmac}/p{page}/{sha256}.{ext}
-        hmac_prefix = content_hmac[:8]
-        storage_path = f"diagrams/{hmac_prefix}/p{page_number}/{sha256}.{ext}"
+        # Generate storage path: artifacts/{full_hmac}/diagrams/p{page}-{sha256}.{ext}
+        storage_path = f"{content_hmac}/diagrams/p{page_number}-{sha256}.{ext}"
 
         # Determine content type
         content_type_map = {
@@ -404,6 +404,7 @@ class ArtifactStorageService:
                 file_options={
                     "content-type": content_type,
                     "cache-control": "86400",  # Cache for 24 hours
+                    "upsert": True,
                 },
             )
 

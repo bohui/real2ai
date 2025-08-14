@@ -252,14 +252,12 @@ class DocumentProcessingWorkflow:
         """Mark processing as started in database."""
         return await self.mark_processing_started_node.execute(state)
 
-    @langsmith_trace(name="extract_text", run_type="chain")
     async def extract_text(
         self, state: DocumentProcessingState
     ) -> DocumentProcessingState:
         """Extract text from document using appropriate method."""
         return await self.extract_text_node.execute(state)
 
-    @langsmith_trace(name="detect_diagrams_with_ocr", run_type="tool")
     async def detect_diagrams_with_ocr(
         self, state: DocumentProcessingState
     ) -> DocumentProcessingState:
@@ -335,9 +333,9 @@ class DocumentProcessingWorkflow:
 
     @langsmith_trace(name="document_processing_workflow", run_type="chain")
     async def process_document(
-        self, 
-        document_id: str, 
-        use_llm: bool = None, 
+        self,
+        document_id: str,
+        use_llm: bool = None,
         content_hash: Optional[str] = None,
         australian_state: Optional[str] = None,
         contract_type: Optional[str] = None,

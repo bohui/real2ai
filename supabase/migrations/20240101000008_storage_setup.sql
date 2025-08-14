@@ -48,6 +48,29 @@ VALUES (
     file_size_limit = EXCLUDED.file_size_limit,
     allowed_mime_types = EXCLUDED.allowed_mime_types;
 
+-- Create storage bucket for artifacts (text pages, diagrams, metadata)
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES (
+    'artifacts',
+    'artifacts',
+    false,  -- Private bucket
+    52428800,  -- 50MB limit
+    ARRAY[
+        'text/plain',
+        'text/markdown',
+        'application/json',
+        'image/jpeg',
+        'image/jpg',
+        'image/png',
+        'image/gif',
+        'image/svg+xml',
+        'image/webp',
+        'image/tiff'
+    ]
+) ON CONFLICT (id) DO UPDATE SET
+    file_size_limit = EXCLUDED.file_size_limit,
+    allowed_mime_types = EXCLUDED.allowed_mime_types;
+
 -- Enable RLS on storage.objects table (if not already enabled)
 DO $$ BEGIN
     IF NOT EXISTS (
@@ -113,6 +136,16 @@ USING (
     bucket_id = 'reports' 
     AND auth.jwt() ->> 'role' = 'service_role'
 );
+
+-- Storage policies for artifacts bucket
+CREATE POLICY "Service role can manage all artifacts"
+ON storage.objects FOR ALL
+USING (
+    bucket_id = 'artifacts'
+    AND auth.jwt() ->> 'role' = 'service_role'
+);
+
+-- Note: Artifacts are written by service-role jobs; end-users don't directly upload/read raw artifact paths
 
 -- Function to generate secure file path
 CREATE OR REPLACE FUNCTION generate_secure_file_path(

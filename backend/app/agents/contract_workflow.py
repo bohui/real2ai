@@ -568,7 +568,6 @@ class ContractAnalysisWorkflow:
         """Execute input validation node."""
         return self._run_async_node(self.input_validation_node.execute(state))
 
-    @langsmith_trace(name="process_document", run_type="chain")
     def process_document(self, state: RealEstateAgentState) -> RealEstateAgentState:
         """Execute document processing node."""
         return self._run_async_node(self.document_processing_node.execute(state))

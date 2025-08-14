@@ -14,7 +14,7 @@ class TestArtifactStorageService:
     @pytest.fixture
     def storage_service(self):
         """Create a storage service instance."""
-        return ArtifactStorageService(bucket_name="documents")
+        return ArtifactStorageService(bucket_name="artifacts")
 
     async def test_upload_page_image_jpg_uses_image_jpeg(self, storage_service):
         """Test that JPG uploads use image/jpeg content type."""
@@ -54,7 +54,7 @@ class TestArtifactStorageService:
             assert call_args[1]["file_options"]["cache-control"] == "86400"
 
             # Verify the returned values
-            assert uri.startswith("supabase://documents/")
+            assert uri.startswith("supabase://artifacts/")
             assert len(sha256) == 64  # SHA256 hash is 64 characters
 
     async def test_upload_page_image_jpg_error_handling(self, storage_service):
@@ -83,7 +83,7 @@ class TestArtifactStorageService:
                     image_bytes, content_hmac, page_number
                 )
 
-            assert "Storage bucket 'documents' not found" in str(exc_info.value)
+            assert "Storage bucket 'artifacts' not found" in str(exc_info.value)
 
     async def test_upload_diagram_image_content_types(self, storage_service):
         """Test that diagram images use correct content types."""
