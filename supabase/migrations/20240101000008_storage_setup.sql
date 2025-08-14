@@ -37,8 +37,17 @@ VALUES (
     file_size_limit = EXCLUDED.file_size_limit,
     allowed_mime_types = EXCLUDED.allowed_mime_types;
 
--- Enable RLS on storage.objects table
--- ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
+-- Enable RLS on storage.objects table (if not already enabled)
+DO $$ BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_class c
+        JOIN pg_namespace n ON c.relnamespace = n.oid
+        WHERE n.nspname = 'storage' AND c.relname = 'objects' 
+        AND c.relrowsecurity = true
+    ) THEN
+        ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
+    END IF;
+END $$;
 
 -- Storage policies for documents bucket
 -- SECURE: Users can only access files in their own folder (user_id/filename)

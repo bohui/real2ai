@@ -52,11 +52,11 @@ class AuthContextMiddleware(BaseHTTPMiddleware):
         """
         # Extract token from request
         token, user_id, user_email = self._extract_auth_info(request)
-        new_token_header = None  # Track if we need to send a new token to frontend
+        # Token coordination handled via separate endpoint
 
-        # Debug: Log token type
+        # Debug: Log token presence without exposing content
         if token:
-            logger.info(f"Processing token for user: {user_id} (token length: {len(token)}, first 20 chars: {token[:20]}...)")
+            logger.info(f"Processing token for user: {user_id} (token length: {len(token)})")
             is_backend_token = BackendTokenService.is_backend_token(token)
             logger.info(f"Token type check - is_backend_token: {is_backend_token}")
         
@@ -83,7 +83,7 @@ class AuthContextMiddleware(BaseHTTPMiddleware):
             exchanged = await BackendTokenService.ensure_supabase_access_token(token)
             if exchanged:
                 # Replace token with Supabase access token so DB ops are RLS-authenticated
-                logger.info(f"Successfully exchanged backend token for Supabase token (length: {len(exchanged)})")
+                logger.info(f"Successfully exchanged backend token for Supabase token")
                 token = exchanged
             else:
                 logger.warning(f"Failed to exchange backend token for Supabase token for user: {user_id}")
@@ -109,10 +109,8 @@ class AuthContextMiddleware(BaseHTTPMiddleware):
             # Process the request
             response = await call_next(request)
             
-            # If we have a new token from coordinated refresh, add it to response headers
-            if new_token_header:
-                response.headers["X-New-Token"] = new_token_header
-                logger.info(f"Sending new coordinated token to frontend for user: {user_id}")
+            # Token refresh handling moved to separate endpoint for security
+            # Avoid sending tokens in response headers
             
             return response
         finally:
@@ -149,8 +147,8 @@ class AuthContextMiddleware(BaseHTTPMiddleware):
 
         if self.validate_token:
             try:
-                # Note: In production, you'd validate with Supabase's JWT secret
-                # For now, we'll just decode without verification to extract claims
+                # Only decode for claim extraction in middleware
+                # Full verification happens at database layer
                 payload = jwt.decode(
                     token,
                     options={"verify_signature": False},  # Only for claim extraction
@@ -160,8 +158,8 @@ class AuthContextMiddleware(BaseHTTPMiddleware):
                 user_id = payload.get("sub")  # Standard JWT subject claim
                 user_email = payload.get("email")
 
-                # Log token metadata (without sensitive data)
-                logger.info(f"Token claims extracted for user: {user_id}, email: {user_email}")
+                # Log token processing without sensitive data
+                logger.debug(f"Token claims extracted for user: {user_id}")
 
             except InvalidTokenError as e:
                 logger.warning(f"Invalid token format: {str(e)}")

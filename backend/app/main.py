@@ -122,6 +122,20 @@ async def lifespan(app: FastAPI) -> Any:
     else:
         logger.info("LangSmith tracing disabled")
 
+    # Validate production security configuration
+    if settings.environment == "production":
+        logger.info("Validating production security configuration...")
+        
+        # Validate CORS origins in production
+        allowed_origins_env = os.getenv("ALLOWED_ORIGINS", "")
+        if not allowed_origins_env or "localhost" in allowed_origins_env:
+            logger.critical("CRITICAL: ALLOWED_ORIGINS must be configured for production")
+            logger.critical("Current origins include localhost or are empty")
+            logger.critical("Set ALLOWED_ORIGINS environment variable with production domains only")
+            raise RuntimeError("Invalid ALLOWED_ORIGINS configuration for production")
+        
+        logger.info("Production security configuration validated successfully")
+
     # Validate JWT configuration on startup
     logger.info("Validating JWT configuration...")
     try:

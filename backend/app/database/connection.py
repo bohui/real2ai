@@ -203,13 +203,24 @@ class ConnectionPoolManager:
 
     @classmethod
     def _get_database_dsn(cls) -> str:
-        """Get database DSN from settings"""
+        """Get database DSN from settings - require DATABASE_URL in production"""
         settings = get_settings()
 
         if settings.database_url:
             return settings.database_url
+        
+        # In production, DATABASE_URL is required (validated at startup)
+        if settings.environment == "production":
+            raise ValueError(
+                "DATABASE_URL is required in production environment. "
+                "Service key DSN fallback is not allowed."
+            )
+        
+        # Non-production: Log warning and use fallback
+        logger.error("DATABASE_URL not configured - using service key fallback")
+        logger.warning("Security risk: Consider using proper DATABASE_URL instead of service key")
 
-        # Extract database URL from Supabase URL
+        # Fallback: Extract database URL from Supabase URL (legacy, non-production only)
         supabase_url = settings.supabase_url.replace("https://", "").replace(
             "http://", ""
         )
@@ -301,8 +312,21 @@ async def _setup_user_session(
             from app.core.config import get_settings
 
             settings = get_settings()
-            # Decode without verification for now (Supabase handles verification)
-            claims = jwt.decode(user_token, options={"verify_signature": False})
+            # Verify token signature before setting RLS context
+            if not settings.supabase_jwt_secret:
+                logger.error("JWT secret not configured - cannot verify token for RLS")
+                raise ValueError("JWT verification not configured")
+            
+            try:
+                # Verify token with Supabase JWT secret
+                claims = jwt.decode(
+                    user_token, 
+                    settings.supabase_jwt_secret, 
+                    algorithms=["HS256"]
+                )
+            except jwt.InvalidTokenError as e:
+                logger.error(f"Token verification failed for user {user_id}: {e}")
+                raise ValueError(f"Invalid token: {e}")
 
             # Set session GUCs for RLS
             logger.debug(

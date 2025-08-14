@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import validator
+from pydantic import field_validator, model_validator
 from dataclasses import dataclass
 from app.models.contract_state import AustralianState
 
@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     supabase_url: str
     supabase_anon_key: str
     supabase_service_key: str
+    supabase_jwt_secret: Optional[str] = None
     database_url: Optional[str] = None
 
     # Repository and Connection Pool Settings
@@ -194,6 +195,44 @@ class Settings(BaseSettings):
         """Get enhanced workflow configuration"""
         return EnhancedWorkflowConfig.from_settings(self)
 
+    @model_validator(mode='after')
+    def validate_production_requirements(self):
+        """Validate production security requirements"""
+        if self.environment == "production":
+            # Require DATABASE_URL in production
+            if not self.database_url:
+                raise ValueError(
+                    "DATABASE_URL is required in production environment. "
+                    "Service key DSN fallback is not allowed in production."
+                )
+            
+            # Require JWT secret in production
+            if not self.supabase_jwt_secret:
+                raise ValueError(
+                    "SUPABASE_JWT_SECRET is required in production environment. "
+                    "Token verification cannot proceed without JWT secret."
+                )
+        
+        # Warn about missing JWT secret in non-production
+        elif not self.supabase_jwt_secret:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(
+                "SUPABASE_JWT_SECRET not configured. "
+                "Database RLS will fail token verification."
+            )
+        
+        return self
+    
+    @field_validator('environment')
+    @classmethod
+    def validate_environment(cls, v):
+        """Validate environment value"""
+        allowed = {'development', 'staging', 'production', 'test'}
+        if v not in allowed:
+            raise ValueError(f"Environment must be one of {allowed}")
+        return v
+    
     # Note: Pydantic v2 uses model_config; the old inner Config is deprecated
 
 
