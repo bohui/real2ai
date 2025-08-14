@@ -42,7 +42,6 @@ class DocumentProcessingState(TypedDict):
     - algorithm_version: Version of processing algorithm
     - params_fingerprint: Fingerprint of processing parameters
     - text_extraction_result: Results from text extraction
-    - diagram_detection_result: Results from OCR-based diagram detection
     - diagram_processing_result: Results from diagram processing
 
     Output fields:
@@ -70,7 +69,6 @@ class DocumentProcessingState(TypedDict):
     algorithm_version: Optional[int]
     params_fingerprint: Optional[str]
     text_extraction_result: Optional[Dict[str, Any]]
-    diagram_detection_result: Optional[Dict[str, Any]]
     diagram_processing_result: Optional[Dict[str, Any]]
 
     # Output
@@ -373,7 +371,6 @@ class DocumentProcessingWorkflow:
                 storage_path=None,
                 file_type=None,
                 text_extraction_result=None,
-                diagram_detection_result=None,
                 diagram_processing_result=None,
                 processed_summary=None,
                 error=None,

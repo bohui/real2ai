@@ -9,15 +9,24 @@
 - External OCR support nodes exist for saving MD/JPG/JSON and extracting diagrams from MD.
 - `extract_text` uploads full text + per-page text; sets `content_hmac`, `algorithm_version`, `params_fingerprint` in state and inserts unified page artifacts.
 
-### Outstanding review items
+### Outstanding need-to-fix items
 
-- Already processed check (fingerprint source): Logic now uses artifact presence with lowercase statuses, but it passes `documents.content_hash` into methods that expect `content_hmac`. Confirm these are identical; otherwise compute `content_hmac` here (cheap download + hash) or add a converter. Without alignment, short-circuit may produce false negatives.
-- Diagram persistence path: Detections are stored in state, but `SaveDiagramsNode` only maps existing artifacts. Upsert missing `artifact_diagrams` from `diagram_detection_result` (or have detection node persist) before mapping user rows.
-- Async client usage in OCR node: When initializing `GeminiOCRService`, await `get_user_client()` or let the service resolve the client internally. Also enforce retries/backoff and `max_diagram_pages` from config.
-- Page JPGs vs detection rendering: Either persist per-page JPGs via `save_page_jpg` and reuse for detection, or persist the ad-hoc rendered JPGs as `artifact_type='image_jpg'` to avoid repeated work.
-- Repo cleanup stubs: Remove or guard calls to `repo.close()` in nodes that define `cleanup()` but whose repos have no `close()` method.
-- Metrics cleanup: Remove paragraph reads/writes from `UpdateMetricsNode`; compute strictly from pages and diagram results.
-- Migration robustness: Fix any stray quotes in DO $$ EXECUTE strings in `20240101000002_document_content.sql` to ensure migrations apply cleanly.
+- Already processed check
+
+- Diagram artifacts
+  - Keep deterministic `diagram_key` (`diagram_page_{page}_{type}_{seq}`) when upserting from `diagram_processing_result` to ensure idempotency across re-runs.
+
+- OCR node caps
+  - Ensure `max_diagram_pages` limit and retries/backoff are enforced in per-page detection to control costs and transient failures.
+
+- Page JPG persistence strategy
+  - Either wire a `save_page_jpg` step before detection and reuse those images, or persist in-node rendered JPGs as `artifact_type='image_jpg'` to avoid re-rendering on re-runs.
+
+- Repo cleanup calls
+  - Remove/guard any `repo.close()` calls in nodes since repos don’t expose `close()`.
+
+- Migration validation
+  - Apply migration on staging to confirm DO $$ EXECUTE quoting and constraints behave as expected.
 
 ### Medium priority
 
@@ -38,11 +47,11 @@
 ### Actionable fixes (checklist)
 
 - Nodes
-  - AlreadyProcessedCheck: ensure fingerprint alignment (convert or compute `content_hmac` if needed) when querying artifacts.
-  - DetectDiagramsWithOCR: await user client, enforce `max_diagram_pages` and retries/backoff, and either persist detections or emit a canonical `diagram_processing_result` consumed by `save_diagrams`.
-  - SaveDiagrams: upsert missing diagram artifacts from detection results, then map user rows.
-  - SavePages: keep null-safe annotations; remove repo `.close()` calls.
-  - UpdateMetrics: remove paragraph fields; compute from pages + diagram results.
+  - AlreadyProcessedCheck: align fingerprint (compute/convert to `content_hmac`) before artifact queries.
+  - DetectDiagramsWithOCR: enforce `max_diagram_pages` and retries/backoff from config; persist rendered JPGs if not using a separate `save_page_jpg` step.
+  - SaveDiagrams: ensure deterministic `diagram_key` and upsert artifacts when missing, then map user rows.
+  - SavePages: keep null-safe annotations; remove/guard repo `.close()` calls.
+  - UpdateMetrics: paragraph-free metrics only.
 
 - Repos/migration
   - Remove deprecated JPG/JSON-specific methods or add the missing dataclasses if they must remain.

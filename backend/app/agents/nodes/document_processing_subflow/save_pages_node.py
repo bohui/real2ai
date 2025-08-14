@@ -212,7 +212,7 @@ class SavePagesNode(DocumentProcessingNodeBase):
                 {
                     "document_id": state.get("document_id"),
                     "operation": "upsert_document_page",
-                    "page_count": len(state.get("text_extraction_result", {}).get("pages", [])) if state.get("text_extraction_result") else 0,
+                    "page_count": len(state.get("text_extraction_result").pages) if state.get("text_extraction_result") and state.get("text_extraction_result").pages else 0,
                     "content_hmac": state.get("content_hmac"),
                 }
             )
