@@ -18,6 +18,21 @@ from app.models.supabase_models import Document
 logger = logging.getLogger(__name__)
 
 
+def _safe_json_loads(value, default=None):
+    """Safely parse JSON string to Python object with fallback to default."""
+    if value is None:
+        return default
+    if isinstance(value, dict):
+        return value  # Already a dict, return as-is
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except (json.JSONDecodeError, TypeError):
+            logger.warning(f"Failed to parse JSON string: {value}")
+            return default
+    return default
+
+
 # Document model is now imported from app.models.supabase_models
 
 
@@ -52,8 +67,9 @@ class DocumentsRepository:
                 INSERT INTO documents (
                     id, user_id, original_filename, storage_path, file_type,
                     file_size, content_hash, processing_status,
-                    contract_type, australian_state, text_extraction_method
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                    contract_type, australian_state, text_extraction_method,
+                    upload_metadata, processing_results
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13::jsonb)
                 RETURNING 
                     id, user_id, original_filename, storage_path, file_type,
                     file_size, content_hash, processing_status, processing_started_at,
@@ -74,6 +90,8 @@ class DocumentsRepository:
                 document_data.get("contract_type"),
                 document_data.get("australian_state"),
                 document_data.get("text_extraction_method"),
+                json.dumps(document_data.get("upload_metadata", {})),
+                json.dumps(document_data.get("processing_results", {})),
             )
 
             return Document(
@@ -101,8 +119,8 @@ class DocumentsRepository:
                 australian_state=row.get("australian_state"),
                 contract_type=row.get("contract_type"),
                 processing_notes=row.get("processing_notes"),
-                upload_metadata=row.get("upload_metadata", {}),
-                processing_results=row.get("processing_results", {}),
+                upload_metadata=_safe_json_loads(row.get("upload_metadata"), {}),
+                processing_results=_safe_json_loads(row.get("processing_results"), {}),
                 created_at=row["created_at"],
                 updated_at=row["updated_at"],
             )
@@ -176,8 +194,8 @@ class DocumentsRepository:
                 australian_state=row.get("australian_state"),
                 contract_type=row.get("contract_type"),
                 processing_notes=row.get("processing_notes"),
-                upload_metadata=row.get("upload_metadata", {}),
-                processing_results=row.get("processing_results", {}),
+                upload_metadata=_safe_json_loads(row.get("upload_metadata"), {}),
+                processing_results=_safe_json_loads(row.get("processing_results"), {}),
                 created_at=row["created_at"],
                 updated_at=row["updated_at"],
             )
@@ -360,8 +378,10 @@ class DocumentsRepository:
                     australian_state=row.get("australian_state"),
                     contract_type=row.get("contract_type"),
                     processing_notes=row.get("processing_notes"),
-                    upload_metadata=row.get("upload_metadata", {}),
-                    processing_results=row.get("processing_results", {}),
+                    upload_metadata=_safe_json_loads(row.get("upload_metadata"), {}),
+                    processing_results=_safe_json_loads(
+                        row.get("processing_results"), {}
+                    ),
                     created_at=row["created_at"],
                     updated_at=row["updated_at"],
                 )
@@ -553,8 +573,12 @@ class DocumentsRepository:
                         australian_state=row.get("australian_state"),
                         contract_type=row.get("contract_type"),
                         processing_notes=row.get("processing_notes"),
-                        upload_metadata=row.get("upload_metadata", {}),
-                        processing_results=row.get("processing_results", {}),
+                        upload_metadata=_safe_json_loads(
+                            row.get("upload_metadata"), {}
+                        ),
+                        processing_results=_safe_json_loads(
+                            row.get("processing_results"), {}
+                        ),
                         created_at=row["created_at"],
                         updated_at=row["updated_at"],
                     )

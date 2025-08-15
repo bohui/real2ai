@@ -13,7 +13,7 @@ CREATE TABLE analysis_progress (
     total_elapsed_seconds INTEGER DEFAULT 0 CHECK (total_elapsed_seconds >= 0),
     status VARCHAR(50) DEFAULT 'in_progress' CHECK (status IN ('in_progress', 'completed', 'failed', 'cancelled')),
     error_message TEXT,
-    metadata JSONB DEFAULT '{}',
+    metadata JSONB DEFAULT '{}'::jsonb,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     CONSTRAINT unique_analysis_progress UNIQUE (content_hash, user_id),

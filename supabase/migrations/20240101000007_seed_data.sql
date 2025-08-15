@@ -237,7 +237,7 @@ CREATE TABLE IF NOT EXISTS maintenance_log (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     operation TEXT NOT NULL,
     status TEXT NOT NULL CHECK (status IN ('running', 'completed', 'failed')),
-    details JSONB DEFAULT '{}',
+    details JSONB DEFAULT '{}'::jsonb,
     started_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     completed_at TIMESTAMP WITH TIME ZONE,
     duration_seconds DECIMAL(10,3)

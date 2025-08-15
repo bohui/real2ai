@@ -39,7 +39,7 @@ CREATE TABLE properties (
     last_updated_source TEXT CHECK (length(last_updated_source) <= 100),
     
     -- Metadata
-    property_metadata JSONB DEFAULT '{}',
+    property_metadata JSONB DEFAULT '{}'::jsonb,
     
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -58,7 +58,7 @@ CREATE TABLE property_valuations (
     methodology TEXT,
     valuation_date TIMESTAMP WITH TIME ZONE NOT NULL,
     expires_at TIMESTAMP WITH TIME ZONE,
-    api_response JSONB DEFAULT '{}',
+    api_response JSONB DEFAULT '{}'::jsonb,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -81,7 +81,7 @@ CREATE TABLE property_market_data (
     vacancy_rate DECIMAL(5,2) CHECK (vacancy_rate >= 0),
     data_date TIMESTAMP WITH TIME ZONE NOT NULL,
     expires_at TIMESTAMP WITH TIME ZONE,
-    raw_data JSONB DEFAULT '{}',
+    raw_data JSONB DEFAULT '{}'::jsonb,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -94,13 +94,13 @@ CREATE TABLE property_risk_assessments (
     liquidity_risk TEXT NOT NULL CHECK (liquidity_risk IN ('low', 'medium', 'high', 'very_high')),
     market_risk TEXT NOT NULL CHECK (market_risk IN ('low', 'medium', 'high', 'very_high')),
     structural_risk TEXT NOT NULL CHECK (structural_risk IN ('low', 'medium', 'high', 'very_high')),
-    risk_factors JSONB DEFAULT '[]',
+    risk_factors JSONB DEFAULT '[]'::jsonb,
     risk_score DECIMAL(5,2) CHECK (risk_score >= 0.0 AND risk_score <= 100.0),
     confidence DECIMAL(3,2) CHECK (confidence >= 0.0 AND confidence <= 1.0),
     assessment_date TIMESTAMP WITH TIME ZONE NOT NULL,
     expires_at TIMESTAMP WITH TIME ZONE,
     assessment_methodology TEXT,
-    mitigation_strategies JSONB DEFAULT '[]',
+    mitigation_strategies JSONB DEFAULT '[]'::jsonb,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -129,7 +129,7 @@ CREATE TABLE comparable_sales (
     -- Data source and verification
     data_source TEXT NOT NULL CHECK (length(data_source) <= 50),
     verified BOOLEAN DEFAULT FALSE,
-    sale_metadata JSONB DEFAULT '{}',
+    sale_metadata JSONB DEFAULT '{}'::jsonb,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -150,7 +150,7 @@ CREATE TABLE property_sales_history (
     -- Data source
     data_source TEXT NOT NULL CHECK (length(data_source) <= 50),
     verified BOOLEAN DEFAULT FALSE,
-    sale_metadata JSONB DEFAULT '{}',
+    sale_metadata JSONB DEFAULT '{}'::jsonb,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -170,7 +170,7 @@ CREATE TABLE property_rental_history (
     -- Data source
     data_source TEXT NOT NULL CHECK (length(data_source) <= 50),
     verified BOOLEAN DEFAULT FALSE,
-    rental_metadata JSONB DEFAULT '{}',
+    rental_metadata JSONB DEFAULT '{}'::jsonb,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -184,7 +184,7 @@ CREATE TABLE user_saved_properties (
     notes TEXT,
     saved_at TIMESTAMP WITH TIME ZONE NOT NULL,
     alert_enabled BOOLEAN DEFAULT FALSE,
-    alert_criteria JSONB DEFAULT '{}',
+    alert_criteria JSONB DEFAULT '{}'::jsonb,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     
@@ -195,10 +195,10 @@ CREATE TABLE user_saved_properties (
 CREATE TABLE property_searches (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-    search_criteria JSONB DEFAULT '{}',
+    search_criteria JSONB DEFAULT '{}'::jsonb,
     results_count INTEGER DEFAULT 0 CHECK (results_count >= 0),
     executed_at TIMESTAMP WITH TIME ZONE NOT NULL,
-    search_metadata JSONB DEFAULT '{}',
+    search_metadata JSONB DEFAULT '{}'::jsonb,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -209,11 +209,11 @@ CREATE TABLE property_reports (
     property_id UUID NOT NULL REFERENCES properties(id) ON DELETE CASCADE,
     user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
     report_type TEXT NOT NULL CHECK (length(report_type) <= 100),
-    report_data JSONB DEFAULT '{}',
+    report_data JSONB DEFAULT '{}'::jsonb,
     generated_at TIMESTAMP WITH TIME ZONE NOT NULL,
     expires_at TIMESTAMP WITH TIME ZONE,
     report_version TEXT DEFAULT '1.0' CHECK (length(report_version) <= 50),
-    generation_metadata JSONB DEFAULT '{}',
+    generation_metadata JSONB DEFAULT '{}'::jsonb,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -229,7 +229,7 @@ CREATE TABLE property_api_usage (
     response_time_ms INTEGER CHECK (response_time_ms >= 0),
     request_successful BOOLEAN NOT NULL,
     error_message TEXT,
-    request_metadata JSONB DEFAULT '{}',
+    request_metadata JSONB DEFAULT '{}'::jsonb,
     timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -242,7 +242,7 @@ CREATE TABLE market_insights (
     state TEXT NOT NULL CHECK (length(state) <= 10),
     property_type TEXT CHECK (length(property_type) <= 50),
     insight_type TEXT NOT NULL CHECK (length(insight_type) <= 50),
-    insight_data JSONB DEFAULT '{}',
+    insight_data JSONB DEFAULT '{}'::jsonb,
     confidence_score DECIMAL(3,2) CHECK (confidence_score >= 0.0 AND confidence_score <= 1.0),
     data_sources TEXT[] DEFAULT '{}',
     valid_from TIMESTAMP WITH TIME ZONE NOT NULL,

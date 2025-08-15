@@ -538,6 +538,8 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
                     "contract_type": contract_type,
                     "australian_state": australian_state,
                     "text_extraction_method": "pending",
+                    "upload_metadata": {},
+                    "processing_results": {},
                 }
             )
 

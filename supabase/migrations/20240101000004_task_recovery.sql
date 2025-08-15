@@ -19,10 +19,10 @@ CREATE TABLE task_registry (
     context_key VARCHAR(255),
     current_state task_state NOT NULL DEFAULT 'queued',
     previous_state task_state,
-    state_history JSONB DEFAULT '[]',
+    state_history JSONB DEFAULT '[]'::jsonb,
     progress_percent INTEGER DEFAULT 0 CHECK (progress_percent >= 0 AND progress_percent <= 100),
     current_step VARCHAR(255),
-    checkpoint_data JSONB DEFAULT '{}',
+    checkpoint_data JSONB DEFAULT '{}'::jsonb,
     last_heartbeat TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     max_retries INTEGER DEFAULT 3,
     retry_count INTEGER DEFAULT 0,
@@ -44,9 +44,9 @@ CREATE TABLE task_checkpoints (
     checkpoint_name VARCHAR(255) NOT NULL,
     progress_percent INTEGER NOT NULL,
     step_description TEXT,
-    recoverable_data JSONB NOT NULL DEFAULT '{}',
-    database_state JSONB DEFAULT '{}',
-    file_state JSONB DEFAULT '{}',
+    recoverable_data JSONB NOT NULL DEFAULT '{}'::jsonb,
+    database_state JSONB DEFAULT '{}'::jsonb,
+    file_state JSONB DEFAULT '{}'::jsonb,
     checkpoint_hash VARCHAR(255),
     is_valid BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -164,8 +164,8 @@ CREATE OR REPLACE FUNCTION upsert_task_registry(
     p_task_id VARCHAR(255),
     p_task_name VARCHAR(255),
     p_user_id UUID,
-    p_task_args JSONB DEFAULT '{}',
-    p_task_kwargs JSONB DEFAULT '{}',
+    p_task_args JSONB DEFAULT '{}'::jsonb,
+    p_task_kwargs JSONB DEFAULT '{}'::jsonb,
     p_context_key VARCHAR(255) DEFAULT NULL,
     p_recovery_priority INTEGER DEFAULT 0,
     p_auto_recovery_enabled BOOLEAN DEFAULT TRUE
@@ -252,9 +252,9 @@ CREATE OR REPLACE FUNCTION create_task_checkpoint(
     p_checkpoint_name VARCHAR(255),
     p_progress_percent INTEGER,
     p_step_description TEXT,
-    p_recoverable_data JSONB DEFAULT '{}',
-    p_database_state JSONB DEFAULT '{}',
-    p_file_state JSONB DEFAULT '{}'
+    p_recoverable_data JSONB DEFAULT '{}'::jsonb,
+    p_database_state JSONB DEFAULT '{}'::jsonb,
+    p_file_state JSONB DEFAULT '{}'::jsonb
 ) RETURNS UUID AS $$
 DECLARE
     registry_id UUID;

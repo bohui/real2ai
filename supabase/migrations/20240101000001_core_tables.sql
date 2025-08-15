@@ -9,10 +9,10 @@ CREATE TABLE profiles (
     subscription_status subscription_status NOT NULL DEFAULT 'free',
     credits_remaining INTEGER NOT NULL DEFAULT 1,
     organization TEXT,
-    preferences JSONB DEFAULT '{}',
+    preferences JSONB DEFAULT '{}'::jsonb,
     onboarding_completed BOOLEAN DEFAULT FALSE,
     onboarding_completed_at TIMESTAMP WITH TIME ZONE,
-    onboarding_preferences JSONB DEFAULT '{}',
+    onboarding_preferences JSONB DEFAULT '{}'::jsonb,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -26,8 +26,8 @@ CREATE TABLE documents (
     file_size BIGINT NOT NULL,
     content_hash TEXT,
     processing_status TEXT NOT NULL DEFAULT 'uploaded',
-    upload_metadata JSONB DEFAULT '{}',
-    processing_results JSONB DEFAULT '{}',
+    upload_metadata JSONB DEFAULT '{}'::jsonb,
+    processing_results JSONB DEFAULT '{}'::jsonb,
     processing_started_at TIMESTAMP WITH TIME ZONE,
     processing_completed_at TIMESTAMP WITH TIME ZONE,
     overall_quality_score FLOAT DEFAULT 0.0,
@@ -52,10 +52,10 @@ ALTER TABLE documents ADD COLUMN IF NOT EXISTS artifact_text_id UUID;
 CREATE TABLE contracts (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     content_hash TEXT UNIQUE NOT NULL,
-    metadata JSONB DEFAULT '{}',
+    metadata JSONB DEFAULT '{}'::jsonb,
     contract_type contract_type NOT NULL DEFAULT 'purchase_agreement',
     australian_state australian_state NOT NULL DEFAULT 'NSW',
-    contract_terms JSONB DEFAULT '{}',
+    contract_terms JSONB DEFAULT '{}'::jsonb,
     raw_text TEXT,
     property_address TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -89,7 +89,7 @@ CREATE TABLE usage_logs (
     credits_used INTEGER DEFAULT 0,
     credits_remaining INTEGER DEFAULT 0,
     resource_used TEXT, -- contract_analysis, document_upload, etc.
-    metadata JSONB DEFAULT '{}',
+    metadata JSONB DEFAULT '{}'::jsonb,
     timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -105,8 +105,8 @@ CREATE TABLE subscription_plans (
     price_annually FLOAT,
     credits_per_month INTEGER NOT NULL DEFAULT 0,
     max_file_size_mb INTEGER NOT NULL DEFAULT 50,
-    features JSONB DEFAULT '{}',
-    limits JSONB DEFAULT '{}',
+    features JSONB DEFAULT '{}'::jsonb,
+    limits JSONB DEFAULT '{}'::jsonb,
     active BOOLEAN DEFAULT TRUE,
     sort_order INTEGER DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()

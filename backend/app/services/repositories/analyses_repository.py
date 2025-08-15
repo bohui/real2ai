@@ -17,6 +17,21 @@ from app.models.supabase_models import Analysis
 logger = logging.getLogger(__name__)
 
 
+def _safe_json_loads(value, default=None):
+    """Safely parse JSON string to Python object with fallback to default."""
+    if value is None:
+        return default
+    if isinstance(value, dict):
+        return value  # Already a dict, return as-is
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except (json.JSONDecodeError, TypeError):
+            logger.warning(f"Failed to parse JSON string: {value}")
+            return default
+    return default
+
+
 class AnalysesRepository:
     """Repository for analysis operations with flexible scoping"""
 
@@ -125,8 +140,8 @@ class AnalysesRepository:
             content_hash=row["content_hash"],
             agent_version=row["agent_version"],
             status=row["status"],
-            result=row["result"],
-            error_details=row["error_details"],
+            result=_safe_json_loads(row["result"]),
+            error_details=_safe_json_loads(row["error_details"]),
             started_at=row["started_at"],
             completed_at=row["completed_at"],
             user_id=row["user_id"],
@@ -184,8 +199,8 @@ class AnalysesRepository:
             content_hash=row["content_hash"],
             agent_version=row["agent_version"],
             status=row["status"],
-            result=row["result"],
-            error_details=row["error_details"],
+            result=_safe_json_loads(row["result"]),
+            error_details=_safe_json_loads(row["error_details"]),
             started_at=row["started_at"],
             completed_at=row["completed_at"],
             user_id=row["user_id"],
@@ -226,8 +241,8 @@ class AnalysesRepository:
             content_hash=row["content_hash"],
             agent_version=row["agent_version"],
             status=row["status"],
-            result=row["result"],
-            error_details=row["error_details"],
+            result=_safe_json_loads(row["result"]),
+            error_details=_safe_json_loads(row["error_details"]),
             started_at=row["started_at"],
             completed_at=row["completed_at"],
             user_id=row["user_id"],
@@ -332,8 +347,8 @@ class AnalysesRepository:
                 content_hash=row["content_hash"],
                 agent_version=row["agent_version"],
                 status=row["status"],
-                result=row["result"],
-                error_details=row["error_details"],
+                result=_safe_json_loads(row["result"]),
+                error_details=_safe_json_loads(row["error_details"]),
                 started_at=row["started_at"],
                 completed_at=row["completed_at"],
                 user_id=row["user_id"],
@@ -380,8 +395,8 @@ class AnalysesRepository:
                 content_hash=row["content_hash"],
                 agent_version=row["agent_version"],
                 status=row["status"],
-                result=row["result"],
-                error_details=row["error_details"],
+                result=_safe_json_loads(row["result"]),
+                error_details=_safe_json_loads(row["error_details"]),
                 started_at=row["started_at"],
                 completed_at=row["completed_at"],
                 user_id=row["user_id"],

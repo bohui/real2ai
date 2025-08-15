@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS artifact_diagrams (
     artifact_type text DEFAULT 'diagram' CHECK (artifact_type IN ('diagram', 'image_jpg', 'image_png')),
     image_uri text,
     image_sha256 text,
-    image_metadata jsonb DEFAULT '{}',
+    image_metadata jsonb DEFAULT '{}'::jsonb,
     created_at timestamptz DEFAULT now(),
     UNIQUE (content_hmac, algorithm_version, params_fingerprint, page_number, diagram_key)
 );

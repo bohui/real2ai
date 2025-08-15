@@ -211,7 +211,7 @@ class AuthService:
                 return {}
 
             return User(
-                id=str(profile.user_id),
+                id=str(profile.id),
                 email=profile.email,
                 australian_state=profile.australian_state,
                 user_type=profile.user_type,
