@@ -21,11 +21,26 @@ CREATE TABLE user_contract_views (
     analysis_id UUID,
     viewed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     source TEXT CHECK (source IN ('upload', 'cache_hit')) DEFAULT 'upload',
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 ALTER TABLE user_contract_views ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can view own contract views" ON user_contract_views FOR ALL USING (auth.uid() = user_id);
+
+-- Auto-update trigger for updated_at column
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ language plpgsql;
+
+CREATE TRIGGER update_user_contract_views_updated_at
+    BEFORE UPDATE ON user_contract_views
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
 
 CREATE INDEX idx_user_property_views_user_id ON user_property_views(user_id);
 CREATE INDEX idx_user_property_views_property_hash ON user_property_views(property_hash);

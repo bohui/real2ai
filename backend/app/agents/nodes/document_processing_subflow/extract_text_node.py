@@ -8,6 +8,7 @@ into a dedicated node for the document processing subflow.
 from typing import Dict, Any, List, Optional, Tuple
 import os
 import tempfile
+import uuid
 from datetime import datetime, timezone
 
 from app.agents.subflows.document_processing_workflow import DocumentProcessingState
@@ -278,11 +279,12 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                     )
 
                     # Store artifacts if extraction succeeded
+                    artifact_text_id = None
                     if (
                         self.text_extraction_result
                         and self.text_extraction_result.success
                     ):
-                        await self._store_text_artifacts(
+                        artifact_text_id = await self._store_text_artifacts(
                             content_hmac,
                             algorithm_version,
                             params_fingerprint,
@@ -337,6 +339,9 @@ class ExtractTextNode(DocumentProcessingNodeBase):
             updated_state["content_hmac"] = content_hmac
             updated_state["algorithm_version"] = algorithm_version
             updated_state["params_fingerprint"] = params_fingerprint
+            # Store the artifact_text_id so it can be linked to the document
+            if 'artifact_text_id' in locals() and artifact_text_id:
+                updated_state["artifact_text_id"] = artifact_text_id
 
             duration = (datetime.now(timezone.utc) - start_time).total_seconds()
             self._record_success(duration)
@@ -480,6 +485,9 @@ class ExtractTextNode(DocumentProcessingNodeBase):
             params_fingerprint: Parameters fingerprint
             result: TextExtractionResult to store
             params: Processing parameters
+
+        Returns:
+            UUID: The artifact_text_id of the created full text artifact
         """
         try:
             # Upload full text to storage and get URI + SHA256
@@ -508,6 +516,9 @@ class ExtractTextNode(DocumentProcessingNodeBase):
             self._log_info(
                 f"Stored text artifact {text_artifact.id} with URI {full_text_uri}"
             )
+
+            # Store the artifact ID to return
+            artifact_text_id = text_artifact.id
 
             # Store page artifacts with real storage
             for page in result.pages or []:
@@ -552,9 +563,13 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                     )
                     # Continue with other pages
 
+            # Return the full text artifact ID
+            return artifact_text_id
+
         except Exception as e:
             # Log error but don't fail the overall operation since extraction succeeded
             self._log_warning(f"Failed to store artifacts: {e}")
+            raise  # Re-raise to handle properly
 
     async def _extract_text_with_comprehensive_analysis(
         self,

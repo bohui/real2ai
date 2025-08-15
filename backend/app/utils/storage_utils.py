@@ -40,10 +40,10 @@ class ArtifactStorageService:
         # Compute SHA256 hash
         sha256_hash = hashlib.sha256(content_bytes).hexdigest()
 
-        # Generate storage path: artifacts/{full_hmac}/pages/{uuid}.txt
+        # Generate storage path: artifacts/{full_hmac}/full_text/{uuid}.txt
         # Use full HMAC for folder to group all artifacts for a document
         file_uuid = str(uuid4())
-        storage_path = f"{content_hmac}/pages/{file_uuid}.txt"
+        storage_path = f"{content_hmac}/full_text/{file_uuid}.txt"
 
         # Upload to Supabase Storage
         client = await get_service_supabase_client()

@@ -89,6 +89,15 @@ class ArtifactsRepository:
             if row is None:
                 return None
 
+            # Ensure methods and timings are dictionaries, not JSON strings
+            methods = row["methods"]
+            if isinstance(methods, str):
+                methods = json.loads(methods)
+            
+            timings = row["timings"]
+            if isinstance(timings, str) and timings:
+                timings = json.loads(timings)
+
             return FullTextArtifact(
                 id=row["id"],
                 content_hmac=row["content_hmac"],
@@ -98,8 +107,8 @@ class ArtifactsRepository:
                 full_text_sha256=row["full_text_sha256"],
                 total_pages=row["total_pages"],
                 total_words=row["total_words"],
-                methods=row["methods"],
-                timings=row["timings"],
+                methods=methods,
+                timings=timings,
                 created_at=row["created_at"],
             )
 
@@ -130,6 +139,15 @@ class ArtifactsRepository:
             if row is None:
                 return None
 
+            # Ensure methods and timings are dictionaries, not JSON strings
+            methods = row["methods"]
+            if isinstance(methods, str):
+                methods = json.loads(methods)
+            
+            timings = row["timings"]
+            if isinstance(timings, str) and timings:
+                timings = json.loads(timings)
+
             return FullTextArtifact(
                 id=row["id"],
                 content_hmac=row["content_hmac"],
@@ -139,8 +157,8 @@ class ArtifactsRepository:
                 full_text_sha256=row["full_text_sha256"],
                 total_pages=row["total_pages"],
                 total_words=row["total_words"],
-                methods=row["methods"],
-                timings=row["timings"],
+                methods=methods,
+                timings=timings,
                 created_at=row["created_at"],
             )
 
@@ -229,6 +247,15 @@ class ArtifactsRepository:
                         "Failed to insert or retrieve full text artifact"
                     )
 
+                # Ensure methods and timings are dictionaries, not JSON strings
+                methods = row["methods"]
+                if isinstance(methods, str):
+                    methods = json.loads(methods)
+                
+                timings = row["timings"]
+                if isinstance(timings, str) and timings:
+                    timings = json.loads(timings)
+
                 return FullTextArtifact(
                     id=row["id"],
                     content_hmac=row["content_hmac"],
@@ -238,8 +265,8 @@ class ArtifactsRepository:
                     full_text_sha256=row["full_text_sha256"],
                     total_pages=row["total_pages"],
                     total_words=row["total_words"],
-                    methods=row["methods"],
-                    timings=row["timings"],
+                    methods=methods,
+                    timings=timings,
                     created_at=row["created_at"],
                 )
 

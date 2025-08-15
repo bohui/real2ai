@@ -579,11 +579,11 @@ class DocumentsRepository:
         self, document_id: UUID, results: Dict[str, Any]
     ) -> bool:
         """
-        Update document processing_results field.
+        Update document processing_results field and artifact_text_id if provided.
 
         Args:
             document_id: Document ID
-            results: Processing results dictionary
+            results: Processing results dictionary (can include artifact_text_id)
 
         Returns:
             True if update successful, False otherwise
@@ -605,20 +605,42 @@ class DocumentsRepository:
             # Fallback to string representation
             return str(obj)
 
+        # Extract artifact_text_id if present
+        artifact_text_id = results.pop("artifact_text_id", None) if results else None
+        
         async with get_user_connection(self.user_id) as conn:
-            result = await conn.execute(
-                """
-                UPDATE documents 
-                SET processing_results = $1::jsonb, updated_at = now()
-                WHERE id = $2
-                """,
-                (
-                    json.dumps(results, default=_json_default)
-                    if results is not None
-                    else None
-                ),
-                document_id,
-            )
+            # Build dynamic SQL based on what fields we're updating
+            if artifact_text_id:
+                # Update both processing_results and artifact_text_id
+                result = await conn.execute(
+                    """
+                    UPDATE documents 
+                    SET processing_results = $1::jsonb, artifact_text_id = $2, updated_at = now()
+                    WHERE id = $3
+                    """,
+                    (
+                        json.dumps(results, default=_json_default)
+                        if results is not None
+                        else None
+                    ),
+                    artifact_text_id,
+                    document_id,
+                )
+            else:
+                # Update only processing_results
+                result = await conn.execute(
+                    """
+                    UPDATE documents 
+                    SET processing_results = $1::jsonb, updated_at = now()
+                    WHERE id = $2
+                    """,
+                    (
+                        json.dumps(results, default=_json_default)
+                        if results is not None
+                        else None
+                    ),
+                    document_id,
+                )
             return result.split()[-1] == "1"
 
     async def update_processing_status_and_results(
