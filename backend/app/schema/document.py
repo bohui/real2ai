@@ -110,6 +110,16 @@ class DiagramProcessingResult(SchemaBase):
     detection_summary: Dict[str, int] = Field(default_factory=dict)
     processing_notes: Optional[List[str]] = Field(default_factory=list)
 
+    # Additional fields used by nodes
+    success: Optional[bool] = None
+    diagrams: Optional[List[Any]] = Field(
+        default_factory=list, description="Raw diagram detection items"
+    )
+    pages_processed: Optional[List[int]] = Field(
+        default_factory=list, description="List of page numbers that were processed"
+    )
+    processing_timestamp: Optional[str] = None
+
 
 class DocumentProcessingSummary(SchemaBase):
     total_pages: int

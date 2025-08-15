@@ -906,20 +906,6 @@ class ArtifactsRepository:
         if artifact_type not in ["diagram", "image_jpg", "image_png"]:
             raise ValueError(f"Invalid artifact_type: {artifact_type}")
 
-        # Validate field consistency
-        if artifact_type == "diagram" and (
-            image_uri is not None or image_sha256 is not None
-        ):
-            raise ValueError(
-                "Diagram artifacts should not have image_uri or image_sha256"
-            )
-        if artifact_type in ["image_jpg", "image_png"] and (
-            image_uri is None or image_sha256 is None
-        ):
-            raise ValueError(
-                "Image artifacts must have both image_uri and image_sha256"
-            )
-
         async with get_service_role_connection() as conn:
             lock_key = (
                 hash(

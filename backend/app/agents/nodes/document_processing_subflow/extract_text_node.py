@@ -24,6 +24,7 @@ from app.utils.content_utils import compute_content_hmac, compute_params_fingerp
 from app.utils.storage_utils import ArtifactStorageService
 from app.core.config import get_settings
 from app.services.visual_artifact_service import VisualArtifactService
+from app.schema.document import DiagramProcessingResult
 
 
 class ExtractTextNode(DocumentProcessingNodeBase):
@@ -47,8 +48,9 @@ class ExtractTextNode(DocumentProcessingNodeBase):
         self.artifacts_repo = None
         self.storage_service = None
         self.visual_artifact_service = None
+        self.text_extraction_result = None
         # Heuristics / thresholds
-        self._min_text_len_for_ocr = 60
+        self._min_text_len_for_ocr = 100
         self._ocr_zoom = 2.0
         self._diagram_keywords = [
             "diagram",
@@ -78,8 +80,8 @@ class ExtractTextNode(DocumentProcessingNodeBase):
         if not self.artifacts_repo:
             self.artifacts_repo = ArtifactsRepository()
         if not self.storage_service:
-            # Use 'documents' bucket to match application configuration
-            self.storage_service = ArtifactStorageService(bucket_name="documents")
+            # Use artifacts bucket for storing text extraction artifacts
+            self.storage_service = ArtifactStorageService(bucket_name="artifacts")
         if not self.visual_artifact_service:
             self.visual_artifact_service = VisualArtifactService(
                 storage_service=self.storage_service, artifacts_repo=self.artifacts_repo
@@ -219,7 +221,7 @@ class ExtractTextNode(DocumentProcessingNodeBase):
             # Check if artifacts are enabled
             if not settings.enable_artifacts:
                 self._log_info("Artifacts disabled, performing direct text extraction")
-                text_extraction_result = (
+                self.text_extraction_result = (
                     await self._extract_text_with_comprehensive_analysis(
                         user_client=user_client,
                         document_id=document_id,
@@ -253,8 +255,10 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                     )
 
                     # Build TextExtractionResult from artifacts
-                    text_extraction_result = await self._build_result_from_artifacts(
-                        text_artifact, page_artifacts
+                    self.text_extraction_result = (
+                        await self._build_result_from_artifacts(
+                            text_artifact, page_artifacts
+                        )
                     )
                 else:
                     self._log_info(
@@ -262,7 +266,7 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                     )
 
                     # Compute text extraction
-                    text_extraction_result = (
+                    self.text_extraction_result = (
                         await self._extract_text_with_comprehensive_analysis(
                             user_client=user_client,
                             document_id=document_id,
@@ -274,20 +278,26 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                     )
 
                     # Store artifacts if extraction succeeded
-                    if text_extraction_result and text_extraction_result.success:
+                    if (
+                        self.text_extraction_result
+                        and self.text_extraction_result.success
+                    ):
                         await self._store_text_artifacts(
                             content_hmac,
                             algorithm_version,
                             params_fingerprint,
-                            text_extraction_result,
+                            self.text_extraction_result,
                             params,
                         )
 
             # Validate extraction result
-            if not text_extraction_result or not text_extraction_result.success:
+            if (
+                not self.text_extraction_result
+                or not self.text_extraction_result.success
+            ):
                 error_msg = (
-                    text_extraction_result.error
-                    if text_extraction_result
+                    self.text_extraction_result.error
+                    if self.text_extraction_result
                     else "Text extraction failed"
                 )
                 return self._handle_error(
@@ -305,7 +315,7 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                 )
 
             # Validate extracted content
-            full_text = text_extraction_result.full_text or ""
+            full_text = self.text_extraction_result.full_text or ""
             if len(full_text.strip()) < 100:
                 return self._handle_error(
                     state,
@@ -314,15 +324,16 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                     {
                         "document_id": document_id,
                         "character_count": len(full_text),
-                        "extraction_method": text_extraction_result.extraction_methods,
-                        "total_pages": text_extraction_result.total_pages,
+                        "extraction_method": self.text_extraction_result.extraction_methods,
+                        "total_pages": self.text_extraction_result.total_pages,
                         "content_hmac": content_hmac,
                     },
                 )
 
             # Update state with extraction result and artifact metadata
 
-            updated_state["text_extraction_result"] = text_extraction_result
+            updated_state["text_extraction_result"] = self.text_extraction_result
+            updated_state["diagram_processing_result"] = self.diagram_processing_result
             updated_state["content_hmac"] = content_hmac
             updated_state["algorithm_version"] = algorithm_version
             updated_state["params_fingerprint"] = params_fingerprint
@@ -336,10 +347,10 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                     "document_id": document_id,
                     "content_hmac": content_hmac,
                     "character_count": len(full_text),
-                    "total_pages": text_extraction_result.total_pages,
-                    "extraction_methods": text_extraction_result.extraction_methods,
-                    "overall_confidence": text_extraction_result.overall_confidence,
-                    "total_word_count": text_extraction_result.total_word_count,
+                    "total_pages": self.text_extraction_result.total_pages,
+                    "extraction_methods": self.text_extraction_result.extraction_methods,
+                    "overall_confidence": self.text_extraction_result.overall_confidence,
+                    "total_word_count": self.text_extraction_result.total_word_count,
                     "use_llm": self.use_llm,
                     "duration_seconds": duration,
                     "artifacts_enabled": settings.enable_artifacts,
@@ -708,6 +719,23 @@ class ExtractTextNode(DocumentProcessingNodeBase):
         self, file_content: bytes, state: DocumentProcessingState
     ) -> TextExtractionResult:
         """Hybrid PDF extraction: PyMuPDF first, selective OCR/VLM per page."""
+        # Initialize diagram processing result tracking
+        self.diagram_processing_result = {
+            "success": True,
+            "diagrams": [],
+            "total_diagrams": 0,
+            "pages_processed": [],  # Will track only pages processed by Gemini OCR
+            "diagram_pages": [],
+            "diagram_types": {},
+            "detection_summary": {
+                "processing_method": "hybrid_extraction_llm_hints",
+                "pages_analyzed": 0,
+                "pages_with_diagrams": 0,
+                "detection_source": "llm_ocr_hints",
+            },
+            "processing_timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+
         try:
             import pymupdf
             from io import BytesIO
@@ -749,7 +777,7 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                 # Only run OCR when there's insufficient text AND visual content that might contain text
                 settings = get_settings()
                 should_ocr = (
-                    is_low_text and (has_images or has_diagram_kw)
+                    (is_low_text + has_images + has_diagram_kw) >= 2
                     if settings.enable_selective_ocr
                     else False
                 )
@@ -776,7 +804,6 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                 if should_ocr:
                     ocr_text = ""
                     ocr_method = method
-
                     # Try LLM OCR first if enabled
                     if self.use_llm and gemini_service:
                         try:
@@ -817,6 +844,78 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                             # If LLM returned diagram types, mark later in analysis
                             diagrams = getattr(llm_result, "diagrams", None) or []
                             has_images = bool(diagrams)
+
+                            # Update diagram processing result with detected diagrams
+                            if diagrams:
+                                for hint_index, diagram_type in enumerate(
+                                    diagrams, start=1
+                                ):
+                                    diagram_type_value = (
+                                        getattr(diagram_type, "value", None)
+                                        or str(diagram_type)
+                                        or "unknown"
+                                    )
+                                    confidence = float(
+                                        getattr(llm_result, "text_confidence", 0.0)
+                                        or 0.0
+                                    )
+
+                                    # Create a simple diagram representation
+                                    class SimpleDiagram:
+                                        def __init__(
+                                            self, page, type_value, confidence, method
+                                        ):
+                                            self.page = page
+                                            self.type = type_value
+                                            self.confidence = confidence
+                                            self.detection_method = method
+
+                                    # Add to diagram processing result
+                                    self.diagram_processing_result["diagrams"].append(
+                                        SimpleDiagram(
+                                            idx + 1,  # page number
+                                            diagram_type_value,
+                                            confidence,
+                                            "llm_ocr_hint",
+                                        )
+                                    )
+
+                                    # Update counts and tracking
+                                    self.diagram_processing_result[
+                                        "total_diagrams"
+                                    ] += 1
+                                    if (
+                                        idx + 1
+                                        not in self.diagram_processing_result[
+                                            "diagram_pages"
+                                        ]
+                                    ):
+                                        self.diagram_processing_result[
+                                            "diagram_pages"
+                                        ].append(idx + 1)
+
+                                    # Update diagram types count
+                                    if (
+                                        diagram_type_value
+                                        not in self.diagram_processing_result[
+                                            "diagram_types"
+                                        ]
+                                    ):
+                                        self.diagram_processing_result["diagram_types"][
+                                            diagram_type_value
+                                        ] = 0
+                                    self.diagram_processing_result["diagram_types"][
+                                        diagram_type_value
+                                    ] += 1
+
+                            # Track this page as processed by Gemini OCR (regardless of whether diagrams were found)
+                            if (
+                                idx + 1
+                                not in self.diagram_processing_result["pages_processed"]
+                            ):
+                                self.diagram_processing_result[
+                                    "pages_processed"
+                                ].append(idx + 1)
 
                             # Persist artifact hints with images so downstream diagram detection can skip duplicate API calls
                             if has_images:
@@ -937,7 +1036,9 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                         method = ocr_method
 
                 page_analysis = self._make_page_analysis(
-                    text_to_use, has_image=has_images, has_diagram_kw=has_diagram_kw
+                    text_to_use,
+                    has_image=has_images,
+                    has_diagram_kw=has_diagram_kw,
                 )
 
                 page_extraction = PageExtraction(
@@ -963,6 +1064,17 @@ class ExtractTextNode(DocumentProcessingNodeBase):
             )
             total_words = sum(p.word_count for p in pages)
 
+            # Update final diagram processing result with page counts
+            if hasattr(self, "diagram_processing_result"):
+                # pages_processed already contains only the pages that were processed by Gemini OCR
+                # Update detection summary with actual counts
+                self.diagram_processing_result["detection_summary"][
+                    "pages_analyzed"
+                ] = len(self.diagram_processing_result["pages_processed"])
+                self.diagram_processing_result["detection_summary"][
+                    "pages_with_diagrams"
+                ] = len(self.diagram_processing_result["diagram_pages"])
+
             return TextExtractionResult(
                 success=True,
                 full_text=full_text,
@@ -974,6 +1086,9 @@ class ExtractTextNode(DocumentProcessingNodeBase):
             )
         except Exception as e:
             self._log_warning(f"Hybrid PDF extraction failed: {e}")
+            # Clean up diagram processing result on failure
+            if hasattr(self, "diagram_processing_result"):
+                delattr(self, "diagram_processing_result")
             return TextExtractionResult(
                 success=False,
                 error=str(e),
@@ -1097,7 +1212,10 @@ class ExtractTextNode(DocumentProcessingNodeBase):
             return ""
 
     def _make_page_analysis(
-        self, text: str, has_image: bool = False, has_diagram_kw: bool = False
+        self,
+        text: str,
+        has_image: bool = False,
+        has_diagram_kw: bool = False,
     ) -> ContentAnalysis:
         layout = LayoutFeatures(
             has_header=False,

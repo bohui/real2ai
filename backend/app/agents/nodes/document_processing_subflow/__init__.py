@@ -9,7 +9,7 @@ from .fetch_document_node import FetchDocumentRecordNode
 from .already_processed_check_node import AlreadyProcessedCheckNode
 from .mark_processing_started_node import MarkProcessingStartedNode
 from .extract_text_node import ExtractTextNode
-from .detect_diagrams_with_ocr_node import DetectDiagramsWithOCRNode
+
 from .save_pages_node import SavePagesNode
 from .save_diagrams_node import SaveDiagramsNode
 from .update_metrics_node import UpdateMetricsNode
@@ -19,12 +19,12 @@ from .error_handling_node import ErrorHandlingNode
 
 __all__ = [
     "FetchDocumentRecordNode",
-    "AlreadyProcessedCheckNode", 
+    "AlreadyProcessedCheckNode",
     "MarkProcessingStartedNode",
     "ExtractTextNode",
     "DetectDiagramsWithOCRNode",
     "SavePagesNode",
-    "SaveDiagramsNode", 
+    "SaveDiagramsNode",
     "UpdateMetricsNode",
     "MarkBasicCompleteNode",
     "BuildSummaryNode",

@@ -12,134 +12,12 @@ from pydantic import BaseModel, Field
 from uuid import UUID
 
 
-# Enum definitions matching your database schema
-class AustralianState(str, Enum):
-    NSW = "NSW"
-    VIC = "VIC"
-    QLD = "QLD"
-    SA = "SA"
-    WA = "WA"
-    TAS = "TAS"
-    NT = "NT"
-    ACT = "ACT"
-
-
-class UserType(str, Enum):
-    BUYER = "buyer"
-    INVESTOR = "investor"
-    AGENT = "agent"
-
-
-class SubscriptionStatus(str, Enum):
-    FREE = "free"
-    BASIC = "basic"
-    PREMIUM = "premium"
-    ENTERPRISE = "enterprise"
-
-
-class ContractType(str, Enum):
-    PURCHASE_AGREEMENT = "purchase_agreement"
-    LEASE_AGREEMENT = "lease_agreement"
-    OFF_PLAN = "off_plan"
-    AUCTION = "auction"
-
-
-class DocumentStatus(str, Enum):
-    UPLOADED = "uploaded"
-    PROCESSING = "processing"
-    BASIC_COMPLETE = "basic_complete"
-    ANALYSIS_PENDING = "analysis_pending"
-    ANALYSIS_COMPLETE = "analysis_complete"
-    FAILED = "failed"
-
-
-class PropertyType(str, Enum):
-    HOUSE = "house"
-    UNIT = "unit"
-    TOWNHOUSE = "townhouse"
-    APARTMENT = "apartment"
-    VILLA = "villa"
-    LAND = "land"
-    ACREAGE = "acreage"
-    COMMERCIAL = "commercial"
-    INDUSTRIAL = "industrial"
-    RETAIL = "retail"
-    OTHER = "other"
-
-
-class ValuationSource(str, Enum):
-    DOMAIN = "domain"
-    CORELOGIC = "corelogic"
-    COMBINED = "combined"
-
-
-class ValuationType(str, Enum):
-    AVM = "avm"
-    DESKTOP = "desktop"
-    PROFESSIONAL = "professional"
-
-
-class RiskLevel(str, Enum):
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
-    CRITICAL = "critical"
-
-
-class MarketOutlook(str, Enum):
-    DECLINING = "declining"
-    STABLE = "stable"
-    GROWING = "growing"
-    STRONG_GROWTH = "strong_growth"
-
-
-class InsightType(str, Enum):
-    TREND = "trend"
-    FORECAST = "forecast"
-    COMPARISON = "comparison"
-    HOTSPOT = "hotspot"
-
-
-class ViewSource(str, Enum):
-    SEARCH = "search"
-    BOOKMARK = "bookmark"
-    ANALYSIS = "analysis"
-    UPLOAD = "upload"
-    CACHE_HIT = "cache_hit"
-    SHARED = "shared"
-
-
-class ContentType(str, Enum):
-    TEXT = "text"
-    DIAGRAM = "diagram"
-    TABLE = "table"
-    SIGNATURE = "signature"
-    MIXED = "mixed"
-    EMPTY = "empty"
-
-
-class DiagramType(str, Enum):
-    SITE_PLAN = "site_plan"
-    SEWER_DIAGRAM = "sewer_diagram"
-    SERVICE_LOCATION_DIAGRAM = "service_location_diagram"
-    FLOOD_MAP = "flood_map"
-    BUSHFIRE_MAP = "bushfire_map"
-    TITLE_PLAN = "title_plan"
-    SURVEY_DIAGRAM = "survey_diagram"
-    FLOOR_PLAN = "floor_plan"
-    ELEVATION = "elevation"
-    UNKNOWN = "unknown"
-
-
-class EntityType(str, Enum):
-    ADDRESS = "address"
-    PROPERTY_REFERENCE = "property_reference"
-    DATE = "date"
-    FINANCIAL_AMOUNT = "financial_amount"
-    PARTY_NAME = "party_name"
-    LEGAL_REFERENCE = "legal_reference"
-    CONTACT_INFO = "contact_info"
-    PROPERTY_DETAILS = "property_details"
+# Import enums from central location
+from app.schema.enums import (
+    AustralianState, UserType, SubscriptionStatus, ContractType, DocumentStatus,
+    PropertyType, ValuationSource, ValuationType, RiskLevel, MarketOutlook,
+    InsightType, ViewSource, ContentType, DiagramType, EntityType
+)
 
 
 # Base Model with Automatic Timestamps
@@ -324,7 +202,6 @@ class ArtifactDiagram(BaseModel):
     created_at: Optional[datetime] = Field(None, description="Creation timestamp")
 
 
-
 # User-Document Association Models
 class UserDocumentPage(TimestampedBaseModel):
     """User-specific document page associations"""
@@ -346,7 +223,6 @@ class UserDocumentDiagram(TimestampedBaseModel):
         ..., description="Reference to artifact_diagrams.id"
     )
     annotations: Optional[Dict[str, Any]] = Field(None, description="User annotations")
-
 
 
 class UsageLog(TimestampedBaseModel):
@@ -729,26 +605,8 @@ class AnalysisProgressDetailed(BaseModel):
     model_config = {"from_attributes": True}
 
 
-# Task Recovery System Models
-class TaskState(str, Enum):
-    QUEUED = "queued"
-    STARTED = "started"
-    PROCESSING = "processing"
-    CHECKPOINT = "checkpoint"
-    PAUSED = "paused"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    CANCELLED = "cancelled"
-    RECOVERING = "recovering"
-    PARTIAL = "partial"
-    ORPHANED = "orphaned"
-
-
-class RecoveryMethod(str, Enum):
-    RESUME_CHECKPOINT = "resume_checkpoint"
-    RESTART_CLEAN = "restart_clean"
-    VALIDATE_ONLY = "validate_only"
-    MANUAL_INTERVENTION = "manual_intervention"
+# Import enums from central location
+from app.schema.enums import TaskState, RecoveryMethod
 
 
 class TaskRegistry(TimestampedBaseModel):

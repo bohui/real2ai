@@ -85,52 +85,52 @@ class SaveDiagramsNode(DocumentProcessingNodeBase):
             user_context = await self.get_user_context()
             await self.initialize(uuid.UUID(user_context.user_id))
 
-            # First, persist any new diagram detections as artifacts
+            # # First, persist any new diagram detections as artifacts - don't need to
             current_result = diagram_processing_result
-            if (
-                current_result
-                and current_result.get("success")
-                and content_hmac
-                and algorithm_version is not None
-                and params_fingerprint
-            ):
-                detected_diagrams = current_result.get("diagrams", [])
-                # Track diagram sequence per page for deterministic keys
-                page_diagram_counts = {}
-                for diagram in detected_diagrams:
-                    try:
-                        # Create deterministic diagram key using sequence number per page
-                        page_num = getattr(diagram, "page", None) or getattr(
-                            diagram, "page_number", None
-                        )
-                        if page_num not in page_diagram_counts:
-                            page_diagram_counts[page_num] = 0
-                        page_diagram_counts[page_num] += 1
-                        diagram_key = f"diagram_page_{page_num}_{diagram.type}_{page_diagram_counts[page_num]:02d}"
+            # if (
+            #     current_result
+            #     and current_result.get("detection_summary")
+            #     and content_hmac
+            #     and algorithm_version is not None
+            #     and params_fingerprint
+            # ):
+            #     # Check if the result has diagrams
+            #     detected_diagrams = current_result.get("diagrams", [])
 
-                        # Insert diagram detection as artifact
-                        await self.artifacts_repo.insert_diagram_artifact(
-                            content_hmac=content_hmac,
-                            algorithm_version=algorithm_version,
-                            params_fingerprint=params_fingerprint,
-                            page_number=page_num,
-                            diagram_key=diagram_key,
-                            diagram_meta={
-                                "type": diagram.type,
-                                "confidence": getattr(diagram, "confidence", 0.0),
-                                "description": getattr(diagram, "description", ""),
-                                "detection_method": "ocr_detection",
-                                "bbox": getattr(diagram, "bbox", None),
-                            },
-                            artifact_type="diagram",
-                        )
-                        self._log_info(
-                            f"Persisted diagram detection as artifact: {diagram_key}"
-                        )
-                    except Exception as e:
-                        self._log_warning(
-                            f"Failed to persist diagram detection as artifact: {e}"
-                        )
+            #     # Track diagram sequence per page for deterministic keys
+            #     page_diagram_counts = {}
+            #     for diagram in detected_diagrams:
+            #         try:
+            #             # Create deterministic diagram key using sequence number per page
+            #             page_num = diagram.get("page") or diagram.get("page_number")
+            #             if page_num not in page_diagram_counts:
+            #                 page_diagram_counts[page_num] = 0
+            #             page_diagram_counts[page_num] += 1
+            #             diagram_key = f"diagram_page_{page_num}_{diagram.get('type')}_{page_diagram_counts[page_num]:02d}"
+
+            #             # Insert diagram detection as artifact
+            #             await self.artifacts_repo.insert_diagram_artifact(
+            #                 content_hmac=content_hmac,
+            #                 algorithm_version=algorithm_version,
+            #                 params_fingerprint=params_fingerprint,
+            #                 page_number=page_num,
+            #                 diagram_key=diagram_key,
+            #                 diagram_meta={
+            #                     "type": diagram.get("type"),
+            #                     "confidence": diagram.get("confidence", 0.0),
+            #                     "description": diagram.get("description", ""),
+            #                     "detection_method": "ocr_detection",
+            #                     "bbox": diagram.get("bbox"),
+            #                 },
+            #                 artifact_type="diagram",
+            #             )
+            #             self._log_info(
+            #                 f"Persisted diagram detection as artifact: {diagram_key}"
+            #             )
+            #         except Exception as e:
+            #             self._log_warning(
+            #                 f"Failed to persist diagram detection as artifact: {e}"
+            #             )
 
             # Get diagram artifacts if using artifact system
             diagram_artifacts = []
@@ -202,55 +202,52 @@ class SaveDiagramsNode(DocumentProcessingNodeBase):
                         )
                         diagrams_saved += 1
 
-            # Fallback: Process diagrams from page analysis (legacy path)
-            else:
-                for page in pages:
-                    if (
-                        not page.content_analysis 
-                        or not hasattr(page.content_analysis, 'layout_features') 
-                        or not page.content_analysis.layout_features
-                        or not getattr(page.content_analysis.layout_features, "has_diagrams", False)
-                    ):
-                        continue
-
-                    diagram_key = f"diagram_page_{page.page_number}"
-                    artifact_diagram_id = artifact_map.get(
-                        (page.page_number, diagram_key)
-                    )
-
-                    if artifact_diagram_id:
-                        # Use artifact reference
-                        annotations = {
-                            "diagram_type": getattr(
-                                page.content_analysis, "diagram_type", "unknown"
-                            ),
-                            "confidence": page.confidence,
-                            "detection_method": "artifact_reuse",
-                        }
-
-                        await self.user_docs_repo.upsert_document_diagram(
-                            document_id=document_uuid,
-                            page_number=page.page_number,
-                            diagram_key=diagram_key,
-                            artifact_diagram_id=artifact_diagram_id,
-                            annotations=annotations,
-                        )
-                        diagrams_saved += 1
-
             # Set diagram_processing_result for downstream metrics
             updated_state = state.copy()
-            updated_state["diagram_processing_result"] = {
-                "total_diagrams": diagrams_saved,
-                "diagram_pages": sorted(diagram_pages),
-                "diagram_types": diagram_types,
-                "detection_summary": {
+            from app.schema.document import DiagramProcessingResult
+
+            # Convert page numbers to DiagramPageSummary objects
+            diagram_page_summaries = []
+            for page_num in sorted(diagram_pages):
+                # Find diagrams for this page to get the primary type and confidence
+                page_diagrams = [
+                    d
+                    for d in detected_diagrams
+                    if getattr(d, "page", None) == page_num
+                    or getattr(d, "page_number", None) == page_num
+                ]
+                if page_diagrams:
+                    # Use the first diagram's type and confidence for the page summary
+                    primary_type = (
+                        page_diagrams[0].type
+                        if hasattr(page_diagrams[0], "type")
+                        else "unknown"
+                    )
+                    confidence = getattr(page_diagrams[0], "confidence", 0.0)
+                else:
+                    primary_type = "unknown"
+                    confidence = 0.0
+
+                diagram_page_summaries.append(
+                    {
+                        "page_number": page_num,
+                        "primary_type": primary_type,
+                        "confidence": confidence,
+                    }
+                )
+
+            updated_state["diagram_processing_result"] = DiagramProcessingResult(
+                total_diagrams=diagrams_saved,
+                diagram_pages=diagram_page_summaries,
+                diagram_types=diagram_types,
+                detection_summary={
                     "artifacts_created": len(diagram_artifacts),
                     "user_mappings_created": diagrams_saved,
                     "processing_method": (
-                        "ocr_detection" if current_result else "legacy_analysis"
-                    ),
+                        1 if current_result else 0
+                    ),  # 1 for ocr_detection, 0 for legacy_analysis
                 },
-            }
+            )
 
             duration = (datetime.now(timezone.utc) - start_time).total_seconds()
             self._record_success(duration)

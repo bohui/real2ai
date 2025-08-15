@@ -84,12 +84,14 @@ class UpdateMetricsNode(DocumentProcessingNodeBase):
                     f"No diagram processing result for document {document_id}, using empty result",
                     extra={"document_id": document_id},
                 )
-                diagram_processing_result = {
-                    "total_diagrams": 0,
-                    "diagram_pages": [],
-                    "diagram_types": {},
-                    "detection_summary": {},
-                }
+                from app.schema.document import DiagramProcessingResult
+
+                diagram_processing_result = DiagramProcessingResult(
+                    total_diagrams=0,
+                    diagram_pages=[],
+                    diagram_types={},
+                    detection_summary={},
+                )
 
             self._log_info(
                 f"Updating metrics for document {document_id}",
@@ -118,7 +120,11 @@ class UpdateMetricsNode(DocumentProcessingNodeBase):
             avg_confidence = sum(confidences) / len(confidences) if confidences else 0.0
 
             # Diagram information
-            total_diagrams = diagram_processing_result.get("total_diagrams", 0)
+            total_diagrams = (
+                diagram_processing_result.total_diagrams
+                if diagram_processing_result
+                else 0
+            )
             has_diagrams = total_diagrams > 0
 
             # Page-based metrics only
@@ -129,7 +135,7 @@ class UpdateMetricsNode(DocumentProcessingNodeBase):
 
             # Prepare update data (ensure JSON-serializable values)
             processing_completed_at = datetime.now(timezone.utc).isoformat()
-            
+
             # Prepare text extraction metadata (excluding full_text)
             try:
                 text_extraction_dict = (

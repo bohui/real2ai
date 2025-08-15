@@ -1,37 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
-from enum import Enum
 from datetime import datetime
-
-
-class RiskSeverity(str, Enum):
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
-    CRITICAL = "critical"
-
-
-class DiagramType(str, Enum):
-    TITLE_PLAN = "title_plan"
-    SURVEY_DIAGRAM = "survey_diagram"
-    STRATA_PLAN = "strata_plan"
-    BODY_CORPORATE_PLAN = "body_corporate_plan"
-    DEVELOPMENT_PLAN = "development_plan"
-    SUBDIVISION_PLAN = "subdivision_plan"
-    OFF_THE_PLAN_MARKETING = "off_the_plan_marketing"
-    SITE_PLAN = "site_plan"
-    SEWER_SERVICE_DIAGRAM = "sewer_service_diagram"
-    FLOOD_MAP = "flood_map"
-    BUSHFIRE_MAP = "bushfire_map"
-    ZONING_MAP = "zoning_map"
-    ENVIRONMENTAL_OVERLAY = "environmental_overlay"
-    HERITAGE_OVERLAY = "heritage_overlay"
-    CONTOUR_MAP = "contour_map"
-    DRAINAGE_PLAN = "drainage_plan"
-    UTILITY_PLAN = "utility_plan"
-    PARKING_PLAN = "parking_plan"
-    LANDSCAPE_PLAN = "landscape_plan"
-    BUILDING_ENVELOPE_PLAN = "building_envelope_plan"
+from app.schema.enums import RiskSeverity, DiagramType
 
 
 class DiagramReference(BaseModel):
@@ -377,10 +347,7 @@ class DiagramRiskAssessment(BaseModel):
         None, description="Estimated financial impact of risks"
     )
 
-    model_config = {
-        "use_enum_values": True,
-        "arbitrary_types_allowed": True
-    }
+    model_config = {"use_enum_values": True, "arbitrary_types_allowed": True}
 
 
 # Example usage and helper functions

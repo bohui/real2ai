@@ -5,83 +5,11 @@ Pydantic models for structured entity extraction from legal documents
 
 from typing import Dict, List, Optional, Any, Union
 from pydantic import BaseModel, Field, validator
-from enum import Enum
 from datetime import datetime, date
 from decimal import Decimal
-
-
-class AustralianState(str, Enum):
-    """Australian states and territories"""
-    NSW = "NSW"
-    VIC = "VIC"
-    QLD = "QLD"
-    WA = "WA"
-    SA = "SA"
-    TAS = "TAS"
-    ACT = "ACT"
-    NT = "NT"
-
-
-class ContractType(str, Enum):
-    """Contract types for analysis"""
-    PURCHASE_AGREEMENT = "purchase_agreement"
-    LEASE_AGREEMENT = "lease_agreement"
-    RENTAL_AGREEMENT = "rental_agreement"
-    COMMERCIAL_LEASE = "commercial_lease"
-    OPTION_TO_PURCHASE = "option_to_purchase"
-    UNKNOWN = "unknown"
-
-
-class PartyRole(str, Enum):
-    """Roles of parties in contract"""
-    VENDOR = "vendor"
-    PURCHASER = "purchaser"
-    LANDLORD = "landlord"
-    TENANT = "tenant"
-    AGENT = "agent"
-    SOLICITOR = "solicitor"
-    CONVEYANCER = "conveyancer"
-    OTHER = "other"
-
-
-class PropertyType(str, Enum):
-    """Property types"""
-    RESIDENTIAL_HOUSE = "residential_house"
-    UNIT_APARTMENT = "unit_apartment"
-    TOWNHOUSE = "townhouse"
-    LAND = "land"
-    COMMERCIAL = "commercial"
-    INDUSTRIAL = "industrial"
-    MIXED_USE = "mixed_use"
-    OTHER = "other"
-
-
-class DateType(str, Enum):
-    """Types of dates in contracts"""
-    SETTLEMENT_DATE = "settlement_date"
-    COMPLETION_DATE = "completion_date"
-    EXCHANGE_DATE = "exchange_date"
-    LEASE_START = "lease_start"
-    LEASE_END = "lease_end"
-    COOLING_OFF_EXPIRY = "cooling_off_expiry"
-    FINANCE_APPROVAL_DUE = "finance_approval_due"
-    INSPECTION_DUE = "inspection_due"
-    CONTRACT_DATE = "contract_date"
-    OTHER = "other"
-
-
-class FinancialType(str, Enum):
-    """Types of financial amounts"""
-    PURCHASE_PRICE = "purchase_price"
-    DEPOSIT = "deposit"
-    RENT_AMOUNT = "rent_amount"
-    BOND = "bond"
-    STAMP_DUTY = "stamp_duty"
-    LEGAL_FEES = "legal_fees"
-    AGENT_COMMISSION = "agent_commission"
-    BODY_CORPORATE_FEES = "body_corporate_fees"
-    COUNCIL_RATES = "council_rates"
-    OTHER_FEES = "other_fees"
+from app.schema.enums import (
+    AustralianState, ContractType, PartyRole, PropertyType, DateType, FinancialType
+)
 
 
 # Base entity models

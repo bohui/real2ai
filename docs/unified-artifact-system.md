@@ -47,13 +47,15 @@ CREATE TABLE artifact_diagrams (
     diagram_key text NOT NULL,
     diagram_meta jsonb NOT NULL,
     artifact_type text DEFAULT 'diagram' CHECK (artifact_type IN ('diagram', 'image_jpg', 'image_png')),
-    image_uri text,           -- For image artifacts
-    image_sha256 text,        -- For image artifacts  
-    image_metadata jsonb,     -- For image artifacts
+    image_uri text,           -- For diagrams and image artifacts (optional for diagrams)
+    image_sha256 text,        -- For diagrams and image artifacts (optional for diagrams)
+    image_metadata jsonb,     -- For diagrams and image artifacts (optional for diagrams)
     created_at timestamptz DEFAULT now(),
     UNIQUE (content_hmac, algorithm_version, params_fingerprint, page_number, diagram_key)
 );
 ```
+
+**Note**: Diagrams (`artifact_type = 'diagram'`) can optionally have `image_uri` and `image_sha256` fields to store their original images for analysis. Image artifacts (`artifact_type = 'image_jpg'` or `'image_png'`) must have these fields.
 
 ### Unified Repository Methods
 
@@ -115,9 +117,20 @@ await artifacts_repo.insert_unified_page_artifact(
     metrics={"word_count": word_count, "confidence": 0.95}
 )
 
+# Store diagram with its original image for analysis
 await artifacts_repo.insert_unified_visual_artifact(
     artifact_type="diagram",
-    diagram_meta={"type": "site_plan", "confidence": 0.88}
+    diagram_meta={"type": "site_plan", "confidence": 0.88},
+    image_uri="supabase://artifacts/diagram.jpg",  # Original image for analysis
+    image_sha256="abc123...",
+    image_metadata={"width": 1200, "height": 800, "source": "pdf_extraction"}
+)
+
+# Store diagram without image (metadata only)
+await artifacts_repo.insert_unified_visual_artifact(
+    artifact_type="diagram",
+    diagram_meta={"type": "survey_diagram", "confidence": 0.92}
+    # No image storage needed for metadata-only diagrams
 )
 ```
 

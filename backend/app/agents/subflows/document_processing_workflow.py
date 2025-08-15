@@ -20,10 +20,30 @@ from langgraph.graph import StateGraph
 from pydantic import BaseModel
 
 from app.core.auth_context import AuthContext
-from app.schema.document import ProcessedDocumentSummary, ProcessingErrorResponse
+from app.schema.document import (
+    ProcessedDocumentSummary,
+    ProcessingErrorResponse,
+    TextExtractionResult,
+    DiagramProcessingResult,
+)
 from app.core.langsmith_config import langsmith_trace
 
 logger = logging.getLogger(__name__)
+
+
+class ErrorDetails(BaseModel):
+    """Schema for error details in document processing state."""
+
+    node: str
+    error_type: str
+    error_message: str
+    timestamp: str
+    context: Optional[Dict[str, Any]] = None
+    root_cause_type: Optional[str] = None
+    root_cause_message: Optional[str] = None
+    exception_chain: Optional[str] = None
+    node_location: Optional[str] = None
+    error_category: Optional[str] = None
 
 
 class DocumentProcessingState(TypedDict):
@@ -70,15 +90,15 @@ class DocumentProcessingState(TypedDict):
     algorithm_version: Optional[int]
     params_fingerprint: Optional[str]
     local_tmp_path: Optional[str]
-    text_extraction_result: Optional[Dict[str, Any]]
-    diagram_processing_result: Optional[Dict[str, Any]]
+    text_extraction_result: Optional[TextExtractionResult]
+    diagram_processing_result: Optional[DiagramProcessingResult]
 
     # Output
     processed_summary: Optional[ProcessedDocumentSummary]
 
     # Error handling
     error: Optional[str]
-    error_details: Optional[Dict[str, Any]]
+    error_details: Optional[ErrorDetails]
 
 
 class DocumentProcessingWorkflow:
@@ -134,7 +154,6 @@ class DocumentProcessingWorkflow:
             AlreadyProcessedCheckNode,
             MarkProcessingStartedNode,
             ExtractTextNode,
-            DetectDiagramsWithOCRNode,
             SavePagesNode,
             SaveDiagramsNode,
             UpdateMetricsNode,
@@ -150,7 +169,6 @@ class DocumentProcessingWorkflow:
         self.extract_text_node = ExtractTextNode(
             use_llm=self.use_llm_document_processing
         )
-        self.detect_diagrams_with_ocr_node = DetectDiagramsWithOCRNode()
         self.save_pages_node = SavePagesNode()
         self.save_diagrams_node = SaveDiagramsNode()
         self.update_metrics_node = UpdateMetricsNode()
@@ -164,7 +182,6 @@ class DocumentProcessingWorkflow:
             "already_processed_check": self.already_processed_check_node,
             "mark_processing_started": self.mark_processing_started_node,
             "extract_text": self.extract_text_node,
-            "detect_diagrams_with_ocr": self.detect_diagrams_with_ocr_node,
             "save_pages": self.save_pages_node,
             "save_diagrams": self.save_diagrams_node,
             "update_metrics": self.update_metrics_node,
@@ -178,7 +195,6 @@ class DocumentProcessingWorkflow:
         workflow.add_node("already_processed_check", self.already_processed_check)
         workflow.add_node("mark_processing_started", self.mark_processing_started)
         workflow.add_node("extract_text", self.extract_text)
-        workflow.add_node("detect_diagrams_with_ocr", self.detect_diagrams_with_ocr)
         workflow.add_node("save_pages", self.save_pages)
         workflow.add_node("save_diagrams", self.save_diagrams)
         workflow.add_node("update_metrics", self.update_metrics)
@@ -210,13 +226,6 @@ class DocumentProcessingWorkflow:
         workflow.add_conditional_edges(
             "extract_text",
             self.check_extraction_success,
-            {"success": "detect_diagrams_with_ocr", "error": "error_handling"},
-        )
-
-        # Conditional edge from detect_diagrams_with_ocr
-        workflow.add_conditional_edges(
-            "detect_diagrams_with_ocr",
-            self.check_processing_success,
             {"success": "save_pages", "error": "error_handling"},
         )
 
@@ -259,12 +268,6 @@ class DocumentProcessingWorkflow:
     ) -> DocumentProcessingState:
         """Extract text from document using appropriate method."""
         return await self.extract_text_node.execute(state)
-
-    async def detect_diagrams_with_ocr(
-        self, state: DocumentProcessingState
-    ) -> DocumentProcessingState:
-        """Detect diagrams using OCR service."""
-        return await self.detect_diagrams_with_ocr_node.execute(state)
 
     @langsmith_trace(name="save_pages", run_type="tool")
     async def save_pages(
@@ -320,8 +323,12 @@ class DocumentProcessingWorkflow:
 
     def check_extraction_success(self, state: DocumentProcessingState) -> str:
         """Check if text extraction was successful."""
-        extraction_result = state.get("text_extraction_result", {})
-        if state.get("error") or not extraction_result.get("success"):
+        text_extraction_result = state.get("text_extraction_result")
+        if (
+            state.get("error")
+            or not text_extraction_result
+            or not text_extraction_result.success
+        ):
             return "error"
         else:
             return "success"
@@ -384,12 +391,18 @@ class DocumentProcessingWorkflow:
             if result_state.get("processed_summary"):
                 return result_state["processed_summary"]
             elif result_state.get("error"):
+                error_details = result_state.get("error_details")
                 return ProcessingErrorResponse(
                     success=False,
                     error=result_state["error"],
                     processing_time=0.0,
                     processing_timestamp=datetime.now(timezone.utc).isoformat(),
-                    details=result_state.get("error_details"),
+                    recovery_suggestions=[
+                        "Check document format and size",
+                        "Verify file is not corrupted",
+                        "Try processing with different settings",
+                        "Contact support if the problem persists",
+                    ],
                 )
             else:
                 return ProcessingErrorResponse(
@@ -397,6 +410,12 @@ class DocumentProcessingWorkflow:
                     error="Unknown processing failure",
                     processing_time=0.0,
                     processing_timestamp=datetime.now(timezone.utc).isoformat(),
+                    recovery_suggestions=[
+                        "Check document format and size",
+                        "Verify file is not corrupted",
+                        "Try processing with different settings",
+                        "Contact support if the problem persists",
+                    ],
                 )
 
         except Exception as e:

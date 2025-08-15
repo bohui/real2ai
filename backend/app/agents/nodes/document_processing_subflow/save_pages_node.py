@@ -34,8 +34,8 @@ class SavePagesNode(DocumentProcessingNodeBase):
         super().__init__("save_pages")
         self.user_docs_repo = None
         self.artifacts_repo = None
-        # Use the same bucket/prefix convention as extraction storage
-        self.storage_service = ArtifactStorageService(bucket_name="documents")
+        # Use artifacts bucket for storing page artifacts
+        self.storage_service = ArtifactStorageService(bucket_name="artifacts")
 
     async def initialize(self, user_id):
         """Initialize repositories with user context"""

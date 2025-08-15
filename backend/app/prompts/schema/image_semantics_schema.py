@@ -1,35 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any, Union
-from enum import Enum
 from datetime import datetime
-
-class ImageType(str, Enum):
-    """Types of images/diagrams that can be analyzed"""
-    SITE_PLAN = "site_plan"
-    SURVEY_DIAGRAM = "survey_diagram" 
-    SEWER_SERVICE_DIAGRAM = "sewer_service_diagram"
-    FLOOD_MAP = "flood_map"
-    BUSHFIRE_MAP = "bushfire_map"
-    ZONING_MAP = "zoning_map"
-    ENVIRONMENTAL_OVERLAY = "environmental_overlay"
-    CONTOUR_MAP = "contour_map"
-    DRAINAGE_PLAN = "drainage_plan"
-    UTILITY_PLAN = "utility_plan"
-    BUILDING_ENVELOPE_PLAN = "building_envelope_plan"
-    STRATA_PLAN = "strata_plan"
-    AERIAL_VIEW = "aerial_view"
-    CROSS_SECTION = "cross_section"
-    ELEVATION_VIEW = "elevation_view"
-    LANDSCAPE_PLAN = "landscape_plan"
-    PARKING_PLAN = "parking_plan"
-    UNKNOWN = "unknown"
-
-class ConfidenceLevel(str, Enum):
-    """Confidence levels for semantic extraction"""
-    HIGH = "high"         # >90% confidence
-    MEDIUM = "medium"     # 70-90% confidence
-    LOW = "low"          # 50-70% confidence
-    UNCERTAIN = "uncertain"  # <50% confidence
+from app.schema.enums import ImageType, ConfidenceLevel
 
 class LocationReference(BaseModel):
     """Spatial location reference within the image"""

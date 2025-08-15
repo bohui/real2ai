@@ -1,5 +1,8 @@
 """Schema module for request/response models."""
 
+# Enum schemas - Central location for all enums
+from .enums import *
+
 # Authentication schemas
 from .auth import UserRegistrationRequest, UserLoginRequest, UserResponse
 

@@ -132,7 +132,7 @@ BEGIN
   ) THEN
     EXECUTE 'ALTER TABLE artifact_diagrams ADD CONSTRAINT chk_artifact_diagrams_image_fields_consistency 
              CHECK (
-                 (artifact_type = ''diagram'' AND image_uri IS NULL AND image_sha256 IS NULL) OR
+                 (artifact_type = ''diagram'') OR
                  (artifact_type IN (''image_jpg'', ''image_png'') AND image_uri IS NOT NULL AND image_sha256 IS NOT NULL)
              )';
   END IF;

@@ -1,7 +1,7 @@
 from typing import Optional, List
 from pydantic import BaseModel, Field
 
-from .image_semantics_schema import ImageType
+from app.schema.enums import ImageType
 
 
 # class TextDiagramInsight(BaseModel):
