@@ -26,7 +26,7 @@ from app.clients.base.exceptions import (
 from google.genai.types import Content, Part, GenerateContentConfig, SafetySetting
 import asyncio
 
-from app.schema.document import GeminiPageExtractionResult, DiagramHint
+from app.prompts.schema.text_diagram_insight_schema import TextDiagramInsightList
 
 logger = logging.getLogger(__name__)
 
@@ -605,14 +605,8 @@ Focus on accuracy and completeness. Extract all visible text content."""
         australian_state: Optional[str] = None,
         contract_type: Optional[str] = None,
         document_type: Optional[str] = None,
-    ) -> GeminiPageExtractionResult:
-        """Lightweight helper to get OCR text and diagram type (if applicable) via a single LLM call.
-
-        Returns a dict with keys:
-        - text: str
-        - confidence: float
-        - diagram_hint: { is_diagram: bool, diagram_type: str | None }
-        """
+    ) -> TextDiagramInsightList:
+        """Lightweight helper to get OCR text and diagram types via a single LLM call."""
         if not self.gemini_service:
             raise HTTPException(
                 status_code=503, detail="Gemini OCR service not initialized"
@@ -625,7 +619,6 @@ Focus on accuracy and completeness. Extract all visible text content."""
             # Use centralized schema for structured output
             from app.prompts.schema.text_diagram_insight_schema import (
                 TextDiagramInsightList,
-                DiagramHintItem,
             )
 
             parser = create_parser(TextDiagramInsightList)
@@ -800,44 +793,31 @@ Focus on accuracy and completeness. Extract all visible text content."""
 
             if parsing_result.success and parsing_result.parsed_data:
                 model: TextDiagramInsightList = parsing_result.parsed_data
-                hints: List[DiagramHint] = []
-                for item in model.diagrams or []:
-                    # tolerate schema variance
-                    is_diag = bool(getattr(item, "is_diagram", False))
-                    d_type = getattr(item, "diagram_type", None)
-                    hints.append(DiagramHint(is_diagram=is_diag, diagram_type=d_type))
-
-                primary_hint = (
-                    hints[0]
-                    if hints
-                    else DiagramHint(is_diagram=False, diagram_type=None)
-                )
-
-                return GeminiPageExtractionResult(
-                    text=(model.text or "").strip(),
-                    confidence=float(model.confidence or 0.0),
-                    diagram_hint=primary_hint,
-                    diagram_hints=hints,
-                )
+                # Ensure defaults
+                model.text = (model.text or "").strip()
+                model.text_confidence = float(model.text_confidence or 0.0)
+                model.diagrams = list(model.diagrams or [])
+                model.diagrams_confidence = float(model.diagrams_confidence or 0.0)
+                return model
 
             # Fallback on parse failure
             raw = parsing_result.raw_output or ""
-            return GeminiPageExtractionResult(
+            return TextDiagramInsightList(
                 text=raw if isinstance(raw, str) else "",
-                confidence=0.0,
-                diagram_hint=DiagramHint(is_diagram=False, diagram_type=None),
-                diagram_hints=[],
+                text_confidence=0.0,
+                diagrams=[],
+                diagrams_confidence=0.0,
             )
 
         except HTTPException:
             raise
         except Exception as e:
             logger.warning(f"extract_text_diagram_insight failed for {filename}: {e}")
-            return GeminiPageExtractionResult(
+            return TextDiagramInsightList(
                 text="",
-                confidence=0.0,
-                diagram_hint=DiagramHint(is_diagram=False, diagram_type=None),
-                diagram_hints=[],
+                text_confidence=0.0,
+                diagrams=[],
+                diagrams_confidence=0.0,
             )
 
     async def _handle_parsing_failure(

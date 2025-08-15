@@ -4,6 +4,8 @@ from typing import Dict, List, Any, Optional
 from pydantic import BaseModel, Field
 from datetime import datetime
 
+from app.prompts.schema.image_semantics_schema import ImageType
+
 
 class SchemaBase(BaseModel):
     def get(self, key: str, default: Any = None) -> Any:
@@ -215,18 +217,6 @@ class ProcessedDocumentSummary(SchemaBase):
     file_type: Optional[str] = None
     storage_path: Optional[str] = None
     content_hash: Optional[str] = None
-
-
-class DiagramHint(SchemaBase):
-    is_diagram: bool
-    diagram_type: Optional[str] = None
-
-
-class GeminiPageExtractionResult(SchemaBase):
-    text: str = ""
-    confidence: float = 0.0
-    diagram_hint: Optional[DiagramHint] = None
-    diagram_hints: List[DiagramHint] = Field(default_factory=list)
 
 
 class TextExtractionOverview(SchemaBase):
