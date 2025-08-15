@@ -33,7 +33,7 @@ Analyze this {{ contract_type }} and extract structured information for a {{ use
 
 ## Contract Text
 ```
-{{ extracted_text[:8000] }}
+{{ extracted_text}}
 ```
 
 ## Extraction Schema

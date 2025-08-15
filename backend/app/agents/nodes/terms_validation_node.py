@@ -186,19 +186,20 @@ class TermsValidationNode(BaseNode):
                 rendered_prompt, use_gemini_fallback=True
             )
 
-            # Parse LLM response
-            if self.structured_parsers.get("terms_validation"):
-                parsing_result = self.structured_parsers["terms_validation"].parse(
-                    response
-                )
-                if parsing_result.success and parsing_result.data:
-                    return parsing_result.data
+            # Parse LLM response if we got one
+            if response:
+                if self.structured_parsers.get("terms_validation"):
+                    parsing_result = self.structured_parsers["terms_validation"].parse(
+                        response
+                    )
+                    if parsing_result.success and parsing_result.data:
+                        return parsing_result.data
 
-            validation_result = self._safe_json_parse(response)
-            if validation_result:
-                return validation_result
+                validation_result = self._safe_json_parse(response)
+                if validation_result:
+                    return validation_result
 
-            # Fallback to rule-based if parsing fails
+            # Fallback to rule-based if no response or parsing fails
             return await self._validate_terms_completeness_rule_based(contract_terms)
 
         except Exception as e:

@@ -231,12 +231,13 @@ class DocumentQualityValidationNode(BaseNode):
                 rendered_prompt, use_gemini_fallback=True
             )
 
-            # Parse LLM response
-            quality_result = self._safe_json_parse(response)
-            if quality_result:
-                return quality_result
+            # Parse LLM response if we got one
+            if response:
+                quality_result = self._safe_json_parse(response)
+                if quality_result:
+                    return quality_result
 
-            # Fallback to rule-based if parsing fails
+            # Fallback to rule-based if no response or parsing fails
             return await self._validate_document_quality_rule_based(text, metadata)
 
         except Exception as e:

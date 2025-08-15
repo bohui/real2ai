@@ -333,7 +333,7 @@ class ContractTermsExtractionNode(BaseNode):
             context = PromptContext(
                 context_type=ContextType.EXTRACTION,
                 variables={
-                    "extracted_text": text[:8000],  # Limit for LLM processing
+                    "extracted_text": text,  # Limit for LLM processing
                     "document_metadata": document_metadata,
                     "extraction_type": "contract_terms",
                     # Service mapping required variables
@@ -368,27 +368,28 @@ class ContractTermsExtractionNode(BaseNode):
                         rendered_prompt, use_gemini_fallback=True
                     )
 
-                    # Parse structured response
-                    if self.structured_parsers.get("contract_terms"):
-                        parsing_result = self.structured_parsers[
-                            "contract_terms"
-                        ].parse(response)
-                        if parsing_result.success and parsing_result.data:
-                            return parsing_result.data
+                    # Parse structured response if we got one
+                    if response:
+                        if self.structured_parsers.get("contract_terms"):
+                            parsing_result = self.structured_parsers[
+                                "contract_terms"
+                            ].parse(response)
+                            if parsing_result.success and parsing_result.data:
+                                return parsing_result.data
 
-                    # Fallback to JSON parsing with braces recovery
-                    contract_terms = self._safe_json_parse(response)
-                    if contract_terms:
-                        return contract_terms
+                        # Fallback to JSON parsing with braces recovery
+                        contract_terms = self._safe_json_parse(response)
+                        if contract_terms:
+                            return contract_terms
 
-                    # Attempt to extract JSON substring if the model returned extra text
-                    import re
+                        # Attempt to extract JSON substring if the model returned extra text
+                        import re
 
-                    json_snippets = re.findall(r"\{[\s\S]*\}", response)
-                    for snippet in json_snippets:
-                        parsed = self._safe_json_parse(snippet)
-                        if parsed:
-                            return parsed
+                        json_snippets = re.findall(r"\{[\s\S]*\}", response)
+                        for snippet in json_snippets:
+                            parsed = self._safe_json_parse(snippet)
+                            if parsed:
+                                return parsed
 
                     if attempt < max_retries:
                         self._log_step_debug(

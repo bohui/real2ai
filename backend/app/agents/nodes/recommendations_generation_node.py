@@ -50,13 +50,13 @@ class RecommendationsGenerationNode(BaseNode):
             contract_terms = state.get("contract_terms", {})
             compliance_analysis = state.get("compliance_analysis", {})
             risk_assessment = state.get("risk_assessment", {})
-            
+
             # Log data availability for debugging
             self._log_step_debug(
                 f"Analysis data available: contract_terms={bool(contract_terms)}, "
                 f"compliance_analysis={bool(compliance_analysis)}, "
                 f"risk_assessment={bool(risk_assessment)}",
-                state
+                state,
             )
 
             # Perform recommendations generation
@@ -95,7 +95,9 @@ class RecommendationsGenerationNode(BaseNode):
                 "overall_confidence", 0.5
             )
             # Defensive access for confidence_scores
-            state.setdefault("confidence_scores", {})["recommendations"] = recommendations_confidence
+            state.setdefault("confidence_scores", {})[
+                "recommendations"
+            ] = recommendations_confidence
 
             recommendations_data = {
                 "recommendations_result": recommendations_result,
@@ -149,7 +151,8 @@ class RecommendationsGenerationNode(BaseNode):
                 variables={
                     # Fix variable name mapping and provide defaults for null values
                     "contract_terms": contract_terms or {},
-                    "compliance_check": compliance_analysis or {},  # Template expects 'compliance_check'
+                    "compliance_check": compliance_analysis
+                    or {},  # Template expects 'compliance_check'
                     "risk_assessment": risk_assessment or {},
                     "recommendation_categories": [
                         "immediate_actions",
@@ -160,12 +163,14 @@ class RecommendationsGenerationNode(BaseNode):
                     ],
                     "priority_levels": ["high", "medium", "low"],
                     # Service mapping context requirements (best-effort)
-                    "extracted_text": (doc_meta.get("full_text", "") or "")[:8000],
+                    "extracted_text": (doc_meta.get("full_text", "") or ""),
                     "australian_state": state.get("australian_state", "NSW"),
                     "contract_type": state.get("contract_type", "purchase_agreement"),
                     "user_type": state.get("user_type", "general"),
                     # Template expects 'user_experience', not 'user_experience_level'
-                    "user_experience": state.get("user_experience_level", "intermediate"),
+                    "user_experience": state.get(
+                        "user_experience_level", "intermediate"
+                    ),
                 },
             )
 
@@ -179,20 +184,21 @@ class RecommendationsGenerationNode(BaseNode):
                 rendered_prompt, use_gemini_fallback=True
             )
 
-            # Parse structured response
-            if self.structured_parsers.get("recommendations"):
-                parsing_result = self.structured_parsers["recommendations"].parse(
-                    response
-                )
-                if parsing_result.success and parsing_result.data:
-                    return parsing_result.data
+            # Parse structured response if we got one
+            if response:
+                if self.structured_parsers.get("recommendations"):
+                    parsing_result = self.structured_parsers["recommendations"].parse(
+                        response
+                    )
+                    if parsing_result.success and parsing_result.data:
+                        return parsing_result.data
 
-            # Fallback to JSON parsing
-            recommendations_result = self._safe_json_parse(response)
-            if recommendations_result:
-                return recommendations_result
+                # Fallback to JSON parsing
+                recommendations_result = self._safe_json_parse(response)
+                if recommendations_result:
+                    return recommendations_result
 
-            # Final fallback to rule-based generation
+            # Fallback to rule-based generation if no response or parsing fails
             return await self._generate_recommendations_rule_based(
                 contract_terms, compliance_analysis, risk_assessment
             )

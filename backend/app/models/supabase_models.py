@@ -198,6 +198,9 @@ class ArtifactPage(BaseModel):
         None, description="Page layout information"
     )
     metrics: Optional[Dict[str, Any]] = Field(None, description="Page metrics")
+    content_type: str = Field(
+        default="text", description="Type of content (text, markdown, json_metadata)"
+    )
     created_at: Optional[datetime] = Field(None, description="Creation timestamp")
 
 

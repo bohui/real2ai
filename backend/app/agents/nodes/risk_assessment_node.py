@@ -180,13 +180,13 @@ class RiskAssessmentNode(BaseNode):
                         "confidence",
                     ],
                     # Service 'contract_analysis_workflow' required variables
-                    "extracted_text": (extracted_text_value or "")[:8000],
+                    "extracted_text": (extracted_text_value or ""),
                     "australian_state": australian_state_value,
                     "contract_type": contract_type_value,
                     "user_type": user_type_value,
                     "user_experience_level": user_experience_level_value,
                     # Template 'analysis/risk_analysis_structured' required variables
-                    "document_content": (extracted_text_value or "")[:8000],
+                    "document_content": (extracted_text_value or ""),
                     # Use a sensible default focus; template supports specific branches
                     "analysis_focus": "compliance",
                     # Optional template variable for nicer rendering
@@ -204,20 +204,21 @@ class RiskAssessmentNode(BaseNode):
                 rendered_prompt, use_gemini_fallback=True
             )
 
-            # Parse structured response
-            if self.structured_parsers.get("risk_analysis"):
-                parsing_result = self.structured_parsers["risk_analysis"].parse(
-                    response
-                )
-                if parsing_result.success and parsing_result.data:
-                    return parsing_result.data
+            # Parse structured response if we got one
+            if response:
+                if self.structured_parsers.get("risk_analysis"):
+                    parsing_result = self.structured_parsers["risk_analysis"].parse(
+                        response
+                    )
+                    if parsing_result.success and parsing_result.data:
+                        return parsing_result.data
 
-            # Fallback to JSON parsing
-            risk_result = self._safe_json_parse(response)
-            if risk_result:
-                return risk_result
+                # Fallback to JSON parsing
+                risk_result = self._safe_json_parse(response)
+                if risk_result:
+                    return risk_result
 
-            # Final fallback to rule-based assessment
+            # Fallback to rule-based assessment if no response or parsing fails
             return await self._assess_risks_rule_based(
                 contract_terms, compliance_analysis
             )

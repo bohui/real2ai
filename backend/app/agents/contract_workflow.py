@@ -280,20 +280,37 @@ class ContractAnalysisWorkflow:
     async def initialize(self):
         """Initialize clients and set up workflow for execution."""
         try:
-            # Initialize OpenAI client
-            self.openai_client = await get_openai_client()
+            # Initialize OpenAI client with fallback
+            try:
+                self.openai_client = await get_openai_client()
+                logger.info("OpenAI client initialized successfully")
+            except Exception as e:
+                logger.warning(f"Failed to initialize OpenAI client: {e}")
+                self.openai_client = None
 
-            # Initialize Gemini client
-            self.gemini_client = await get_gemini_client()
+            # Initialize Gemini client with fallback
+            try:
+                self.gemini_client = await get_gemini_client()
+                logger.info("Gemini client initialized successfully")
+            except Exception as e:
+                logger.warning(f"Failed to initialize Gemini client: {e}")
+                self.gemini_client = None
+
+            # Verify at least one client is available
+            if not self.openai_client and not self.gemini_client:
+                raise Exception("No AI clients could be initialized. Both OpenAI and Gemini failed.")
 
             # Set clients in all nodes that need them
-            for node in self.nodes.values():
+            for node_name, node in self.nodes.items():
                 if hasattr(node, "openai_client"):
                     node.openai_client = self.openai_client
                 if hasattr(node, "gemini_client"):
                     node.gemini_client = self.gemini_client
+                
+                # Log client availability for each node
+                logger.debug(f"Node {node_name}: OpenAI={self.openai_client is not None}, Gemini={self.gemini_client is not None}")
 
-            logger.info("Workflow clients initialized successfully")
+            logger.info(f"Workflow clients initialized successfully - OpenAI: {self.openai_client is not None}, Gemini: {self.gemini_client is not None}")
 
         except Exception as e:
             logger.error(f"Failed to initialize workflow clients: {e}")

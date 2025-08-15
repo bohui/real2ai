@@ -179,20 +179,21 @@ class ComplianceAnalysisNode(BaseNode):
                 rendered_prompt, use_gemini_fallback=True
             )
 
-            # Parse structured response
-            if self.structured_parsers.get("compliance_analysis"):
-                parsing_result = self.structured_parsers["compliance_analysis"].parse(
-                    llm_response
-                )
-                if parsing_result.success and parsing_result.data:
-                    return parsing_result.data
+            # Parse structured response if we got one
+            if llm_response:
+                if self.structured_parsers.get("compliance_analysis"):
+                    parsing_result = self.structured_parsers[
+                        "compliance_analysis"
+                    ].parse(llm_response)
+                    if parsing_result.success and parsing_result.data:
+                        return parsing_result.data
 
-            # Fallback to JSON parsing
-            compliance_result = self._safe_json_parse(llm_response)
-            if compliance_result:
-                return compliance_result
+                # Fallback to JSON parsing
+                compliance_result = self._safe_json_parse(llm_response)
+                if compliance_result:
+                    return compliance_result
 
-            # Final fallback to rule-based analysis
+            # Fallback to rule-based analysis if no response or parsing fails
             return await self._analyze_compliance_rule_based(
                 contract_terms, australian_state
             )
@@ -214,9 +215,10 @@ class ComplianceAnalysisNode(BaseNode):
                     fallback_prompt, use_gemini_fallback=True
                 )
 
-                compliance_result = self._safe_json_parse(llm_response)
-                if compliance_result:
-                    return compliance_result
+                if llm_response:
+                    compliance_result = self._safe_json_parse(llm_response)
+                    if compliance_result:
+                        return compliance_result
 
             except Exception as fallback_error:
                 self._log_exception(

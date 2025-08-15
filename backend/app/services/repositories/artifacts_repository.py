@@ -354,7 +354,7 @@ class ArtifactsRepository:
                 """
                 SELECT id, content_hmac, algorithm_version, params_fingerprint,
                        page_number, page_text_uri, page_text_sha256,
-                       layout, metrics, created_at
+                       layout, metrics, COALESCE(content_type, 'text') as content_type, created_at
                 FROM artifact_pages
                 WHERE content_hmac = $1 AND algorithm_version = $2 AND params_fingerprint = $3
                       AND page_number = $4
@@ -370,6 +370,10 @@ class ArtifactsRepository:
                     f"Failed to insert or retrieve page artifact for page {page_number}"
                 )
 
+            # Deserialize JSON fields if they are strings
+            layout = safe_json_loads(row["layout"])
+            metrics = safe_json_loads(row["metrics"])
+
             return PageArtifact(
                 id=row["id"],
                 content_hmac=row["content_hmac"],
@@ -378,8 +382,9 @@ class ArtifactsRepository:
                 page_number=row["page_number"],
                 page_text_uri=row["page_text_uri"],
                 page_text_sha256=row["page_text_sha256"],
-                layout=row["layout"],
-                metrics=row["metrics"],
+                layout=layout,
+                metrics=metrics,
+                content_type=row["content_type"],
                 created_at=row["created_at"],
             )
 
@@ -539,22 +544,29 @@ class ArtifactsRepository:
                 params_fingerprint,
             )
 
-            return [
-                PageArtifact(
-                    id=row["id"],
-                    content_hmac=row["content_hmac"],
-                    algorithm_version=row["algorithm_version"],
-                    params_fingerprint=row["params_fingerprint"],
-                    page_number=row["page_number"],
-                    page_text_uri=row["page_text_uri"],
-                    page_text_sha256=row["page_text_sha256"],
-                    layout=row["layout"],
-                    metrics=row["metrics"],
-                    content_type=row["content_type"],
-                    created_at=row["created_at"],
+            artifacts = []
+            for row in rows:
+                # Deserialize JSON fields if they are strings
+                layout = safe_json_loads(row["layout"])
+                metrics = safe_json_loads(row["metrics"])
+
+                artifacts.append(
+                    PageArtifact(
+                        id=row["id"],
+                        content_hmac=row["content_hmac"],
+                        algorithm_version=row["algorithm_version"],
+                        params_fingerprint=row["params_fingerprint"],
+                        page_number=row["page_number"],
+                        page_text_uri=row["page_text_uri"],
+                        page_text_sha256=row["page_text_sha256"],
+                        layout=layout,
+                        metrics=metrics,
+                        content_type=row["content_type"],
+                        created_at=row["created_at"],
+                    )
                 )
-                for row in rows
-            ]
+
+            return artifacts
 
     async def get_all_visual_artifacts(
         self, content_hmac: str, algorithm_version: int, params_fingerprint: str
@@ -860,6 +872,10 @@ class ArtifactsRepository:
                     f"Failed to insert or retrieve unified page artifact {page_number}"
                 )
 
+            # Deserialize JSON fields if they are strings
+            layout = safe_json_loads(row["layout"])
+            metrics = safe_json_loads(row["metrics"])
+
             return PageArtifact(
                 id=row["id"],
                 content_hmac=row["content_hmac"],
@@ -868,8 +884,8 @@ class ArtifactsRepository:
                 page_number=row["page_number"],
                 page_text_uri=row["page_text_uri"],
                 page_text_sha256=row["page_text_sha256"],
-                layout=row["layout"],
-                metrics=row["metrics"],
+                layout=layout,
+                metrics=metrics,
                 content_type=row["content_type"],
                 created_at=row["created_at"],
             )
@@ -1061,22 +1077,29 @@ class ArtifactsRepository:
                     algorithm_version,
                 )
 
-            return [
-                PageArtifact(
-                    id=row["id"],
-                    content_hmac=row["content_hmac"],
-                    algorithm_version=row["algorithm_version"],
-                    params_fingerprint=row["params_fingerprint"],
-                    page_number=row["page_number"],
-                    page_text_uri=row["page_text_uri"],
-                    page_text_sha256=row["page_text_sha256"],
-                    layout=row["layout"],
-                    metrics=row["metrics"],
-                    content_type=row["content_type"],
-                    created_at=row["created_at"],
+            artifacts = []
+            for row in rows:
+                # Deserialize JSON fields if they are strings
+                layout = safe_json_loads(row["layout"])
+                metrics = safe_json_loads(row["metrics"])
+
+                artifacts.append(
+                    PageArtifact(
+                        id=row["id"],
+                        content_hmac=row["content_hmac"],
+                        algorithm_version=row["algorithm_version"],
+                        params_fingerprint=row["params_fingerprint"],
+                        page_number=row["page_number"],
+                        page_text_uri=row["page_text_uri"],
+                        page_text_sha256=row["page_text_sha256"],
+                        layout=layout,
+                        metrics=metrics,
+                        content_type=row["content_type"],
+                        created_at=row["created_at"],
+                    )
                 )
-                for row in rows
-            ]
+
+            return artifacts
 
     async def get_diagram_artifacts_by_content_hmac(
         self,

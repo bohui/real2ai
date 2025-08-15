@@ -212,7 +212,7 @@ class FinalValidationNode(BaseNode):
                         "recommendations",
                     ],
                     # Service mapping context requirements (best-effort)
-                    "extracted_text": (doc_meta.get("full_text", "") or "")[:8000],
+                    "extracted_text": (doc_meta.get("full_text", "") or ""),
                     "australian_state": state.get("australian_state"),
                     "contract_type": contract_type_value,
                     "user_type": state.get("user_type", "general"),
@@ -245,20 +245,21 @@ class FinalValidationNode(BaseNode):
                 rendered_prompt, use_gemini_fallback=True
             )
 
-            # Parse structured response
-            if self.structured_parsers.get("workflow_validation"):
-                parsing_result = self.structured_parsers["workflow_validation"].parse(
-                    response
-                )
-                if parsing_result.success and parsing_result.data:
-                    return parsing_result.data
+            # Parse structured response if we got one
+            if response:
+                if self.structured_parsers.get("workflow_validation"):
+                    parsing_result = self.structured_parsers[
+                        "workflow_validation"
+                    ].parse(response)
+                    if parsing_result.success and parsing_result.data:
+                        return parsing_result.data
 
-            # Fallback to JSON parsing
-            validation_result = self._safe_json_parse(response)
-            if validation_result:
-                return validation_result
+                # Fallback to JSON parsing
+                validation_result = self._safe_json_parse(response)
+                if validation_result:
+                    return validation_result
 
-            # Final fallback to rule-based validation
+            # Fallback to rule-based validation if no response or parsing fails
             return await self._validate_final_output_rule_based(workflow_outputs)
 
         except Exception as e:

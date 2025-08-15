@@ -424,43 +424,52 @@ class BaseNode(ABC):
 
     async def _generate_content_with_fallback(
         self, prompt: str, use_gemini_fallback: bool = True
-    ) -> str:
+    ) -> Optional[str]:
         """
         Generate content with client fallback logic.
 
         This method attempts to generate content using available clients with fallback:
         1. Try OpenAI client first
         2. Fall back to Gemini client if OpenAI fails and fallback is enabled
-        3. Raise ClientError if no clients produce valid responses
+        3. Return None if no clients produce valid responses and fallbacks are enabled
+        4. Raise ClientError if no clients produce valid responses and fallbacks are disabled
 
         Args:
             prompt: The prompt to send to the LLM
             use_gemini_fallback: Whether to use Gemini as fallback (default: True)
 
         Returns:
-            Generated content string
+            Generated content string or None if fallbacks fail
 
         Raises:
-            ClientError: If no valid response is generated from available clients
+            ClientError: If no valid response is generated from available clients and fallbacks are disabled
         """
-        try:
-            if self.openai_client:
+        # Try OpenAI client first
+        if self.openai_client:
+            try:
                 response = await self.openai_client.generate_content(prompt)
                 if response and response.strip():
                     return response
+            except Exception as e:
+                logger.warning(f"OpenAI client failed in {self.node_name}: {e}")
 
-            if use_gemini_fallback and self.gemini_client:
+        # Fall back to Gemini client if enabled
+        if use_gemini_fallback and self.gemini_client:
+            try:
                 response = await self.gemini_client.generate_content(prompt)
                 if response and response.strip():
                     return response
+            except Exception as e:
+                logger.warning(f"Gemini client failed in {self.node_name}: {e}")
 
+        # If we get here, no clients produced valid responses
+        if not self.enable_fallbacks:
             raise ClientError("No valid response from available clients")
 
-        except Exception as e:
-            logger.error(f"Content generation failed in {self.node_name}: {e}")
-            if not self.enable_fallbacks:
-                raise
-            return ""
+        logger.error(
+            f"Content generation failed in {self.node_name}: No valid response from available clients"
+        )
+        return None
 
     def _safe_json_parse(self, response: str) -> Optional[Dict[str, Any]]:
         """
