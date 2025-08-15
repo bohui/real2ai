@@ -14,6 +14,7 @@ from .base_node import DocumentProcessingNodeBase
 from app.agents.subflows.document_processing_workflow import DocumentProcessingState
 from app.services.repositories.artifacts_repository import ArtifactsRepository
 from app.utils.storage_utils import ArtifactStorageService
+from app.services.visual_artifact_service import VisualArtifactService
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +34,10 @@ class SavePageJPGAsArtifactPagesJPGNode(DocumentProcessingNodeBase):
         super().__init__("save_page_jpg")
         self.storage_service = ArtifactStorageService()
         self.artifacts_repo = ArtifactsRepository()
+        self.visual_artifact_service = VisualArtifactService(
+            storage_service=self.storage_service,
+            artifacts_repo=self.artifacts_repo
+        )
     
     async def execute(self, state: DocumentProcessingState) -> DocumentProcessingState:
         """
@@ -78,11 +83,6 @@ class SavePageJPGAsArtifactPagesJPGNode(DocumentProcessingNodeBase):
                     with open(jpg_path, 'rb') as f:
                         jpg_bytes = f.read()
                     
-                    # Upload to storage
-                    uri, sha256 = await self.storage_service.upload_page_image_jpg(
-                        jpg_bytes, content_hmac, page_number
-                    )
-                    
                     # Calculate metrics
                     file_size = len(jpg_bytes)
                     
@@ -93,39 +93,52 @@ class SavePageJPGAsArtifactPagesJPGNode(DocumentProcessingNodeBase):
                         'source_file': os.path.basename(jpg_path)
                     }
                     
-                    # Create artifact using unified repository method
-                    artifact_data = await self.artifacts_repo.insert_unified_visual_artifact(
+                    diagram_key = f"page_image_{page_number}"
+                    
+                    # Use visual artifact service to store both image and metadata
+                    result = await self.visual_artifact_service.store_visual_artifact(
+                        image_bytes=jpg_bytes,
                         content_hmac=content_hmac,
                         algorithm_version=algorithm_version,
                         params_fingerprint=params_fingerprint,
                         page_number=page_number,
-                        diagram_key=f"page_image_{page_number}",
+                        diagram_key=diagram_key,
                         artifact_type="image_jpg",
-                        image_uri=uri,
-                        image_sha256=sha256,
                         image_metadata=metadata
                     )
                     
                     visual_artifacts.append({
-                        'artifact_id': str(artifact_data.id),
+                        'artifact_id': result.artifact_id,
                         'page_number': page_number,
-                        'diagram_key': f"page_image_{page_number}",
+                        'diagram_key': diagram_key,
                         'artifact_type': 'image_jpg',
-                        'image_uri': uri,
-                        'image_sha256': sha256,
-                        'image_metadata': metadata
+                        'image_uri': result.image_uri,
+                        'image_sha256': result.image_sha256,
+                        'image_metadata': metadata,
+                        'cache_hit': result.cache_hit
                     })
                     
                     processed_pages += 1
                     
-                    self.logger.debug(
-                        f"Processed JPG page {page_number}",
-                        extra={
-                            'page_number': page_number,
-                            'file_size_bytes': file_size,
-                            'source_file': os.path.basename(jpg_path)
-                        }
-                    )
+                    if result.cache_hit:
+                        self.logger.debug(
+                            f"Reused cached JPG artifact for page {page_number}",
+                            extra={
+                                'page_number': page_number,
+                                'source_file': os.path.basename(jpg_path),
+                                'cache_hit': True
+                            }
+                        )
+                    else:
+                        self.logger.debug(
+                            f"Processed JPG page {page_number}",
+                            extra={
+                                'page_number': page_number,
+                                'file_size_bytes': file_size,
+                                'source_file': os.path.basename(jpg_path),
+                                'cache_hit': False
+                            }
+                        )
                 
                 except Exception as page_error:
                     self.logger.error(

@@ -84,6 +84,7 @@ class Settings(BaseSettings):
     document_hmac_secret: Optional[str] = None
     artifacts_algorithm_version: int = 1
     enable_artifacts: bool = False
+    visual_artifact_cache_ttl: int = 600  # Cache TTL in seconds (default 10 minutes)
 
     # File Storage
     max_file_size: int = 52428800  # 50MB

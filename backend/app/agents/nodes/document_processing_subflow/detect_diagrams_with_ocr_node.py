@@ -16,6 +16,7 @@ from app.core.langsmith_config import langsmith_trace
 from app.services.ai.gemini_ocr_service import GeminiOCRService
 from app.prompts.schema.diagram_detection_schema import DiagramDetectionItem
 from app.models.supabase_models import DiagramType
+from app.services.visual_artifact_service import VisualArtifactService
 
 
 class DetectDiagramsWithOCRNode(DocumentProcessingNodeBase):
@@ -35,6 +36,7 @@ class DetectDiagramsWithOCRNode(DocumentProcessingNodeBase):
         self.ocr_service = None
         # Configuration will be loaded from settings
         self.artifacts_repo = None
+        self.visual_artifact_service = None
 
     async def _initialize_services(self):
         """Initialize OCR service if not already initialized"""
@@ -395,9 +397,6 @@ class DetectDiagramsWithOCRNode(DocumentProcessingNodeBase):
             # Generate page JPG from PDF
             page_jpg_bytes = await self._render_page_to_jpg(storage_path, page_number)
 
-            # Persist rendered JPG as artifact for reuse (if we have artifact metadata in state)
-            await self._persist_page_jpg_if_needed(page_jpg_bytes, page_number)
-
             # Use shared Gemini OCR service with PromptManager to detect diagram for this page
             # Reuse the same structured method as text OCR, focusing the analysis on diagram detection
             state = getattr(self, "_current_state", {}) or {}
@@ -412,29 +411,15 @@ class DetectDiagramsWithOCRNode(DocumentProcessingNodeBase):
             )
 
             page_diagrams = []
-            # Prefer multiple hints if available
-            hints = getattr(llm_result, "diagram_hints", None) or []
-            if hints:
-                for h in hints:
-                    if getattr(h, "is_diagram", False):
-                        d_type = getattr(h, "diagram_type", None) or "unknown"
-                        page_diagrams.append(
-                            DiagramDetectionItem(type=d_type, page=page_number)
-                        )
-            else:
-                if getattr(
-                    getattr(llm_result, "diagram_hint", None), "is_diagram", False
-                ):
-                    diag_type = (
-                        getattr(
-                            getattr(llm_result, "diagram_hint", None),
-                            "diagram_type",
-                            None,
-                        )
-                        or "unknown"
+            # Diagrams are returned directly as a list of ImageType enums
+            diagrams = getattr(llm_result, "diagrams", None) or []
+            if diagrams:
+                for d in diagrams:
+                    diagram_type_value = (
+                        getattr(d, "value", None) or str(d) or "unknown"
                     )
                     page_diagrams.append(
-                        DiagramDetectionItem(type=diag_type, page=page_number)
+                        DiagramDetectionItem(type=diagram_type_value, page=page_number)
                     )
 
             self._log_info(
@@ -445,50 +430,43 @@ class DetectDiagramsWithOCRNode(DocumentProcessingNodeBase):
             )
 
             # Persist detected diagrams as unified visual artifacts to enable reuse
-            if page_diagrams:
-                try:
-                    state = getattr(self, "_current_state", {}) or {}
-                    content_hmac = state.get("content_hmac")
-                    algorithm_version = state.get("algorithm_version")
-                    params_fingerprint = state.get("params_fingerprint")
+            try:
+                # Prepare diagram metadata for persistence
+                diagram_meta = {
+                    "detection_method": "ocr_detection",
+                    "source": "gemini",
+                    "diagram_types": [d.type for d in page_diagrams],
+                    "diagram_count": len(page_diagrams),
+                }
 
-                    if (
-                        content_hmac
-                        and algorithm_version is not None
-                        and params_fingerprint
-                    ):
-                        if not self.artifacts_repo:
-                            from app.services.repositories.artifacts_repository import (
-                                ArtifactsRepository,
-                            )
+                # Persist the page JPG after diagrams are detected
+                await self._persist_page_jpg(page_jpg_bytes, page_number, diagram_meta)
 
-                            self.artifacts_repo = ArtifactsRepository()
+                state = getattr(self, "_current_state", {}) or {}
+                content_hmac = state.get("content_hmac")
+                algorithm_version = state.get("algorithm_version")
+                params_fingerprint = state.get("params_fingerprint")
 
-                        for seq_index, diagram_item in enumerate(
-                            page_diagrams, start=1
-                        ):
-                            diagram_key = f"diagram_page_{page_number}_{diagram_item.type}_{seq_index:02d}"
-                            await self.artifacts_repo.insert_unified_visual_artifact(
-                                content_hmac=content_hmac,
-                                algorithm_version=algorithm_version,
-                                params_fingerprint=params_fingerprint,
-                                page_number=page_number,
-                                diagram_key=diagram_key,
-                                artifact_type="diagram",
-                                diagram_meta={
-                                    "type": diagram_item.type,
-                                    "detection_method": "ocr_detection",
-                                    "source": "gemini",
-                                },
-                            )
-                        self._log_info(
-                            f"Persisted {len(page_diagrams)} OCR diagram artifact(s) for page {page_number}",
-                            page=page_number,
+                if (
+                    content_hmac
+                    and algorithm_version is not None
+                    and params_fingerprint
+                ):
+                    if not self.artifacts_repo:
+                        from app.services.repositories.artifacts_repository import (
+                            ArtifactsRepository,
                         )
-                except Exception as persist_err:
-                    self._log_warning(
-                        f"Failed to persist OCR diagram artifacts for page {page_number}: {persist_err}"
+
+                        self.artifacts_repo = ArtifactsRepository()
+
+                    self._log_info(
+                        f"Persisted page JPG and detected {len(page_diagrams)} diagrams for page {page_number}",
+                        page=page_number,
                     )
+            except Exception as persist_err:
+                self._log_warning(
+                    f"Failed to persist OCR diagram artifacts for page {page_number}: {persist_err}"
+                )
 
             return page_diagrams
 
@@ -663,8 +641,11 @@ class DetectDiagramsWithOCRNode(DocumentProcessingNodeBase):
         except Exception:
             return "pdf"  # Default to PDF
 
-    async def _persist_page_jpg_if_needed(
-        self, page_jpg_bytes: bytes, page_number: int
+    async def _persist_page_jpg(
+        self,
+        page_jpg_bytes: bytes,
+        page_number: int,
+        diagram_meta: Optional[Dict[str, Any]] = None,
     ):
         """
         Persist rendered page JPG as artifact to avoid recomputation on re-runs.
@@ -672,6 +653,7 @@ class DetectDiagramsWithOCRNode(DocumentProcessingNodeBase):
         Args:
             page_jpg_bytes: Rendered JPG bytes
             page_number: Page number (1-based)
+            diagram_meta: Optional diagram metadata to include
         """
         try:
             # Get state from current context (if available)
@@ -686,46 +668,53 @@ class DetectDiagramsWithOCRNode(DocumentProcessingNodeBase):
                     and algorithm_version is not None
                     and params_fingerprint
                 ):
-                    # Upload JPG to storage
-                    from app.utils.storage_utils import ArtifactStorageService
-
-                    storage_service = ArtifactStorageService()
-
-                    # Upload JPG image to storage
-                    jpg_uri, jpg_sha256 = await storage_service.upload_page_image_jpg(
-                        page_jpg_bytes, content_hmac, page_number
-                    )
-
-                    # Persist as unified diagram artifact with artifact_type='image_jpg'
-                    if not hasattr(self, "artifacts_repo") or not self.artifacts_repo:
+                    # Initialize visual artifact service if needed
+                    if not self.visual_artifact_service:
+                        from app.utils.storage_utils import ArtifactStorageService
                         from app.services.repositories.artifacts_repository import (
                             ArtifactsRepository,
                         )
 
-                        self.artifacts_repo = ArtifactsRepository()
+                        if not self.artifacts_repo:
+                            self.artifacts_repo = ArtifactsRepository()
+
+                        self.visual_artifact_service = VisualArtifactService(
+                            storage_service=ArtifactStorageService(),
+                            artifacts_repo=self.artifacts_repo,
+                        )
 
                     diagram_key = f"page_jpg_{page_number}"
 
-                    await self.artifacts_repo.insert_unified_visual_artifact(
+                    # Prepare diagram metadata
+                    base_meta = {"rendered_for": "ocr_detection", "zoom": "2.0x"}
+                    if diagram_meta:
+                        base_meta.update(diagram_meta)
+
+                    # Use visual artifact service to store both image and metadata
+                    result = await self.visual_artifact_service.store_visual_artifact(
+                        image_bytes=page_jpg_bytes,
                         content_hmac=content_hmac,
                         algorithm_version=algorithm_version,
                         params_fingerprint=params_fingerprint,
                         page_number=page_number,
                         diagram_key=diagram_key,
                         artifact_type="image_jpg",
-                        image_uri=jpg_uri,
-                        image_sha256=jpg_sha256,
                         image_metadata={
                             "format": "jpeg",
                             "quality": "high",
                             "dpi": "144",
                         },
-                        diagram_meta={"rendered_for": "ocr_detection", "zoom": "2.0x"},
+                        diagram_meta=base_meta,
                     )
 
-                    self._log_info(
-                        f"Persisted page {page_number} JPG as artifact: {diagram_key}"
-                    )
+                    if result.cache_hit:
+                        self._log_info(
+                            f"Reused cached JPG artifact for page {page_number}: {diagram_key}"
+                        )
+                    else:
+                        self._log_info(
+                            f"Persisted page {page_number} JPG as artifact: {diagram_key}"
+                        )
 
         except Exception as e:
             # Don't fail OCR detection if JPG persistence fails
