@@ -202,7 +202,7 @@ class ArtifactsRepository:
                         content_hmac, algorithm_version, params_fingerprint,
                         full_text_uri, full_text_sha256, total_pages, total_words,
                         methods, timings
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, ($8)::jsonb, ($9)::jsonb)
                     ON CONFLICT (content_hmac, algorithm_version, params_fingerprint) DO NOTHING
                     """,
                     content_hmac,
@@ -342,7 +342,7 @@ class ArtifactsRepository:
                 INSERT INTO artifact_pages (
                     content_hmac, algorithm_version, params_fingerprint,
                     page_number, page_text_uri, page_text_sha256, layout, metrics
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                ) VALUES ($1, $2, $3, $4, $5, $6, ($7)::jsonb, ($8)::jsonb)
                 ON CONFLICT (content_hmac, algorithm_version, params_fingerprint, page_number) DO NOTHING
                 """,
                 content_hmac,
@@ -808,7 +808,7 @@ class ArtifactsRepository:
                         content_hmac, algorithm_version, params_fingerprint,
                         page_number, page_text_uri, page_text_sha256, 
                         layout, metrics, content_type
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                    ) VALUES ($1, $2, $3, $4, $5, $6, ($7)::jsonb, ($8)::jsonb, $9)
                     ON CONFLICT (content_hmac, algorithm_version, params_fingerprint, page_number) 
                     DO UPDATE SET
                         layout = COALESCE(artifact_pages.layout, EXCLUDED.layout),
@@ -945,7 +945,7 @@ class ArtifactsRepository:
                         content_hmac, algorithm_version, params_fingerprint,
                         page_number, diagram_key, diagram_meta, artifact_type,
                         image_uri, image_sha256, image_metadata
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                    ) VALUES ($1, $2, $3, $4, $5, ($6)::jsonb, $7, $8, $9, ($10)::jsonb)
                     ON CONFLICT (content_hmac, algorithm_version, params_fingerprint, page_number, diagram_key) 
                     DO NOTHING
                     """,
