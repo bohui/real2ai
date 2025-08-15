@@ -6,38 +6,19 @@ Documents are user-scoped and this repository provides CRUD operations
 with integrated JWT-based authentication.
 """
 
-from typing import Dict, List, Optional, Any
+from typing import Optional, Dict, Any, List
 from uuid import UUID
-from dataclasses import dataclass
-from datetime import datetime, date
+from datetime import datetime
 import logging
 import json
 
 from app.database.connection import get_user_connection
+from app.models.supabase_models import Document
 
 logger = logging.getLogger(__name__)
 
 
-@dataclass
-class Document:
-    """Document model aligned with current `documents` schema."""
-
-    id: UUID
-    user_id: UUID
-    original_filename: str
-    storage_path: str
-    file_type: str
-    file_size: int
-    content_hash: Optional[str]
-    processing_status: str
-    processing_started_at: Optional[datetime] = None
-    processing_completed_at: Optional[datetime] = None
-    processing_errors: Optional[Dict[str, Any]] = None
-    artifact_text_id: Optional[UUID] = None
-    total_pages: Optional[int] = 0
-    total_word_count: Optional[int] = 0
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
+# Document model is now imported from app.models.supabase_models
 
 
 class DocumentsRepository:
@@ -77,7 +58,10 @@ class DocumentsRepository:
                     id, user_id, original_filename, storage_path, file_type,
                     file_size, content_hash, processing_status, processing_started_at,
                     processing_completed_at, processing_errors, artifact_text_id,
-                    total_pages, total_word_count, created_at, updated_at
+                    total_pages, total_word_count, total_text_length, overall_quality_score,
+                    extraction_confidence, text_extraction_method, has_diagrams, diagram_count,
+                    document_type, australian_state, contract_type, processing_notes,
+                    upload_metadata, processing_results, created_at, updated_at
                 """,
                 document_data.get("id"),
                 document_data.get("user_id"),
@@ -105,8 +89,20 @@ class DocumentsRepository:
                 processing_completed_at=row["processing_completed_at"],
                 processing_errors=row["processing_errors"],
                 artifact_text_id=row["artifact_text_id"],
-                total_pages=row["total_pages"],
-                total_word_count=row["total_word_count"],
+                total_pages=row["total_pages"] or 0,
+                total_word_count=row["total_word_count"] or 0,
+                total_text_length=row.get("total_text_length", 0),
+                overall_quality_score=row.get("overall_quality_score", 0.0),
+                extraction_confidence=row.get("extraction_confidence", 0.0),
+                text_extraction_method=row.get("text_extraction_method"),
+                has_diagrams=row.get("has_diagrams", False),
+                diagram_count=row.get("diagram_count", 0),
+                document_type=row.get("document_type"),
+                australian_state=row.get("australian_state"),
+                contract_type=row.get("contract_type"),
+                processing_notes=row.get("processing_notes"),
+                upload_metadata=row.get("upload_metadata", {}),
+                processing_results=row.get("processing_results", {}),
                 created_at=row["created_at"],
                 updated_at=row["updated_at"],
             )
@@ -134,7 +130,10 @@ class DocumentsRepository:
                 SELECT id, user_id, original_filename, storage_path, file_type, file_size, 
                        content_hash, processing_status, processing_started_at,
                        processing_completed_at, processing_errors, artifact_text_id,
-                       total_pages, total_word_count, created_at, updated_at
+                       total_pages, total_word_count, total_text_length, overall_quality_score,
+                       extraction_confidence, text_extraction_method, has_diagrams, diagram_count,
+                       document_type, australian_state, contract_type, processing_notes,
+                       upload_metadata, processing_results, created_at, updated_at
                 FROM documents
                 WHERE id = $1
                 """,
@@ -167,6 +166,18 @@ class DocumentsRepository:
                 artifact_text_id=row["artifact_text_id"],
                 total_pages=row["total_pages"],
                 total_word_count=row["total_word_count"],
+                total_text_length=row.get("total_text_length", 0),
+                overall_quality_score=row.get("overall_quality_score", 0.0),
+                extraction_confidence=row.get("extraction_confidence", 0.0),
+                text_extraction_method=row.get("text_extraction_method"),
+                has_diagrams=row.get("has_diagrams", False),
+                diagram_count=row.get("diagram_count", 0),
+                document_type=row.get("document_type"),
+                australian_state=row.get("australian_state"),
+                contract_type=row.get("contract_type"),
+                processing_notes=row.get("processing_notes"),
+                upload_metadata=row.get("upload_metadata", {}),
+                processing_results=row.get("processing_results", {}),
                 created_at=row["created_at"],
                 updated_at=row["updated_at"],
             )
@@ -201,7 +212,9 @@ class DocumentsRepository:
             if error_details is not None:
                 param_count += 1
                 set_clauses.append(f"processing_errors = ${param_count}::jsonb")
-                params.append(json.dumps(error_details) if error_details is not None else None)
+                params.append(
+                    json.dumps(error_details) if error_details is not None else None
+                )
 
             if processing_started_at is not None:
                 param_count += 1
@@ -309,7 +322,10 @@ class DocumentsRepository:
                 SELECT id, user_id, original_filename, storage_path, file_type, file_size, 
                        content_hash, processing_status, processing_started_at,
                        processing_completed_at, processing_errors, artifact_text_id,
-                       total_pages, total_word_count, created_at, updated_at
+                       total_pages, total_word_count, total_text_length, overall_quality_score,
+                       extraction_confidence, text_extraction_method, has_diagrams, diagram_count,
+                       document_type, australian_state, contract_type, processing_notes,
+                       upload_metadata, processing_results, created_at, updated_at
                 FROM documents
                 {where_clause}
                 ORDER BY created_at DESC
@@ -334,6 +350,18 @@ class DocumentsRepository:
                     artifact_text_id=row["artifact_text_id"],
                     total_pages=row["total_pages"],
                     total_word_count=row["total_word_count"],
+                    total_text_length=row.get("total_text_length", 0),
+                    overall_quality_score=row.get("overall_quality_score", 0.0),
+                    extraction_confidence=row.get("extraction_confidence", 0.0),
+                    text_extraction_method=row.get("text_extraction_method"),
+                    has_diagrams=row.get("has_diagrams", False),
+                    diagram_count=row.get("diagram_count", 0),
+                    document_type=row.get("document_type"),
+                    australian_state=row.get("australian_state"),
+                    contract_type=row.get("contract_type"),
+                    processing_notes=row.get("processing_notes"),
+                    upload_metadata=row.get("upload_metadata", {}),
+                    processing_results=row.get("processing_results", {}),
                     created_at=row["created_at"],
                     updated_at=row["updated_at"],
                 )
@@ -396,7 +424,9 @@ class DocumentsRepository:
             if error_details is not None:
                 param_count += 1
                 set_clauses.append(f"processing_errors = ${param_count}::jsonb")
-                query_params.append(json.dumps(error_details) if error_details is not None else None)
+                query_params.append(
+                    json.dumps(error_details) if error_details is not None else None
+                )
 
             param_count += 1
             query_params.append(document_ids)
@@ -470,7 +500,10 @@ class DocumentsRepository:
                 columns = """id, user_id, original_filename, storage_path, file_type, file_size, 
                             content_hash, processing_status, processing_started_at,
                             processing_completed_at, processing_errors, artifact_text_id,
-                            total_pages, total_word_count, created_at, updated_at"""
+                            total_pages, total_word_count, total_text_length, overall_quality_score,
+                            extraction_confidence, text_extraction_method, has_diagrams, diagram_count,
+                            document_type, australian_state, contract_type, processing_notes,
+                            upload_metadata, processing_results, created_at, updated_at"""
 
             rows = await conn.fetch(
                 f"""
@@ -510,6 +543,18 @@ class DocumentsRepository:
                         artifact_text_id=row["artifact_text_id"],
                         total_pages=row["total_pages"],
                         total_word_count=row["total_word_count"],
+                        total_text_length=row.get("total_text_length", 0),
+                        overall_quality_score=row.get("overall_quality_score", 0.0),
+                        extraction_confidence=row.get("extraction_confidence", 0.0),
+                        text_extraction_method=row.get("text_extraction_method"),
+                        has_diagrams=row.get("has_diagrams", False),
+                        diagram_count=row.get("diagram_count", 0),
+                        document_type=row.get("document_type"),
+                        australian_state=row.get("australian_state"),
+                        contract_type=row.get("contract_type"),
+                        processing_notes=row.get("processing_notes"),
+                        upload_metadata=row.get("upload_metadata", {}),
+                        processing_results=row.get("processing_results", {}),
                         created_at=row["created_at"],
                         updated_at=row["updated_at"],
                     )
@@ -537,6 +582,7 @@ class DocumentsRepository:
         Returns:
             True if update successful, False otherwise
         """
+
         # Local helper to safely serialize complex objects (datetimes, UUIDs, Pydantic models)
         def _json_default(obj: Any):
             try:
@@ -546,7 +592,7 @@ class DocumentsRepository:
             except Exception:
                 pass
 
-            if isinstance(obj, (datetime, date)):
+            if isinstance(obj, datetime):
                 return obj.isoformat()
             if isinstance(obj, UUID):
                 return str(obj)
@@ -560,7 +606,11 @@ class DocumentsRepository:
                 SET processing_results = $1::jsonb, updated_at = now()
                 WHERE id = $2
                 """,
-                json.dumps(results, default=_json_default) if results is not None else None,
+                (
+                    json.dumps(results, default=_json_default)
+                    if results is not None
+                    else None
+                ),
                 document_id,
             )
             return result.split()[-1] == "1"
@@ -591,7 +641,11 @@ class DocumentsRepository:
                     WHERE id = $3
                     """,
                     status,
-                    json.dumps(results, default=_json_default) if results is not None else None,
+                    (
+                        json.dumps(results, default=_json_default)
+                        if results is not None
+                        else None
+                    ),
                     document_id,
                 )
             else:

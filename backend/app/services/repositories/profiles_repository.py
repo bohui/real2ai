@@ -8,10 +8,25 @@ from typing import Dict, List, Optional, Any
 from uuid import UUID
 from datetime import datetime
 import asyncpg
+import json
 
 from app.database.connection import get_user_connection
 from app.models.supabase_models import Profile as UserProfile
 from dataclasses import dataclass
+
+
+def _safe_parse_json(value):
+    """Safely parse JSON value, handling None and already parsed cases"""
+    if value is None:
+        return {}
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except (json.JSONDecodeError, TypeError):
+            return {}
+    return {}
 
 
 @dataclass
@@ -98,10 +113,10 @@ class ProfilesRepository:
                 subscription_status=row["subscription_status"],
                 credits_remaining=row["credits_remaining"],
                 organization=row["organization"],
-                preferences=row["preferences"],
+                preferences=_safe_parse_json(row["preferences"]),
                 onboarding_completed=row["onboarding_completed"],
                 onboarding_completed_at=row["onboarding_completed_at"],
-                onboarding_preferences=row["onboarding_preferences"],
+                onboarding_preferences=_safe_parse_json(row["onboarding_preferences"]),
                 created_at=row["created_at"],
                 updated_at=row["updated_at"],
             )
@@ -143,10 +158,10 @@ class ProfilesRepository:
                 kwargs.get("subscription_status", "free"),
                 kwargs.get("credits_remaining", 1),
                 kwargs.get("organization"),
-                kwargs.get("preferences", {}),
+                json.dumps(kwargs.get("preferences", {})),
                 kwargs.get("onboarding_completed", False),
                 kwargs.get("onboarding_completed_at"),
-                kwargs.get("onboarding_preferences", {}),
+                json.dumps(kwargs.get("onboarding_preferences", {})),
             )
 
             return UserProfile(
@@ -159,10 +174,10 @@ class ProfilesRepository:
                 subscription_status=row["subscription_status"],
                 credits_remaining=row["credits_remaining"],
                 organization=row["organization"],
-                preferences=row["preferences"],
+                preferences=_safe_parse_json(row["preferences"]),
                 onboarding_completed=row["onboarding_completed"],
                 onboarding_completed_at=row["onboarding_completed_at"],
-                onboarding_preferences=row["onboarding_preferences"],
+                onboarding_preferences=_safe_parse_json(row["onboarding_preferences"]),
                 created_at=row["created_at"],
                 updated_at=row["updated_at"],
             )
@@ -204,7 +219,15 @@ class ProfilesRepository:
                 if field in updateable_fields:
                     param_count += 1
                     set_clauses.append(f"{field} = ${param_count}")
-                    params.append(value)
+
+                    # Handle JSON fields - serialize dictionaries to JSON strings
+                    if field in [
+                        "preferences",
+                        "onboarding_preferences",
+                    ] and isinstance(value, dict):
+                        params.append(json.dumps(value))
+                    else:
+                        params.append(value)
 
             if not set_clauses:
                 return await self.get_profile(target_user_id)
@@ -251,10 +274,10 @@ class ProfilesRepository:
                 subscription_status=row["subscription_status"],
                 credits_remaining=row["credits_remaining"],
                 organization=row["organization"],
-                preferences=row["preferences"],
+                preferences=_safe_parse_json(row["preferences"]),
                 onboarding_completed=row["onboarding_completed"],
                 onboarding_completed_at=row["onboarding_completed_at"],
-                onboarding_preferences=row["onboarding_preferences"],
+                onboarding_preferences=_safe_parse_json(row["onboarding_preferences"]),
                 created_at=row["created_at"],
                 updated_at=row["updated_at"],
             )
