@@ -8,30 +8,13 @@ and shared analyses depending on table RLS configuration.
 from typing import Dict, List, Optional, Any
 import json
 from uuid import UUID
-from dataclasses import dataclass
 from datetime import datetime
 import logging
 
 from app.database.connection import get_user_connection, get_service_role_connection
+from app.models.supabase_models import Analysis
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class Analysis:
-    """Analysis model"""
-
-    id: UUID
-    content_hash: str
-    agent_version: str
-    status: str
-    result: Optional[Dict[str, Any]] = None
-    error_details: Optional[Dict[str, Any]] = None
-    started_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
-    user_id: Optional[UUID] = None  # May be null for shared analyses
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
 
 
 class AnalysesRepository:

@@ -10,26 +10,13 @@ discrepancies across environments.
 from typing import Dict, List, Optional, Any
 import json
 from uuid import UUID
-from dataclasses import dataclass
 from datetime import datetime
 import logging
 
 from app.database.connection import get_service_role_connection, get_user_connection
+from app.models.supabase_models import Contract
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class Contract:
-    """Contract model"""
-
-    id: UUID
-    content_hash: str
-    contract_type: str
-    australian_state: Optional[str] = None
-    metadata: Optional[Dict[str, Any]] = None
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
 
 
 class ContractsRepository:
@@ -47,7 +34,7 @@ class ContractsRepository:
         content_hash: str,
         contract_type: str,
         australian_state: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        contract_terms: Optional[Dict[str, Any]] = None,
     ) -> Contract:
         """
         Upsert contract by content hash.
@@ -56,7 +43,7 @@ class ContractsRepository:
             content_hash: SHA-256 hash of contract content
             contract_type: Type of contract
             australian_state: Optional Australian state
-            metadata: Optional additional metadata
+            contract_terms: Optional contract terms
 
         Returns:
             Contract: Existing or newly created contract
@@ -65,20 +52,20 @@ class ContractsRepository:
             row = await conn.fetchrow(
                 """
                 INSERT INTO contracts (
-                    content_hash, contract_type, australian_state, metadata
+                    content_hash, contract_type, australian_state, contract_terms
                 ) VALUES ($1, $2, $3, $4::jsonb)
                 ON CONFLICT (content_hash) DO UPDATE SET
                     contract_type = COALESCE(contracts.contract_type, EXCLUDED.contract_type),
                     australian_state = COALESCE(contracts.australian_state, EXCLUDED.australian_state),
-                    metadata = COALESCE(contracts.metadata, EXCLUDED.metadata),
+                    contract_terms = COALESCE(contracts.contract_terms, EXCLUDED.contract_terms),
                     updated_at = now()
                 RETURNING id, content_hash, contract_type, australian_state, 
-                         metadata, created_at, updated_at
+                         contract_terms, raw_text, property_address, created_at, updated_at
                 """,
                 content_hash,
                 contract_type,
                 australian_state,
-                json.dumps(metadata) if metadata is not None else None,
+                json.dumps(contract_terms) if contract_terms is not None else None,
             )
 
             return Contract(
@@ -86,7 +73,9 @@ class ContractsRepository:
                 content_hash=row["content_hash"],
                 contract_type=row["contract_type"],
                 australian_state=row["australian_state"],
-                metadata=row["metadata"],
+                contract_terms=row.get("metadata", {}),  # Map metadata to contract_terms
+                raw_text=row.get("raw_text"),
+                property_address=row.get("property_address"),
                 created_at=row["created_at"],
                 updated_at=row["updated_at"],
             )
@@ -136,7 +125,7 @@ class ContractsRepository:
                 row = await conn.fetchrow(
                     """
                     SELECT id, content_hash, contract_type, australian_state, 
-                           metadata, created_at, updated_at
+                           contract_terms, raw_text, property_address, created_at, updated_at
                     FROM contracts
                     WHERE content_hash = $1
                     """,
@@ -147,7 +136,7 @@ class ContractsRepository:
                 row = await conn.fetchrow(
                     """
                 SELECT id, content_hash, contract_type, australian_state, 
-                       metadata, created_at, updated_at
+                       contract_terms, raw_text, property_address, created_at, updated_at
                 FROM contracts
                 WHERE content_hash = $1
                 """,
@@ -162,7 +151,9 @@ class ContractsRepository:
                 content_hash=row["content_hash"],
                 contract_type=row["contract_type"],
                 australian_state=row["australian_state"],
-                metadata=row["metadata"],
+                contract_terms=row.get("metadata", {}),  # Map metadata to contract_terms
+                raw_text=row.get("raw_text"),
+                property_address=row.get("property_address"),
                 created_at=row["created_at"],
                 updated_at=row["updated_at"],
             )
@@ -215,20 +206,22 @@ class ContractsRepository:
                 content_hash=row["content_hash"],
                 contract_type=row["contract_type"],
                 australian_state=row["australian_state"],
-                metadata=row["metadata"],
+                contract_terms=row.get("metadata", {}),  # Map metadata to contract_terms
+                raw_text=row.get("raw_text"),
+                property_address=row.get("property_address"),
                 created_at=row["created_at"],
                 updated_at=row["updated_at"],
             )
 
-    async def update_contract_metadata(
-        self, contract_id: UUID, metadata: Dict[str, Any]
+    async def update_contract_terms(
+        self, contract_id: UUID, contract_terms: Dict[str, Any]
     ) -> bool:
         """
-        Update contract metadata.
+        Update contract terms.
 
         Args:
             contract_id: Contract ID
-            metadata: New metadata
+            contract_terms: New contract terms
 
         Returns:
             True if update successful, False otherwise
@@ -237,10 +230,10 @@ class ContractsRepository:
             result = await conn.execute(
                 """
                 UPDATE contracts 
-                SET metadata = $1::jsonb, updated_at = now()
+                SET contract_terms = $1::jsonb, updated_at = now()
                 WHERE id = $2
                 """,
-                json.dumps(metadata) if metadata is not None else None,
+                json.dumps(contract_terms) if contract_terms is not None else None,
                 contract_id,
             )
             return result.split()[-1] == "1"

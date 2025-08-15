@@ -6,37 +6,17 @@ Centralizes profile management with proper RLS enforcement and typing.
 
 from typing import Dict, List, Optional, Any
 from uuid import UUID
-from dataclasses import dataclass
 from datetime import datetime
 import asyncpg
 
 from app.database.connection import get_user_connection
-
-
-@dataclass
-class UserProfile:
-    """User profile model mapped to `profiles` table schema"""
-
-    user_id: UUID  # maps to column `id`
-    email: str
-    full_name: Optional[str] = None
-    phone_number: Optional[str] = None
-    australian_state: Optional[str] = None
-    user_type: Optional[str] = None
-    subscription_status: Optional[str] = None
-    credits_remaining: Optional[int] = None
-    organization: Optional[str] = None
-    preferences: Optional[Dict[str, Any]] = None
-    onboarding_completed: bool = False
-    onboarding_completed_at: Optional[datetime] = None
-    onboarding_preferences: Optional[Dict[str, Any]] = None
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
+from app.models.supabase_models import Profile as UserProfile
+from dataclasses import dataclass
 
 
 @dataclass
 class ProfileSettings:
-    """User settings model"""
+    """User settings model - temporary until proper settings table is implemented"""
 
     user_id: UUID
     notifications_enabled: bool = True
@@ -109,7 +89,7 @@ class ProfilesRepository:
                 return None
 
             return UserProfile(
-                user_id=row["id"],
+                id=row["id"],
                 email=row["email"],
                 full_name=row["full_name"],
                 phone_number=row["phone_number"],
@@ -145,38 +125,44 @@ class ProfilesRepository:
             row = await conn.fetchrow(
                 """
                 INSERT INTO profiles (
-                    user_id, email, full_name, avatar_url, phone, company, role, bio,
-                    preferences, onboarding_completed, onboarding_step
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-                RETURNING user_id, email, full_name, avatar_url, phone, company, role, bio,
-                          preferences, onboarding_completed, onboarding_step,
+                    id, email, full_name, phone_number, australian_state, user_type,
+                    subscription_status, credits_remaining, organization, preferences,
+                    onboarding_completed, onboarding_completed_at, onboarding_preferences
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                RETURNING id, email, full_name, phone_number, australian_state, user_type,
+                          subscription_status, credits_remaining, organization, preferences,
+                          onboarding_completed, onboarding_completed_at, onboarding_preferences,
                           created_at, updated_at
                 """,
                 user_id,
                 email,
                 full_name,
-                kwargs.get("avatar_url"),
-                kwargs.get("phone"),
-                kwargs.get("company"),
-                kwargs.get("role"),
-                kwargs.get("bio"),
-                kwargs.get("preferences"),
+                kwargs.get("phone_number"),
+                kwargs.get("australian_state", "NSW"),
+                kwargs.get("user_type", "buyer"),
+                kwargs.get("subscription_status", "free"),
+                kwargs.get("credits_remaining", 1),
+                kwargs.get("organization"),
+                kwargs.get("preferences", {}),
                 kwargs.get("onboarding_completed", False),
-                kwargs.get("onboarding_step"),
+                kwargs.get("onboarding_completed_at"),
+                kwargs.get("onboarding_preferences", {}),
             )
 
             return UserProfile(
-                user_id=row["user_id"],
+                id=row["id"],
                 email=row["email"],
                 full_name=row["full_name"],
-                avatar_url=row["avatar_url"],
-                phone=row["phone"],
-                company=row["company"],
-                role=row["role"],
-                bio=row["bio"],
+                phone_number=row["phone_number"],
+                australian_state=row["australian_state"],
+                user_type=row["user_type"],
+                subscription_status=row["subscription_status"],
+                credits_remaining=row["credits_remaining"],
+                organization=row["organization"],
                 preferences=row["preferences"],
                 onboarding_completed=row["onboarding_completed"],
-                onboarding_step=row["onboarding_step"],
+                onboarding_completed_at=row["onboarding_completed_at"],
+                onboarding_preferences=row["onboarding_preferences"],
                 created_at=row["created_at"],
                 updated_at=row["updated_at"],
             )
@@ -256,7 +242,7 @@ class ProfilesRepository:
                 return None
 
             return UserProfile(
-                user_id=row["id"],
+                id=row["id"],
                 email=row["email"],
                 full_name=row["full_name"],
                 phone_number=row["phone_number"],
@@ -308,7 +294,9 @@ class ProfilesRepository:
         Returns:
             Updated UserProfile if successful
         """
-        return await self.update_profile(user_id=user_id, onboarding_step=step)
+        return await self.update_profile(
+            user_id=user_id, onboarding_preferences={"current_step": step}
+        )
 
     async def complete_onboarding(
         self, user_id: Optional[UUID] = None
@@ -323,7 +311,10 @@ class ProfilesRepository:
             Updated UserProfile if successful
         """
         return await self.update_profile(
-            user_id=user_id, onboarding_completed=True, onboarding_step=None
+            user_id=user_id,
+            onboarding_completed=True,
+            onboarding_completed_at=datetime.now(),
+            onboarding_preferences={"current_step": "completed"},
         )
 
     # ================================
@@ -475,11 +466,10 @@ class ProfilesRepository:
             return None
 
         return {
-            "user_id": str(profile.user_id),
+            "user_id": str(profile.id),
             "email": profile.email,
             "full_name": profile.full_name,
-            "avatar_url": profile.avatar_url,
-            "company": profile.company,
+            "organization": profile.organization,
             "onboarding_completed": profile.onboarding_completed,
             "created_at": (
                 profile.created_at.isoformat() if profile.created_at else None

@@ -10,7 +10,6 @@ import json
 from typing import Dict, List, Optional, Any
 from uuid import UUID
 import asyncpg
-from dataclasses import dataclass
 from datetime import datetime
 
 from app.database.connection import get_service_role_connection
@@ -19,58 +18,11 @@ from app.utils.content_utils import (
     validate_content_hmac,
     validate_params_fingerprint,
 )
-
-
-@dataclass
-class FullTextArtifact:
-    """Full text artifact model"""
-
-    id: UUID
-    content_hmac: str
-    algorithm_version: int
-    params_fingerprint: str
-    full_text_uri: str
-    full_text_sha256: str
-    total_pages: int
-    total_words: int
-    methods: Dict[str, Any]
-    timings: Optional[Dict[str, Any]] = None
-    created_at: Optional[datetime] = None
-
-
-@dataclass
-class PageArtifact:
-    """Unified page artifact model supporting text, markdown, and JSON metadata"""
-
-    id: UUID
-    content_hmac: str
-    algorithm_version: int
-    params_fingerprint: str
-    page_number: int
-    page_text_uri: str
-    page_text_sha256: str
-    layout: Optional[Dict[str, Any]] = None
-    metrics: Optional[Dict[str, Any]] = None
-    content_type: str = "text"  # "text", "markdown", "json_metadata"
-    created_at: Optional[datetime] = None
-
-
-@dataclass
-class DiagramArtifact:
-    """Unified diagram artifact model supporting diagrams and images"""
-
-    id: UUID
-    content_hmac: str
-    algorithm_version: int
-    params_fingerprint: str
-    page_number: int
-    diagram_key: str
-    diagram_meta: Dict[str, Any]
-    artifact_type: str = "diagram"  # "diagram", "image_jpg", "image_png"
-    image_uri: Optional[str] = None  # For image artifacts
-    image_sha256: Optional[str] = None  # For image artifacts
-    image_metadata: Optional[Dict[str, Any]] = None  # For image artifacts
-    created_at: Optional[datetime] = None
+from app.models.supabase_models import (
+    FullTextArtifact,
+    ArtifactPage as PageArtifact,
+    ArtifactDiagram as DiagramArtifact,
+)
 
 
 class ArtifactsRepository:
@@ -131,6 +83,47 @@ class ArtifactsRepository:
                 content_hmac,
                 algorithm_version,
                 params_fingerprint,
+            )
+
+            if row is None:
+                return None
+
+            return FullTextArtifact(
+                id=row["id"],
+                content_hmac=row["content_hmac"],
+                algorithm_version=row["algorithm_version"],
+                params_fingerprint=row["params_fingerprint"],
+                full_text_uri=row["full_text_uri"],
+                full_text_sha256=row["full_text_sha256"],
+                total_pages=row["total_pages"],
+                total_words=row["total_words"],
+                methods=row["methods"],
+                timings=row["timings"],
+                created_at=row["created_at"],
+            )
+
+    async def get_full_text_artifact_by_id(
+        self, artifact_id: UUID
+    ) -> Optional[FullTextArtifact]:
+        """
+        Get full text artifact by ID.
+
+        Args:
+            artifact_id: Artifact ID
+
+        Returns:
+            FullTextArtifact if found, None otherwise
+        """
+        async with get_service_role_connection() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT id, content_hmac, algorithm_version, params_fingerprint,
+                       full_text_uri, full_text_sha256, total_pages, total_words,
+                       methods, timings, created_at
+                FROM artifacts_full_text
+                WHERE id = $1
+                """,
+                artifact_id,
             )
 
             if row is None:
