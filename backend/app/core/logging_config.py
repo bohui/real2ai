@@ -113,7 +113,6 @@ def configure_logging(level: int | str | None = None, *, use_json: bool = True) 
         "",  # root
         "app",
         "uvicorn",
-        "uvicorn.error",
         "uvicorn.access",
         "celery",
         "celery.app.trace",

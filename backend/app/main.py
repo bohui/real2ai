@@ -31,7 +31,6 @@ for logger_name in (
     "app",
     "app.router.websockets",
     "uvicorn",
-    "uvicorn.error",
     "uvicorn.access",
 ):
     logging.getLogger(logger_name).setLevel(log_level)
