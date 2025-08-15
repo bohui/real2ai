@@ -13,23 +13,9 @@ import logging
 
 from app.database.connection import get_user_connection, get_service_role_connection
 from app.models.supabase_models import Analysis
+from app.utils.json_utils import safe_json_loads
 
 logger = logging.getLogger(__name__)
-
-
-def _safe_json_loads(value, default=None):
-    """Safely parse JSON string to Python object with fallback to default."""
-    if value is None:
-        return default
-    if isinstance(value, dict):
-        return value  # Already a dict, return as-is
-    if isinstance(value, str):
-        try:
-            return json.loads(value)
-        except (json.JSONDecodeError, TypeError):
-            logger.warning(f"Failed to parse JSON string: {value}")
-            return default
-    return default
 
 
 class AnalysesRepository:
@@ -140,8 +126,8 @@ class AnalysesRepository:
             content_hash=row["content_hash"],
             agent_version=row["agent_version"],
             status=row["status"],
-            result=_safe_json_loads(row["result"]),
-            error_details=_safe_json_loads(row["error_details"]),
+            result=safe_json_loads(row["result"]),
+            error_details=safe_json_loads(row["error_details"]),
             started_at=row["started_at"],
             completed_at=row["completed_at"],
             user_id=row["user_id"],
@@ -199,8 +185,8 @@ class AnalysesRepository:
             content_hash=row["content_hash"],
             agent_version=row["agent_version"],
             status=row["status"],
-            result=_safe_json_loads(row["result"]),
-            error_details=_safe_json_loads(row["error_details"]),
+            result=safe_json_loads(row["result"]),
+            error_details=safe_json_loads(row["error_details"]),
             started_at=row["started_at"],
             completed_at=row["completed_at"],
             user_id=row["user_id"],
@@ -241,8 +227,8 @@ class AnalysesRepository:
             content_hash=row["content_hash"],
             agent_version=row["agent_version"],
             status=row["status"],
-            result=_safe_json_loads(row["result"]),
-            error_details=_safe_json_loads(row["error_details"]),
+            result=safe_json_loads(row["result"]),
+            error_details=safe_json_loads(row["error_details"]),
             started_at=row["started_at"],
             completed_at=row["completed_at"],
             user_id=row["user_id"],
@@ -347,8 +333,8 @@ class AnalysesRepository:
                 content_hash=row["content_hash"],
                 agent_version=row["agent_version"],
                 status=row["status"],
-                result=_safe_json_loads(row["result"]),
-                error_details=_safe_json_loads(row["error_details"]),
+                result=safe_json_loads(row["result"]),
+                error_details=safe_json_loads(row["error_details"]),
                 started_at=row["started_at"],
                 completed_at=row["completed_at"],
                 user_id=row["user_id"],
@@ -395,8 +381,8 @@ class AnalysesRepository:
                 content_hash=row["content_hash"],
                 agent_version=row["agent_version"],
                 status=row["status"],
-                result=_safe_json_loads(row["result"]),
-                error_details=_safe_json_loads(row["error_details"]),
+                result=safe_json_loads(row["result"]),
+                error_details=safe_json_loads(row["error_details"]),
                 started_at=row["started_at"],
                 completed_at=row["completed_at"],
                 user_id=row["user_id"],

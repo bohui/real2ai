@@ -1,32 +1,21 @@
 """
-Repository for user profile operations
+Profiles Repository - User profile operations
 
-Centralizes profile management with proper RLS enforcement and typing.
+This repository handles user profile operations with proper RLS enforcement.
 """
 
 from typing import Dict, List, Optional, Any
+import json
 from uuid import UUID
 from datetime import datetime
-import asyncpg
-import json
+from dataclasses import dataclass
+import logging
 
 from app.database.connection import get_user_connection
 from app.models.supabase_models import Profile as UserProfile
-from dataclasses import dataclass
+from app.utils.json_utils import safe_json_loads
 
-
-def _safe_parse_json(value):
-    """Safely parse JSON value, handling None and already parsed cases"""
-    if value is None:
-        return {}
-    if isinstance(value, dict):
-        return value
-    if isinstance(value, str):
-        try:
-            return json.loads(value)
-        except (json.JSONDecodeError, TypeError):
-            return {}
-    return {}
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -113,10 +102,12 @@ class ProfilesRepository:
                 subscription_status=row["subscription_status"],
                 credits_remaining=row["credits_remaining"],
                 organization=row["organization"],
-                preferences=_safe_parse_json(row["preferences"]),
+                preferences=safe_json_loads(row["preferences"], {}),
                 onboarding_completed=row["onboarding_completed"],
                 onboarding_completed_at=row["onboarding_completed_at"],
-                onboarding_preferences=_safe_parse_json(row["onboarding_preferences"]),
+                onboarding_preferences=safe_json_loads(
+                    row["onboarding_preferences"], {}
+                ),
                 created_at=row["created_at"],
                 updated_at=row["updated_at"],
             )
@@ -174,10 +165,12 @@ class ProfilesRepository:
                 subscription_status=row["subscription_status"],
                 credits_remaining=row["credits_remaining"],
                 organization=row["organization"],
-                preferences=_safe_parse_json(row["preferences"]),
+                preferences=safe_json_loads(row["preferences"], {}),
                 onboarding_completed=row["onboarding_completed"],
                 onboarding_completed_at=row["onboarding_completed_at"],
-                onboarding_preferences=_safe_parse_json(row["onboarding_preferences"]),
+                onboarding_preferences=safe_json_loads(
+                    row["onboarding_preferences"], {}
+                ),
                 created_at=row["created_at"],
                 updated_at=row["updated_at"],
             )
@@ -274,10 +267,12 @@ class ProfilesRepository:
                 subscription_status=row["subscription_status"],
                 credits_remaining=row["credits_remaining"],
                 organization=row["organization"],
-                preferences=_safe_parse_json(row["preferences"]),
+                preferences=safe_json_loads(row["preferences"], {}),
                 onboarding_completed=row["onboarding_completed"],
                 onboarding_completed_at=row["onboarding_completed_at"],
-                onboarding_preferences=_safe_parse_json(row["onboarding_preferences"]),
+                onboarding_preferences=safe_json_loads(
+                    row["onboarding_preferences"], {}
+                ),
                 created_at=row["created_at"],
                 updated_at=row["updated_at"],
             )

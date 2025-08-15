@@ -23,6 +23,7 @@ from app.models.supabase_models import (
     ArtifactPage as PageArtifact,
     ArtifactDiagram as DiagramArtifact,
 )
+from app.utils.json_utils import safe_json_loads
 
 
 class ArtifactsRepository:
@@ -478,6 +479,9 @@ class ArtifactsRepository:
                     f"Failed to insert or retrieve diagram artifact {diagram_key}"
                 )
 
+            # Deserialize JSON fields if they are strings
+            diagram_meta = safe_json_loads(row["diagram_meta"], {})
+
             return DiagramArtifact(
                 id=row["id"],
                 content_hmac=row["content_hmac"],
@@ -485,7 +489,11 @@ class ArtifactsRepository:
                 params_fingerprint=row["params_fingerprint"],
                 page_number=row["page_number"],
                 diagram_key=row["diagram_key"],
-                diagram_meta=row["diagram_meta"],
+                diagram_meta=diagram_meta,
+                artifact_type="diagram",  # Default for this method
+                image_uri=None,
+                image_sha256=None,
+                image_metadata=None,
                 created_at=row["created_at"],
             )
 
@@ -587,23 +595,31 @@ class ArtifactsRepository:
                 params_fingerprint,
             )
 
-            return [
-                DiagramArtifact(
-                    id=row["id"],
-                    content_hmac=row["content_hmac"],
-                    algorithm_version=row["algorithm_version"],
-                    params_fingerprint=row["params_fingerprint"],
-                    page_number=row["page_number"],
-                    diagram_key=row["diagram_key"],
-                    diagram_meta=row["diagram_meta"],
-                    artifact_type=row["artifact_type"],
-                    image_uri=row["image_uri"],
-                    image_sha256=row["image_sha256"],
-                    image_metadata=row["image_metadata"],
-                    created_at=row["created_at"],
+            artifacts = []
+            for row in rows:
+                # Deserialize JSON fields if they are strings
+                diagram_meta = safe_json_loads(row["diagram_meta"], {})
+
+                image_metadata = safe_json_loads(row["image_metadata"])
+
+                artifacts.append(
+                    DiagramArtifact(
+                        id=row["id"],
+                        content_hmac=row["content_hmac"],
+                        algorithm_version=row["algorithm_version"],
+                        params_fingerprint=row["params_fingerprint"],
+                        page_number=row["page_number"],
+                        diagram_key=row["diagram_key"],
+                        diagram_meta=diagram_meta,
+                        artifact_type=row["artifact_type"],
+                        image_uri=row["image_uri"],
+                        image_sha256=row["image_sha256"],
+                        image_metadata=image_metadata,
+                        created_at=row["created_at"],
+                    )
                 )
-                for row in rows
-            ]
+
+            return artifacts
 
     async def get_document_processing_summary(
         self, content_hmac: str, algorithm_version: int, params_fingerprint: str
@@ -962,6 +978,10 @@ class ArtifactsRepository:
                     f"Failed to insert or retrieve unified visual artifact {diagram_key}"
                 )
 
+            # Deserialize JSON fields if they are strings
+            diagram_meta = safe_json_loads(row["diagram_meta"], {})
+            image_metadata = safe_json_loads(row["image_metadata"])
+
             return DiagramArtifact(
                 id=row["id"],
                 content_hmac=row["content_hmac"],
@@ -969,11 +989,11 @@ class ArtifactsRepository:
                 params_fingerprint=row["params_fingerprint"],
                 page_number=row["page_number"],
                 diagram_key=row["diagram_key"],
-                diagram_meta=row["diagram_meta"],
+                diagram_meta=diagram_meta,
                 artifact_type=row["artifact_type"],
                 image_uri=row["image_uri"],
                 image_sha256=row["image_sha256"],
-                image_metadata=row["image_metadata"],
+                image_metadata=image_metadata,
                 created_at=row["created_at"],
             )
 

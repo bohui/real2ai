@@ -1,36 +1,20 @@
 """
 Documents Repository - User-scoped document operations
 
-This repository handles document-level operations with proper RLS enforcement.
-Documents are user-scoped and this repository provides CRUD operations
-with integrated JWT-based authentication.
+This repository handles document operations with user context and RLS enforcement.
 """
 
-from typing import Optional, Dict, Any, List
+from typing import Dict, List, Optional, Any, Union
+import json
+import logging
 from uuid import UUID
 from datetime import datetime
-import logging
-import json
 
 from app.database.connection import get_user_connection
 from app.models.supabase_models import Document
+from app.utils.json_utils import safe_json_loads
 
 logger = logging.getLogger(__name__)
-
-
-def _safe_json_loads(value, default=None):
-    """Safely parse JSON string to Python object with fallback to default."""
-    if value is None:
-        return default
-    if isinstance(value, dict):
-        return value  # Already a dict, return as-is
-    if isinstance(value, str):
-        try:
-            return json.loads(value)
-        except (json.JSONDecodeError, TypeError):
-            logger.warning(f"Failed to parse JSON string: {value}")
-            return default
-    return default
 
 
 # Document model is now imported from app.models.supabase_models
@@ -119,8 +103,8 @@ class DocumentsRepository:
                 australian_state=row.get("australian_state"),
                 contract_type=row.get("contract_type"),
                 processing_notes=row.get("processing_notes"),
-                upload_metadata=_safe_json_loads(row.get("upload_metadata"), {}),
-                processing_results=_safe_json_loads(row.get("processing_results"), {}),
+                upload_metadata=safe_json_loads(row.get("upload_metadata"), {}),
+                processing_results=safe_json_loads(row.get("processing_results"), {}),
                 created_at=row["created_at"],
                 updated_at=row["updated_at"],
             )
@@ -194,8 +178,8 @@ class DocumentsRepository:
                 australian_state=row.get("australian_state"),
                 contract_type=row.get("contract_type"),
                 processing_notes=row.get("processing_notes"),
-                upload_metadata=_safe_json_loads(row.get("upload_metadata"), {}),
-                processing_results=_safe_json_loads(row.get("processing_results"), {}),
+                upload_metadata=safe_json_loads(row.get("upload_metadata"), {}),
+                processing_results=safe_json_loads(row.get("processing_results"), {}),
                 created_at=row["created_at"],
                 updated_at=row["updated_at"],
             )
@@ -378,8 +362,8 @@ class DocumentsRepository:
                     australian_state=row.get("australian_state"),
                     contract_type=row.get("contract_type"),
                     processing_notes=row.get("processing_notes"),
-                    upload_metadata=_safe_json_loads(row.get("upload_metadata"), {}),
-                    processing_results=_safe_json_loads(
+                    upload_metadata=safe_json_loads(row.get("upload_metadata"), {}),
+                    processing_results=safe_json_loads(
                         row.get("processing_results"), {}
                     ),
                     created_at=row["created_at"],
@@ -573,10 +557,8 @@ class DocumentsRepository:
                         australian_state=row.get("australian_state"),
                         contract_type=row.get("contract_type"),
                         processing_notes=row.get("processing_notes"),
-                        upload_metadata=_safe_json_loads(
-                            row.get("upload_metadata"), {}
-                        ),
-                        processing_results=_safe_json_loads(
+                        upload_metadata=safe_json_loads(row.get("upload_metadata"), {}),
+                        processing_results=safe_json_loads(
                             row.get("processing_results"), {}
                         ),
                         created_at=row["created_at"],

@@ -14,9 +14,21 @@ from uuid import UUID
 
 # Import enums from central location
 from app.schema.enums import (
-    AustralianState, UserType, SubscriptionStatus, ContractType, DocumentStatus,
-    PropertyType, ValuationSource, ValuationType, RiskLevel, MarketOutlook,
-    InsightType, ViewSource, ContentType, DiagramType, EntityType
+    AustralianState,
+    UserType,
+    SubscriptionStatus,
+    ContractType,
+    DocumentStatus,
+    PropertyType,
+    ValuationSource,
+    ValuationType,
+    RiskLevel,
+    MarketOutlook,
+    InsightType,
+    ViewSource,
+    ContentType,
+    DiagramType,
+    EntityType,
 )
 
 
@@ -199,6 +211,17 @@ class ArtifactDiagram(BaseModel):
     page_number: int = Field(..., description="Page number")
     diagram_key: str = Field(..., description="Diagram identifier key")
     diagram_meta: Dict[str, Any] = Field(..., description="Diagram metadata")
+    artifact_type: str = Field(
+        default="diagram",
+        description="Type of artifact (diagram, image_jpg, image_png)",
+    )
+    image_uri: Optional[str] = Field(None, description="URI for image artifacts")
+    image_sha256: Optional[str] = Field(
+        None, description="SHA256 hash for image artifacts"
+    )
+    image_metadata: Optional[Dict[str, Any]] = Field(
+        None, description="Metadata for image artifacts"
+    )
     created_at: Optional[datetime] = Field(None, description="Creation timestamp")
 
 
