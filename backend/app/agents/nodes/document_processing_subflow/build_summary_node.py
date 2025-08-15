@@ -123,7 +123,7 @@ class BuildSummaryNode(DocumentProcessingNodeBase):
                     {"document_id": document_id},
                 )
 
-            australian_state_value = getattr(document, "australian_state", None)
+            australian_state_value = document.australian_state
             original_filename = document.original_filename
             file_type_value = document.file_type
             storage_path_value = document.storage_path

@@ -22,7 +22,8 @@ from app.agents.nodes.document_processing_subflow import (
     SaveParagraphsNode,
 )
 from app.schema.document import ProcessedDocumentSummary
-from app.services.repositories.documents_repository import Document
+from app.services.repositories.documents_repository import DocumentsRepository
+from app.models.supabase_models import Document
 
 
 @pytest.fixture
@@ -52,13 +53,13 @@ def sample_state():
         diagram_processing_result=None,
         processed_summary=None,
         error=None,
-        error_details=None
+        error_details=None,
     )
 
 
 class TestFetchDocumentRecordNode:
     """Test cases for FetchDocumentRecordNode."""
-    
+
     @pytest.mark.asyncio
     async def test_successful_fetch(self, sample_state, mock_user_client):
         """Test successful document metadata fetch."""
@@ -71,63 +72,77 @@ class TestFetchDocumentRecordNode:
             file_type="application/pdf",
             file_size=1024,
             content_hash="test_hash_123",
-            processing_status="pending"
+            processing_status="pending",
         )
-        
+
         # Mock the DocumentsRepository
         mock_docs_repo = AsyncMock()
         mock_docs_repo.get_document.return_value = document_obj
-        
+
         # Ensure mock_user_client.database is never called
-        mock_user_client.database.select.side_effect = Exception("Should not be called - use repository instead")
-        
+        mock_user_client.database.select.side_effect = Exception(
+            "Should not be called - use repository instead"
+        )
+
         node = FetchDocumentRecordNode()
-        
-        with patch('app.agents.nodes.document_processing_subflow.fetch_document_node.DocumentsRepository', return_value=mock_docs_repo):
-            with patch.object(node, 'get_user_client', return_value=mock_user_client):
+
+        with patch(
+            "app.agents.nodes.document_processing_subflow.fetch_document_node.DocumentsRepository",
+            return_value=mock_docs_repo,
+        ):
+            with patch.object(node, "get_user_client", return_value=mock_user_client):
                 # Act
                 result = await node.execute(sample_state)
-                
+
                 # Assert
                 assert result["storage_path"] == "documents/test.pdf"
-                assert result["file_type"] == "application/pdf" 
+                assert result["file_type"] == "application/pdf"
                 assert result["content_hash"] == "test_hash_123"
                 assert result["error"] is None
-                
+
                 # Verify repository was called correctly
-                mock_docs_repo.get_document.assert_called_once_with(UUID(sample_state["document_id"]))
-                
+                mock_docs_repo.get_document.assert_called_once_with(
+                    UUID(sample_state["document_id"])
+                )
+
                 # Verify user_client.database was NOT called
                 assert not mock_user_client.database.select.called
-    
+
     @pytest.mark.asyncio
     async def test_document_not_found(self, sample_state, mock_user_client):
         """Test handling when document is not found."""
         # Arrange - Mock repository to return None (document not found)
         mock_docs_repo = AsyncMock()
         mock_docs_repo.get_document.return_value = None
-        
+
         # Ensure mock_user_client.database is never called
-        mock_user_client.database.select.side_effect = Exception("Should not be called - use repository instead")
-        
+        mock_user_client.database.select.side_effect = Exception(
+            "Should not be called - use repository instead"
+        )
+
         node = FetchDocumentRecordNode()
-        
-        with patch('app.agents.nodes.document_processing_subflow.fetch_document_node.DocumentsRepository', return_value=mock_docs_repo):
-            with patch.object(node, 'get_user_client', return_value=mock_user_client):
+
+        with patch(
+            "app.agents.nodes.document_processing_subflow.fetch_document_node.DocumentsRepository",
+            return_value=mock_docs_repo,
+        ):
+            with patch.object(node, "get_user_client", return_value=mock_user_client):
                 # Act
                 result = await node.execute(sample_state)
-                
+
                 # Assert
                 assert result["error"] == "Document not found or access denied"
                 assert result["error_details"] is not None
                 assert result["error_details"]["node"] == "fetch_document_record"
-                
+
                 # Verify repository was called
-                mock_docs_repo.get_document.assert_called_once_with(UUID(sample_state["document_id"]))
-                
+                mock_docs_repo.get_document.assert_called_once_with(
+                    UUID(sample_state["document_id"])
+                )
+
                 # Verify user_client.database was NOT called
                 assert not mock_user_client.database.select.called
-    
+
     @pytest.mark.asyncio
     async def test_missing_document_id(self, mock_user_client):
         """Test handling when document_id is missing."""
@@ -142,15 +157,15 @@ class TestFetchDocumentRecordNode:
             diagram_processing_result=None,
             processed_summary=None,
             error=None,
-            error_details=None
+            error_details=None,
         )
-        
+
         node = FetchDocumentRecordNode()
-        
-        with patch.object(node, 'get_user_client', return_value=mock_user_client):
+
+        with patch.object(node, "get_user_client", return_value=mock_user_client):
             # Act
             result = await node.execute(state)
-            
+
             # Assert
             assert result["error"] == "Document ID is required"
             assert result["error_details"] is not None
@@ -158,7 +173,7 @@ class TestFetchDocumentRecordNode:
 
 class TestAlreadyProcessedCheckNode:
     """Test cases for AlreadyProcessedCheckNode."""
-    
+
     @pytest.mark.asyncio
     async def test_already_processed_document(self, sample_state):
         """Test when document is already processed."""
@@ -174,37 +189,39 @@ class TestAlreadyProcessedCheckNode:
             extraction_method="pdf_native",
             extraction_confidence=0.95,
             processing_timestamp=datetime.now(timezone.utc).isoformat(),
-            llm_used=True
+            llm_used=True,
         )
-        
+
         node = AlreadyProcessedCheckNode()
-        
-        with patch('app.services.document_service.DocumentService') as mock_service:
+
+        with patch("app.services.document_service.DocumentService") as mock_service:
             mock_service_instance = AsyncMock()
-            mock_service_instance.get_processed_document_summary.return_value = sample_summary
+            mock_service_instance.get_processed_document_summary.return_value = (
+                sample_summary
+            )
             mock_service.return_value = mock_service_instance
-            
+
             # Act
             result = await node.execute(sample_state)
-            
+
             # Assert
             assert result["processed_summary"] == sample_summary
             assert result["error"] is None
-    
+
     @pytest.mark.asyncio
     async def test_not_processed_document(self, sample_state):
-        """Test when document is not yet processed.""" 
+        """Test when document is not yet processed."""
         # Arrange
         node = AlreadyProcessedCheckNode()
-        
-        with patch('app.services.document_service.DocumentService') as mock_service:
+
+        with patch("app.services.document_service.DocumentService") as mock_service:
             mock_service_instance = AsyncMock()
             mock_service_instance.get_processed_document_summary.return_value = None
             mock_service.return_value = mock_service_instance
-            
+
             # Act
             result = await node.execute(sample_state)
-            
+
             # Assert
             assert result["processed_summary"] is None
             assert result["error"] is None
@@ -212,7 +229,7 @@ class TestAlreadyProcessedCheckNode:
 
 class TestBuildSummaryNode:
     """Test cases for BuildSummaryNode."""
-    
+
     @pytest.mark.asyncio
     async def test_build_summary_with_existing_summary(self, sample_state):
         """Test building summary when already exists in state."""
@@ -228,38 +245,40 @@ class TestBuildSummaryNode:
             extraction_method="existing",
             extraction_confidence=0.9,
             processing_timestamp=datetime.now(timezone.utc).isoformat(),
-            llm_used=True
+            llm_used=True,
         )
-        
+
         state_with_summary = sample_state.copy()
         state_with_summary["processed_summary"] = existing_summary
-        
+
         node = BuildSummaryNode()
-        
+
         # Act
         result = await node.execute(state_with_summary)
-        
+
         # Assert
         assert result["processed_summary"] == existing_summary
         assert result["error"] is None
-    
+
     @pytest.mark.asyncio
     async def test_build_summary_missing_extraction_result(self, sample_state):
         """Test building summary when text extraction result is missing."""
         # Arrange
         node = BuildSummaryNode()
-        
+
         # Act
         result = await node.execute(sample_state)
-        
+
         # Assert
-        assert result["error"] == "Cannot build summary without successful text extraction"
+        assert (
+            result["error"] == "Cannot build summary without successful text extraction"
+        )
         assert result["error_details"] is not None
 
 
 class TestErrorHandlingNode:
     """Test cases for ErrorHandlingNode."""
-    
+
     @pytest.mark.asyncio
     async def test_handle_error_with_document_id(self, sample_state, mock_user_client):
         """Test error handling with valid document ID."""
@@ -268,36 +287,45 @@ class TestErrorHandlingNode:
         error_state["error"] = "Sample processing error"
         error_state["error_details"] = {
             "error_type": "ProcessingError",
-            "node": "extract_text"
+            "node": "extract_text",
         }
-        
+
         # Mock the DocumentsRepository used in ErrorHandlingNode
         mock_docs_repo = AsyncMock()
         mock_docs_repo.update_processing_status_and_results = AsyncMock()
-        
+
         # Ensure mock_user_client.database is never called
-        mock_user_client.database.update.side_effect = Exception("Should not be called - use repository instead")
-        
+        mock_user_client.database.update.side_effect = Exception(
+            "Should not be called - use repository instead"
+        )
+
         node = ErrorHandlingNode()
-        
-        with patch('app.services.repositories.documents_repository.DocumentsRepository', return_value=mock_docs_repo):
-            with patch.object(node, 'get_user_client', return_value=mock_user_client):
+
+        with patch(
+            "app.services.repositories.documents_repository.DocumentsRepository",
+            return_value=mock_docs_repo,
+        ):
+            with patch.object(node, "get_user_client", return_value=mock_user_client):
                 # Act
                 result = await node.execute(error_state)
-                
+
                 # Assert
                 assert result["error"] == "Sample processing error"
                 assert result["error_details"] is not None
-                
+
                 # Verify repository method was called correctly
                 mock_docs_repo.update_processing_status_and_results.assert_called_once()
-                call_args = mock_docs_repo.update_processing_status_and_results.call_args
-                assert call_args[0][0] == UUID(sample_state["document_id"])  # document_id as UUID
+                call_args = (
+                    mock_docs_repo.update_processing_status_and_results.call_args
+                )
+                assert call_args[0][0] == UUID(
+                    sample_state["document_id"]
+                )  # document_id as UUID
                 assert call_args[0][1] == "failed"  # ProcessingStatus.FAILED.value
-                
+
                 # Verify user_client.database was NOT called
                 assert not mock_user_client.database.update.called
-    
+
     @pytest.mark.asyncio
     async def test_handle_error_without_document_id(self):
         """Test error handling without document ID."""
@@ -312,19 +340,20 @@ class TestErrorHandlingNode:
             diagram_processing_result=None,
             processed_summary=None,
             error="Some error occurred",
-            error_details=None
+            error_details=None,
         )
-        
+
         node = ErrorHandlingNode()
-        
+
         # Act
         result = await node.execute(state)
-        
+
         # Assert
-        assert "Missing document ID" in result["error"] or result["error"] == "Some error occurred"
+        assert (
+            "Missing document ID" in result["error"]
+            or result["error"] == "Some error occurred"
+        )
         assert result["error_details"] is not None
-
-
 
 
 if __name__ == "__main__":

@@ -54,44 +54,176 @@ class ContractTermsExtractionNode(BaseNode):
             full_text = document_metadata.get("full_text", "")
 
             if not full_text:
-                # Enhanced diagnostics for empty document
-                diagnostic_info = {
-                    "document_metadata_keys": (
-                        list(document_metadata.keys()) if document_metadata else []
-                    ),
-                    "document_metadata_type": str(type(document_metadata)),
-                    "document_data_keys": (
-                        list(state.get("document_data", {}).keys())
-                        if state.get("document_data")
-                        else []
-                    ),
-                    "parsing_status": str(state.get("parsing_status", "unknown")),
-                    "document_processing_complete": "document_metadata" in state
-                    and isinstance(state.get("document_metadata"), dict),
-                }
+                # read from document repository
+                try:
+                    # Get document ID from document_data
+                    document_data = state.get("document_data", {})
+                    document_id = document_data.get("document_id")
 
-                error_msg = "No text available for contract terms extraction - document processing may have failed"
+                    if not document_id:
+                        error_msg = "No document_id available to read from repository"
+                        self._log_step_debug(error_msg, state)
+                        return self._handle_node_error(
+                            state,
+                            Exception(error_msg),
+                            "Cannot read document from repository - missing document_id",
+                            {"document_data_keys": list(document_data.keys())},
+                        )
 
-                # Log detailed diagnostic information for debugging
-                # Use getattr for defensive access in case method is missing
-                log_warning = getattr(self, "_log_warning", None)
-                if log_warning:
-                    log_warning(
-                        f"Contract terms extraction failed: empty document",
-                        extra=diagnostic_info,
+                    # Import repositories and storage service
+                    from app.services.repositories.documents_repository import (
+                        DocumentsRepository,
                     )
-                else:
-                    logger.warning(
-                        f"Contract terms extraction failed: empty document",
-                        extra=diagnostic_info,
+                    from app.services.repositories.artifacts_repository import (
+                        ArtifactsRepository,
+                    )
+                    from app.utils.storage_utils import ArtifactStorageService
+                    from app.core.auth_context import AuthContext
+
+                    # Get user ID for repository access
+                    user_id = AuthContext.get_user_id()
+                    if not user_id:
+                        # Fallback to state user_id if available
+                        user_id = state.get("user_id")
+                        if not user_id:
+                            error_msg = "No user_id available for repository access"
+                            return self._handle_node_error(
+                                state,
+                                Exception(error_msg),
+                                "Cannot access document repository - missing user_id",
+                                {"document_id": document_id},
+                            )
+
+                    # Get document from repository
+                    documents_repo = DocumentsRepository(user_id=user_id)
+                    document = await documents_repo.get_document(document_id)
+
+                    if not document:
+                        error_msg = f"Document not found in repository: {document_id}"
+                        return self._handle_node_error(
+                            state,
+                            Exception(error_msg),
+                            "Document not found in repository",
+                            {"document_id": document_id, "user_id": user_id},
+                        )
+
+                    # Check if document has artifact_text_id
+                    if not document.artifact_text_id:
+                        error_msg = "Document has no associated text artifact"
+                        return self._handle_node_error(
+                            state,
+                            Exception(error_msg),
+                            "Document has no text artifact for reading",
+                            {
+                                "document_id": document_id,
+                                "processing_status": document.processing_status,
+                                "artifact_text_id": document.artifact_text_id,
+                            },
+                        )
+
+                    # Get full text artifact using the artifact_text_id
+                    artifacts_repo = ArtifactsRepository()
+                    full_text_artifact = (
+                        await artifacts_repo.get_full_text_artifact_by_id(
+                            document.artifact_text_id
+                        )
                     )
 
-                return self._handle_node_error(
-                    state,
-                    Exception(error_msg),
-                    error_msg,
-                    diagnostic_info,
-                )
+                    if not full_text_artifact:
+                        error_msg = (
+                            f"Full text artifact not found: {document.artifact_text_id}"
+                        )
+                        return self._handle_node_error(
+                            state,
+                            Exception(error_msg),
+                            "Full text artifact not found in repository",
+                            {
+                                "document_id": document_id,
+                                "artifact_text_id": document.artifact_text_id,
+                            },
+                        )
+
+                    # Download the full text content from storage
+                    storage_service = ArtifactStorageService()
+                    try:
+                        full_text = await storage_service.download_text_blob(
+                            full_text_artifact.full_text_uri
+                        )
+                        self._log_step_debug(
+                            "Successfully retrieved text from artifact storage",
+                            state,
+                            {
+                                "document_id": document_id,
+                                "artifact_id": str(document.artifact_text_id),
+                                "text_length": len(full_text),
+                                "total_pages": full_text_artifact.total_pages,
+                                "total_words": full_text_artifact.total_words,
+                            },
+                        )
+                    except Exception as storage_error:
+                        error_msg = f"Failed to download text from artifact storage: {storage_error}"
+                        return self._handle_node_error(
+                            state,
+                            Exception(error_msg),
+                            "Failed to download text content from artifact storage",
+                            {
+                                "document_id": document_id,
+                                "artifact_id": str(document.artifact_text_id),
+                                "artifact_uri": full_text_artifact.full_text_uri,
+                                "storage_error": str(storage_error),
+                            },
+                        )
+
+                except Exception as repo_error:
+                    self._log_exception(
+                        repo_error,
+                        state,
+                        {
+                            "operation": "document_repository_read",
+                            "document_id": document_id,
+                        },
+                    )
+                    # Continue with empty text - will be handled by existing error logic
+                    full_text = ""
+
+            # Enhanced diagnostics for empty document
+            # diagnostic_info = {
+            #     "document_metadata_keys": (
+            #         list(document_metadata.keys()) if document_metadata else []
+            #     ),
+            #     "document_metadata_type": str(type(document_metadata)),
+            #     "document_data_keys": (
+            #         list(state.get("document_data", {}).keys())
+            #         if state.get("document_data")
+            #         else []
+            #     ),
+            #     "parsing_status": str(state.get("parsing_status", "unknown")),
+            #     "document_processing_complete": "document_metadata" in state
+            #     and isinstance(state.get("document_metadata"), dict),
+            # }
+
+            # error_msg = "No text available for contract terms extraction - document processing may have failed"
+
+            # # Log detailed diagnostic information for debugging
+            # # Use getattr for defensive access in case method is missing
+            # log_warning = getattr(self, "_log_warning", None)
+            # if log_warning:
+            #     log_warning(
+            #         f"Contract terms extraction failed: empty document",
+            #         extra=diagnostic_info,
+            #     )
+            # else:
+            #     logger.warning(
+            #         f"Contract terms extraction failed: empty document",
+            #         extra=diagnostic_info,
+            #     )
+
+            # return self._handle_node_error(
+            #     state,
+            #     Exception(error_msg),
+            #     error_msg,
+            #     diagnostic_info,
+            # )
 
             # Extract terms using configured method
 
