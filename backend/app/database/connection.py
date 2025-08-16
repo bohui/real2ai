@@ -6,6 +6,8 @@ import asyncio
 import asyncpg
 import json
 import time
+import weakref
+import threading
 from collections import OrderedDict
 from typing import Dict, Optional, Any, AsyncContextManager, AsyncGenerator
 from uuid import UUID
@@ -32,82 +34,157 @@ class UserPoolInfo:
         self.last_accessed = time.time()
 
 
-class ConnectionPoolManager:
-    """Enhanced database connection pool manager with JWT-based RLS enforcement"""
+class LoopPoolRegistry:
+    """Per-loop pool registry for concurrent dual-loop operation"""
+    
+    def __init__(self):
+        self.service_pool: Optional[asyncpg.Pool] = None
+        self.user_pools: OrderedDict[UUID, UserPoolInfo] = OrderedDict()
+        self.lock: Optional[asyncio.Lock] = None
+        self.loop_ref: Optional[weakref.ref] = None
+        self.created_at = time.time()
+        self.last_accessed = time.time()
+    
+    def touch(self):
+        """Update last accessed time"""
+        self.last_accessed = time.time()
+    
+    def is_loop_alive(self) -> bool:
+        """Check if the event loop is still alive"""
+        if self.loop_ref is None:
+            return False
+        loop = self.loop_ref()
+        return loop is not None and not loop.is_closed()
+    
+    async def close_all_pools(self):
+        """Close all pools in this registry"""
+        pools_to_close = []
+        
+        if self.service_pool:
+            pools_to_close.append(self.service_pool.close())
+            self.service_pool = None
+        
+        for pool_info in self.user_pools.values():
+            pools_to_close.append(pool_info.pool.close())
+        self.user_pools.clear()
+        
+        if pools_to_close:
+            await asyncio.gather(*pools_to_close, return_exceptions=True)
 
-    _service_pool: Optional[asyncpg.Pool] = None
-    _user_pools: OrderedDict[UUID, UserPoolInfo] = OrderedDict()
-    # Pools must be used only with the event loop they were created with.
-    # We bind pools to a specific loop id and recreate them if the loop changes.
-    _loop_id: Optional[int] = None
-    _pool_lock: Optional[asyncio.Lock] = None
+
+class ConnectionPoolManager:
+    """Enhanced database connection pool manager with per-loop pool registry for concurrent operation"""
+
+    # Per-loop pool registry for true concurrent dual-loop operation
+    _pools_by_loop: Dict[int, LoopPoolRegistry] = {}
+    _registry_lock = threading.Lock()  # Thread-safe registry access
+    _last_cleanup = time.time()
+    _cleanup_interval = 300  # 5 minutes
     _metrics: Dict[str, int] = {
+        "active_loops": 0,
         "active_user_pools": 0,
         "evictions": 0,
         "pool_hits": 0,
         "pool_misses": 0,
+        "registry_cleanups": 0,
     }
 
     @classmethod
-    def _ensure_loop_bound(cls) -> None:
-        """Ensure pools are bound to the current event loop. Reset when loop changes."""
-        try:
+    def _get_loop_registry(cls, current_loop: Optional[asyncio.AbstractEventLoop] = None) -> LoopPoolRegistry:
+        """Get or create pool registry for the current event loop"""
+        if current_loop is None:
             current_loop = asyncio.get_running_loop()
-        except RuntimeError:
-            # Fallback to get_event_loop for older contexts
-            current_loop = asyncio.get_event_loop()
-
+        
         current_loop_id = id(current_loop)
-        if cls._loop_id is None:
-            cls._loop_id = current_loop_id
-            if cls._pool_lock is None:
-                cls._pool_lock = asyncio.Lock()
+        
+        with cls._registry_lock:
+            # Check if registry exists for this loop
+            if current_loop_id not in cls._pools_by_loop:
+                # Create new registry for this loop
+                registry = LoopPoolRegistry()
+                registry.loop_ref = weakref.ref(current_loop)
+                cls._pools_by_loop[current_loop_id] = registry
+                cls._metrics["active_loops"] = len(cls._pools_by_loop)
+                
+                logger.debug(f"[POOL-REGISTRY] Created new pool registry for loop {current_loop_id}")
+            else:
+                registry = cls._pools_by_loop[current_loop_id]
+                registry.touch()
+                
+            # Perform periodic cleanup of stale registries
+            cls._cleanup_stale_registries()
+            
+        return registry
+    
+    @classmethod
+    def _cleanup_stale_registries(cls):
+        """Clean up registries for dead event loops (called with _registry_lock held)"""
+        current_time = time.time()
+        if current_time - cls._last_cleanup < cls._cleanup_interval:
             return
-
-        if cls._loop_id != current_loop_id:
-            # Event loop changed; close all existing pools and rebind
-            # Best-effort synchronous cleanup; schedule async close if possible
-            async def _close_all():
-                await cls.close_all()
-
-            try:
-                if current_loop.is_running():
-                    # Run cleanup in the new loop to avoid cross-loop awaits
-                    fut = current_loop.create_task(_close_all())
-                    # Fire-and-forget; errors will be logged inside close_all
-                else:
-                    current_loop.run_until_complete(_close_all())
-            except Exception:
-                # If cleanup fails, reset references; the GC/driver will clean up
-                cls._service_pool = None
-                cls._user_pools.clear()
-
-            cls._loop_id = current_loop_id
-            cls._pool_lock = asyncio.Lock()
+        
+        stale_loop_ids = []
+        for loop_id, registry in cls._pools_by_loop.items():
+            if not registry.is_loop_alive() or (current_time - registry.last_accessed) > 1800:  # 30 min idle
+                stale_loop_ids.append(loop_id)
+        
+        for loop_id in stale_loop_ids:
+            registry = cls._pools_by_loop.pop(loop_id, None)
+            if registry:
+                # Schedule async cleanup in background (best effort)
+                try:
+                    # We can't await here since we're in a sync context
+                    # The pools will be cleaned up by garbage collection
+                    logger.debug(f"[POOL-REGISTRY] Marked stale registry for cleanup: loop {loop_id}")
+                except Exception as e:
+                    logger.debug(f"[POOL-REGISTRY] Error during stale registry cleanup: {e}")
+        
+        if stale_loop_ids:
+            cls._metrics["registry_cleanups"] += 1
+            cls._metrics["active_loops"] = len(cls._pools_by_loop)
+            logger.debug(f"[POOL-REGISTRY] Cleaned up {len(stale_loop_ids)} stale registries")
+        
+        cls._last_cleanup = current_time
 
     @classmethod
     async def get_service_pool(cls) -> asyncpg.Pool:
-        """Get service role connection pool"""
-        cls._ensure_loop_bound()
-        if cls._service_pool is None:
-            settings = get_settings()
-            dsn = cls._get_database_dsn()
+        """Get service role connection pool for current event loop"""
+        current_loop = asyncio.get_running_loop()
+        current_loop_id = id(current_loop)
+        registry = cls._get_loop_registry(current_loop)
+        
+        # Ensure lock exists for this loop
+        if registry.lock is None:
+            registry.lock = asyncio.Lock()
+        
+        async with registry.lock:
+            if registry.service_pool is None:
+                settings = get_settings()
+                dsn = cls._get_database_dsn()
 
-            try:
-                cls._service_pool = await asyncpg.create_pool(
-                    dsn, min_size=1, max_size=10, command_timeout=60
-                )
-                logger.info("Service role connection pool created")
-            except Exception as e:
-                logger.error(f"Failed to create service role connection pool: {e}")
-                raise
-
-        return cls._service_pool
+                try:
+                    # Optimized service pool for lightweight operations (progress, auth, etc.)
+                    registry.service_pool = await asyncpg.create_pool(
+                        dsn, 
+                        min_size=2,           # Always ready for progress updates
+                        max_size=8,           # Small pool for lightweight operations
+                        command_timeout=30,   # Fast timeout for service operations
+                        server_settings={
+                            'application_name': f'service_pool_loop_{current_loop_id}',
+                            'statement_timeout': '30s'
+                        }
+                    )
+                    logger.info(f"[POOL-REGISTRY] Service pool created for loop {current_loop_id} (optimized for lightweight operations)")
+                except Exception as e:
+                    logger.error(f"[POOL-REGISTRY] Failed to create service pool for loop {current_loop_id}: {e}")
+                    raise
+            
+            registry.touch()
+            return registry.service_pool
 
     @classmethod
     async def get_user_pool(cls, user_id: UUID) -> asyncpg.Pool:
-        """Get user-specific connection pool based on configured mode"""
-        cls._ensure_loop_bound()
+        """Get user-specific connection pool for current event loop based on configured mode"""
         settings = get_settings()
 
         if settings.db_pool_mode == "per_user":
@@ -118,54 +195,70 @@ class ConnectionPoolManager:
 
     @classmethod
     async def _get_per_user_pool(cls, user_id: UUID) -> asyncpg.Pool:
-        """Get or create per-user connection pool"""
-        cls._ensure_loop_bound()
-        # mypy: _pool_lock is ensured in _ensure_loop_bound
-        async with cls._pool_lock:  # type: ignore[arg-type]
+        """Get or create per-user connection pool for current event loop"""
+        current_loop = asyncio.get_running_loop()
+        current_loop_id = id(current_loop)
+        registry = cls._get_loop_registry(current_loop)
+        
+        # Ensure lock exists for this loop
+        if registry.lock is None:
+            registry.lock = asyncio.Lock()
+            
+        async with registry.lock:
             settings = get_settings()
 
             # Check if pool exists and touch it
-            if user_id in cls._user_pools:
-                pool_info = cls._user_pools[user_id]
+            if user_id in registry.user_pools:
+                pool_info = registry.user_pools[user_id]
                 pool_info.touch()
                 # Move to end for LRU
-                cls._user_pools.move_to_end(user_id)
+                registry.user_pools.move_to_end(user_id)
                 cls._metrics["pool_hits"] += 1
+                registry.touch()
                 return pool_info.pool
 
             cls._metrics["pool_misses"] += 1
 
             # Enforce max pools limit
-            if len(cls._user_pools) >= settings.db_max_active_user_pools:
-                await cls._evict_least_recently_used()
+            if len(registry.user_pools) >= settings.db_max_active_user_pools:
+                await cls._evict_least_recently_used_in_registry(registry)
 
             # Create new pool
             dsn = cls._get_database_dsn()
 
             try:
+                # Optimized workflow pool for heavy LangGraph operations
                 pool = await asyncpg.create_pool(
                     dsn,
-                    min_size=settings.db_user_pool_min_size,
-                    max_size=settings.db_user_pool_max_size,
-                    command_timeout=60,
+                    min_size=max(3, settings.db_user_pool_min_size),  # Ready for parallel node execution
+                    max_size=max(15, settings.db_user_pool_max_size), # Handle concurrent workflow operations
+                    command_timeout=120,  # Longer timeout for LLM/analysis operations
+                    server_settings={
+                        'application_name': f'workflow_pool_loop_{current_loop_id}_user_{str(user_id)[:8]}',
+                        'statement_timeout': '120s'
+                    }
                 )
 
                 pool_info = UserPoolInfo(pool, user_id)
-                cls._user_pools[user_id] = pool_info
-                cls._metrics["active_user_pools"] = len(cls._user_pools)
+                registry.user_pools[user_id] = pool_info
+                
+                # Update metrics (sum across all loops)
+                total_user_pools = sum(len(reg.user_pools) for reg in cls._pools_by_loop.values())
+                cls._metrics["active_user_pools"] = total_user_pools
 
-                logger.info(f"Created per-user connection pool for user {user_id}")
+                logger.info(f"[POOL-REGISTRY] Created per-user pool for user {user_id} in loop {current_loop_id}")
+                registry.touch()
                 return pool
 
             except Exception as e:
-                logger.error(f"Failed to create user pool for {user_id}: {e}")
+                logger.error(f"[POOL-REGISTRY] Failed to create user pool for {user_id} in loop {current_loop_id}: {e}")
                 # Fallback to service pool
                 return await cls.get_service_pool()
 
     @classmethod
-    async def _evict_least_recently_used(cls):
-        """Evict the least recently used pool"""
-        if not cls._user_pools:
+    async def _evict_least_recently_used_in_registry(cls, registry: LoopPoolRegistry):
+        """Evict the least recently used pool in a specific registry"""
+        if not registry.user_pools:
             return
 
         settings = get_settings()
@@ -173,7 +266,7 @@ class ConnectionPoolManager:
 
         # First, try to evict idle pools
         to_evict = []
-        for user_id, pool_info in cls._user_pools.items():
+        for user_id, pool_info in registry.user_pools.items():
             if (
                 current_time - pool_info.last_accessed
                 > settings.db_user_pool_idle_ttl_seconds
@@ -182,24 +275,28 @@ class ConnectionPoolManager:
 
         if to_evict:
             for user_id in to_evict:
-                await cls._close_user_pool(user_id)
+                await cls._close_user_pool_in_registry(registry, user_id)
         else:
             # No idle pools, evict LRU
-            oldest_user_id = next(iter(cls._user_pools))
-            await cls._close_user_pool(oldest_user_id)
+            oldest_user_id = next(iter(registry.user_pools))
+            await cls._close_user_pool_in_registry(registry, oldest_user_id)
 
     @classmethod
-    async def _close_user_pool(cls, user_id: UUID):
-        """Close and remove a specific user pool"""
-        if user_id in cls._user_pools:
-            pool_info = cls._user_pools.pop(user_id)
+    async def _close_user_pool_in_registry(cls, registry: LoopPoolRegistry, user_id: UUID):
+        """Close and remove a specific user pool from a registry"""
+        if user_id in registry.user_pools:
+            pool_info = registry.user_pools.pop(user_id)
             try:
                 await pool_info.pool.close()
                 cls._metrics["evictions"] += 1
-                cls._metrics["active_user_pools"] = len(cls._user_pools)
-                logger.info(f"Evicted connection pool for user {user_id}")
+                
+                # Update metrics (sum across all loops)
+                total_user_pools = sum(len(reg.user_pools) for reg in cls._pools_by_loop.values())
+                cls._metrics["active_user_pools"] = total_user_pools
+                
+                logger.info(f"[POOL-REGISTRY] Evicted connection pool for user {user_id}")
             except Exception as e:
-                logger.error(f"Error closing user pool for {user_id}: {e}")
+                logger.error(f"[POOL-REGISTRY] Error closing user pool for {user_id}: {e}")
 
     @classmethod
     def _get_database_dsn(cls) -> str:
@@ -231,14 +328,19 @@ class ConnectionPoolManager:
 
     @classmethod
     async def cleanup_expired_pools(cls):
-        """Clean up expired pools based on TTL"""
-        cls._ensure_loop_bound()
-        async with cls._pool_lock:  # type: ignore[arg-type]
+        """Clean up expired pools based on TTL for current event loop"""
+        current_loop = asyncio.get_running_loop()
+        registry = cls._get_loop_registry(current_loop)
+        
+        if registry.lock is None:
+            registry.lock = asyncio.Lock()
+            
+        async with registry.lock:
             settings = get_settings()
             current_time = time.time()
             expired_users = []
 
-            for user_id, pool_info in cls._user_pools.items():
+            for user_id, pool_info in registry.user_pools.items():
                 if (
                     current_time - pool_info.last_accessed
                     > settings.db_user_pool_idle_ttl_seconds
@@ -246,55 +348,92 @@ class ConnectionPoolManager:
                     expired_users.append(user_id)
 
             for user_id in expired_users:
-                await cls._close_user_pool(user_id)
+                await cls._close_user_pool_in_registry(registry, user_id)
 
     @classmethod
     async def close_all(cls):
-        """Close all connection pools"""
-        # Guard against None lock in startup/cleanup races
-        if cls._pool_lock is None:
-            cls._pool_lock = asyncio.Lock()
-        async with cls._pool_lock:
-            pools_to_close = []
-
-            if cls._service_pool:
-                pools_to_close.append(cls._service_pool.close())
-                cls._service_pool = None
-
-            for pool_info in cls._user_pools.values():
-                pools_to_close.append(pool_info.pool.close())
-            cls._user_pools.clear()
-
-            if pools_to_close:
-                await asyncio.gather(*pools_to_close, return_exceptions=True)
-
-            cls._metrics = {
-                "active_user_pools": 0,
-                "evictions": 0,
-                "pool_hits": 0,
-                "pool_misses": 0,
-            }
-            # Reset loop binding to allow rebind on next use
-            cls._loop_id = None
-            logger.info("All connection pools closed")
+        """Close all connection pools for current event loop"""
+        current_loop = asyncio.get_running_loop()
+        current_loop_id = id(current_loop)
+        
+        with cls._registry_lock:
+            if current_loop_id not in cls._pools_by_loop:
+                logger.debug(f"[POOL-REGISTRY] No pools to close for loop {current_loop_id}")
+                return
+            
+            registry = cls._pools_by_loop.pop(current_loop_id)
+        
+        # Close all pools in this registry
+        await registry.close_all_pools()
+        
+        # Update global metrics
+        with cls._registry_lock:
+            cls._metrics["active_loops"] = len(cls._pools_by_loop)
+            total_user_pools = sum(len(reg.user_pools) for reg in cls._pools_by_loop.values())
+            cls._metrics["active_user_pools"] = total_user_pools
+        
+        logger.info(f"[POOL-REGISTRY] All connection pools closed for loop {current_loop_id}")
+    
+    @classmethod 
+    async def close_all_loops(cls):
+        """Close all connection pools for all event loops (used for shutdown)"""
+        with cls._registry_lock:
+            registries = list(cls._pools_by_loop.values())
+            cls._pools_by_loop.clear()
+        
+        # Close all registries
+        close_tasks = []
+        for registry in registries:
+            close_tasks.append(registry.close_all_pools())
+        
+        if close_tasks:
+            await asyncio.gather(*close_tasks, return_exceptions=True)
+        
+        # Reset metrics
+        cls._metrics = {
+            "active_loops": 0,
+            "active_user_pools": 0,
+            "evictions": 0,
+            "pool_hits": 0,
+            "pool_misses": 0,
+            "registry_cleanups": 0,
+        }
+        
+        logger.info("[POOL-REGISTRY] All connection pools closed for all loops")
 
     @classmethod
     def get_metrics(cls) -> Dict[str, int]:
-        """Get connection pool metrics"""
-        cls._metrics["active_user_pools"] = len(cls._user_pools)
-        return cls._metrics.copy()
+        """Get connection pool metrics across all loops"""
+        with cls._registry_lock:
+            # Update metrics with current counts
+            cls._metrics["active_loops"] = len(cls._pools_by_loop)
+            total_user_pools = sum(len(reg.user_pools) for reg in cls._pools_by_loop.values())
+            cls._metrics["active_user_pools"] = total_user_pools
+            
+            # Add detailed per-loop metrics
+            detailed_metrics = cls._metrics.copy()
+            for loop_id, registry in cls._pools_by_loop.items():
+                detailed_metrics[f"loop_{loop_id}_user_pools"] = len(registry.user_pools)
+                detailed_metrics[f"loop_{loop_id}_has_service_pool"] = 1 if registry.service_pool else 0
+                detailed_metrics[f"loop_{loop_id}_last_accessed"] = int(registry.last_accessed)
+            
+        return detailed_metrics
 
 
 async def _setup_user_session(
-    connection: asyncpg.Connection, user_id: Optional[UUID] = None
+    connection: asyncpg.Connection, 
+    user_id: Optional[UUID] = None, 
+    user_token: Optional[str] = None
 ):
     """
-    Set up user session with JWT claims for RLS enforcement.
+    Set up user session with JWT claims for RLS enforcement using transaction-local GUCs.
 
     Args:
         connection: Database connection
-        user_id: Optional user ID (uses auth context if not provided)
+        user_id: User ID (uses auth context if not provided)
+        user_token: JWT token (uses auth context if not provided)
     """
+    # Use provided user_id/token or fall back to auth context as last resort
     if user_id is None:
         user_id_str = AuthContext.get_user_id()
         if user_id_str:
@@ -304,8 +443,8 @@ async def _setup_user_session(
                 logger.warning(f"Invalid user ID format in auth context: {user_id_str}")
                 user_id = None
 
-    # Get user token from auth context
-    user_token = AuthContext.get_user_token()
+    if user_token is None:
+        user_token = AuthContext.get_user_token()
 
     if user_token and user_id:
         try:
@@ -432,25 +571,22 @@ async def _setup_user_session(
                 )
                 raise ValueError(f"Invalid token: {e}")
 
-            # Set session GUCs for RLS
+            # Set transaction-local GUCs for RLS (auto-reset on commit/rollback)
             logger.debug(
-                "[DB] Setting user session GUCs",
+                "[DB] Setting user transaction-local GUCs",
                 extra={
                     "user_id": str(user_id),
                     "has_claims": True,
-                    "loop_is_closed": getattr(
-                        asyncio.get_event_loop(), "is_closed", lambda: None
-                    )(),
                 },
             )
             await connection.execute(
-                "SELECT set_config('request.jwt.claims', $1, false)", json.dumps(claims)
+                "SELECT set_config('request.jwt.claims', $1, true)", json.dumps(claims)
             )
             await connection.execute(
-                "SELECT set_config('role', $1, false)", "authenticated"
+                "SELECT set_config('role', $1, true)", "authenticated"
             )
             await connection.execute(
-                "SELECT set_config('request.jwt.claim.sub', $1, false)", str(user_id)
+                "SELECT set_config('request.jwt.claim.sub', $1, true)", str(user_id)
             )
 
             logger.debug(f"Set user session context for user {user_id}")
@@ -463,16 +599,16 @@ async def _setup_user_session(
                     "event_loop_closed": True,
                 },
             )
-            # Set minimal auth context
+            # Set minimal auth context (transaction-local)
             await connection.execute(
-                "SELECT set_config('role', $1, false)", "authenticated"
+                "SELECT set_config('role', $1, true)", "authenticated"
             )
             await connection.execute(
-                "SELECT set_config('request.jwt.claim.sub', $1, false)", str(user_id)
+                "SELECT set_config('request.jwt.claim.sub', $1, true)", str(user_id)
             )
     else:
-        # No user context - set anonymous role
-        await connection.execute("SELECT set_config('role', $1, false)", "anon")
+        # No user context - set anonymous role (transaction-local)
+        await connection.execute("SELECT set_config('role', $1, true)", "anon")
 
 
 async def _reset_session_gucs(connection: asyncpg.Connection):
@@ -495,19 +631,19 @@ async def _reset_session_gucs(connection: asyncpg.Connection):
 
 async def _setup_service_session(connection: asyncpg.Connection):
     """
-    Set up a service-role session so RLS policies that rely on auth.jwt() pass.
+    Set up a service-role session using transaction-local GUCs so RLS policies that rely on auth.jwt() pass.
 
     Supabase RLS policies often check auth.jwt()->>'role' = 'service_role'. When
     connecting directly to Postgres (asyncpg), we must set the same GUCs that
-    PostgREST would set.
+    PostgREST would set. Using transaction-local GUCs prevents session bleed.
     """
     try:
         claims = {"role": "service_role"}
         await connection.execute(
-            "SELECT set_config('request.jwt.claims', $1, false)", json.dumps(claims)
+            "SELECT set_config('request.jwt.claims', $1, true)", json.dumps(claims)
         )
-        await connection.execute("SELECT set_config('role', $1, false)", "service_role")
-        logger.debug("Set service-role session context for connection")
+        await connection.execute("SELECT set_config('role', $1, true)", "service_role")
+        logger.debug("Set service-role transaction-local context for connection")
     except Exception as e:
         logger.error(f"Failed to set service session context: {e}")
 
@@ -521,23 +657,43 @@ async def get_service_role_connection() -> AsyncGenerator[asyncpg.Connection, No
         AsyncContextManager[asyncpg.Connection] with service role privileges
     """
     pool = await ConnectionPoolManager.get_service_pool()
-    connection = await pool.acquire()
-    logger.debug("[DB] Acquired service-role connection from pool")
+    
+    # Track acquisition time to detect pool starvation
+    import time
+    start_time = time.time()
+    
+    try:
+        # Acquire with timeout to prevent hanging
+        connection = await asyncio.wait_for(pool.acquire(), timeout=10.0)
+        
+        acquisition_time = time.time() - start_time
+        if acquisition_time > 2.0:
+            logger.warning(f"[DB] Slow service pool acquisition: {acquisition_time:.2f}s")
+        else:
+            logger.debug(f"[DB] Acquired service-role connection in {acquisition_time:.3f}s")
+            
+    except asyncio.TimeoutError:
+        logger.error("[DB] Service pool acquisition timeout - possible pool starvation")
+        raise
 
     try:
-        # Ensure service-role RLS context is present for this connection
-        await _setup_service_session(connection)
-        yield connection
+        # Wrap in transaction with service-role RLS context
+        async with connection.transaction():
+            await _setup_service_session(connection)
+            yield connection
     finally:
         try:
+            # Reset connection state before releasing to pool
+            await _reset_session_gucs(connection)
             await pool.release(connection)
-            logger.debug("[DB] Released service-role connection back to pool")
+            logger.debug("[DB] Released service-role connection back to pool with state reset")
         except (RuntimeError, Exception) as e:
             logger.error(f"Failed to release service role connection: {e}")
-            # Force close if event loop is dead
+            # Force close connection if reset/release fails
             try:
                 if hasattr(connection, "close") and not connection.is_closed():
-                    connection.close()
+                    await connection.close()
+                    logger.warning("[DB] Force-closed service connection due to release failure")
             except Exception:
                 pass  # Ignore final cleanup errors
 
@@ -545,12 +701,14 @@ async def get_service_role_connection() -> AsyncGenerator[asyncpg.Connection, No
 @asynccontextmanager
 async def get_user_connection(
     user_id: Optional[UUID] = None,
+    user_token: Optional[str] = None,
 ) -> AsyncGenerator[asyncpg.Connection, None]:
     """
-    Get a user-scoped database connection with JWT-based RLS enforcement.
+    Get a user-scoped database connection with JWT-based RLS enforcement using transaction-local GUCs.
 
     Args:
         user_id: User ID for connection context (uses auth context if not provided)
+        user_token: JWT token (uses auth context if not provided)
 
     Returns:
         AsyncContextManager[asyncpg.Connection] with user RLS context
@@ -570,16 +728,29 @@ async def get_user_connection(
             raise ValueError("No user ID provided and none in auth context")
 
     pool = await ConnectionPoolManager.get_user_pool(user_id)
-    connection = await pool.acquire()
-    logger.debug(
-        "[DB] Acquired user connection",
-        extra={"user_id": str(user_id), "pool_mode": settings.db_pool_mode},
-    )
+    
+    # Track acquisition time to detect pool starvation
+    start_time = time.time()
+    
+    try:
+        # Acquire with timeout to prevent hanging
+        connection = await asyncio.wait_for(pool.acquire(), timeout=15.0)
+        
+        acquisition_time = time.time() - start_time
+        if acquisition_time > 3.0:
+            logger.warning(f"[DB] Slow user pool acquisition: {acquisition_time:.2f}s for user {user_id}")
+        else:
+            logger.debug(f"[DB] Acquired user connection in {acquisition_time:.3f}s for user {user_id}")
+            
+    except asyncio.TimeoutError:
+        logger.error(f"[DB] User pool acquisition timeout for user {user_id} - possible pool starvation")
+        raise
 
     try:
-        # Set up user session context
-        await _setup_user_session(connection, user_id)
-        yield connection
+        # Wrap in transaction with user session context (transaction-local GUCs)
+        async with connection.transaction():
+            await _setup_user_session(connection, user_id, user_token)
+            yield connection
     except Exception as e:
         logger.error(
             f"Error using user connection for user {user_id}: {e}",
@@ -590,9 +761,10 @@ async def get_user_connection(
         try:
             # Check if we can still run async operations
             try:
-                # Reset GUCs in shared mode to prevent bleed-over
-                if settings.db_pool_mode == "shared":
-                    await _reset_session_gucs(connection)
+                # Always reset connection state for safety (not just in shared mode)
+                # This prevents session state bleed-over between operations
+                await _reset_session_gucs(connection)
+                logger.debug(f"[DB] Reset session state for user {user_id}")
             except (RuntimeError, Exception) as e:
                 # Event loop might be closed or other async context issues
                 logger.warning(f"Failed to reset session GUCs for user {user_id}: {e}")
@@ -603,7 +775,7 @@ async def get_user_connection(
             # Attempt to release connection gracefully
             await pool.release(connection)
             logger.debug(
-                "[DB] Released user connection",
+                "[DB] Released user connection with state reset",
                 extra={"user_id": str(user_id), "pool_mode": settings.db_pool_mode},
             )
         except (RuntimeError, Exception) as e:
@@ -712,3 +884,23 @@ async def fetchrow_raw_sql(query: str, *args, user_id: Optional[UUID] = None) ->
             if attempt == max_attempts - 1:
                 raise
             await asyncio.sleep(0.1 * (attempt + 1))
+
+
+# Alias for new safe repository pattern
+@asynccontextmanager
+async def get_service_connection() -> AsyncGenerator[asyncpg.Connection, None]:
+    """
+    Get a service connection for lightweight read operations.
+    
+    This is an alias for get_service_role_connection() that follows the new
+    safe repository pattern where operations explicitly pass user_id in queries
+    rather than relying on session state. Uses transaction-local GUCs for safety.
+    
+    Features:
+    - Uses service pool optimized for lightweight operations
+    - Transaction-local GUCs prevent session state bleed
+    - Automatic connection reset on release (belt-and-suspenders)
+    - Works in any event loop context (single or dual pool architecture)
+    """
+    async with get_service_role_connection() as conn:
+        yield conn

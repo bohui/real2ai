@@ -146,8 +146,43 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                 },
             )
 
-            # Get user-authenticated client for file operations
-            user_client = await self.get_user_client()
+            # Get user-aware service client for storage operations
+            user_id = state.get("user_id")
+            if not user_id:
+                return self._handle_error(
+                    state,
+                    ValueError("Missing user_id in workflow state"),
+                    "User ID is required for authenticated storage access",
+                    {"provided_state_keys": list(state.keys())}
+                )
+            
+            # Use authenticated client with proper RLS enforcement
+            # This uses the authentication context from the parent task
+            try:
+                from app.core.auth_context import AuthContext
+                
+                # Get user-authenticated client using existing authentication context
+                # The isolated=True parameter ensures proper connection pool handling
+                user_client = await AuthContext.get_authenticated_client(isolated=True)
+                
+                # Verify we have the correct user context
+                auth_user_id = AuthContext.get_user_id()
+                if auth_user_id != user_id:
+                    self._log_warning(
+                        f"Authentication context user_id {auth_user_id} doesn't match workflow user_id {user_id}"
+                    )
+                
+                self._log_info(
+                    f"Using authenticated client for user {user_id} storage operations"
+                )
+                
+            except Exception as client_error:
+                return self._handle_error(
+                    state,
+                    client_error,
+                    f"Failed to get authenticated client for user {user_id}: {str(client_error)}",
+                    {"user_id": user_id, "auth_user_id": AuthContext.get_user_id(), "client_error": str(client_error)}
+                )
 
             # Download file content to compute HMAC if not provided
             file_content = None

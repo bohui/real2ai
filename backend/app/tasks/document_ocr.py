@@ -37,23 +37,12 @@ async def enhanced_reprocess_document_with_ocr_background(
     """
 
     try:
-        # Verify user context matches expected user
-        context_user_id = AuthContext.get_user_id()
-        if context_user_id != user_id:
-            raise ValueError(
-                f"User context mismatch: expected {user_id}, got {context_user_id}"
-            )
-
-        # Initialize user-aware document service
+        # Initialize document service
         document_service = DocumentService()
         await document_service.initialize()
 
-        # Get user-authenticated client (respects RLS)
-        # Use isolated client to prevent JWT token race conditions in concurrent tasks
-        user_client = await document_service.get_user_client(isolated=True)
-
-        # Update document status
-        docs_repo = DocumentsRepository()
+        # Initialize repository with explicit user_id for RLS compliance
+        docs_repo = DocumentsRepository(user_id=UUID(user_id))
         await docs_repo.update_document_status(UUID(document_id), "reprocessing_ocr")
 
         # Send WebSocket notification
@@ -226,8 +215,8 @@ async def batch_ocr_processing_background(
                 async with semaphore:
                     try:
                         # Get document details
-                        docs_repo = DocumentsRepository()
-                        document = await docs_repo.get_document(UUID(doc_id))
+                        docs_repo = DocumentsRepository(user_id=UUID(user_id))
+                        document = await docs_repo.get_document(UUID(doc_id), user_id=UUID(user_id))
 
                         if not document:
                             logger.warning(
@@ -283,8 +272,8 @@ async def batch_ocr_processing_background(
             for i, doc_id in enumerate(document_ids):
                 try:
                     # Get document details
-                    docs_repo = DocumentsRepository()
-                    document = await docs_repo.get_document(UUID(doc_id))
+                    docs_repo = DocumentsRepository(user_id=UUID(user_id))
+                    document = await docs_repo.get_document(UUID(doc_id), user_id=UUID(user_id))
 
                     if not document:
                         continue

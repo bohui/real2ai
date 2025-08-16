@@ -134,7 +134,7 @@ class ProgressTrackingWorkflow(ContractAnalysisWorkflow):
             return
         try:
             # Verify event loop stability before executing callback
-            from app.core.async_utils import create_stabilized_execution_context
+            from app.core.async_utils import AsyncContextManager
             
             # Quick loop verification (lightweight check)
             current_loop = asyncio.get_running_loop()

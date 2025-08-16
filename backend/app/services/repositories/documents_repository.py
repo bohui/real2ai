@@ -10,7 +10,7 @@ import logging
 from uuid import UUID
 from datetime import datetime
 
-from app.database.connection import get_user_connection
+from app.database.connection import get_user_connection, get_service_connection
 from app.models.supabase_models import Document
 from app.utils.json_utils import safe_json_loads
 
@@ -109,24 +109,34 @@ class DocumentsRepository:
                 updated_at=row["updated_at"],
             )
 
-    async def get_document(self, document_id: UUID) -> Optional[Document]:
+    async def get_document(self, document_id: UUID, user_id: Optional[UUID] = None) -> Optional[Document]:
         """
-        Get document by ID.
+        Get document by ID with explicit user_id enforcement.
 
         Args:
             document_id: Document ID
+            user_id: User ID to enforce (uses repository user_id if not provided)
 
         Returns:
             Document or None if not found
         """
-        async with get_user_connection(self.user_id) as conn:
+        # Use explicit user_id or fall back to repository user_id
+        effective_user_id = user_id or self.user_id
+        if not effective_user_id:
+            raise ValueError("No user_id provided and none available in repository")
+            
+        # Use service pool for simple read operations to avoid blocking workflow pool
+        async with get_service_connection() as conn:
             logger.debug(
-                "[DocumentsRepository] get_document",
+                "[DocumentsRepository] get_document with explicit user_id",
                 extra={
                     "document_id": str(document_id),
-                    "repo_user_id": str(self.user_id) if self.user_id else None,
+                    "user_id": str(effective_user_id),
                 },
             )
+            
+            # Connection already wrapped in transaction with service-role GUCs
+            # Enforce user_id directly in WHERE clause - no session state needed
             row = await conn.fetchrow(
                 """
                 SELECT id, user_id, original_filename, storage_path, file_type, file_size, 
@@ -137,9 +147,10 @@ class DocumentsRepository:
                        document_type, australian_state, contract_type, processing_notes,
                        upload_metadata, processing_results, created_at, updated_at
                 FROM documents
-                WHERE id = $1
+                WHERE id = $1 AND user_id = $2
                 """,
                 document_id,
+                effective_user_id,
             )
 
             if not row:

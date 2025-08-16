@@ -76,6 +76,7 @@ class DocumentProcessingState(TypedDict):
     # Required input
     document_id: str
     use_llm: bool
+    user_id: str  # Required for repository access in isolated execution
 
     # Optional input overrides
     content_hash: Optional[str]
@@ -344,6 +345,7 @@ class DocumentProcessingWorkflow:
     async def process_document(
         self,
         document_id: str,
+        user_id: str,
         use_llm: bool = None,
         content_hash: Optional[str] = None,
         australian_state: Optional[str] = None,
@@ -355,6 +357,7 @@ class DocumentProcessingWorkflow:
 
         Args:
             document_id: ID of document to process
+            user_id: User ID for repository access in isolated execution
             use_llm: Override LLM usage setting (optional)
             content_hash: Content hash override (optional)
             australian_state: Australian state for context (optional)
@@ -368,6 +371,7 @@ class DocumentProcessingWorkflow:
             # Create initial state
             initial_state = DocumentProcessingState(
                 document_id=document_id,
+                user_id=user_id,
                 use_llm=(
                     use_llm if use_llm is not None else self.use_llm_document_processing
                 ),

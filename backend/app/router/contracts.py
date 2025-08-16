@@ -624,8 +624,8 @@ async def _get_user_document(
 ) -> DocumentRecord:
     """Get user document with user context (RLS enforced)"""
     try:
-        docs_repo = DocumentsRepository()
-        document = await docs_repo.get_document(UUID(document_id))
+        docs_repo = DocumentsRepository(user_id=UUID(user_id))
+        document = await docs_repo.get_document(UUID(document_id), user_id=UUID(user_id))
 
         logger.debug(
             f"Document query result for {document_id}: {document is not None}"
@@ -886,7 +886,7 @@ async def get_contract_analysis(
             ]
 
         # Also check documents table for additional access
-        docs_repo = DocumentsRepository()
+        docs_repo = DocumentsRepository(user_id=user.id)
         user_documents = await docs_repo.list_user_documents(limit=1000)
         
         if user_documents:
@@ -1075,7 +1075,7 @@ async def delete_contract_analysis(
             ]
 
         # Also check documents table for additional access
-        docs_repo = DocumentsRepository()
+        docs_repo = DocumentsRepository(user_id=user.id)
         user_documents = await docs_repo.list_user_documents(limit=1000)
         
         if user_documents:

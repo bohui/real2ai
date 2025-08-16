@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime
 import logging
 
-from app.database.connection import get_user_connection
+from app.database.connection import get_user_connection, get_service_connection
 
 logger = logging.getLogger(__name__)
 
@@ -70,12 +70,13 @@ class AnalysisProgressRepository:
         Returns:
             True if upsert successful, False otherwise
         """
-        async with get_user_connection(self.user_id) as conn:
+        # Use service pool for lightweight progress operations to avoid blocking workflow pool
+        async with get_service_connection() as conn:
             try:
                 # Diagnostic logging for parameter types and values
                 step_started_at = progress_data.get("step_started_at")
                 logger.debug(
-                    "[AnalysisProgressRepository] Upsert called",
+                    "[AnalysisProgressRepository] Upsert called with explicit user enforcement",
                     extra={
                         "content_hash": content_hash,
                         "user_id": user_id,
@@ -169,7 +170,8 @@ class AnalysisProgressRepository:
                 "current_step, progress_percent, updated_at, status, error_message"
             )
 
-        async with get_user_connection(self.user_id) as conn:
+        # Use service pool for lightweight read operations
+        async with get_service_connection() as conn:
             try:
                 row = await conn.fetchrow(
                     f"""
@@ -213,7 +215,8 @@ class AnalysisProgressRepository:
         if columns is None:
             columns = "*"
 
-        async with get_user_connection(self.user_id) as conn:
+        # Use service pool for lightweight read operations
+        async with get_service_connection() as conn:
             try:
                 # Build WHERE clause dynamically
                 where_clauses = []
@@ -257,7 +260,8 @@ class AnalysisProgressRepository:
         Returns:
             True if deletion successful, False otherwise
         """
-        async with get_user_connection(self.user_id) as conn:
+        # Use service pool for lightweight read operations
+        async with get_service_connection() as conn:
             try:
                 result = await conn.execute(
                     """
@@ -291,7 +295,8 @@ class AnalysisProgressRepository:
         Returns:
             True if update successful, False otherwise
         """
-        async with get_user_connection(self.user_id) as conn:
+        # Use service pool for lightweight read operations
+        async with get_service_connection() as conn:
             try:
                 if error_message is not None:
                     result = await conn.execute(
@@ -356,7 +361,8 @@ class AnalysisProgressRepository:
         Returns:
             Number of records deleted
         """
-        async with get_user_connection(self.user_id) as conn:
+        # Use service pool for lightweight read operations
+        async with get_service_connection() as conn:
             try:
                 result = await conn.execute(
                     """
@@ -389,7 +395,8 @@ class AnalysisProgressRepository:
         Returns:
             Number of records deleted
         """
-        async with get_user_connection(self.user_id) as conn:
+        # Use service pool for lightweight read operations
+        async with get_service_connection() as conn:
             try:
                 if user_id:
                     result = await conn.execute(

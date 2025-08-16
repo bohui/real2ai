@@ -319,17 +319,30 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
             else:
                 self.logger.warning(f"Unexpected RPC response type: {type(result)}")
                 return
+            
+            # Debug logging for response format
+            self.logger.debug(f"Bucket RPC response: {result_data}")
 
             # Log appropriate message based on result
-            if result_data.get("created"):
+            # Handle the actual RPC response format: {"status": "ok", "existed": boolean}
+            if result_data.get("status") == "ok":
+                if result_data.get("existed"):
+                    self.logger.debug(
+                        f"Storage bucket already exists: {self.storage_bucket}"
+                    )
+                else:
+                    self.logger.info(f"Created storage bucket: {self.storage_bucket}")
+            elif result_data.get("created"):
+                # Fallback for legacy response format
                 self.logger.info(f"Created storage bucket: {self.storage_bucket}")
             elif result_data.get("message") == "Bucket already exists":
+                # Fallback for legacy response format
                 self.logger.debug(
                     f"Storage bucket already exists: {self.storage_bucket}"
                 )
             else:
-                self.logger.info(
-                    f"Bucket operation result: {result_data.get('message', 'Unknown')}"
+                self.logger.warning(
+                    f"Unexpected bucket operation response: {result_data}"
                 )
 
             self.log_operation(
@@ -524,7 +537,7 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
                 )
 
             # Create document record using repository (user context - RLS enforced)
-            repo = DocumentsRepository()
+            repo = DocumentsRepository(user_id=user_id)
             await repo.create_document(
                 {
                     "id": document_id,
