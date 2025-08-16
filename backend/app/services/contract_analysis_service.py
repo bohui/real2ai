@@ -226,9 +226,9 @@ class ContractAnalysisService:
                     self._service_metrics["prompt_manager_errors"] += 1
 
             # Execute analysis with stabilized execution to prevent loop migration
-            from app.core.async_utils import AsyncContextManager
+            from app.core.async_utils import create_stabilized_execution_context
             
-            async with AsyncContextManager():
+            async with create_stabilized_execution_context() as stabilizer:
                 logger.info(f"[ANALYSIS-STABILIZER] Starting stabilized execution for session {session_id}")
                 
                 # Execute analysis with progress tracking in stabilized context
@@ -238,6 +238,7 @@ class ContractAnalysisService:
                     contract_id,
                     progress_callback=progress_callback,
                     resume_from_step=(user_preferences or {}).get("resume_from_step"),
+                    stabilizer=stabilizer,
                 )
                 
                 logger.info(f"[ANALYSIS-STABILIZER] Completed stabilized execution for session {session_id}")
@@ -626,6 +627,7 @@ class ContractAnalysisService:
         *,
         progress_callback: Optional[Callable[[str, int, str], Awaitable[None]]] = None,
         resume_from_step: Optional[str] = None,
+        stabilizer = None,
     ) -> RealEstateAgentState:
         """
         Execute workflow with real-time progress updates
@@ -643,8 +645,17 @@ class ContractAnalysisService:
             openai_api_base=self.openai_api_base,
         )
 
+        # Execute the workflow with loop stability verification
+        if stabilizer:
+            logger.info(f"[ANALYSIS-STABILIZER] Verifying loop stability before workflow execution")
+            await stabilizer.verify_loop_stability("pre_workflow_execution")
+
         # Execute the workflow
         result = await progress_workflow.analyze_contract(initial_state)
+        
+        if stabilizer:
+            logger.info(f"[ANALYSIS-STABILIZER] Verifying loop stability after workflow execution")
+            await stabilizer.verify_loop_stability("post_workflow_execution")
         
         return result
 

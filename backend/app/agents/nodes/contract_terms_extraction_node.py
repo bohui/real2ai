@@ -78,12 +78,13 @@ class ContractTermsExtractionNode(BaseNode):
                         ArtifactsRepository,
                     )
                     from app.utils.storage_utils import ArtifactStorageService
-                    # Get user ID for repository access - prefer state over AuthContext
-                    user_id = state.get("user_id")
+                    from app.core.auth_context import AuthContext
+
+                    # Get user ID for repository access
+                    user_id = AuthContext.get_user_id()
                     if not user_id:
-                        # Fallback to AuthContext as last resort
-                        from app.core.auth_context import AuthContext
-                        user_id = AuthContext.get_user_id()
+                        # Fallback to state user_id if available
+                        user_id = state.get("user_id")
                         if not user_id:
                             error_msg = "No user_id available for repository access"
                             return self._handle_node_error(
@@ -93,9 +94,9 @@ class ContractTermsExtractionNode(BaseNode):
                                 {"document_id": document_id},
                             )
 
-                    # Get document from repository with explicit user_id
+                    # Get document from repository
                     documents_repo = DocumentsRepository(user_id=user_id)
-                    document = await documents_repo.get_document(document_id, user_id=user_id)
+                    document = await documents_repo.get_document(document_id)
 
                     if not document:
                         error_msg = f"Document not found in repository: {document_id}"
@@ -121,7 +122,7 @@ class ContractTermsExtractionNode(BaseNode):
                         )
 
                     # Get full text artifact using the artifact_text_id
-                    artifacts_repo = ArtifactsRepository(user_id=user_id)
+                    artifacts_repo = ArtifactsRepository()
                     full_text_artifact = (
                         await artifacts_repo.get_full_text_artifact_by_id(
                             document.artifact_text_id

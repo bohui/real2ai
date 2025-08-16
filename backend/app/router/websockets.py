@@ -55,8 +55,8 @@ async def check_document_cache_status(document_id: str, user_id: str) -> Dict[st
 
     try:
         # Get document with user context (RLS enforced)
-        docs_repo = DocumentsRepository(user_id=UUID(user_id))
-        document = await docs_repo.get_document(UUID(document_id), user_id=UUID(user_id))
+        docs_repo = DocumentsRepository()
+        document = await docs_repo.get_document(UUID(document_id))
 
         if not document:
             raise ValueError(f"Document {document_id} not found or access denied")
@@ -86,6 +86,7 @@ async def check_document_cache_status(document_id: str, user_id: str) -> Dict[st
         )
 
         # Check if user has access to documents with this content_hash using repository
+        docs_repo = DocumentsRepository()
         user_documents = await docs_repo.get_documents_by_content_hash(
             content_hash, user_id
         )
@@ -192,7 +193,7 @@ async def check_document_cache_status(document_id: str, user_id: str) -> Dict[st
             )
 
             # Get detailed progress if available
-            progress_repo = AnalysisProgressRepository(user_id=user_id)
+            progress_repo = AnalysisProgressRepository()
             progress = await progress_repo.get_latest_progress(content_hash, user_id)
 
             progress_info = None
@@ -491,8 +492,8 @@ async def document_analysis_websocket(
         # Send document_uploaded notification if this is a recent upload
         try:
             # Get document details to check upload time
-            docs_repo = DocumentsRepository(user_id=user.id)
-            document_obj = await docs_repo.get_document(UUID(document_id), user_id=user.id)
+            docs_repo = DocumentsRepository()
+            document_obj = await docs_repo.get_document(UUID(document_id))
 
             if document_obj:
                 document = {
@@ -953,8 +954,8 @@ async def handle_status_request(
     """Handle status request with user context (RLS enforced)."""
     try:
         # First get the content_hash from the document
-        docs_repo = DocumentsRepository(user_id=UUID(user_id))
-        document = await docs_repo.get_document(UUID(document_id), user_id=UUID(user_id))
+        docs_repo = DocumentsRepository()
+        document = await docs_repo.get_document(UUID(document_id))
 
         if not document:
             raise ValueError(f"Document {document_id} not found or access denied")
@@ -1005,7 +1006,7 @@ async def handle_status_request(
                 # Continue anyway - the user should still have access through documents
 
         # Get detailed progress from analysis_progress table (user context - RLS enforced)
-        progress_repo = AnalysisProgressRepository(user_id=user_id)
+        progress_repo = AnalysisProgressRepository()
         # Request all fields needed by the frontend to avoid KeyErrors
         progress_data = await progress_repo.get_latest_progress(
             content_hash,
@@ -1096,8 +1097,8 @@ async def handle_cancellation_request(
 
     try:
         # Get the content_hash from the document
-        docs_repo = DocumentsRepository(user_id=UUID(user_id))
-        document = await docs_repo.get_document(UUID(document_id), user_id=UUID(user_id))
+        docs_repo = DocumentsRepository()
+        document = await docs_repo.get_document(UUID(document_id))
 
         if not document:
             raise ValueError(f"Document {document_id} not found or access denied")
@@ -1105,7 +1106,7 @@ async def handle_cancellation_request(
         content_hash = document.content_hash
 
         # Find and update analysis_progress records that match the filters
-        progress_repo = AnalysisProgressRepository(user_id=user_id)
+        progress_repo = AnalysisProgressRepository()
         progress_records = await progress_repo.get_progress_records(
             filters={
                 "content_hash": content_hash,
@@ -1215,9 +1216,9 @@ async def _dispatch_analysis_task(
 ) -> Dict[str, str]:
     """Helper function to dispatch analysis task with proper contract/analysis creation."""
     try:
-        # Get document record with explicit user_id for safety
-        docs_repo = DocumentsRepository(user_id=UUID(user_id))
-        document_obj = await docs_repo.get_document(UUID(document_id), user_id=UUID(user_id))
+        # Get document record
+        docs_repo = DocumentsRepository()
+        document_obj = await docs_repo.get_document(UUID(document_id))
 
         if not document_obj:
             raise ValueError(f"Document {document_id} not found or access denied")

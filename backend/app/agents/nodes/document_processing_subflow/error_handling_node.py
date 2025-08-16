@@ -74,16 +74,6 @@ class ErrorHandlingNode(DocumentProcessingNodeBase):
                 }
             )
             
-            # Get user_id from state for repository pattern
-            user_id = state.get("user_id")
-            if not user_id:
-                self._log_warning(
-                    f"Missing user_id in workflow state during error handling for document {document_id}",
-                    extra={"document_id": document_id, "error_message": error_message}
-                )
-                # Still try to update with service role if user_id is not available
-                user_id = None
-            
             # Get user-authenticated client to update document status
             try:
                 user_client = await self.get_user_client()
@@ -107,7 +97,7 @@ class ErrorHandlingNode(DocumentProcessingNodeBase):
                 from app.services.repositories.documents_repository import DocumentsRepository
                 from uuid import UUID
                 
-                docs_repo = DocumentsRepository(user_id=user_id)
+                docs_repo = DocumentsRepository()
                 # Use update_document_status method which properly handles processing_errors field
                 await docs_repo.update_document_status(
                     UUID(document_id),

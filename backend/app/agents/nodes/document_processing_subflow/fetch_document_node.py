@@ -57,18 +57,8 @@ class FetchDocumentRecordNode(DocumentProcessingNodeBase):
             
             self._log_info(f"Fetching document record for ID: {document_id}")
             
-            # Get user_id from state for explicit user_id passing pattern
-            user_id = state.get("user_id")
-            if not user_id:
-                return self._handle_error(
-                    state,
-                    ValueError("Missing user_id in workflow state"),
-                    "User ID is required for document access",
-                    {"provided_state_keys": list(state.keys())}
-                )
-
             # Fetch document record with RLS enforcement using repository
-            docs_repo = DocumentsRepository(user_id=user_id)
+            docs_repo = DocumentsRepository()
             document_obj = await docs_repo.get_document(UUID(document_id))
             
             if not document_obj:

@@ -14,6 +14,7 @@ from datetime import datetime, UTC
 # Core imports
 from app.models.contract_state import RealEstateAgentState
 from app.schema.enums import ProcessingStatus
+from app.core.async_utils import AsyncContextManager, ensure_async_pool_initialization
 from app.models.workflow_outputs import (
     RiskAnalysisOutput,
     RecommendationsOutput,
@@ -214,13 +215,13 @@ class ContractAnalysisWorkflow:
             and not self._is_production
         )
 
-        # No longer using persistent background loops - running everything in current loop
+        # Persistent event loop for node execution in worker context to avoid
+        # cross-loop issues with async resources (e.g., asyncpg pools, clients)
+        self._event_loop = None
+        self._event_loop_thread = None
 
         # Initialize node instances
         self._initialize_nodes()
-
-        # Create LangGraph-compatible node functions
-        self._create_node_functions()
 
         # Create workflow
         self.workflow = self._create_workflow()
@@ -297,9 +298,7 @@ class ContractAnalysisWorkflow:
 
             # Verify at least one client is available
             if not self.openai_client and not self.gemini_client:
-                raise Exception(
-                    "No AI clients could be initialized. Both OpenAI and Gemini failed."
-                )
+                raise Exception("No AI clients could be initialized. Both OpenAI and Gemini failed.")
 
             # Set clients in all nodes that need them
             for node_name, node in self.nodes.items():
@@ -307,15 +306,11 @@ class ContractAnalysisWorkflow:
                     node.openai_client = self.openai_client
                 if hasattr(node, "gemini_client"):
                     node.gemini_client = self.gemini_client
-
+                
                 # Log client availability for each node
-                logger.debug(
-                    f"Node {node_name}: OpenAI={self.openai_client is not None}, Gemini={self.gemini_client is not None}"
-                )
+                logger.debug(f"Node {node_name}: OpenAI={self.openai_client is not None}, Gemini={self.gemini_client is not None}")
 
-            logger.info(
-                f"Workflow clients initialized successfully - OpenAI: {self.openai_client is not None}, Gemini: {self.gemini_client is not None}"
-            )
+            logger.info(f"Workflow clients initialized successfully - OpenAI: {self.openai_client is not None}, Gemini: {self.gemini_client is not None}")
 
         except Exception as e:
             logger.error(f"Failed to initialize workflow clients: {e}")
@@ -325,29 +320,29 @@ class ContractAnalysisWorkflow:
         """Create the LangGraph workflow with node-based architecture."""
         workflow = StateGraph(RealEstateAgentState)
 
-        # Add all node execution methods to the workflow using standalone functions
-        workflow.add_node("validate_input", self._node_functions["validate_input"])
-        workflow.add_node("process_document", self._node_functions["process_document"])
-        workflow.add_node("extract_terms", self._node_functions["extract_contract_terms"])
-        workflow.add_node("analyze_compliance", self._node_functions["analyze_australian_compliance"])
-        workflow.add_node("analyze_contract_diagrams", self._node_functions["analyze_contract_diagrams"])
-        workflow.add_node("assess_risks", self._node_functions["assess_contract_risks"])
-        workflow.add_node("generate_recommendations", self._node_functions["generate_recommendations"])
-        workflow.add_node("compile_report", self._node_functions["compile_analysis_report"])
+        # Add all node execution methods to the workflow
+        workflow.add_node("validate_input", self.validate_input)
+        workflow.add_node("process_document", self.process_document)
+        workflow.add_node("extract_terms", self.extract_contract_terms)
+        workflow.add_node("analyze_compliance", self.analyze_australian_compliance)
+        workflow.add_node("analyze_contract_diagrams", self.analyze_contract_diagrams)
+        workflow.add_node("assess_risks", self.assess_contract_risks)
+        workflow.add_node("generate_recommendations", self.generate_recommendations)
+        workflow.add_node("compile_report", self.compile_analysis_report)
 
         # Add validation nodes if enabled
         if self.enable_validation:
             workflow.add_node(
-                "validate_document_quality", self._node_functions["validate_document_quality_step"]
+                "validate_document_quality", self.validate_document_quality_step
             )
             workflow.add_node(
-                "validate_terms_completeness", self._node_functions["validate_terms_completeness_step"]
+                "validate_terms_completeness", self.validate_terms_completeness_step
             )
-            workflow.add_node("validate_final_output", self._node_functions["validate_final_output_step"])
+            workflow.add_node("validate_final_output", self.validate_final_output_step)
 
         # Add utility nodes
-        workflow.add_node("handle_error", self._node_functions["handle_processing_error"])
-        workflow.add_node("retry_processing", self._node_functions["retry_failed_step"])
+        workflow.add_node("handle_error", self.handle_processing_error)
+        workflow.add_node("retry_processing", self.retry_failed_step)
 
         # Set entry point
         workflow.set_entry_point("validate_input")
@@ -421,96 +416,285 @@ class ContractAnalysisWorkflow:
 
         return workflow.compile()
 
+    # Node execution wrapper methods
+    def _run_async_node(self, node_coroutine):
+        """Run async node in a persistent event loop to prevent cross-loop issues."""
+        import asyncio
+        import threading
+        import contextvars
 
-    # Node execution methods - async functions for LangGraph compatibility
-    # We'll run LangGraph directly in the current event loop using our per-loop registry system
+        # Diagnostic: capture loop/thread/auth context before execution
+        try:
+            from app.core.auth_context import AuthContext
 
-    # Create async wrapper functions that LangGraph can call directly
-    # These functions will have the correct signature: async def func(state, config=None)
-    
-    def _create_node_functions(self):
-        """Create async functions with correct signatures for LangGraph."""
-        
-        @langsmith_trace(name="validate_input", run_type="tool")
-        async def validate_input(state: RealEstateAgentState, config=None) -> RealEstateAgentState:
-            """Execute input validation node."""
-            return await self.input_validation_node.execute(state)
+            auth_ctx = AuthContext.create_task_context()
+            logger.debug(
+                "[Workflow] _run_async_node pre-exec",
+                extra={
+                    "thread_name": threading.current_thread().name,
+                    "has_running_loop": True,
+                    "user_id": AuthContext.get_user_id(),
+                    "has_token": bool(AuthContext.get_user_token()),
+                },
+            )
+        except Exception:
+            auth_ctx = None  # type: ignore[assignment]
 
-        async def process_document(state: RealEstateAgentState, config=None) -> RealEstateAgentState:
-            """Execute document processing node."""
-            return await self.document_processing_node.execute(state)
+        try:
+            # If already inside an async loop (e.g., being called from an async context),
+            # dispatch the coroutine to a persistent background event loop running in a
+            # dedicated thread to avoid creating a new loop per call (which breaks DB pools).
+            running_loop = asyncio.get_running_loop()
+            if running_loop is None:
+                raise RuntimeError("No running event loop found")
 
-        @langsmith_trace(name="validate_document_quality", run_type="tool")
-        async def validate_document_quality_step(state: RealEstateAgentState, config=None) -> RealEstateAgentState:
-            """Execute document quality validation node."""
-            return await self.document_quality_validation_node.execute(state)
+            # Lazily start a dedicated background loop thread
+            if (
+                self._event_loop is None
+                or self._event_loop.is_closed()
+                or self._event_loop_thread is None
+            ):
+                import threading as _threading
 
-        @langsmith_trace(name="extract_contract_terms", run_type="chain")
-        async def extract_contract_terms(state: RealEstateAgentState, config=None) -> RealEstateAgentState:
-            """Execute contract terms extraction node."""
-            return await self.contract_terms_extraction_node.execute(state)
+                def _loop_worker():
+                    self._event_loop = asyncio.new_event_loop()
+                    try:
+                        self._event_loop.run_forever()
+                    finally:
+                        try:
+                            self._event_loop.close()
+                        except Exception:
+                            pass
 
-        @langsmith_trace(name="validate_terms_completeness", run_type="tool")
-        async def validate_terms_completeness_step(state: RealEstateAgentState, config=None) -> RealEstateAgentState:
-            """Execute terms validation node."""
-            return await self.terms_validation_node.execute(state)
+                self._event_loop_thread = _threading.Thread(
+                    target=_loop_worker, name="workflow-loop", daemon=True
+                )
+                self._event_loop_thread.start()
 
-        @langsmith_trace(name="analyze_australian_compliance", run_type="chain")
-        async def analyze_australian_compliance(state: RealEstateAgentState, config=None) -> RealEstateAgentState:
-            """Execute compliance analysis node."""
-            return await self.compliance_analysis_node.execute(state)
+                # Wait briefly for loop to start
+                import time as _time
 
-        @langsmith_trace(name="analyze_contract_diagrams", run_type="chain")
-        async def analyze_contract_diagrams(state: RealEstateAgentState, config=None) -> RealEstateAgentState:
-            """Execute diagram analysis node."""
-            return await self.diagram_analysis_node.execute(state)
+                for _ in range(50):
+                    if self._event_loop is not None and self._event_loop.is_running():
+                        break
+                    _time.sleep(0.01)
 
-        @langsmith_trace(name="assess_contract_risks", run_type="chain")
-        async def assess_contract_risks(state: RealEstateAgentState, config=None) -> RealEstateAgentState:
-            """Execute risk assessment node."""
-            return await self.risk_assessment_node.execute(state)
+            # Submit coroutine to the persistent background loop
+            import concurrent.futures as _cf
 
-        @langsmith_trace(name="generate_recommendations", run_type="chain")
-        async def generate_recommendations(state: RealEstateAgentState, config=None) -> RealEstateAgentState:
-            """Execute recommendations generation node."""
-            return await self.recommendations_generation_node.execute(state)
+            # Capture contextvars to propagate tracing/auth context
+            current_context = contextvars.copy_context()
 
-        @langsmith_trace(name="validate_final_output", run_type="tool")
-        async def validate_final_output_step(state: RealEstateAgentState, config=None) -> RealEstateAgentState:
-            """Execute final validation node."""
-            return await self.final_validation_node.execute(state)
+            async def _wrapper():
+                try:
+                    from app.core.auth_context import AuthContext as _AC
 
-        @langsmith_trace(name="compile_analysis_report", run_type="chain")
-        async def compile_analysis_report(state: RealEstateAgentState, config=None) -> RealEstateAgentState:
-            """Execute report compilation node."""
-            return await self.report_compilation_node.execute(state)
+                    if auth_ctx:
+                        _AC.restore_task_context(auth_ctx)
+                except Exception:
+                    pass
+                return await node_coroutine
 
-        @langsmith_trace(name="handle_processing_error", run_type="tool")
-        async def handle_processing_error(state: RealEstateAgentState, config=None) -> RealEstateAgentState:
-            """Execute error handling node."""
-            return await self.error_handling_node.execute(state)
+            future = _cf.Future()
 
-        @langsmith_trace(name="retry_failed_step", run_type="tool")
-        async def retry_failed_step(state: RealEstateAgentState, config=None) -> RealEstateAgentState:
-            """Execute retry processing node."""
-            return await self.retry_processing_node.execute(state)
-        
-        # Store these functions so we can reference them in workflow creation
-        self._node_functions = {
-            'validate_input': validate_input,
-            'process_document': process_document, 
-            'validate_document_quality_step': validate_document_quality_step,
-            'extract_contract_terms': extract_contract_terms,
-            'validate_terms_completeness_step': validate_terms_completeness_step,
-            'analyze_australian_compliance': analyze_australian_compliance,
-            'analyze_contract_diagrams': analyze_contract_diagrams,
-            'assess_contract_risks': assess_contract_risks,
-            'generate_recommendations': generate_recommendations,
-            'validate_final_output_step': validate_final_output_step,
-            'compile_analysis_report': compile_analysis_report,
-            'handle_processing_error': handle_processing_error,
-            'retry_failed_step': retry_failed_step,
-        }
+            def _submit_to_loop():
+                try:
+                    task = self._event_loop.create_task(_wrapper())
+                    task.add_done_callback(
+                        lambda t: (
+                            future.set_result(t.result())
+                            if not t.exception()
+                            else future.set_exception(t.exception())
+                        )
+                    )
+                except Exception as submit_error:
+                    future.set_exception(submit_error)
+
+            # Use call_soon_threadsafe to schedule the coroutine
+            self._event_loop.call_soon_threadsafe(
+                lambda: current_context.run(_submit_to_loop)
+            )
+            return future.result()
+        except (RuntimeError, AttributeError, ImportError) as loop_error:
+            # No running loop, asyncio not available, or loop detection failed
+            logger.debug(
+                f"[Workflow] No running loop detected ({type(loop_error).__name__}: {loop_error}), creating persistent loop"
+            )
+            # Ensure a persistent background loop is running, then schedule onto it
+            import threading as _threading
+            import time as _time
+            import concurrent.futures as _cf
+            import contextvars as _ctxvars
+
+            # Start background loop thread if needed
+            if (
+                self._event_loop is None
+                or self._event_loop.is_closed()
+                or self._event_loop_thread is None
+                or not getattr(self._event_loop, "is_running", lambda: False)()
+            ):
+
+                def _loop_worker():
+                    import asyncio as _asyncio
+
+                    self._event_loop = _asyncio.new_event_loop()
+                    try:
+                        self._event_loop.run_forever()
+                    finally:
+                        try:
+                            self._event_loop.close()
+                        except Exception:
+                            pass
+
+                self._event_loop_thread = _threading.Thread(
+                    target=_loop_worker, name="workflow-loop", daemon=True
+                )
+                self._event_loop_thread.start()
+
+                # Wait briefly for loop to start
+                for _ in range(50):
+                    if self._event_loop is not None and self._event_loop.is_running():
+                        break
+                    _time.sleep(0.01)
+
+            # Schedule coroutine onto the background loop and wait synchronously
+            current_context = _ctxvars.copy_context()
+
+            async def _wrapper_bg():
+                try:
+                    from app.core.auth_context import AuthContext as _AC
+
+                    if auth_ctx:
+                        _AC.restore_task_context(auth_ctx)
+                except Exception:
+                    pass
+                return await node_coroutine
+
+            future = _cf.Future()
+
+            def _submit_to_running_loop():
+                try:
+                    task = self._event_loop.create_task(_wrapper_bg())
+                    task.add_done_callback(
+                        lambda t: (
+                            future.set_result(t.result())
+                            if not t.exception()
+                            else future.set_exception(t.exception())
+                        )
+                    )
+                except Exception as submit_error:
+                    future.set_exception(submit_error)
+
+            self._event_loop.call_soon_threadsafe(
+                lambda: current_context.run(_submit_to_running_loop)
+            )
+
+            result = future.result()
+
+            # Do not close persistent loop; reuse across nodes
+            try:
+                from app.core.auth_context import AuthContext
+
+                logger.debug(
+                    "[Workflow] _run_async_node post-exec (background loop)",
+                    extra={
+                        "thread_name": _threading.current_thread().name,
+                        "execution_path": "background_loop",
+                        "had_running_loop": False,
+                        "user_id": AuthContext.get_user_id(),
+                        "has_token": bool(AuthContext.get_user_token()),
+                    },
+                )
+            except Exception:
+                pass
+
+            return result
+
+    @langsmith_trace(name="validate_input", run_type="tool")
+    def validate_input(self, state: RealEstateAgentState) -> RealEstateAgentState:
+        """Execute input validation node."""
+        return self._run_async_node(self.input_validation_node.execute(state))
+
+    def process_document(self, state: RealEstateAgentState) -> RealEstateAgentState:
+        """Execute document processing node."""
+        return self._run_async_node(self.document_processing_node.execute(state))
+
+    @langsmith_trace(name="validate_document_quality", run_type="tool")
+    def validate_document_quality_step(
+        self, state: RealEstateAgentState
+    ) -> RealEstateAgentState:
+        """Execute document quality validation node."""
+        return self._run_async_node(
+            self.document_quality_validation_node.execute(state)
+        )
+
+    @langsmith_trace(name="extract_contract_terms", run_type="chain")
+    def extract_contract_terms(
+        self, state: RealEstateAgentState
+    ) -> RealEstateAgentState:
+        """Execute contract terms extraction node."""
+        return self._run_async_node(self.contract_terms_extraction_node.execute(state))
+
+    @langsmith_trace(name="validate_terms_completeness", run_type="tool")
+    def validate_terms_completeness_step(
+        self, state: RealEstateAgentState
+    ) -> RealEstateAgentState:
+        """Execute terms validation node."""
+        return self._run_async_node(self.terms_validation_node.execute(state))
+
+    @langsmith_trace(name="analyze_australian_compliance", run_type="chain")
+    def analyze_australian_compliance(
+        self, state: RealEstateAgentState
+    ) -> RealEstateAgentState:
+        """Execute compliance analysis node."""
+        return self._run_async_node(self.compliance_analysis_node.execute(state))
+
+    @langsmith_trace(name="analyze_contract_diagrams", run_type="chain")
+    def analyze_contract_diagrams(
+        self, state: RealEstateAgentState
+    ) -> RealEstateAgentState:
+        """Execute diagram analysis node."""
+        return self._run_async_node(self.diagram_analysis_node.execute(state))
+
+    @langsmith_trace(name="assess_contract_risks", run_type="chain")
+    def assess_contract_risks(
+        self, state: RealEstateAgentState
+    ) -> RealEstateAgentState:
+        """Execute risk assessment node."""
+        return self._run_async_node(self.risk_assessment_node.execute(state))
+
+    @langsmith_trace(name="generate_recommendations", run_type="chain")
+    def generate_recommendations(
+        self, state: RealEstateAgentState
+    ) -> RealEstateAgentState:
+        """Execute recommendations generation node."""
+        return self._run_async_node(self.recommendations_generation_node.execute(state))
+
+    @langsmith_trace(name="validate_final_output", run_type="tool")
+    def validate_final_output_step(
+        self, state: RealEstateAgentState
+    ) -> RealEstateAgentState:
+        """Execute final validation node."""
+        return self._run_async_node(self.final_validation_node.execute(state))
+
+    @langsmith_trace(name="compile_analysis_report", run_type="chain")
+    def compile_analysis_report(
+        self, state: RealEstateAgentState
+    ) -> RealEstateAgentState:
+        """Execute report compilation node."""
+        return self._run_async_node(self.report_compilation_node.execute(state))
+
+    @langsmith_trace(name="handle_processing_error", run_type="tool")
+    def handle_processing_error(
+        self, state: RealEstateAgentState
+    ) -> RealEstateAgentState:
+        """Execute error handling node."""
+        return self._run_async_node(self.error_handling_node.execute(state))
+
+    @langsmith_trace(name="retry_failed_step", run_type="tool")
+    def retry_failed_step(self, state: RealEstateAgentState) -> RealEstateAgentState:
+        """Execute retry processing node."""
+        return self._run_async_node(self.retry_processing_node.execute(state))
 
     # Conditional edge check methods (kept simple for orchestration)
     def check_processing_success(self, state: RealEstateAgentState) -> str:
@@ -552,18 +736,15 @@ class ContractAnalysisWorkflow:
 
     @langsmith_trace(name="contract_analysis_workflow", run_type="chain")
     async def analyze_contract(self, state: RealEstateAgentState) -> Dict[str, Any]:
-        """Main analysis method using per-loop registry system for safety."""
+        """Main analysis method - maintains backward compatibility."""
         try:
             # Update metrics
             self._metrics["total_analyses"] += 1
             start_time = datetime.now(UTC)
 
-            # Execute LangGraph workflow directly in current event loop
-            # Our per-loop registry system and @langgraph_safe_task decorator 
-            # provide all the cross-loop protection we need
-            logger.info(f"[WORKFLOW] Starting LangGraph workflow execution in current event loop")
-            result = await self.workflow.ainvoke(state)
-            logger.info(f"[WORKFLOW] LangGraph workflow completed successfully")
+            # Execute workflow with proper async context to prevent event loop conflicts
+            async with AsyncContextManager():
+                result = await self.workflow.ainvoke(state)
 
             # Update performance metrics
             processing_time = (datetime.now(UTC) - start_time).total_seconds()

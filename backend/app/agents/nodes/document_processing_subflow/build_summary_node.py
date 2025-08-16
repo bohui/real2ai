@@ -102,16 +102,6 @@ class BuildSummaryNode(DocumentProcessingNodeBase):
             extraction_methods = text_extraction_result.extraction_methods or []
             primary_method = extraction_methods[0] if extraction_methods else "unknown"
 
-            # Get user_id from state for repository pattern
-            user_id = state.get("user_id")
-            if not user_id:
-                return self._handle_error(
-                    state,
-                    ValueError("Missing user_id in workflow state"),
-                    "User ID is required for document access",
-                    {"operation": "build_summary"}
-                )
-
             # Retrieve authoritative metadata from document record using repository
             from app.services.repositories.documents_repository import (
                 DocumentsRepository,
@@ -122,7 +112,7 @@ class BuildSummaryNode(DocumentProcessingNodeBase):
             # )
             from uuid import UUID
 
-            docs_repo = DocumentsRepository(user_id=user_id)
+            docs_repo = DocumentsRepository()
             document = await docs_repo.get_document(UUID(document_id))
 
             if not document:

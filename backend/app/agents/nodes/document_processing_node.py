@@ -76,14 +76,22 @@ class DocumentProcessingNode(BaseNode):
             user_id = AuthContext.get_user_id()
             if not user_id:
                 # Log diagnostic context to help identify why auth is missing
-                self._log_step_debug(
-                    "Missing AuthContext; attempting fallback to state user_id",
-                    state,
-                    {
-                        "doc_id": document_id,
-                        "thread_name": __import__("threading").current_thread().name,
-                    },
-                )
+                try:
+                    from app.core.auth_context import AuthContext as AC
+
+                    self._log_step_debug(
+                        "Missing AuthContext; attempting fallback to state user_id",
+                        state,
+                        {
+                            "doc_id": document_id,
+                            "has_token": bool(AC.get_user_token()),
+                            "thread_name": __import__("threading")
+                            .current_thread()
+                            .name,
+                        },
+                    )
+                except Exception:
+                    pass
 
                 # Fallback: use user_id from workflow state if available
                 fallback_user_id = state.get("user_id")
@@ -113,11 +121,10 @@ class DocumentProcessingNode(BaseNode):
                         australian_state = australian_state.name
                     else:
                         australian_state = str(australian_state)
-
+                    
                     result = await subflow.process_document(
-                        document_id=document_id,
-                        user_id=user_id,
-                        use_llm=use_llm,
+                        document_id=document_id, 
+                        use_llm=use_llm, 
                         content_hash=content_hash,
                         australian_state=australian_state,
                         contract_type=state.get("contract_type", "purchase_agreement"),

@@ -181,8 +181,12 @@ async def run_document_processing_subflow(
     task_start = datetime.now(UTC)
 
     try:
-        # User ID is passed explicitly as parameter - no need for context validation
-        # in isolated thread execution with @celery_async_task decorator
+        # Verify user context matches expected user
+        context_user_id = AuthContext.get_user_id()
+        if context_user_id != user_id:
+            raise ValueError(
+                f"User context mismatch: expected {user_id}, got {context_user_id}"
+            )
 
         logger.info(
             f"Starting document processing subflow for user {user_id}, document {document_id}"
@@ -285,7 +289,7 @@ async def run_document_processing_subflow(
             from app.services.repositories.documents_repository import DocumentsRepository
             from uuid import UUID
             
-            docs_repo = DocumentsRepository(user_id=UUID(user_id))
+            docs_repo = DocumentsRepository()
             await docs_repo.update_processing_status_and_results(
                 UUID(document_id),
                 ProcessingStatus.FAILED.value,

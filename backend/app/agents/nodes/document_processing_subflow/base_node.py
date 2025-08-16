@@ -60,96 +60,62 @@ class DocumentProcessingNodeBase(ABC):
         pass
 
     async def get_user_client(self):
-        """
-        Get authenticated client for database operations.
-
-        In isolated execution contexts (like LangGraph workflows), this will fall back
-        to system client if user authentication is not available.
-        """
-        try:
-            # Try user authentication first
-            return await AuthContext.get_authenticated_client(
-                isolated=True, require_auth=True
-            )
-        except Exception as e:
-            self.logger.warning(
-                f"User authentication not available in isolated context: {e}"
-            )
-            # Fall back to system client for file operations
-            return await AuthContext.get_authenticated_client(
-                isolated=True, require_auth=False
-            )
+        """Get authenticated user client for database operations."""
+        return await AuthContext.get_authenticated_client(isolated=True)
 
     async def get_user_context(self):
-        """
-        Get user context for authentication and authorization.
-
-        In isolated execution contexts, this may return None if user context
-        is not available. Nodes should check for None and handle gracefully.
-        """
+        """Get user context for authentication and authorization."""
         try:
             return AuthContext.get_current_context()
         except Exception as e:
-            self.logger.warning(
-                f"User context not available in isolated execution: {e}"
-            )
-            return None
+            self.logger.warning(f"Failed to get user context: {e}")
+            raise ValueError("User authentication required") from e
 
     def _ensure_user_context(
         self, state: DocumentProcessingState
     ) -> DocumentProcessingState:
         """
-        Ensure user context information is available in state.
+        Ensure user context is available and valid.
 
-        In isolated execution contexts, user authentication may not be available.
-        This method will try to get user context and store it in state, but will
-        fall back to using explicit user_id from state if context is not available.
+        This method checks that the user context is properly set and accessible
+        for all database operations that require RLS (Row Level Security).
 
         Args:
             state: Current document processing state
 
         Returns:
-            Updated state with user context information
+            Updated state with user context validation
+
+        Raises:
+            ValueError: If user context is not available or invalid
         """
-        updated_state = state.copy()
-
         try:
-            # Try to get user context from AuthContext
+            # Verify user context is available
             user_context = AuthContext.get_current_context()
-            if user_context and user_context.user_id:
-                # Store user context in state for downstream nodes
-                updated_state["user_context"] = {
-                    "user_id": user_context.user_id,
-                    "authenticated": True,
-                    "context_type": "user_authenticated",
-                }
+            if not user_context or not user_context.user_id:
+                raise ValueError("No user context available - authentication required")
 
-                self._log_debug(
-                    f"User context validated for user {user_context.user_id}",
-                    user_id=user_context.user_id,
-                )
-                return updated_state
+            # Store user context in state for downstream nodes
+            state = state.copy()
+            state["user_context"] = {
+                "user_id": user_context.user_id,
+                "authenticated": True,
+                "context_type": "user_authenticated",
+            }
+
+            self._log_debug(
+                f"User context validated for user {user_context.user_id}",
+                user_id=user_context.user_id,
+            )
+
+            return state
 
         except Exception as e:
-            self.logger.warning(f"AuthContext not available: {e}")
-
-        # Fallback: Check if user_id is available in state (for isolated execution)
-        user_id = state.get("user_id")
-        if user_id:
-            updated_state["user_context"] = {
-                "user_id": user_id,
-                "authenticated": False,
-                "context_type": "isolated_execution",
-            }
-            self.logger.info(
-                f"Using user_id from state for isolated execution: {user_id}"
-            )
-            return updated_state
-
-        # No user context available
-        self.logger.warning("No user context or user_id available")
-        updated_state["auth_error"] = "No user authentication or user_id available"
-        return updated_state
+            self.logger.error(f"User context validation failed: {e}", exc_info=True)
+            # Return state with error instead of raising to allow graceful handling
+            state = state.copy()
+            state["auth_error"] = f"User authentication required: {str(e)}"
+            return state
 
     def _handle_error(
         self,
@@ -558,7 +524,3 @@ class DocumentProcessingNodeBase(ABC):
                 break
 
         return chain
-
-    def _log_debug(self, message: str, **kwargs):
-        """Helper method for debug logging."""
-        self.logger.debug(f"[{self.node_name}] {message}", extra=kwargs)

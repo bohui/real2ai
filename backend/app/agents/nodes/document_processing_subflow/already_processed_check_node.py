@@ -55,47 +55,12 @@ class AlreadyProcessedCheckNode(DocumentProcessingNodeBase):
 
             self._log_info(f"Checking if document {document_id} is already processed")
 
-            # Get user_id from state for repository pattern
-            user_id = state.get("user_id")
-            if not user_id:
-                return self._handle_error(
-                    state,
-                    ValueError("Missing user_id in workflow state"),
-                    "User ID is required for document access",
-                    {"operation": "already_processed_check"},
-                )
-
-            # Use authenticated client with proper RLS enforcement
-            # This uses the authentication context from the parent task
-            try:
-                from app.core.auth_context import AuthContext
-                
-                # Get user-authenticated client using existing authentication context
-                # The isolated=True parameter ensures proper connection pool handling
-                user_client = await AuthContext.get_authenticated_client(isolated=True)
-                
-                # Verify we have the correct user context
-                auth_user_id = AuthContext.get_user_id()
-                if auth_user_id != user_id:
-                    self._log_warning(
-                        f"Authentication context user_id {auth_user_id} doesn't match workflow user_id {user_id}"
-                    )
-                
-                self._log_info(
-                    f"Using authenticated client for user {user_id} storage operations"
-                )
-                
-            except Exception as client_error:
-                return self._handle_error(
-                    state,
-                    client_error,
-                    f"Failed to get authenticated client for user {user_id}: {str(client_error)}",
-                    {"user_id": user_id, "auth_user_id": AuthContext.get_user_id(), "client_error": str(client_error)}
-                )
+            # Get user-authenticated client
+            user_client = await self.get_user_client()
 
             # Check if document is already processed by looking at database
             summary = await self._get_processed_document_summary(
-                user_client, document_id, user_id
+                user_client, document_id
             )
 
             updated_state = state.copy()
@@ -148,7 +113,7 @@ class AlreadyProcessedCheckNode(DocumentProcessingNodeBase):
                 },
             )
 
-    async def _get_processed_document_summary(self, user_client, document_id: str, user_id: str):
+    async def _get_processed_document_summary(self, user_client, document_id: str):
         """
         Get processed document summary from database.
 
@@ -171,7 +136,7 @@ class AlreadyProcessedCheckNode(DocumentProcessingNodeBase):
             )
             from uuid import UUID
 
-            docs_repo = DocumentsRepository(user_id=user_id)
+            docs_repo = DocumentsRepository()
             document_obj = await docs_repo.get_document(UUID(document_id))
 
             if not document_obj:
@@ -215,7 +180,7 @@ class AlreadyProcessedCheckNode(DocumentProcessingNodeBase):
                 ArtifactsRepository,
             )
 
-            artifacts_repo = ArtifactsRepository(user_id=user_id)
+            artifacts_repo = ArtifactsRepository()
 
             # Check if there are page artifacts or diagram artifacts
             content_hash = document.get("content_hash")
@@ -277,7 +242,7 @@ class AlreadyProcessedCheckNode(DocumentProcessingNodeBase):
             content_hash = document.get("content_hash")
 
             if not australian_state and content_hash:
-                contracts_repo = ContractsRepository(user_id=user_id)
+                contracts_repo = ContractsRepository()
                 contracts = await contracts_repo.get_contracts_by_content_hash(
                     content_hash, limit=1
                 )

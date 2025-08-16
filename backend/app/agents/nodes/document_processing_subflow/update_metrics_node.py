@@ -102,18 +102,9 @@ class UpdateMetricsNode(DocumentProcessingNodeBase):
                 },
             )
 
-            # Get user_id from state for repository pattern
-            user_id = state.get("user_id")
-            if not user_id:
-                return self._handle_error(
-                    state,
-                    ValueError("Missing user_id in workflow state"),
-                    "User ID is required for document access",
-                    {"operation": "update_metrics"}
-                )
-                
-            # Initialize repos with user context
-            await self.initialize(user_id)
+            # Get user context and initialize repos
+            user_context = await self.get_user_context()
+            await self.initialize(uuid.UUID(user_context.user_id))
 
             # Get user-authenticated client
             user_client = await self.get_user_client()
@@ -210,7 +201,7 @@ class UpdateMetricsNode(DocumentProcessingNodeBase):
             )
             from uuid import UUID
 
-            docs_repo = DocumentsRepository(user_id=user_id)
+            docs_repo = DocumentsRepository()
             await docs_repo.update_processing_results(UUID(document_id), update_data)
 
             # Record final step completion in runs tracking
