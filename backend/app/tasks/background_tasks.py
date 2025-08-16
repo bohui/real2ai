@@ -15,7 +15,6 @@ from app.core.celery import celery_app
 from app.core.task_context import user_aware_task, task_manager
 from app.core.auth_context import AuthContext
 from app.core.langsmith_config import langsmith_session, log_trace_info
-from app.core.async_utils import get_langgraph_manager, make_loop_consistent_callback
 from app.core.config import get_settings
 from app.clients.factory import get_service_supabase_client
 from app.agents.contract_workflow import ContractAnalysisWorkflow
@@ -473,173 +472,15 @@ async def comprehensive_document_analysis(
                     except Exception:
                         pass
 
-            # DEBUGGING: Log current state before creating callback
-            import asyncio
-            current_loop = asyncio.get_running_loop()
-            current_loop_id = id(current_loop)
-            current_tasks = len(asyncio.all_tasks(current_loop))
-            logger.info(f"[TASK-DEBUG] Before callback creation - Loop {current_loop_id}, Tasks: {current_tasks}")
-
-            # Create event loop consistent callback to prevent cross-loop issues
-            consistent_progress_callback = make_loop_consistent_callback(persist_progress)
-            logger.info(f"[TASK-DEBUG] Created consistent callback for loop {current_loop_id}")
-            
-            # ENHANCED DEBUGGING: Log current thread and process info
-            import threading
-            import os
-            current_thread = threading.current_thread()
-            current_pid = os.getpid()
-            logger.info(f"[TASK-DEBUG] Current thread: {current_thread.name} ({current_thread.ident}), PID: {current_pid}")
-            
-            # Execute contract analysis in isolated LangGraph context with FORCED isolation
-            manager = get_langgraph_manager()
-            logger.info(f"[TASK-DEBUG] Got LangGraph manager, FORCING isolated context")
-            
-            # Check isolation strategy
-            use_process_isolation = analysis_options.get("use_process_isolation", False)
-            use_thread_isolation = analysis_options.get("use_thread_isolation", True)  # Default to thread isolation
-            
-            if use_process_isolation:
-                logger.info(f"[TASK-DEBUG] Using PROCESS ISOLATION for analysis {analysis_id}")
-                
-                try:
-                    from app.core.async_utils import execute_langgraph_in_process
-                    
-                    # Prepare workflow config for process isolation
-                    workflow_config = {
-                        'user_id': user_id,
-                        'session_id': content_hash,
-                        'document_data': document_data,
-                        'australian_state': state_to_use,
-                        'user_preferences': analysis_options,
-                        'user_type': 'buyer'
-                    }
-                    
-                    # Execute in completely isolated process
-                    process_result = await execute_langgraph_in_process(
-                        workflow_config=workflow_config,
-                        context_id=f"analysis_{analysis_id}"
-                    )
-                    
-                    # Convert process result to expected format
-                    analysis_response = {
-                        'success': process_result.get('success', True),
-                        'analysis_results': process_result.get('analysis_results', {}),
-                        'processing_time': process_result.get('processing_time', 0),
-                        'session_id': content_hash,
-                        'final_state': process_result.get('analysis_results', {}),
-                        'execution_mode': 'process_isolated'
-                    }
-                    
-                    logger.info(f"[TASK-DEBUG] Process isolation completed successfully for analysis {analysis_id}")
-                    
-                except Exception as process_error:
-                    logger.error(f"[TASK-DEBUG] Process isolation failed: {process_error}")
-                    logger.info(f"[TASK-DEBUG] Falling back to thread isolation")
-                    use_process_isolation = False
-            
-            if not use_process_isolation and use_thread_isolation:
-                # Try forced thread isolation first
-                use_forced_thread = analysis_options.get("use_forced_thread_isolation", True)
-                
-                if use_forced_thread:
-                    logger.info(f"[TASK-DEBUG] Using FORCED THREAD ISOLATION for analysis {analysis_id}")
-                    
-                    try:
-                        # Create a wrapper function for contract analysis
-                        async def execute_contract_analysis():
-                            logger.info(f"[FORCED-THREAD] Executing contract analysis in isolated thread")
-                            
-                            # Create analysis service in the isolated thread
-                            isolated_contract_service = ContractAnalysisService(
-                                websocket_manager=websocket_manager,
-                                enable_websocket_progress=True,
-                            )
-                            
-                            # Execute analysis in isolated context
-                            return await isolated_contract_service.start_analysis(
-                                user_id=user_id,
-                                session_id=content_hash,
-                                document_data=document_data,
-                                australian_state=state_to_use,
-                                user_preferences=analysis_options,
-                                user_type="buyer",
-                                progress_callback=consistent_progress_callback,
-                            )
-                        
-                        # Execute in forced thread isolation
-                        analysis_response = await manager.execute_in_isolated_thread(
-                            execute_contract_analysis,
-                            context_id=f"analysis_{analysis_id}"
-                        )
-                        
-                        logger.info(f"[TASK-DEBUG] Forced thread isolation completed successfully for analysis {analysis_id}")
-                        
-                    except Exception as thread_error:
-                        logger.error(f"[TASK-DEBUG] Forced thread isolation failed: {thread_error}")
-                        logger.info(f"[TASK-DEBUG] Falling back to context isolation")
-                        use_forced_thread = False
-                
-                if not use_forced_thread:
-                    logger.info(f"[TASK-DEBUG] Using CONTEXT ISOLATION for analysis {analysis_id}")
-                    
-                    async with manager.create_isolated_context(f"analysis_{analysis_id}") as context:
-                        isolated_thread = threading.current_thread()
-                        isolated_pid = os.getpid()
-                        isolated_loop = asyncio.get_running_loop()
-                        isolated_loop_id = id(isolated_loop)
-                        
-                        logger.info(f"[TASK-DEBUG] In isolated context {context.context_id}")
-                        logger.info(f"[TASK-DEBUG] Thread: {isolated_thread.name} ({isolated_thread.ident}), PID: {isolated_pid}")
-                        logger.info(f"[TASK-DEBUG] Loop: {isolated_loop_id}, created new: {context.created_new_loop}")
-                        
-                        # CRITICAL: Verify thread separation
-                        if isolated_thread.ident == current_thread.ident:
-                            logger.error(f"[TASK-DEBUG] CRITICAL: No thread isolation achieved! Same thread: {isolated_thread.ident}")
-                        else:
-                            logger.info(f"[TASK-DEBUG] SUCCESS: Thread isolation achieved: {current_thread.ident} -> {isolated_thread.ident}")
-                        
-                        # Log task state in isolated context
-                        isolated_tasks = asyncio.all_tasks(isolated_loop)
-                        logger.info(f"[TASK-DEBUG] Isolated loop has {len(isolated_tasks)} tasks")
-                        
-                        logger.info(f"[TASK-DEBUG] Starting contract analysis in isolated context {context.context_id}")
-                        
-                        analysis_response = await contract_service.start_analysis(
-                            user_id=user_id,
-                            session_id=content_hash,  # Use content_hash as session_id
-                            document_data=document_data,
-                            australian_state=state_to_use,
-                            user_preferences=analysis_options,
-                            user_type="buyer",  # Default user type
-                            progress_callback=consistent_progress_callback,  # Use consistent callback
-                        )
-                        
-                        final_tasks = len(asyncio.all_tasks(isolated_loop))
-                        logger.info(f"[TASK-DEBUG] Contract analysis completed in context {context.context_id}, final tasks: {final_tasks}")
-                        
-                    # Log state after exiting isolated context
-                    post_thread = threading.current_thread()
-                    post_pid = os.getpid()
-                    post_loop = asyncio.get_running_loop()
-                    post_loop_id = id(post_loop)
-                    post_tasks = len(asyncio.all_tasks(post_loop))
-                    logger.info(f"[TASK-DEBUG] After isolated context - Thread: {post_thread.name} ({post_thread.ident}), PID: {post_pid}")
-                    logger.info(f"[TASK-DEBUG] After isolated context - Loop: {post_loop_id}, Tasks: {post_tasks}")
-            
-            elif not use_process_isolation and not use_thread_isolation:
-                logger.info(f"[TASK-DEBUG] Using NO ISOLATION for analysis {analysis_id} (original approach)")
-                
-                # Original approach without isolation
-                analysis_response = await contract_service.start_analysis(
-                    user_id=user_id,
-                    session_id=content_hash,
-                    document_data=document_data,
-                    australian_state=state_to_use,
-                    user_preferences=analysis_options,
-                    user_type="buyer",
-                    progress_callback=consistent_progress_callback,
-                )
+            analysis_response = await contract_service.start_analysis(
+                user_id=user_id,
+                session_id=content_hash,  # Use content_hash as session_id
+                document_data=document_data,
+                australian_state=state_to_use,
+                user_preferences=analysis_options,
+                user_type="buyer",  # Default user type
+                progress_callback=persist_progress,
+            )
 
             # Handle None response
             if analysis_response is None:

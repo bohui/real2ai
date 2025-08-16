@@ -7,7 +7,7 @@ import logging
 from typing import Dict, Any, Optional, List, Callable, Awaitable
 from datetime import datetime, timezone
 
-from app.agents.progress_tracking_workflow import ProgressTrackingWorkflow
+from app.agents.contract_workflow import ContractAnalysisWorkflow
 from app.core.config import (
     get_enhanced_workflow_config,
     validate_workflow_configuration,
@@ -64,8 +64,9 @@ class ContractAnalysisService:
         enable_websocket_progress: bool = True,
     ):
         self.websocket_manager = websocket_manager
-        # WebSocket progress is always enabled when websocket manager is available
-        self.enable_websocket_progress = websocket_manager is not None
+        self.enable_websocket_progress = (
+            enable_websocket_progress and websocket_manager is not None
+        )
         self.openai_api_key = openai_api_key
         # Resolve model name from environment/config if not explicitly provided
         if model_name is None:
@@ -109,7 +110,15 @@ class ContractAnalysisService:
         else:
             self.prompt_manager = prompt_manager
 
-        # Workflow is no longer needed - always use progress tracking
+        # Initialize workflow
+        self.workflow = ContractAnalysisWorkflow(
+            openai_api_key=self.openai_api_key,
+            model_name=self.model_name,
+            openai_api_base=self.openai_api_base,
+            prompt_manager=self.prompt_manager,
+            enable_validation=self.config.enable_validation,
+            enable_quality_checks=self.config.enable_quality_checks,
+        )
 
         # WebSocket progress tracking
         self.active_analyses: Dict[str, Dict[str, Any]] = {}
@@ -138,6 +147,7 @@ class ContractAnalysisService:
         contract_type: str = "purchase_agreement",
         user_experience: str = "novice",
         user_type: str = "buyer",
+        enable_websocket_progress: Optional[bool] = None,
         progress_callback: Optional[Callable[[str, int, str], Awaitable[None]]] = None,
     ) -> ContractAnalysisServiceResponse:
         """
@@ -152,7 +162,7 @@ class ContractAnalysisService:
             contract_type: Type of contract being analyzed
             user_experience: User experience level
             user_type: Type of user (buyer, seller, etc.)
-
+            enable_websocket_progress: Override WebSocket progress setting
 
         Returns:
             Enhanced analysis results with comprehensive metadata
@@ -165,8 +175,12 @@ class ContractAnalysisService:
         if session_id is None:
             session_id = f"analysis_{int(start_time.timestamp())}"
 
-        # WebSocket progress is always enabled
-        use_websocket_progress = True
+        # Determine if WebSocket progress should be enabled
+        use_websocket_progress = (
+            enable_websocket_progress
+            if enable_websocket_progress is not None
+            else self.enable_websocket_progress
+        )
 
         logger.info(f"Starting unified contract analysis for session {session_id}")
 
@@ -200,22 +214,23 @@ class ContractAnalysisService:
                 user_type=user_type,
             )
 
-            # Initialize analysis tracking (always enabled)
+            # Initialize analysis tracking if WebSocket is enabled
             contract_id = initial_state["session_id"]
-            self.active_analyses[contract_id] = {
-                "start_time": start_time,
-                "user_id": user_id,
-                "session_id": session_id,
-                "status": "starting",
-                "progress": 0,
-            }
+            if use_websocket_progress:
+                self.active_analyses[contract_id] = {
+                    "start_time": start_time,
+                    "user_id": user_id,
+                    "session_id": session_id,
+                    "status": "starting",
+                    "progress": 0,
+                }
 
-            # Send analysis started event
-            if self.websocket_manager:
-                await self.websocket_manager.send_message(
-                    session_id,
-                    WebSocketEvents.analysis_started(contract_id, estimated_time=3),
-                )
+                # Send analysis started event
+                if self.websocket_manager:
+                    await self.websocket_manager.send_message(
+                        session_id,
+                        WebSocketEvents.analysis_started(contract_id, estimated_time=3),
+                    )
 
             # Initialize prompt manager if needed
             if self.prompt_manager:
@@ -225,23 +240,18 @@ class ContractAnalysisService:
                     logger.warning(f"Prompt manager initialization failed: {e}")
                     self._service_metrics["prompt_manager_errors"] += 1
 
-            # Execute analysis with stabilized execution to prevent loop migration
-            from app.core.async_utils import create_stabilized_execution_context
-            
-            async with create_stabilized_execution_context() as stabilizer:
-                logger.info(f"[ANALYSIS-STABILIZER] Starting stabilized execution for session {session_id}")
-                
-                # Execute analysis with progress tracking in stabilized context
+            # Execute analysis with optional progress tracking
+            if use_websocket_progress:
                 final_state = await self._execute_with_progress_tracking(
                     initial_state,
                     session_id,
                     contract_id,
                     progress_callback=progress_callback,
                     resume_from_step=(user_preferences or {}).get("resume_from_step"),
-                    stabilizer=stabilizer,
                 )
-                
-                logger.info(f"[ANALYSIS-STABILIZER] Completed stabilized execution for session {session_id}")
+            else:
+                logger.debug(f"Executing workflow for session {session_id}")
+                final_state = await self.workflow.analyze_contract(initial_state)
 
             # Calculate processing time
             processing_time = (datetime.now(timezone.utc) - start_time).total_seconds()
@@ -265,8 +275,8 @@ class ContractAnalysisService:
                 + processing_time
             ) / self._service_metrics["total_requests"]
 
-            # Send WebSocket completion events (always enabled)
-            if self.websocket_manager:
+            # Send WebSocket completion events if enabled
+            if use_websocket_progress and self.websocket_manager:
                 if final_state.get("error_state"):
                     await self.websocket_manager.send_message(
                         session_id,
@@ -325,8 +335,8 @@ class ContractAnalysisService:
             error_msg = f"Contract analysis failed: {str(e)}"
             logger.error(f"{error_msg} (processing time: {processing_time:.2f}s)")
 
-            # Send WebSocket error event (always enabled)
-            if self.websocket_manager:
+            # Send WebSocket error event if enabled
+            if use_websocket_progress and self.websocket_manager:
                 await self.websocket_manager.send_message(
                     session_id,
                     WebSocketEvents.analysis_failed(
@@ -369,6 +379,7 @@ class ContractAnalysisService:
             user_preferences=user_preferences,
             session_id=session_id,
             user_type=user_type,
+            enable_websocket_progress=True,
             progress_callback=progress_callback,
         )
 
@@ -537,7 +548,11 @@ class ContractAnalysisService:
                     else 0
                 ),
                 configuration=workflow_config,
-                performance_metrics={},
+                performance_metrics=(
+                    self.workflow.get_workflow_metrics()
+                    if hasattr(self.workflow, "get_workflow_metrics")
+                    else {}
+                ),
                 service_metrics=self._service_metrics,
             ),
             error=final_state.get("error_state"),
@@ -627,37 +642,419 @@ class ContractAnalysisService:
         *,
         progress_callback: Optional[Callable[[str, int, str], Awaitable[None]]] = None,
         resume_from_step: Optional[str] = None,
-        stabilizer = None,
     ) -> RealEstateAgentState:
         """
         Execute workflow with real-time progress updates
         """
 
+        # Create a custom workflow that sends progress updates
+        class ProgressTrackingWorkflow(ContractAnalysisWorkflow):
+            def __init__(self, parent_service, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.parent_service = parent_service
+                self.session_id = session_id
+                self.contract_id = contract_id
+                self.progress_callback = progress_callback
+                # Fixed order of primary steps for resume logic
+                self._step_order = [
+                    "validate_input",
+                    "process_document",
+                    "validate_document_quality",
+                    "extract_terms",
+                    "validate_terms_completeness",
+                    "analyze_compliance",
+                    "assess_risks",
+                    "analyze_contract_diagrams",
+                    "generate_recommendations",
+                    "validate_final_output",
+                    "compile_report",
+                ]
+                try:
+                    # Handle both normal step names and failed step names (e.g., "extract_terms_failed")
+                    clean_step = resume_from_step
+                    if resume_from_step and resume_from_step.endswith("_failed"):
+                        # Remove the "_failed" suffix to get the actual step name
+                        clean_step = resume_from_step[:-7]  # Remove "_failed" (7 chars)
+
+                    self._resume_index = (
+                        self._step_order.index(clean_step) if clean_step else 0
+                    )
+
+                    # If resuming from a failed step, we want to retry that step
+                    # so we don't skip it
+                    if resume_from_step and resume_from_step.endswith("_failed"):
+                        logger.info(
+                            f"Resuming from failed step: {clean_step} (will retry)"
+                        )
+                    else:
+                        logger.info(
+                            f"Resuming from step: {clean_step} (will skip completed steps)"
+                        )
+                except ValueError:
+                    logger.warning(
+                        f"Unknown resume step: {resume_from_step}, starting from beginning"
+                    )
+                    self._resume_index = 0
+
+            def _should_skip(self, step_name: str) -> bool:
+                try:
+                    idx = self._step_order.index(step_name)
+                except ValueError:
+                    return False
+                return idx < self._resume_index
+
+            def _schedule_persist(self, step: str, percent: int, description: str):
+                # Schedule external progress persistence callback if provided
+                if not self.progress_callback:
+                    return
+                try:
+                    loop = asyncio.get_running_loop()
+                    loop.create_task(self.progress_callback(step, percent, description))
+                except RuntimeError:
+                    # No event loop available; skip persistence to avoid blocking
+                    try:
+                        logger.debug(
+                            "[ProgressTracking] No running event loop; skipping persist",
+                            extra={
+                                "step": step,
+                                "percent": percent,
+                                "description": (
+                                    description[:120]
+                                    if isinstance(description, str)
+                                    else str(description)
+                                ),
+                            },
+                        )
+                    except Exception:
+                        pass
+
+            def _send_failure_progress(self, step: str, percent: int, error_msg: str):
+                """Send failure progress update for step failures."""
+                try:
+                    self.parent_service._schedule_progress_update(
+                        self.session_id,
+                        self.contract_id,
+                        f"{step}_failed",
+                        percent,
+                        error_msg,
+                    )
+                except Exception:
+                    # Don't let progress update failures crash the workflow
+                    pass
+
+            async def validate_input(self, state):
+                if self._should_skip("validate_input"):
+                    return state
+
+                # Mark status as processing when first step begins
+                try:
+                    if self.contract_id in self.parent_service.active_analyses:
+                        self.parent_service.active_analyses[self.contract_id][
+                            "status"
+                        ] = "processing"
+                except Exception:
+                    pass
+
+                # Execute the step first
+                try:
+                    result = super().validate_input(state)
+
+                    # Only send progress updates and persist checkpoints AFTER successful completion
+                    self.parent_service._schedule_progress_update(
+                        self.session_id,
+                        self.contract_id,
+                        "validate_input",
+                        14,
+                        "Validating document and input parameters",
+                    )
+                    self._schedule_persist(
+                        "validate_input", 14, "Validating document and input parameters"
+                    )
+
+                    return result
+                except Exception as e:
+                    # Send failure progress for clarity
+                    self.parent_service._schedule_progress_update(
+                        self.session_id,
+                        self.contract_id,
+                        "validate_input_failed",
+                        14,
+                        f"Input validation failed: {str(e)}",
+                    )
+                    # Re-raise the exception to maintain error handling
+                    raise
+
+            async def process_document(self, state):
+                if self._should_skip("process_document"):
+                    return state
+
+                # Execute the step first
+                result = super().process_document(state)
+
+                # Only send progress updates and persist checkpoints AFTER successful completion
+                self.parent_service._schedule_progress_update(
+                    self.session_id,
+                    self.contract_id,
+                    "process_document",
+                    28,
+                    "Processing document and extracting text content",
+                )
+                self._schedule_persist(
+                    "process_document",
+                    28,
+                    "Processing document and extracting text content",
+                )
+
+                return result
+
+            async def extract_contract_terms(self, state):
+                if self._should_skip("extract_terms"):
+                    return state
+
+                # Execute the step first
+                try:
+                    result = super().extract_contract_terms(state)
+
+                    # Only send progress updates and persist checkpoints AFTER successful completion
+                    self.parent_service._schedule_progress_update(
+                        self.session_id,
+                        self.contract_id,
+                        "extract_terms",
+                        42,
+                        "Extracting key contract terms using Australian tools",
+                    )
+                    self._schedule_persist(
+                        "extract_terms",
+                        42,
+                        "Extracting key contract terms using Australian tools",
+                    )
+
+                    return result
+                except Exception as e:
+                    # Send failure progress for clarity
+                    self._send_failure_progress(
+                        "extract_terms",
+                        42,
+                        f"Contract terms extraction failed: {str(e)}",
+                    )
+                    raise
+
+            async def analyze_australian_compliance(self, state):
+                if self._should_skip("analyze_compliance"):
+                    return state
+
+                # Execute the step first
+                result = super().analyze_australian_compliance(state)
+
+                # Only send progress updates and persist checkpoints AFTER successful completion
+                self.parent_service._schedule_progress_update(
+                    self.session_id,
+                    self.contract_id,
+                    "analyze_compliance",
+                    57,
+                    "Analyzing compliance with Australian property laws",
+                )
+                self._schedule_persist(
+                    "analyze_compliance",
+                    57,
+                    "Analyzing compliance with Australian property laws",
+                )
+
+                return result
+
+            async def assess_contract_risks(self, state):
+                if self._should_skip("assess_risks"):
+                    return state
+
+                # Execute the step first
+                result = super().assess_contract_risks(state)
+
+                # Only send progress updates and persist checkpoints AFTER successful completion
+                self.parent_service._schedule_progress_update(
+                    self.session_id,
+                    self.contract_id,
+                    "assess_risks",
+                    71,
+                    "Assessing contract risks and potential issues",
+                )
+                self._schedule_persist(
+                    "assess_risks", 71, "Assessing contract risks and potential issues"
+                )
+
+                return result
+
+            async def generate_recommendations(self, state):
+                if self._should_skip("generate_recommendations"):
+                    return state
+
+                # Execute the step first
+                result = super().generate_recommendations(state)
+
+                # Only send progress updates and persist checkpoints AFTER successful completion
+                if not (isinstance(result, dict) and result.get("error_state")):
+                    self.parent_service._schedule_progress_update(
+                        self.session_id,
+                        self.contract_id,
+                        "generate_recommendations",
+                        85,
+                        "Generating actionable recommendations",
+                    )
+                    self._schedule_persist(
+                        "generate_recommendations",
+                        85,
+                        "Generating actionable recommendations",
+                    )
+
+                return result
+
+            async def compile_analysis_report(self, state):
+                if self._should_skip("compile_report"):
+                    return state
+
+                # Execute the step first
+                result = super().compile_analysis_report(state)
+
+                # Only send progress updates and persist checkpoints AFTER successful completion
+                if not (isinstance(result, dict) and result.get("error_state")):
+                    self.parent_service._schedule_progress_update(
+                        self.session_id,
+                        self.contract_id,
+                        "compile_report",
+                        98,
+                        "Compiling final analysis report",
+                    )
+                    self._schedule_persist(
+                        "compile_report", 98, "Compiling final analysis report"
+                    )
+
+                return result
+
+            # Additional step overrides for complete resume coverage
+            # Also override conditional checks to avoid triggering retries when skipping past steps
+            def check_processing_success(self, state):
+                # When resuming beyond process_document, force the success path
+                if self._should_skip("process_document"):
+                    return "success"
+                return super().check_processing_success(state)
+
+            def check_document_quality(self, state):
+                # When resuming beyond validate_document_quality, force quality_passed
+                if self._should_skip("validate_document_quality"):
+                    return "quality_passed"
+                return super().check_document_quality(state)
+
+            def check_extraction_quality(self, state):
+                # When resuming beyond extract_terms, force high_confidence
+                if self._should_skip("extract_terms"):
+                    return "high_confidence"
+                return super().check_extraction_quality(state)
+
+            async def validate_document_quality_step(self, state):
+                if self._should_skip("validate_document_quality"):
+                    return state
+
+                # Execute the step first
+                result = super().validate_document_quality_step(state)
+
+                # Only send progress updates and persist checkpoints AFTER successful completion
+                if not (isinstance(result, dict) and result.get("error_state")):
+                    self.parent_service._schedule_progress_update(
+                        self.session_id,
+                        self.contract_id,
+                        "validate_document_quality",
+                        18,
+                        "Validating document quality and readability",
+                    )
+                    self._schedule_persist(
+                        "validate_document_quality",
+                        18,
+                        "Validating document quality and readability",
+                    )
+
+                return result
+
+            async def validate_terms_completeness_step(self, state):
+                if self._should_skip("validate_terms_completeness"):
+                    return state
+
+                # Execute the step first
+                result = super().validate_terms_completeness_step(state)
+
+                # Only send progress updates and persist checkpoints AFTER successful completion
+                if not (isinstance(result, dict) and result.get("error_state")):
+                    self.parent_service._schedule_progress_update(
+                        self.session_id,
+                        self.contract_id,
+                        "validate_terms_completeness",
+                        50,
+                        "Validating completeness of extracted terms",
+                    )
+                    self._schedule_persist(
+                        "validate_terms_completeness",
+                        50,
+                        "Validating completeness of extracted terms",
+                    )
+
+                return result
+
+            async def analyze_contract_diagrams(self, state):
+                if self._should_skip("analyze_contract_diagrams"):
+                    return state
+
+                # Execute the step first
+                result = super().analyze_contract_diagrams(state)
+
+                # Only send progress updates and persist checkpoints AFTER successful completion
+                if not (isinstance(result, dict) and result.get("error_state")):
+                    self.parent_service._schedule_progress_update(
+                        self.session_id,
+                        self.contract_id,
+                        "analyze_contract_diagrams",
+                        65,
+                        "Analyzing contract diagrams and visual elements",
+                    )
+                    self._schedule_persist(
+                        "analyze_contract_diagrams",
+                        65,
+                        "Analyzing contract diagrams and visual elements",
+                    )
+
+                return result
+
+            async def validate_final_output_step(self, state):
+                if self._should_skip("validate_final_output"):
+                    return state
+
+                # Execute the step first
+                result = super().validate_final_output_step(state)
+
+                # Only send progress updates and persist checkpoints AFTER successful completion
+                if not (isinstance(result, dict) and result.get("error_state")):
+                    self.parent_service._schedule_progress_update(
+                        self.session_id,
+                        self.contract_id,
+                        "validate_final_output",
+                        95,
+                        "Performing final validation of analysis results",
+                    )
+                    self._schedule_persist(
+                        "validate_final_output",
+                        95,
+                        "Performing final validation of analysis results",
+                    )
+
+                return result
+
         # Create progress-tracking workflow
         progress_workflow = ProgressTrackingWorkflow(
-            parent_service=self,
-            session_id=session_id,
-            contract_id=contract_id,
-            progress_callback=progress_callback,
-            resume_from_step=resume_from_step,
+            self,
             openai_api_key=self.openai_api_key,
             model_name=self.model_name,
             openai_api_base=self.openai_api_base,
         )
 
-        # Execute the workflow with loop stability verification
-        if stabilizer:
-            logger.info(f"[ANALYSIS-STABILIZER] Verifying loop stability before workflow execution")
-            await stabilizer.verify_loop_stability("pre_workflow_execution")
-
         # Execute the workflow
-        result = await progress_workflow.analyze_contract(initial_state)
-        
-        if stabilizer:
-            logger.info(f"[ANALYSIS-STABILIZER] Verifying loop stability after workflow execution")
-            await stabilizer.verify_loop_stability("post_workflow_execution")
-        
-        return result
+        return await progress_workflow.analyze_contract(initial_state)
 
     async def _send_progress_update(
         self,
@@ -848,11 +1245,23 @@ class ContractAnalysisService:
             "components": {},
         }
 
-        # Workflow component is no longer used
-        health_status["components"]["workflow"] = {
-            "status": "disabled",
-            "message": "Workflow component removed - using progress tracking workflow instead",
-        }
+        # Check workflow health
+        try:
+            workflow_metrics = (
+                self.workflow.get_workflow_metrics()
+                if hasattr(self.workflow, "get_workflow_metrics")
+                else {}
+            )
+            health_status["components"]["workflow"] = {
+                "status": "healthy",
+                "metrics": workflow_metrics,
+            }
+        except Exception as e:
+            health_status["components"]["workflow"] = {
+                "status": "error",
+                "error": str(e),
+            }
+            health_status["status"] = "degraded"
 
         # Check prompt manager health
         if self.prompt_manager:
@@ -895,10 +1304,11 @@ class ContractAnalysisService:
                 if hasattr(self.config, "validate_config")
                 else {}
             ),
-            "workflow_metrics": {
-                "status": "disabled",
-                "message": "Workflow component removed - using progress tracking workflow instead",
-            },
+            "workflow_metrics": (
+                self.workflow.get_workflow_metrics()
+                if hasattr(self.workflow, "get_workflow_metrics")
+                else {}
+            ),
             "websocket_metrics": {
                 "active_analyses_count": self.get_active_analyses_count(),
                 "total_analyses": len(self.active_analyses),

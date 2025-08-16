@@ -10,7 +10,6 @@
 - each function file should have a short description in the beginning explain what this file do
 - source code implementation and unittest file should be implemented at the same time (try find existing test file and modify it first don't always create new test file)
 - function doc string and file description should be updated at the same time
-- each main folder can have a readme.md file
 
 
 # Developer environment
