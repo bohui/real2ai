@@ -20,9 +20,7 @@ celery_app = Celery(
     backend=settings.redis_url,
     include=[
         "app.tasks.ocr_tasks",
-        "app.tasks.comprehensive_analysis",
-        "app.tasks.document_ocr",
-        "app.tasks.report_generation",
+        "app.tasks.background_tasks",
         "app.tasks.user_aware_tasks",
         "app.tasks.cleanup_tasks",
     ],

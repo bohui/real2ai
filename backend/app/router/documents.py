@@ -360,7 +360,9 @@ async def reprocess_document_with_ocr(
         }
 
         # Use enhanced background processing via Celery
-        from app.tasks import enhanced_reprocess_document_with_ocr_background
+        from app.tasks.background_tasks import (
+            enhanced_reprocess_document_with_ocr_background,
+        )
 
         task = enhanced_reprocess_document_with_ocr_background.delay(
             document_id, user.id, document, contract_context, enhanced_options
@@ -451,7 +453,7 @@ async def batch_process_ocr(
         # Start batch processing
         batch_id = batch_context["batch_id"]
 
-        from app.tasks import batch_ocr_processing_background
+        from app.tasks.background_tasks import batch_ocr_processing_background
 
         task = batch_ocr_processing_background.delay(
             [doc["id"] for doc in verified_docs],
