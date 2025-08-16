@@ -65,23 +65,47 @@ class ConnectionPoolManager:
             return
 
         if cls._loop_id != current_loop_id:
-            # Event loop changed; close all existing pools and rebind
-            # Best-effort synchronous cleanup; schedule async close if possible
-            async def _close_all():
-                await cls.close_all()
+            # Event loop changed; make existing pools unavailable immediately to avoid races
+            # Capture references for background close, then null out class refs synchronously
+            old_service_pool = cls._service_pool
+            old_user_pools = list(cls._user_pools.values())
+            cls._service_pool = None
+            cls._user_pools.clear()
+            cls._metrics = {
+                "active_user_pools": 0,
+                "evictions": 0,
+                "pool_hits": 0,
+                "pool_misses": 0,
+            }
+
+            async def _close_captured():
+                try:
+                    close_ops = []
+                    if old_service_pool is not None:
+                        close_ops.append(old_service_pool.close())
+                    for pool_info in old_user_pools:
+                        try:
+                            close_ops.append(pool_info.pool.close())
+                        except Exception:
+                            # Ignore close scheduling errors for individual pools
+                            pass
+                    if close_ops:
+                        await asyncio.gather(*close_ops, return_exceptions=True)
+                finally:
+                    logger.info(
+                        "Closed pools from previous event loop after loop change"
+                    )
 
             try:
                 if current_loop.is_running():
-                    # Run cleanup in the new loop to avoid cross-loop awaits
-                    fut = current_loop.create_task(_close_all())
-                    # Fire-and-forget; errors will be logged inside close_all
+                    current_loop.create_task(_close_captured())
                 else:
-                    current_loop.run_until_complete(_close_all())
+                    current_loop.run_until_complete(_close_captured())
             except Exception:
-                # If cleanup fails, reset references; the GC/driver will clean up
-                cls._service_pool = None
-                cls._user_pools.clear()
+                # Best-effort cleanup; leaked resources will be cleaned by driver/GC
+                pass
 
+            # Rebind to new loop and create a fresh lock
             cls._loop_id = current_loop_id
             cls._pool_lock = asyncio.Lock()
 
@@ -463,16 +487,39 @@ async def _setup_user_session(
                     "event_loop_closed": True,
                 },
             )
-            # Set minimal auth context
-            await connection.execute(
-                "SELECT set_config('role', $1, false)", "authenticated"
-            )
-            await connection.execute(
-                "SELECT set_config('request.jwt.claim.sub', $1, false)", str(user_id)
-            )
+            # Auth/token failures: do not impersonate; bubble up
+            try:
+                import jwt as _jwt  # type: ignore
+
+                if isinstance(e, _jwt.InvalidTokenError) or "Invalid token" in str(e):
+                    raise
+            except Exception:
+                # If jwt import/type check fails, continue to other checks
+                pass
+
+            # Connection-level issues: bubble up for retry with a fresh connection
+            if isinstance(
+                e,
+                (
+                    asyncpg.InterfaceError,
+                    asyncpg.exceptions.ConnectionDoesNotExistError,
+                ),
+            ):
+                raise
+
+            # Safe fallback: attempt anon role; ignore any failures, then re-raise
+            try:
+                await connection.execute("SELECT set_config('role', $1, false)", "anon")
+            except Exception:
+                pass
+            # Re-raise to let caller handle/retry
+            raise
     else:
         # No user context - set anonymous role
-        await connection.execute("SELECT set_config('role', $1, false)", "anon")
+        try:
+            await connection.execute("SELECT set_config('role', $1, false)", "anon")
+        except Exception:
+            pass
 
 
 async def _reset_session_gucs(connection: asyncpg.Connection):

@@ -703,30 +703,20 @@ class ContractAnalysisService:
                     return False
                 return idx < self._resume_index
 
-            def _schedule_persist(self, step: str, percent: int, description: str):
-                # Schedule external progress persistence callback if provided
+            async def _schedule_persist(
+                self, step: str, percent: int, description: str
+            ):
+                # Persist progress using provided async callback; do nothing if not provided
                 if not self.progress_callback:
                     return
                 try:
-                    loop = asyncio.get_running_loop()
-                    loop.create_task(self.progress_callback(step, percent, description))
-                except RuntimeError:
-                    # No event loop available; skip persistence to avoid blocking
-                    try:
-                        logger.debug(
-                            "[ProgressTracking] No running event loop; skipping persist",
-                            extra={
-                                "step": step,
-                                "percent": percent,
-                                "description": (
-                                    description[:120]
-                                    if isinstance(description, str)
-                                    else str(description)
-                                ),
-                            },
-                        )
-                    except Exception:
-                        pass
+                    await self.progress_callback(step, percent, description)
+                except Exception as persist_error:
+                    # Best-effort: never fail the workflow due to persistence path
+                    logger.debug(
+                        f"[ProgressTracking] Persist callback failed: {persist_error}",
+                        exc_info=False,
+                    )
 
             def _send_failure_progress(self, step: str, percent: int, error_msg: str):
                 """Send failure progress update for step failures."""
@@ -767,7 +757,7 @@ class ContractAnalysisService:
                         14,
                         "Validating document and input parameters",
                     )
-                    self._schedule_persist(
+                    await self._schedule_persist(
                         "validate_input", 14, "Validating document and input parameters"
                     )
 
@@ -799,7 +789,7 @@ class ContractAnalysisService:
                     28,
                     "Processing document and extracting text content",
                 )
-                self._schedule_persist(
+                await self._schedule_persist(
                     "process_document",
                     28,
                     "Processing document and extracting text content",
@@ -823,7 +813,7 @@ class ContractAnalysisService:
                         42,
                         "Extracting key contract terms using Australian tools",
                     )
-                    self._schedule_persist(
+                    await self._schedule_persist(
                         "extract_terms",
                         42,
                         "Extracting key contract terms using Australian tools",
@@ -854,7 +844,7 @@ class ContractAnalysisService:
                     57,
                     "Analyzing compliance with Australian property laws",
                 )
-                self._schedule_persist(
+                await self._schedule_persist(
                     "analyze_compliance",
                     57,
                     "Analyzing compliance with Australian property laws",
@@ -877,7 +867,7 @@ class ContractAnalysisService:
                     71,
                     "Assessing contract risks and potential issues",
                 )
-                self._schedule_persist(
+                await self._schedule_persist(
                     "assess_risks", 71, "Assessing contract risks and potential issues"
                 )
 
@@ -899,7 +889,7 @@ class ContractAnalysisService:
                         85,
                         "Generating actionable recommendations",
                     )
-                    self._schedule_persist(
+                    await self._schedule_persist(
                         "generate_recommendations",
                         85,
                         "Generating actionable recommendations",
@@ -923,7 +913,7 @@ class ContractAnalysisService:
                         98,
                         "Compiling final analysis report",
                     )
-                    self._schedule_persist(
+                    await self._schedule_persist(
                         "compile_report", 98, "Compiling final analysis report"
                     )
 
@@ -965,7 +955,7 @@ class ContractAnalysisService:
                         18,
                         "Validating document quality and readability",
                     )
-                    self._schedule_persist(
+                    await self._schedule_persist(
                         "validate_document_quality",
                         18,
                         "Validating document quality and readability",
@@ -989,7 +979,7 @@ class ContractAnalysisService:
                         50,
                         "Validating completeness of extracted terms",
                     )
-                    self._schedule_persist(
+                    await self._schedule_persist(
                         "validate_terms_completeness",
                         50,
                         "Validating completeness of extracted terms",
@@ -1013,7 +1003,7 @@ class ContractAnalysisService:
                         65,
                         "Analyzing contract diagrams and visual elements",
                     )
-                    self._schedule_persist(
+                    await self._schedule_persist(
                         "analyze_contract_diagrams",
                         65,
                         "Analyzing contract diagrams and visual elements",
@@ -1037,7 +1027,7 @@ class ContractAnalysisService:
                         95,
                         "Performing final validation of analysis results",
                     )
-                    self._schedule_persist(
+                    await self._schedule_persist(
                         "validate_final_output",
                         95,
                         "Performing final validation of analysis results",
