@@ -16,7 +16,7 @@ from app.clients.factory import get_service_supabase_client
 from app.services.repositories.recovery_repository import RecoveryRepository
 from app.core.task_recovery import TaskState, RecoveryMethod, RecoverableTask
 from app.core.celery import celery_app
-from app.tasks import background_tasks
+from app.tasks import comprehensive_analysis
 from app.services.repositories.analyses_repository import AnalysesRepository
 
 logger = logging.getLogger(__name__)
@@ -192,7 +192,7 @@ class CheckpointResumeStrategy(RecoveryStrategy):
     def _get_task_function(self, task_name: str):
         """Get Celery task function by name"""
         task_map = {
-            "comprehensive_document_analysis": background_tasks.comprehensive_document_analysis,
+            "comprehensive_document_analysis": comprehensive_analysis.comprehensive_document_analysis,
             # "process_document_background": background_tasks.process_document_background,
             # "analyze_contract_background": background_tasks.analyze_contract_background,
         }

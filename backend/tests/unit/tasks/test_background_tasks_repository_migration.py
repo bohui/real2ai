@@ -11,10 +11,8 @@ from uuid import uuid4, UUID
 from datetime import datetime
 from typing import Dict, Any
 
-from app.tasks.background_tasks import (
-    update_analysis_progress,
-    comprehensive_document_analysis,
-)
+from app.tasks.utils import update_analysis_progress
+from app.tasks.comprehensive_analysis import comprehensive_document_analysis
 from app.services.repositories.analysis_progress_repository import AnalysisProgress
 from app.services.repositories.documents_repository import DocumentsRepository
 from app.models.supabase_models import Document
@@ -436,7 +434,7 @@ class TestBackgroundTasksIntegration:
             mock_auth_context.get_user_id.return_value = str(uuid4())
 
             # Import the function that performs the conversion
-            from app.tasks.background_tasks import comprehensive_document_analysis
+            from app.tasks.comprehensive_analysis import comprehensive_document_analysis
 
             # The function should convert Document object to dict for backward compatibility
             # We can verify this by checking that the function doesn't fail when accessing dict keys

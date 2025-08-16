@@ -764,7 +764,7 @@ async def _start_background_analysis_with_cache(
 ) -> str:
     """Start comprehensive background analysis with progress tracking and cache integration."""
     try:
-        from app.tasks.background_tasks import comprehensive_document_analysis
+        from app.tasks import comprehensive_document_analysis
 
         # Enhanced task parameters with comprehensive processing and progress tracking
         task_params = {
@@ -1005,7 +1005,7 @@ async def get_contract_analysis_report(
 
         if format == "pdf":
             # Generate PDF and upload to storage, return signed URL
-            from app.tasks.background_tasks import generate_pdf_report
+            from app.tasks import generate_pdf_report
             from app.core.auth_context import AuthContext
             import uuid
 

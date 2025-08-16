@@ -25,7 +25,7 @@ class TestDocumentUpload:
         test_file = BytesIO(b"fake pdf content")
         
         # Mock the background task to prevent actual execution
-        with patch('app.tasks.background_tasks.process_document_background', new_callable=AsyncMock) as mock_bg_task:
+        with patch('app.tasks.document_ocr.enhanced_reprocess_document_with_ocr_background', new_callable=AsyncMock) as mock_bg_task:
             response = client.post(
                 "/api/documents/upload",
                 files={"file": ("test-contract.pdf", test_file, "application/pdf")},

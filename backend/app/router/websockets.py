@@ -714,7 +714,7 @@ async def handle_start_analysis_request(
 
     try:
         # Import here to avoid circular imports
-        from app.tasks.background_tasks import comprehensive_document_analysis
+        from app.tasks import comprehensive_document_analysis
 
         # Get analysis options from client
         analysis_options = data.get(
@@ -1140,7 +1140,7 @@ async def handle_cancellation_request(
 
         # Try to cancel the Celery task if we can find it
         try:
-            from app.tasks.background_tasks import comprehensive_document_analysis
+            from app.tasks import comprehensive_document_analysis
 
             # Get all active tasks and try to revoke matching ones
             app = comprehensive_document_analysis.app
@@ -1152,7 +1152,7 @@ async def handle_cancellation_request(
                     for task in tasks:
                         if task.get(
                             "name"
-                        ) == "app.tasks.background_tasks.comprehensive_document_analysis" and document_id in str(
+                        ) == "app.tasks.comprehensive_analysis.comprehensive_document_analysis" and document_id in str(
                             task.get("args", [])
                         ):
                             # Revoke the task
@@ -1261,7 +1261,7 @@ async def _dispatch_analysis_task(
         logger.info(f"Created new analysis record: {analysis_id}")
 
         # Import and dispatch the comprehensive analysis task
-        from app.tasks.background_tasks import comprehensive_document_analysis
+        from app.tasks import comprehensive_document_analysis
 
         # Enhanced task parameters with comprehensive processing
         task_params = {

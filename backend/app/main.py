@@ -320,9 +320,7 @@ app.include_router(cache_router)
 
 
 # Import background tasks
-from app.tasks.background_tasks import (
-    # process_document_background,
-    # analyze_contract_background,
+from app.tasks import (
     enhanced_reprocess_document_with_ocr_background,
     batch_ocr_processing_background,
     generate_pdf_report,

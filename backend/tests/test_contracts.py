@@ -58,7 +58,7 @@ class TestContractAnalysis:
         }
         
         # Mock the background task to prevent actual execution
-        with patch('app.tasks.background_tasks.comprehensive_document_analysis', new_callable=AsyncMock) as mock_bg_task:
+        with patch('app.tasks.comprehensive_analysis.comprehensive_document_analysis', new_callable=AsyncMock) as mock_bg_task:
             response = client.post("/api/contracts/analyze", json=request_data)
         
             assert response.status_code == 200
@@ -162,7 +162,7 @@ class TestContractAnalysis:
         }
         
         # Mock the background task to prevent actual execution
-        with patch('app.tasks.background_tasks.comprehensive_document_analysis', new_callable=AsyncMock) as mock_bg_task:
+        with patch('app.tasks.comprehensive_analysis.comprehensive_document_analysis', new_callable=AsyncMock) as mock_bg_task:
             response = client.post("/api/contracts/analyze", json=request_data)
             
             assert response.status_code == 200
@@ -259,7 +259,7 @@ class TestAnalysisReports:
     """Test analysis report functionality"""
     
     @patch('app.router.contracts.get_contract_analysis')
-    @patch('app.tasks.background_tasks.generate_pdf_report')
+    @patch('app.tasks.report_generation.generate_pdf_report')
     def test_download_analysis_report_pdf(self, mock_generate_pdf, mock_get_analysis, client: TestClient, sample_analysis_data):
         """Test PDF report download"""
         # Mock get_contract_analysis
