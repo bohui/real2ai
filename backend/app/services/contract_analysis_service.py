@@ -120,6 +120,9 @@ class ContractAnalysisService:
             enable_quality_checks=self.config.enable_quality_checks,
         )
 
+        # Note: Workflow will be initialized lazily when first used
+        self._workflow_initialized = False
+
         # WebSocket progress tracking
         self.active_analyses: Dict[str, Dict[str, Any]] = {}
 
@@ -136,6 +139,17 @@ class ContractAnalysisService:
         logger.info(
             f"Unified contract analysis service initialized with config: {config_validation['config_summary']}"
         )
+
+    async def _ensure_workflow_initialized(self):
+        """Ensure the workflow is initialized before use."""
+        if not self._workflow_initialized:
+            try:
+                await self.workflow.initialize()
+                self._workflow_initialized = True
+                logger.info("Contract analysis workflow initialized successfully")
+            except Exception as e:
+                logger.error(f"Failed to initialize workflow: {e}")
+                raise
 
     async def analyze_contract(
         self,
@@ -239,6 +253,9 @@ class ContractAnalysisService:
                 except Exception as e:
                     logger.warning(f"Prompt manager initialization failed: {e}")
                     self._service_metrics["prompt_manager_errors"] += 1
+
+            # Ensure workflow is initialized before use
+            await self._ensure_workflow_initialized()
 
             # Execute analysis with optional progress tracking
             if use_websocket_progress:
@@ -1042,6 +1059,14 @@ class ContractAnalysisService:
             model_name=self.model_name,
             openai_api_base=self.openai_api_base,
         )
+
+        # Ensure the progress workflow is initialized
+        try:
+            await progress_workflow.initialize()
+            logger.info("Progress tracking workflow initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize progress tracking workflow: {e}")
+            raise
 
         # Execute the workflow
         return await progress_workflow.analyze_contract(initial_state)

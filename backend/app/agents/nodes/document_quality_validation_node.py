@@ -77,22 +77,33 @@ class DocumentQualityValidationNode(BaseNode):
             use_llm = self.use_llm_config.get("document_quality", True)
 
             if use_llm:
-                try:
-                    quality_metrics = await self._validate_document_quality_with_llm(
+                # Check if clients are available before attempting LLM validation
+                if not self.openai_client and not self.gemini_client:
+                    logger.warning(
+                        "No AI clients available, falling back to rule-based validation"
+                    )
+                    quality_metrics = await self._validate_document_quality_rule_based(
                         document_text, document_metadata
                     )
-                except Exception as llm_error:
-                    self._log_exception(
-                        llm_error, state, {"fallback_to_rule_based": True}
-                    )
-                    if self.enable_fallbacks:
+                else:
+                    try:
                         quality_metrics = (
-                            await self._validate_document_quality_rule_based(
+                            await self._validate_document_quality_with_llm(
                                 document_text, document_metadata
                             )
                         )
-                    else:
-                        raise llm_error
+                    except Exception as llm_error:
+                        self._log_exception(
+                            llm_error, state, {"fallback_to_rule_based": True}
+                        )
+                        if self.enable_fallbacks:
+                            quality_metrics = (
+                                await self._validate_document_quality_rule_based(
+                                    document_text, document_metadata
+                                )
+                            )
+                        else:
+                            raise llm_error
             else:
                 quality_metrics = await self._validate_document_quality_rule_based(
                     document_text, document_metadata
@@ -143,6 +154,10 @@ class DocumentQualityValidationNode(BaseNode):
         self, text: str, metadata: Dict[str, Any]
     ) -> Dict[str, Any]:
         """Validate document quality using LLM analysis."""
+        # Check if clients are available
+        if not self.openai_client and not self.gemini_client:
+            raise Exception("No AI clients available for LLM validation")
+
         try:
             from app.core.prompts import PromptContext, ContextType
 
@@ -238,11 +253,17 @@ class DocumentQualityValidationNode(BaseNode):
                     return quality_result
 
             # Fallback to rule-based if no response or parsing fails
+            logger.info(
+                "LLM validation failed or returned no response, falling back to rule-based validation"
+            )
             return await self._validate_document_quality_rule_based(text, metadata)
 
         except Exception as e:
             self._log_exception(e, context={"text_length": len(text)})
             if self.enable_fallbacks:
+                logger.info(
+                    "LLM validation failed, falling back to rule-based validation"
+                )
                 return await self._validate_document_quality_rule_based(text, metadata)
             raise
 

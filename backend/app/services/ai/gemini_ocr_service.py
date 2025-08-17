@@ -31,6 +31,62 @@ from app.prompts.schema.text_diagram_insight_schema import TextDiagramInsightLis
 logger = logging.getLogger(__name__)
 
 
+# Module-level constants to avoid magic numbers
+MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024  # 50MB
+SUPPORTED_FORMATS = {
+    "pdf",
+    "png",
+    "jpg",
+    "jpeg",
+    "webp",
+    "gif",
+    "bmp",
+    "tiff",
+}
+
+DEFAULT_PAGE_NUMBER = 1
+
+# Generation config defaults
+GENERATION_TEMPERATURE = 0.2
+GENERATION_TOP_P = 1
+GENERATION_SEED = 0
+GENERATION_MAX_OUTPUT_TOKENS = 65535
+
+# Truncation lengths
+PROMPT_INPUT_TRUNCATE_LENGTH = 4000
+RESPONSE_PREVIEW_TRUNCATE_LENGTH = 200
+RAW_TEXT_FALLBACK_TRUNCATE_LENGTH = 1000
+
+# Other defaults
+ESTIMATED_PAGES_DEFAULT = 1
+
+# HTTP status codes
+HTTP_503_SERVICE_UNAVAILABLE = 503
+HTTP_429_TOO_MANY_REQUESTS = 429
+HTTP_500_INTERNAL_SERVER_ERROR = 500
+HTTP_413_REQUEST_ENTITY_TOO_LARGE = 413
+HTTP_400_BAD_REQUEST = 400
+
+# Confidence scoring parameters
+CONFIDENCE_INITIAL = 1.0
+SHORT_TEXT_LENGTH_THRESHOLD = 50
+VERY_SHORT_TEXT_LENGTH_THRESHOLD = 10
+SHORT_TEXT_PENALTY = 0.7
+VERY_SHORT_TEXT_PENALTY = 0.4
+SUBSTITUTION_ERROR_THRESHOLD_RATIO = 0.1
+SUBSTITUTION_ERROR_PENALTY = 0.6
+SPECIAL_CHAR_RATIO_THRESHOLD = 0.15
+SPECIAL_CHAR_PENALTY = 0.7
+SHORT_WORDS_RATIO_THRESHOLD = 0.3
+SHORT_WORDS_PENALTY = 0.8
+SENTENCE_LENGTH_GOOD_MIN = 5
+SENTENCE_LENGTH_GOOD_MAX = 25
+GOOD_SENTENCE_BONUS_MULTIPLIER = 1.1
+
+# Fallback defaults
+FALLBACK_CONFIDENCE = 0.5
+
+
 class GeminiOCRService(PromptEnabledService, UserAwareService):
     """
     Advanced OCR service with integrated Pydantic output parsing
@@ -48,17 +104,8 @@ class GeminiOCRService(PromptEnabledService, UserAwareService):
 
         self.settings = get_settings()
         self.gemini_service = None
-        self.max_file_size = 50 * 1024 * 1024  # 50MB limit
-        self.supported_formats = {
-            "pdf",
-            "png",
-            "jpg",
-            "jpeg",
-            "webp",
-            "gif",
-            "bmp",
-            "tiff",
-        }
+        self.max_file_size = MAX_FILE_SIZE_BYTES
+        self.supported_formats = SUPPORTED_FORMATS
 
     async def initialize(self):
         """Initialize Gemini OCR service"""
@@ -71,7 +118,7 @@ class GeminiOCRService(PromptEnabledService, UserAwareService):
         except ClientConnectionError as e:
             logger.error(f"Failed to connect to Gemini service: {e}")
             raise HTTPException(
-                status_code=503,
+                status_code=HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Gemini OCR service unavailable - connection failed",
             )
 
@@ -80,7 +127,7 @@ class GeminiOCRService(PromptEnabledService, UserAwareService):
         document_type: Optional[str] = None,
         australian_state: Optional[str] = None,
         contract_type: Optional[str] = None,
-        page_number: int = 1,
+        page_number: int = DEFAULT_PAGE_NUMBER,
         is_multi_page: bool = False,
         **kwargs,
     ) -> str:
@@ -207,7 +254,8 @@ Focus on accuracy and completeness. Extract all visible text content."""
         """
         if not self.gemini_service:
             raise HTTPException(
-                status_code=503, detail="Gemini OCR service not initialized"
+                status_code=HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Gemini OCR service not initialized",
             )
 
         try:
@@ -328,13 +376,14 @@ Focus on accuracy and completeness. Extract all visible text content."""
             except ClientQuotaExceededError as e:
                 logger.error(f"Gemini quota exceeded during OCR extraction: {e}")
                 raise HTTPException(
-                    status_code=429,
+                    status_code=HTTP_429_TOO_MANY_REQUESTS,
                     detail="OCR extraction quota exceeded. Please try again later.",
                 )
             except ClientError as e:
                 logger.error(f"Gemini client error during OCR extraction: {e}")
                 raise HTTPException(
-                    status_code=500, detail=f"OCR extraction failed: {str(e)}"
+                    status_code=HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"OCR extraction failed: {str(e)}",
                 )
 
         except HTTPException:
@@ -416,7 +465,9 @@ Focus on accuracy and completeness. Extract all visible text content."""
             # Count apparent pages (look for page breaks, headers, footers)
             page_indicators = re.findall(r"page\s+(\d+)", raw_text.lower())
             estimated_pages = (
-                max([int(p) for p in page_indicators]) if page_indicators else 1
+                max([int(p) for p in page_indicators])
+                if page_indicators
+                else ESTIMATED_PAGES_DEFAULT
             )
 
             # Extract potential financial amounts
@@ -441,7 +492,7 @@ Focus on accuracy and completeness. Extract all visible text content."""
                 "text_length": len(raw_text),
                 "word_count": len(raw_text.split()),
                 "extraction_method": "basic_fallback",
-                "confidence": 0.5,  # Low confidence for fallback
+                "confidence": FALLBACK_CONFIDENCE,  # Low confidence for fallback
             }
 
             return basic_structure
@@ -471,7 +522,8 @@ Focus on accuracy and completeness. Extract all visible text content."""
         """
         if not self.gemini_service:
             raise HTTPException(
-                status_code=503, detail="Gemini OCR service not initialized"
+                status_code=HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Gemini OCR service not initialized",
             )
 
         try:
@@ -568,13 +620,14 @@ Focus on accuracy and completeness. Extract all visible text content."""
             except ClientQuotaExceededError as e:
                 logger.error(f"Gemini quota exceeded during semantic analysis: {e}")
                 raise HTTPException(
-                    status_code=429,
+                    status_code=HTTP_429_TOO_MANY_REQUESTS,
                     detail="Semantic analysis quota exceeded. Please try again later.",
                 )
             except ClientError as e:
                 logger.error(f"Gemini client error during semantic analysis: {e}")
                 raise HTTPException(
-                    status_code=500, detail=f"Semantic analysis failed: {str(e)}"
+                    status_code=HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Semantic analysis failed: {str(e)}",
                 )
 
         except HTTPException:
@@ -653,10 +706,10 @@ Focus on accuracy and completeness. Extract all visible text content."""
                 ],
             )
             generate_config = GenerateContentConfig(
-                temperature=0.2,
-                top_p=1,
-                seed=0,
-                max_output_tokens=65535,
+                temperature=GENERATION_TEMPERATURE,
+                top_p=GENERATION_TOP_P,
+                seed=GENERATION_SEED,
+                max_output_tokens=GENERATION_MAX_OUTPUT_TOKENS,
                 safety_settings=[
                     SafetySetting(
                         category="HARM_CATEGORY_HATE_SPEECH", threshold="OFF"
@@ -690,7 +743,7 @@ Focus on accuracy and completeness. Extract all visible text content."""
                     # Record critical inputs
                     llm_run.inputs = {
                         "model": model_name,
-                        "prompt": rendered_prompt[:4000],
+                        "prompt": rendered_prompt[:PROMPT_INPUT_TRUNCATE_LENGTH],
                         "mime_type": mime_type,
                         "generation_config": {
                             "temperature": generate_config.temperature,
@@ -780,7 +833,9 @@ Focus on accuracy and completeness. Extract all visible text content."""
                 try:
                     llm_run.outputs = {
                         "response_length": len(ai_text or ""),
-                        "response_preview": (ai_text or "")[:200],
+                        "response_preview": (ai_text or "")[
+                            :RESPONSE_PREVIEW_TRUNCATE_LENGTH
+                        ],
                         **(
                             {"usage": usage_dict}
                             if "usage_dict" in locals() and usage_dict
@@ -911,7 +966,9 @@ Focus on accuracy and completeness. Extract all visible text content."""
                     "overall_risk_level": "unknown",
                     "risk_factors": [],
                 },
-                "extracted_text": raw_output[:1000],  # First 1000 chars as fallback
+                "extracted_text": raw_output[
+                    :RAW_TEXT_FALLBACK_TRUNCATE_LENGTH
+                ],  # First N chars as fallback
                 "analysis_quality": "low_confidence_fallback",
             }
 
@@ -945,18 +1002,20 @@ Focus on accuracy and completeness. Extract all visible text content."""
         """Validate file size and format"""
         if len(file_content) > self.max_file_size:
             raise HTTPException(
-                status_code=413,
+                status_code=HTTP_413_REQUEST_ENTITY_TOO_LARGE,
                 detail=f"File too large. Maximum size: {self.max_file_size / 1024 / 1024}MB",
             )
 
         if file_type.lower() not in self.supported_formats:
             raise HTTPException(
-                status_code=400, detail=f"Unsupported file format: {file_type}"
+                status_code=HTTP_400_BAD_REQUEST,
+                detail=f"Unsupported file format: {file_type}",
             )
 
         if len(file_content) == 0:
             raise HTTPException(
-                status_code=400, detail="Empty file cannot be processed"
+                status_code=HTTP_400_BAD_REQUEST,
+                detail="Empty file cannot be processed",
             )
 
     def _calculate_confidence_score(self, extracted_text: str) -> float:
@@ -965,13 +1024,13 @@ Focus on accuracy and completeness. Extract all visible text content."""
             return 0.0
 
         # Initialize confidence
-        confidence = 1.0
+        confidence = CONFIDENCE_INITIAL
 
         # Text length factor (very short text gets lower confidence)
-        if len(extracted_text) < 50:
-            confidence *= 0.7
-        elif len(extracted_text) < 10:
-            confidence *= 0.4
+        if len(extracted_text) < SHORT_TEXT_LENGTH_THRESHOLD:
+            confidence *= SHORT_TEXT_PENALTY
+        elif len(extracted_text) < VERY_SHORT_TEXT_LENGTH_THRESHOLD:
+            confidence *= VERY_SHORT_TEXT_PENALTY
 
         # Count quality indicators
         total_chars = len(extracted_text)
@@ -1001,22 +1060,24 @@ Focus on accuracy and completeness. Extract all visible text content."""
         )
 
         # Apply penalties
-        if substitution_errors > total_chars * 0.1:  # More than 10% substitution errors
-            confidence *= 0.6
-        if special_char_ratio > 0.15:  # More than 15% special characters
-            confidence *= 0.7
-        if (
-            short_words > len(extracted_text.split()) * 0.3
-        ):  # More than 30% single-char words
-            confidence *= 0.8
+        if substitution_errors > total_chars * SUBSTITUTION_ERROR_THRESHOLD_RATIO:
+            confidence *= SUBSTITUTION_ERROR_PENALTY
+        if special_char_ratio > SPECIAL_CHAR_RATIO_THRESHOLD:
+            confidence *= SPECIAL_CHAR_PENALTY
+        if short_words > len(extracted_text.split()) * SHORT_WORDS_RATIO_THRESHOLD:
+            confidence *= SHORT_WORDS_PENALTY
 
         # Bonus for good indicators
         sentences = len(re.findall(r"[.!?]+", extracted_text))
         words = len(extracted_text.split())
         if sentences > 0 and words > 0:
             avg_words_per_sentence = words / sentences
-            if 5 <= avg_words_per_sentence <= 25:  # Reasonable sentence length
-                confidence *= 1.1
+            if (
+                SENTENCE_LENGTH_GOOD_MIN
+                <= avg_words_per_sentence
+                <= SENTENCE_LENGTH_GOOD_MAX
+            ):
+                confidence *= GOOD_SENTENCE_BONUS_MULTIPLIER
 
         # Ensure confidence stays in valid range
         return max(0.0, min(1.0, confidence))

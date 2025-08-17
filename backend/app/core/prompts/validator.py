@@ -107,9 +107,13 @@ class PromptValidator:
 
         # Model-specific limits
         self.model_limits = {
-            "gemini-2.5-flash": {"max_tokens": 32000, "context_window": 128000},
+            "gemini-2.5-flash": {"max_tokens": 65535, "context_window": 128000},
             "gpt-4": {"max_tokens": 8000, "context_window": 32000},
             "gpt-3.5-turbo": {"max_tokens": 4000, "context_window": 16000},
+            "deepseek/deepseek-chat-v3-0324:free": {
+                "max_tokens": 16000,
+                "context_window": 64000,
+            },
         }
 
     def validate_template(self, template: PromptTemplate) -> ValidationResult:

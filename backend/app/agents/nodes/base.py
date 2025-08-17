@@ -432,7 +432,7 @@ class BaseNode(ABC):
         1. Try OpenAI client first
         2. Fall back to Gemini client if OpenAI fails and fallback is enabled
         3. Return None if no clients produce valid responses and fallbacks are enabled
-        4. Raise ClientError if no clients produce valid responses and fallbacks are disabled
+        4. Raise ClientError if no valid response is generated from available clients and fallbacks are disabled
 
         Args:
             prompt: The prompt to send to the LLM
@@ -444,14 +444,39 @@ class BaseNode(ABC):
         Raises:
             ClientError: If no valid response is generated from available clients and fallbacks are disabled
         """
+        # Check if clients are available
+        if not self.openai_client and not self.gemini_client:
+            error_msg = f"No AI clients available in {self.node_name}. Workflow may not be properly initialized."
+            logger.error(error_msg)
+            if not self.enable_fallbacks:
+                raise ClientError(error_msg)
+            return None
+
         # Try OpenAI client first
+        openai_failed = False
+        gemini_failed = False
+        last_error = None
+
         if self.openai_client:
             try:
                 response = await self.openai_client.generate_content(prompt)
                 if response and response.strip():
                     return response
             except Exception as e:
-                logger.warning(f"OpenAI client failed in {self.node_name}: {e}")
+                openai_failed = True
+                last_error = e
+                # Check for authentication errors which suggest misconfiguration
+                if (
+                    "401" in str(e)
+                    or "Unauthorized" in str(e)
+                    or "No auth credentials" in str(e)
+                ):
+                    logger.warning(
+                        f"OpenAI client authentication failed in {self.node_name}: {e}"
+                    )
+                    logger.info(f"Falling back to Gemini client for {self.node_name}")
+                else:
+                    logger.warning(f"OpenAI client failed in {self.node_name}: {e}")
 
         # Fall back to Gemini client if enabled
         if use_gemini_fallback and self.gemini_client:
@@ -460,14 +485,36 @@ class BaseNode(ABC):
                 if response and response.strip():
                     return response
             except Exception as e:
+                gemini_failed = True
+                last_error = e
                 logger.warning(f"Gemini client failed in {self.node_name}: {e}")
 
         # If we get here, no clients produced valid responses
         if not self.enable_fallbacks:
-            raise ClientError("No valid response from available clients")
+            if not self.openai_client and not self.gemini_client:
+                raise ClientError(
+                    f"No AI clients available in {self.node_name}. Workflow may not be properly initialized."
+                )
+            elif last_error:
+                raise ClientError(
+                    f"No valid response from available clients. Last error: {last_error}"
+                )
+            else:
+                raise ClientError("No valid response from available clients")
+
+        # Log a more informative error message
+        error_details = []
+        if openai_failed:
+            error_details.append("OpenAI failed")
+        if gemini_failed:
+            error_details.append("Gemini failed")
+
+        if not error_details:
+            error_details.append("No clients available")
 
         logger.error(
-            f"Content generation failed in {self.node_name}: No valid response from available clients"
+            f"Content generation failed in {self.node_name}: {', '.join(error_details)}. "
+            f"Last error: {last_error if last_error else 'No specific error'}"
         )
         return None
 

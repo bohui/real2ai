@@ -298,19 +298,34 @@ class ContractAnalysisWorkflow:
 
             # Verify at least one client is available
             if not self.openai_client and not self.gemini_client:
-                raise Exception("No AI clients could be initialized. Both OpenAI and Gemini failed.")
+                error_msg = (
+                    "No AI clients could be initialized. Both OpenAI and Gemini failed. "
+                    "Please check your API keys and configuration."
+                )
+                logger.error(error_msg)
+                raise Exception(error_msg)
 
             # Set clients in all nodes that need them
             for node_name, node in self.nodes.items():
                 if hasattr(node, "openai_client"):
                     node.openai_client = self.openai_client
+                    logger.debug(f"Node {node_name}: OpenAI client set")
                 if hasattr(node, "gemini_client"):
                     node.gemini_client = self.gemini_client
-                
-                # Log client availability for each node
-                logger.debug(f"Node {node_name}: OpenAI={self.openai_client is not None}, Gemini={self.gemini_client is not None}")
+                    logger.debug(f"Node {node_name}: Gemini client set")
 
-            logger.info(f"Workflow clients initialized successfully - OpenAI: {self.openai_client is not None}, Gemini: {self.gemini_client is not None}")
+                # Log client availability for each node
+                logger.debug(
+                    f"Node {node_name}: OpenAI={self.openai_client is not None}, Gemini={self.gemini_client is not None}"
+                )
+
+                # Verify that at least one client is available for each node
+                if not node.openai_client and not node.gemini_client:
+                    logger.warning(f"Node {node_name} has no AI clients available")
+
+            logger.info(
+                f"Workflow clients initialized successfully - OpenAI: {self.openai_client is not None}, Gemini: {self.gemini_client is not None}"
+            )
 
         except Exception as e:
             logger.error(f"Failed to initialize workflow clients: {e}")
