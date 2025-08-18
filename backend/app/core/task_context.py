@@ -600,17 +600,228 @@ class TaskContextManager:
             task_id: Unique task identifier
 
         Returns:
-            Context key for the stored context
+            Context key for task execution
         """
         if not self.store:
             await self.initialize()
 
         # Get current auth context
-        task_context = AuthContext.create_task_context()
+        user_token = AuthContext.get_user_token()
+        user_id = AuthContext.get_user_id()
+        user_email = AuthContext.get_user_email()
+        auth_metadata = AuthContext.get_auth_metadata()
 
-        user_token: Optional[str] = task_context.get("user_token")
-        if not user_token:
-            raise ValueError("No user token in current auth context")
+        if not user_token or not user_id:
+            raise ValueError("No authenticated user context available")
+
+        # Enhanced token validation and logging
+        logger.info(
+            f"Creating task context for task {task_id}",
+            extra={
+                "task_id": task_id,
+                "user_id": user_id,
+                "user_email": user_email,
+                "token_length": len(user_token),
+                "token_type": (
+                    "backend"
+                    if BackendTokenService.is_backend_token(user_token)
+                    else "supabase"
+                ),
+                "auth_metadata": auth_metadata,
+            },
+        )
+
+        # Validate token expiration before storing
+        try:
+            if BackendTokenService.is_backend_token(user_token):
+                claims = BackendTokenService.verify_backend_token(user_token)
+                backend_exp = claims.get("exp")
+                supa_exp = claims.get("supa_exp")
+                now = int(time.time())
+
+                if backend_exp:
+                    time_to_backend_expiry = backend_exp - now
+                    logger.info(
+                        f"Backend token expiry analysis for task {task_id}",
+                        extra={
+                            "task_id": task_id,
+                            "user_id": user_id,
+                            "backend_exp": backend_exp,
+                            "time_to_backend_expiry_seconds": time_to_backend_expiry,
+                            "time_to_backend_expiry_minutes": (
+                                time_to_backend_expiry / 60
+                                if time_to_backend_expiry > 0
+                                else 0
+                            ),
+                            "is_expired": time_to_backend_expiry <= 0,
+                        },
+                    )
+
+                    if supa_exp:
+                        time_to_supabase_expiry = supa_exp - now
+                        buffer_time = supa_exp - backend_exp
+                        logger.info(
+                            f"Token coordination analysis for task {task_id}",
+                            extra={
+                                "task_id": task_id,
+                                "user_id": user_id,
+                                "supabase_exp": supa_exp,
+                                "time_to_supabase_expiry_seconds": time_to_supabase_expiry,
+                                "time_to_supabase_expiry_minutes": (
+                                    time_to_supabase_expiry / 60
+                                    if time_to_supabase_expiry > 0
+                                    else 0
+                                ),
+                                "buffer_time_seconds": buffer_time,
+                                "buffer_time_minutes": (
+                                    buffer_time / 60 if buffer_time > 0 else 0
+                                ),
+                                "is_supabase_expired": time_to_supabase_expiry <= 0,
+                            },
+                        )
+
+                        # Warn if buffer is too small for long-running tasks
+                        if buffer_time < 300:  # Less than 5 minutes
+                            logger.warning(
+                                f"Small token buffer for task {task_id} - may cause expiration issues",
+                                extra={
+                                    "task_id": task_id,
+                                    "user_id": user_id,
+                                    "buffer_time_seconds": buffer_time,
+                                    "recommendation": "Consider increasing backend_token_ttl_buffer_minutes or implementing proactive refresh",
+                                },
+                            )
+
+                    # Warn if backend token expires soon
+                    if time_to_backend_expiry <= 600:  # 10 minutes or less
+                        logger.warning(
+                            f"Backend token expires soon for task {task_id}",
+                            extra={
+                                "task_id": task_id,
+                                "user_id": user_id,
+                                "time_to_backend_expiry_seconds": time_to_backend_expiry,
+                                "time_to_backend_expiry_minutes": (
+                                    time_to_backend_expiry / 60
+                                    if time_to_backend_expiry > 0
+                                    else 0
+                                ),
+                                "recommendation": "Task may fail if execution takes longer than token lifetime",
+                            },
+                        )
+
+                        # Check if we should proactively refresh
+                        if time_to_backend_expiry <= 300:  # 5 minutes or less
+                            logger.warning(
+                                f"Backend token expires very soon for task {task_id} - attempting proactive refresh",
+                                extra={
+                                    "task_id": task_id,
+                                    "user_id": user_id,
+                                    "time_to_backend_expiry_seconds": time_to_backend_expiry,
+                                },
+                            )
+
+                            try:
+                                # Attempt to refresh the token before storing context
+                                refreshed_token = await BackendTokenService.refresh_coordinated_tokens(
+                                    user_token
+                                )
+                                if refreshed_token:
+                                    user_token = refreshed_token
+                                    logger.info(
+                                        f"Successfully refreshed backend token for task {task_id}",
+                                        extra={
+                                            "task_id": task_id,
+                                            "user_id": user_id,
+                                            "old_token_length": len(user_token),
+                                            "new_token_length": len(refreshed_token),
+                                        },
+                                    )
+                                else:
+                                    logger.warning(
+                                        f"Failed to refresh backend token for task {task_id}",
+                                        extra={
+                                            "task_id": task_id,
+                                            "user_id": user_id,
+                                        },
+                                    )
+                            except Exception as refresh_error:
+                                logger.error(
+                                    f"Error during proactive token refresh for task {task_id}",
+                                    extra={
+                                        "task_id": task_id,
+                                        "user_id": user_id,
+                                        "error": str(refresh_error),
+                                    },
+                                    exc_info=True,
+                                )
+            else:
+                # Supabase token - check expiration
+                try:
+                    import jwt
+
+                    claims = jwt.decode(user_token, options={"verify_signature": False})
+                    exp = claims.get("exp")
+                    if exp:
+                        now = int(time.time())
+                        time_to_expiry = exp - now
+                        logger.info(
+                            f"Supabase token expiry analysis for task {task_id}",
+                            extra={
+                                "task_id": task_id,
+                                "user_id": user_id,
+                                "exp": exp,
+                                "time_to_expiry_seconds": time_to_expiry,
+                                "time_to_expiry_minutes": (
+                                    time_to_expiry / 60 if time_to_expiry > 0 else 0
+                                ),
+                                "is_expired": time_to_expiry <= 0,
+                            },
+                        )
+
+                        if time_to_expiry <= 600:  # 10 minutes or less
+                            logger.warning(
+                                f"Supabase token expires soon for task {task_id}",
+                                extra={
+                                    "task_id": task_id,
+                                    "user_id": user_id,
+                                    "time_to_expiry_seconds": time_to_expiry,
+                                    "time_to_expiry_minutes": (
+                                        time_to_expiry / 60 if time_to_expiry > 0 else 0
+                                    ),
+                                    "recommendation": "Consider using backend tokens for better coordination",
+                                },
+                            )
+                except Exception as token_analysis_error:
+                    logger.warning(
+                        f"Could not analyze Supabase token expiry for task {task_id}",
+                        extra={
+                            "task_id": task_id,
+                            "user_id": user_id,
+                            "error": str(token_analysis_error),
+                        },
+                    )
+
+        except Exception as validation_error:
+            logger.error(
+                f"Error validating token for task {task_id}",
+                extra={
+                    "task_id": task_id,
+                    "user_id": user_id,
+                    "error": str(validation_error),
+                },
+                exc_info=True,
+            )
+            # Continue with original token - let the task handle validation errors
+
+        # Create task context
+        task_context = {
+            "user_id": user_id,
+            "user_email": user_email,
+            "user_token": user_token,
+            "auth_metadata": auth_metadata,
+            "refresh_token": AuthContext.get_refresh_token(),
+            "created_at": datetime.now(UTC).isoformat(),
+        }
 
         # If the token is a backend-issued token, exchange it for a Supabase access token
         try:
@@ -711,3 +922,241 @@ async def refresh_current_task_ttl(context_key: str) -> bool:
     except Exception as e:
         logger.error(f"Error refreshing TTL for task context {context_key}: {e}")
         return False
+
+
+async def check_token_health(context_key: str) -> Dict[str, Any]:
+    """
+    Check the health of the current authentication token.
+    This is useful for long-running tasks to monitor token status.
+
+    Args:
+        context_key: The task context key
+
+    Returns:
+        Dictionary containing token health information
+    """
+    try:
+        from app.services.backend_token_service import BackendTokenService
+        from app.core.auth_context import AuthContext
+
+        current_token = AuthContext.get_user_token()
+        user_id = AuthContext.get_user_id()
+
+        if not current_token:
+            return {
+                "status": "no_token",
+                "user_id": user_id,
+                "message": "No authentication token available",
+            }
+
+        health_info = {
+            "status": "unknown",
+            "user_id": user_id,
+            "token_length": len(current_token),
+            "token_type": (
+                "backend"
+                if BackendTokenService.is_backend_token(current_token)
+                else "supabase"
+            ),
+            "expiry_info": {},
+            "recommendations": [],
+        }
+
+        try:
+            if BackendTokenService.is_backend_token(current_token):
+                # Analyze backend token
+                claims = BackendTokenService.verify_backend_token(current_token)
+                backend_exp = claims.get("exp")
+                supa_exp = claims.get("supa_exp")
+                now = int(time.time())
+
+                if backend_exp:
+                    time_to_backend_expiry = backend_exp - now
+                    time_to_backend_expiry_minutes = (
+                        time_to_backend_expiry / 60 if time_to_backend_expiry > 0 else 0
+                    )
+
+                    health_info["expiry_info"] = {
+                        "backend_exp": backend_exp,
+                        "time_to_backend_expiry_seconds": time_to_backend_expiry,
+                        "time_to_backend_expiry_minutes": time_to_backend_expiry_minutes,
+                        "is_expired": time_to_backend_expiry <= 0,
+                    }
+
+                    if time_to_backend_expiry <= 0:
+                        health_info["status"] = "expired"
+                        health_info["message"] = "Backend token is expired"
+                        health_info["recommendations"].append(
+                            "Token needs immediate refresh"
+                        )
+                    elif time_to_backend_expiry <= 300:  # 5 minutes
+                        health_info["status"] = "critical"
+                        health_info["message"] = "Backend token expires very soon"
+                        health_info["recommendations"].append(
+                            "Refresh token immediately"
+                        )
+                    elif time_to_backend_expiry <= 900:  # 15 minutes
+                        health_info["status"] = "warning"
+                        health_info["message"] = "Backend token expires soon"
+                        health_info["recommendations"].append(
+                            "Consider refreshing token"
+                        )
+                    else:
+                        health_info["status"] = "healthy"
+                        health_info["message"] = "Backend token is healthy"
+
+                    if supa_exp:
+                        time_to_supabase_expiry = supa_exp - now
+                        buffer_time = supa_exp - backend_exp
+                        buffer_time_minutes = buffer_time / 60 if buffer_time > 0 else 0
+
+                        health_info["expiry_info"].update(
+                            {
+                                "supabase_exp": supa_exp,
+                                "time_to_supabase_expiry_seconds": time_to_supabase_expiry,
+                                "time_to_supabase_expiry_minutes": (
+                                    time_to_supabase_expiry / 60
+                                    if time_to_supabase_expiry > 0
+                                    else 0
+                                ),
+                                "buffer_time_seconds": buffer_time,
+                                "buffer_time_minutes": buffer_time_minutes,
+                                "is_supabase_expired": time_to_supabase_expiry <= 0,
+                            }
+                        )
+
+                        if buffer_time < 600:  # Less than 10 minutes
+                            health_info["recommendations"].append(
+                                "Token buffer is small - consider increasing backend_token_ttl_buffer_minutes"
+                            )
+
+                        if time_to_supabase_expiry <= 0:
+                            health_info["status"] = "critical"
+                            health_info["message"] = (
+                                "Both backend and Supabase tokens are expired"
+                            )
+                            health_info["recommendations"].append(
+                                "User needs to re-authenticate"
+                            )
+
+                # Check if refresh is needed
+                if health_info["status"] in ["critical", "expired"]:
+                    try:
+                        refreshed_token = (
+                            await BackendTokenService.refresh_coordinated_tokens(
+                                current_token
+                            )
+                        )
+                        if refreshed_token:
+                            health_info["refresh_attempted"] = True
+                            health_info["refresh_successful"] = True
+                            health_info["new_token_length"] = len(refreshed_token)
+                            health_info["message"] = "Token refreshed successfully"
+
+                            # Update auth context with new token
+                            AuthContext.set_auth_context(
+                                token=refreshed_token,
+                                user_id=user_id,
+                                user_email=AuthContext.get_user_email(),
+                                metadata=AuthContext.get_auth_metadata(),
+                                refresh_token=AuthContext.get_refresh_token(),
+                            )
+                        else:
+                            health_info["refresh_attempted"] = True
+                            health_info["refresh_successful"] = False
+                            health_info["message"] = "Token refresh failed"
+                    except Exception as refresh_error:
+                        health_info["refresh_attempted"] = True
+                        health_info["refresh_successful"] = False
+                        health_info["refresh_error"] = str(refresh_error)
+                        health_info["message"] = f"Token refresh error: {refresh_error}"
+
+            else:
+                # Analyze Supabase token
+                try:
+                    import jwt
+
+                    claims = jwt.decode(
+                        current_token, options={"verify_signature": False}
+                    )
+                    exp = claims.get("exp")
+                    if exp:
+                        now = int(time.time())
+                        time_to_expiry = exp - now
+                        time_to_expiry_minutes = (
+                            time_to_expiry / 60 if time_to_expiry > 0 else 0
+                        )
+
+                        health_info["expiry_info"] = {
+                            "exp": exp,
+                            "time_to_expiry_seconds": time_to_expiry,
+                            "time_to_expiry_minutes": time_to_expiry_minutes,
+                            "is_expired": time_to_expiry <= 0,
+                        }
+
+                        if time_to_expiry <= 0:
+                            health_info["status"] = "expired"
+                            health_info["message"] = "Supabase token is expired"
+                            health_info["recommendations"].append(
+                                "User needs to re-authenticate"
+                            )
+                        elif time_to_expiry <= 600:  # 10 minutes
+                            health_info["status"] = "warning"
+                            health_info["message"] = "Supabase token expires soon"
+                            health_info["recommendations"].append(
+                                "Consider using backend tokens for better coordination"
+                            )
+                        else:
+                            health_info["status"] = "healthy"
+                            health_info["message"] = "Supabase token is healthy"
+
+                except Exception as token_analysis_error:
+                    health_info["status"] = "error"
+                    health_info["message"] = (
+                        f"Could not analyze token: {token_analysis_error}"
+                    )
+                    health_info["token_analysis_error"] = str(token_analysis_error)
+
+        except Exception as analysis_error:
+            health_info["status"] = "error"
+            health_info["message"] = f"Error analyzing token: {analysis_error}"
+            health_info["analysis_error"] = str(analysis_error)
+
+        # Log health status
+        if health_info["status"] in ["critical", "expired"]:
+            logger.error(
+                f"Token health check critical for context {context_key}",
+                extra={
+                    "context_key": context_key,
+                    "user_id": user_id,
+                    "health_info": health_info,
+                },
+            )
+        elif health_info["status"] == "warning":
+            logger.warning(
+                f"Token health check warning for context {context_key}",
+                extra={
+                    "context_key": context_key,
+                    "user_id": user_id,
+                    "health_info": health_info,
+                },
+            )
+        else:
+            logger.debug(
+                f"Token health check for context {context_key}",
+                extra={
+                    "context_key": context_key,
+                    "user_id": user_id,
+                    "health_info": health_info,
+                },
+            )
+
+        return health_info
+
+    except Exception as e:
+        logger.error(f"Error checking token health for context {context_key}: {e}")
+        return {
+            "status": "error",
+            "message": f"Error checking token health: {e}",
+            "error": str(e),
+        }

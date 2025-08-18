@@ -14,6 +14,7 @@ import logging
 
 from app.core.config import get_settings
 from app.core.auth_context import AuthContext
+from app.services.backend_token_service import BackendTokenService
 
 logger = logging.getLogger(__name__)
 
@@ -310,125 +311,260 @@ class ConnectionPoolManager:
 
 
 async def _setup_user_session(
-    connection: asyncpg.Connection, user_id: Optional[UUID] = None
-):
+    connection: asyncpg.Connection, user_id: Optional[str]
+) -> None:
     """
-    Set up user session with JWT claims for RLS enforcement.
+    Set up user session context for RLS enforcement.
 
     Args:
         connection: Database connection
-        user_id: Optional user ID (uses auth context if not provided)
+        user_id: Optional user ID (if None, sets anonymous role)
     """
-    if user_id is None:
-        user_id_str = AuthContext.get_user_id()
-        if user_id_str:
-            try:
-                user_id = UUID(user_id_str)
-            except ValueError:
-                logger.warning(f"Invalid user ID format in auth context: {user_id_str}")
-                user_id = None
+    # Import JWT at the top level to avoid scope issues
+    try:
+        import jwt
+    except ImportError:
+        logger.error("JWT library not available - cannot verify tokens")
+        raise ValueError("JWT verification not available")
 
-    # Get user token from auth context
-    user_token = AuthContext.get_user_token()
+    # Get settings for JWT verification
+    settings = get_settings()
 
-    if user_token and user_id:
+    if user_id:
         try:
-            # Parse JWT token to extract claims
-            import jwt
-            from app.core.config import get_settings
-
-            settings = get_settings()
-
-            # Debug diagnostics (no secrets)
-            try:
-                unverified_header = jwt.get_unverified_header(user_token)
-            except Exception as header_error:
-                unverified_header = {"_error": str(header_error)}
-            try:
-                unverified_claims = jwt.decode(
-                    user_token, options={"verify_signature": False}
+            # Get user token from auth context
+            user_token = AuthContext.get_user_token()
+            if not user_token:
+                logger.warning(
+                    f"No user token available for user {user_id} - setting anonymous role"
                 )
-            except Exception as claims_error:
-                unverified_claims = {"_error": str(claims_error)}
+                await connection.execute("SELECT set_config('role', $1, false)", "anon")
+                return
 
-            exp_ts = (
-                unverified_claims.get("exp")
-                if isinstance(unverified_claims, dict)
-                else None
-            )
-            now_ts = int(time.time())
-            ttl_seconds = (exp_ts - now_ts) if isinstance(exp_ts, int) else None
-
-            # Compute a short fingerprint of the secret for diagnostics (non-reversible)
-            try:
-                import hashlib
-
-                secret_fingerprint = (
-                    hashlib.sha256(
-                        (settings.supabase_jwt_secret or "").encode("utf-8")
-                    ).hexdigest()[:8]
-                    if settings.supabase_jwt_secret
-                    else None
-                )
-            except Exception:
-                secret_fingerprint = None
-
-            logger.debug(
-                "[DB][JWT] Token diagnostics before verification",
+            # Enhanced token analysis and logging
+            logger.info(
+                f"Setting up user session for user {user_id}",
                 extra={
                     "user_id": str(user_id),
-                    "token_len": len(user_token),
-                    "has_supabase_jwt_secret": bool(settings.supabase_jwt_secret),
-                    "supabase_jwt_secret_len": (
-                        len(settings.supabase_jwt_secret)
-                        if settings.supabase_jwt_secret
-                        else 0
+                    "token_length": len(user_token),
+                    "token_type": (
+                        "backend"
+                        if BackendTokenService.is_backend_token(user_token)
+                        else "supabase"
                     ),
-                    "supabase_jwt_secret_sha256_8": secret_fingerprint,
-                    "header_alg": (
-                        unverified_header.get("alg")
-                        if isinstance(unverified_header, dict)
-                        else None
-                    ),
-                    "header_kid": (
-                        unverified_header.get("kid")
-                        if isinstance(unverified_header, dict)
-                        else None
-                    ),
-                    "claim_iss": (
-                        unverified_claims.get("iss")
-                        if isinstance(unverified_claims, dict)
-                        else None
-                    ),
-                    "claim_aud": (
-                        unverified_claims.get("aud")
-                        if isinstance(unverified_claims, dict)
-                        else None
-                    ),
-                    "claim_sub": (
-                        unverified_claims.get("sub")
-                        if isinstance(unverified_claims, dict)
-                        else None
-                    ),
-                    "claim_role": (
-                        unverified_claims.get("role")
-                        if isinstance(unverified_claims, dict)
-                        else None
-                    ),
-                    "token_ttl_seconds": ttl_seconds,
+                    "connection_id": id(connection),
+                    "event_loop_closed": getattr(
+                        asyncio.get_event_loop(), "is_closed", lambda: None
+                    )(),
                 },
             )
 
-            # Verify token signature before setting RLS context
-            if not settings.supabase_jwt_secret:
-                logger.error("JWT secret not configured - cannot verify token for RLS")
-                raise ValueError("JWT verification not configured")
+            # Analyze token before attempting to use it
+            try:
+                if BackendTokenService.is_backend_token(user_token):
+                    # Analyze backend token
+                    claims = BackendTokenService.verify_backend_token(user_token)
+                    backend_exp = claims.get("exp")
+                    supa_exp = claims.get("supa_exp")
+                    now = int(time.time())
 
-            header_alg = (
-                unverified_header.get("alg")
-                if isinstance(unverified_header, dict)
-                else None
-            )
+                    if backend_exp:
+                        time_to_backend_expiry = backend_exp - now
+                        logger.info(
+                            f"Backend token analysis for user {user_id}",
+                            extra={
+                                "user_id": str(user_id),
+                                "backend_exp": backend_exp,
+                                "time_to_backend_expiry_seconds": time_to_backend_expiry,
+                                "time_to_backend_expiry_minutes": (
+                                    time_to_backend_expiry / 60
+                                    if time_to_backend_expiry > 0
+                                    else 0
+                                ),
+                                "is_expired": time_to_backend_expiry <= 0,
+                                "connection_id": id(connection),
+                            },
+                        )
+
+                        if time_to_backend_expiry <= 0:
+                            logger.error(
+                                f"Backend token is expired for user {user_id}",
+                                extra={
+                                    "user_id": str(user_id),
+                                    "backend_exp": backend_exp,
+                                    "current_time": now,
+                                    "connection_id": id(connection),
+                                    "recommendation": "Token should have been refreshed before database access",
+                                },
+                            )
+                            raise ValueError("Backend token is expired")
+
+                        if supa_exp:
+                            time_to_supabase_expiry = supa_exp - now
+                            buffer_time = supa_exp - backend_exp
+                            logger.info(
+                                f"Token coordination status for user {user_id}",
+                                extra={
+                                    "user_id": str(user_id),
+                                    "supabase_exp": supa_exp,
+                                    "time_to_supabase_expiry_seconds": time_to_supabase_expiry,
+                                    "time_to_supabase_expiry_minutes": (
+                                        time_to_supabase_expiry / 60
+                                        if time_to_supabase_expiry > 0
+                                        else 0
+                                    ),
+                                    "buffer_time_seconds": buffer_time,
+                                    "buffer_time_minutes": (
+                                        buffer_time / 60 if buffer_time > 0 else 0
+                                    ),
+                                    "connection_id": id(connection),
+                                },
+                            )
+
+                            # Check if we need to refresh the token
+                            if time_to_backend_expiry <= 300:  # 5 minutes or less
+                                logger.warning(
+                                    f"Backend token expires soon for user {user_id} - attempting refresh",
+                                    extra={
+                                        "user_id": str(user_id),
+                                        "time_to_backend_expiry_seconds": time_to_backend_expiry,
+                                        "connection_id": id(connection),
+                                    },
+                                )
+
+                                try:
+                                    # Attempt to refresh the token
+                                    refreshed_token = await BackendTokenService.refresh_coordinated_tokens(
+                                        user_token
+                                    )
+                                    if refreshed_token:
+                                        user_token = refreshed_token
+                                        logger.info(
+                                            f"Successfully refreshed backend token for user {user_id}",
+                                            extra={
+                                                "user_id": str(user_id),
+                                                "old_token_length": len(user_token),
+                                                "new_token_length": len(
+                                                    refreshed_token
+                                                ),
+                                                "connection_id": id(connection),
+                                            },
+                                        )
+
+                                        # Update auth context with new token
+                                        AuthContext.set_auth_context(
+                                            token=refreshed_token,
+                                            user_id=user_id,
+                                            user_email=AuthContext.get_user_email(),
+                                            metadata=AuthContext.get_auth_metadata(),
+                                            refresh_token=AuthContext.get_refresh_token(),
+                                        )
+                                    else:
+                                        logger.warning(
+                                            f"Failed to refresh backend token for user {user_id}",
+                                            extra={
+                                                "user_id": str(user_id),
+                                                "connection_id": id(connection),
+                                            },
+                                        )
+                                except Exception as refresh_error:
+                                    logger.error(
+                                        f"Error during token refresh for user {user_id}",
+                                        extra={
+                                            "user_id": str(user_id),
+                                            "error": str(refresh_error),
+                                            "connection_id": id(connection),
+                                        },
+                                        exc_info=True,
+                                    )
+                                    # Continue with original token - let the verification process handle it
+                else:
+                    # Analyze Supabase token
+                    try:
+                        import jwt
+
+                        claims = jwt.decode(
+                            user_token, options={"verify_signature": False}
+                        )
+                        exp = claims.get("exp")
+                        if exp:
+                            now = int(time.time())
+                            time_to_expiry = exp - now
+                            logger.info(
+                                f"Supabase token analysis for user {user_id}",
+                                extra={
+                                    "user_id": str(user_id),
+                                    "exp": exp,
+                                    "time_to_expiry_seconds": time_to_expiry,
+                                    "time_to_expiry_minutes": (
+                                        time_to_expiry / 60 if time_to_expiry > 0 else 0
+                                    ),
+                                    "is_expired": time_to_expiry <= 0,
+                                    "connection_id": id(connection),
+                                },
+                            )
+
+                            if time_to_expiry <= 0:
+                                logger.error(
+                                    f"Supabase token is expired for user {user_id}",
+                                    extra={
+                                        "user_id": str(user_id),
+                                        "exp": exp,
+                                        "current_time": now,
+                                        "connection_id": id(connection),
+                                        "recommendation": "Token should have been refreshed before database access",
+                                    },
+                                )
+                                raise ValueError("Supabase token is expired")
+
+                            if time_to_expiry <= 600:  # 10 minutes or less
+                                logger.warning(
+                                    f"Supabase token expires soon for user {user_id}",
+                                    extra={
+                                        "user_id": str(user_id),
+                                        "time_to_expiry_seconds": time_to_expiry,
+                                        "time_to_expiry_minutes": (
+                                            time_to_expiry / 60
+                                            if time_to_expiry > 0
+                                            else 0
+                                        ),
+                                        "connection_id": id(connection),
+                                        "recommendation": "Consider using backend tokens for better coordination",
+                                    },
+                                )
+                    except Exception as token_analysis_error:
+                        logger.warning(
+                            f"Could not analyze Supabase token expiry for user {user_id}",
+                            extra={
+                                "user_id": str(user_id),
+                                "error": str(token_analysis_error),
+                                "connection_id": id(connection),
+                            },
+                        )
+                        # Continue with original token - let the verification process handle it
+
+            except Exception as token_analysis_error:
+                logger.error(
+                    f"Error analyzing token for user {user_id}",
+                    extra={
+                        "user_id": str(user_id),
+                        "error": str(token_analysis_error),
+                        "connection_id": id(connection),
+                    },
+                    exc_info=True,
+                )
+                # Continue with original token - let the verification process handle it
+
+            # Extract JWT header for algorithm check
+            try:
+                header = jwt.get_unverified_header(user_token)
+                header_alg = header.get("alg") if header else None
+            except Exception as header_error:
+                logger.warning(
+                    f"Could not extract JWT header for user {user_id}: {header_error}"
+                )
+                header_alg = None
+
             if header_alg and header_alg.upper() != "HS256":
                 logger.warning(
                     f"[DB][JWT] Token alg is {header_alg}; only HS256 is supported"
@@ -436,6 +572,16 @@ async def _setup_user_session(
 
             try:
                 # Verify token with Supabase JWT secret (disable audience check)
+                logger.debug(
+                    f"Verifying JWT token for user {user_id}",
+                    extra={
+                        "user_id": str(user_id),
+                        "token_length": len(user_token),
+                        "header_alg": header_alg,
+                        "connection_id": id(connection),
+                    },
+                )
+
                 claims = jwt.decode(
                     user_token,
                     settings.supabase_jwt_secret,
@@ -448,6 +594,7 @@ async def _setup_user_session(
                         "user_id": str(user_id),
                         "claim_sub": claims.get("sub"),
                         "claim_role": claims.get("role"),
+                        "connection_id": id(connection),
                     },
                 )
             except jwt.InvalidTokenError as e:
@@ -465,6 +612,7 @@ async def _setup_user_session(
                     "loop_is_closed": getattr(
                         asyncio.get_event_loop(), "is_closed", lambda: None
                     )(),
+                    "connection_id": id(connection),
                 },
             )
             await connection.execute(
@@ -485,6 +633,9 @@ async def _setup_user_session(
                 extra={
                     "user_id": str(user_id) if user_id else None,
                     "event_loop_closed": True,
+                    "connection_id": id(connection),
+                    "error_type": type(e).__name__,
+                    "error_details": str(e),
                 },
             )
             # Auth/token failures: do not impersonate; bubble up

@@ -237,145 +237,263 @@ async def update_analysis_progress(
 @user_aware_task(recovery_enabled=True, checkpoint_frequency=25, recovery_priority=2)
 async def comprehensive_document_analysis(
     recovery_ctx,
+    context_key: str,
     document_id: str,
     analysis_id: str,
     contract_id: str,
     user_id: str,
     analysis_options: Dict[str, Any],
-):
+) -> Dict[str, Any]:
     """
-    Comprehensive document processing and analysis with detailed progress tracking.
+    Comprehensive document analysis with enhanced token management.
 
-    This task combines:
-    1. Document processing (text extraction, OCR, page analysis)
-    2. Contract analysis (AI workflow)
-    3. Real-time progress updates
-    4. Result caching
+    This task performs comprehensive analysis of uploaded documents with proactive
+    token refresh to prevent JWT expiration issues during long-running operations.
+
+    Args:
+        recovery_ctx: Recovery context for checkpointing
+        context_key: Task context key for authentication
+        document_id: Document ID to analyze
+        analysis_id: Analysis ID for tracking
+        contract_id: Contract ID for context
+        user_id: User ID for authentication
+        analysis_options: Analysis configuration options
+
+    Returns:
+        Analysis results dictionary
     """
+    task_start = datetime.now(timezone.utc)
+    logger.info(
+        f"Starting comprehensive document analysis",
+        extra={
+            "task_id": (
+                recovery_ctx.task_id if hasattr(recovery_ctx, "task_id") else "unknown"
+            ),
+            "document_id": document_id,
+            "analysis_id": analysis_id,
+            "contract_id": contract_id,
+            "user_id": user_id,
+            "context_key": context_key,
+            "analysis_options": analysis_options,
+        },
+    )
+
+    # Proactive token refresh check at task start
     try:
-        # Verify user context matches expected user
-        context_user_id = AuthContext.get_user_id()
-        if context_user_id != user_id:
-            raise ValueError(
-                f"User context mismatch: expected {user_id}, got {context_user_id}"
-            )
+        from app.services.backend_token_service import BackendTokenService
+        from app.core.auth_context import AuthContext
 
-        logger.info(
-            f"Starting comprehensive analysis for user {user_id}, document {document_id}, analysis {analysis_id}"
-        )
+        current_token = AuthContext.get_user_token()
+        if current_token and BackendTokenService.is_backend_token(current_token):
+            # Check if token needs refresh
+            claims = BackendTokenService.verify_backend_token(current_token)
+            backend_exp = claims.get("exp")
+            if backend_exp:
+                now = int(time.time())
+                time_to_expiry = backend_exp - now
 
-        async with langsmith_session(
-            "comprehensive_document_analysis",
-            document_id=document_id,
-            analysis_id=analysis_id,
-            contract_id=contract_id,
-            user_id=user_id,
-        ):
-
-            # Initialize services
-            document_service = DocumentService(use_llm_document_processing=True)
-            await document_service.initialize()
-            # Use isolated client to prevent JWT token race conditions in concurrent tasks
-            user_client = await document_service.get_user_client(isolated=True)
-
-            # Get document record
-            docs_repo = DocumentsRepository()
-            document = await docs_repo.get_document(UUID(document_id))
-            if not document:
-                raise Exception("Document not found or access denied")
-            # Convert to dict for backward compatibility
-            document = {
-                "id": str(document.id),
-                "user_id": str(document.user_id),
-                "original_filename": document.original_filename,
-                "storage_path": document.storage_path,
-                "file_type": document.file_type,
-                "content_hash": document.content_hash,
-                "processing_status": document.processing_status,
-            }
-
-            # Get content_hash for progress tracking
-            content_hash = analysis_options.get("content_hash") or document.get(
-                "content_hash"
-            )
-            if not content_hash:
-                raise Exception(
-                    "Content hash not found in document or analysis options"
-                )
-
-            # Determine resume point from latest analysis_progress (if any)
-            try:
-                progress_repo = AnalysisProgressRepository()
-                latest_progress = await progress_repo.get_latest_progress(
-                    content_hash,
-                    user_id,
-                    columns="current_step, progress_percent, updated_at",
-                )
-                if latest_progress:
-                    last_step = latest_progress.get("current_step")
-                    # Inject resume info into analysis options
-                    if last_step:
-                        analysis_options["resume_from_step"] = last_step
-                        logger.info(
-                            f"Resuming analysis for {content_hash} from step: {last_step}"
-                        )
-            except Exception as resume_err:
-                logger.warning(
-                    f"Unable to fetch latest progress for resume: {resume_err}"
-                )
-
-            # Prefer explicit task checkpoint (if available) to determine precise resume step
-            try:
-                if hasattr(recovery_ctx, "registry") and hasattr(
-                    recovery_ctx, "task_id"
-                ):
-                    ckpt = await recovery_ctx.registry.get_latest_checkpoint(
-                        recovery_ctx.task_id
-                    )
-                    if ckpt and getattr(ckpt, "checkpoint_name", None):
-                        analysis_options["resume_from_step"] = ckpt.checkpoint_name
-                        logger.info(
-                            f"Using checkpoint-based resume step: {ckpt.checkpoint_name}"
-                        )
-            except Exception as ckpt_err:
-                logger.debug(f"No checkpoint-based resume available: {ckpt_err}")
-
-            # =============================================
-            # PHASE 1: COARSE PROGRESS ONLY (skip pre-processing)
-            # =============================================
-
-            # Record a minimal DB-backed milestone to indicate the job is queued/starting
-            # Check if this is a retry operation to preserve progress continuity
-            is_retry = analysis_options.get("is_retry", False)
-            resume_from_step = analysis_options.get("resume_from_step")
-
-            if is_retry and resume_from_step:
-                # For retry operations, preserve the previous progress and show resumption
-                previous_progress = (
-                    latest_progress.get("progress_percent", 5) if latest_progress else 5
-                )
-                await update_analysis_progress(
-                    user_id,
-                    content_hash,
-                    progress_percent=previous_progress,
-                    current_step="retrying",
-                    step_description=f"Resuming analysis from {resume_from_step}...",
-                    estimated_completion_minutes=2,
-                )
                 logger.info(
-                    f"Retry operation: maintaining progress at {previous_progress}% for step {resume_from_step}"
+                    f"Token expiry check at task start",
+                    extra={
+                        "task_id": (
+                            recovery_ctx.task_id
+                            if hasattr(recovery_ctx, "task_id")
+                            else "unknown"
+                        ),
+                        "user_id": user_id,
+                        "time_to_expiry_seconds": time_to_expiry,
+                        "time_to_expiry_minutes": (
+                            time_to_expiry / 60 if time_to_expiry > 0 else 0
+                        ),
+                    },
                 )
-            else:
-                # Normal startup: new analysis
-                await update_analysis_progress(
-                    user_id,
-                    content_hash,
-                    progress_percent=5,
-                    current_step="queued",
-                    step_description="Queued for AI contract analysis...",
-                    estimated_completion_minutes=3,
+
+                # If token expires in less than 15 minutes, refresh proactively
+                if time_to_expiry <= 900:  # 15 minutes
+                    logger.info(
+                        f"Proactively refreshing token before task execution",
+                        extra={
+                            "task_id": (
+                                recovery_ctx.task_id
+                                if hasattr(recovery_ctx, "task_id")
+                                else "unknown"
+                            ),
+                            "user_id": user_id,
+                            "time_to_expiry_seconds": time_to_expiry,
+                            "reason": "Token expires soon, refreshing proactively",
+                        },
+                    )
+
+                    try:
+                        refreshed_token = (
+                            await BackendTokenService.refresh_coordinated_tokens(
+                                current_token
+                            )
+                        )
+                        if refreshed_token:
+                            # Update auth context with new token
+                            AuthContext.set_auth_context(
+                                token=refreshed_token,
+                                user_id=user_id,
+                                user_email=AuthContext.get_user_email(),
+                                metadata=AuthContext.get_auth_metadata(),
+                                refresh_token=AuthContext.get_refresh_token(),
+                            )
+                            logger.info(
+                                f"Successfully refreshed token before task execution",
+                                extra={
+                                    "task_id": (
+                                        recovery_ctx.task_id
+                                        if hasattr(recovery_ctx, "task_id")
+                                        else "unknown"
+                                    ),
+                                    "user_id": user_id,
+                                    "old_token_length": len(current_token),
+                                    "new_token_length": len(refreshed_token),
+                                },
+                            )
+                        else:
+                            logger.warning(
+                                f"Failed to refresh token before task execution",
+                                extra={
+                                    "task_id": (
+                                        recovery_ctx.task_id
+                                        if hasattr(recovery_ctx, "task_id")
+                                        else "unknown"
+                                    ),
+                                    "user_id": user_id,
+                                },
+                            )
+                    except Exception as refresh_error:
+                        logger.error(
+                            f"Error during proactive token refresh",
+                            extra={
+                                "task_id": (
+                                    recovery_ctx.task_id
+                                    if hasattr(recovery_ctx, "task_id")
+                                    else "unknown"
+                                ),
+                                "user_id": user_id,
+                                "error": str(refresh_error),
+                            },
+                            exc_info=True,
+                        )
+                        # Continue with original token - let the database layer handle refresh if needed
+
+    except Exception as token_check_error:
+        logger.warning(
+            f"Could not perform proactive token refresh check",
+            extra={
+                "task_id": (
+                    recovery_ctx.task_id
+                    if hasattr(recovery_ctx, "task_id")
+                    else "unknown"
+                ),
+                "user_id": user_id,
+                "error": str(token_check_error),
+            },
+        )
+        # Continue with task execution - token refresh will happen at database layer if needed
+
+    try:
+        # Initialize services
+        document_service = DocumentService(use_llm_document_processing=True)
+        await document_service.initialize()
+        # Use isolated client to prevent JWT token race conditions in concurrent tasks
+        user_client = await document_service.get_user_client(isolated=True)
+
+        # Get document record
+        docs_repo = DocumentsRepository()
+        document = await docs_repo.get_document(UUID(document_id))
+        if not document:
+            raise Exception("Document not found or access denied")
+        # Convert to dict for backward compatibility
+        document = {
+            "id": str(document.id),
+            "user_id": str(document.user_id),
+            "original_filename": document.original_filename,
+            "storage_path": document.storage_path,
+            "file_type": document.file_type,
+            "content_hash": document.content_hash,
+            "processing_status": document.processing_status,
+        }
+
+        # Get content_hash for progress tracking
+        content_hash = analysis_options.get("content_hash") or document.get(
+            "content_hash"
+        )
+        if not content_hash:
+            raise Exception("Content hash not found in document or analysis options")
+
+        # Determine resume point from latest analysis_progress (if any)
+        try:
+            progress_repo = AnalysisProgressRepository()
+            latest_progress = await progress_repo.get_latest_progress(
+                content_hash,
+                user_id,
+                columns="current_step, progress_percent, updated_at",
+            )
+            if latest_progress:
+                last_step = latest_progress.get("current_step")
+                # Inject resume info into analysis options
+                if last_step:
+                    analysis_options["resume_from_step"] = last_step
+                    logger.info(
+                        f"Resuming analysis for {content_hash} from step: {last_step}"
+                    )
+        except Exception as resume_err:
+            logger.warning(f"Unable to fetch latest progress for resume: {resume_err}")
+
+        # Prefer explicit task checkpoint (if available) to determine precise resume step
+        try:
+            if hasattr(recovery_ctx, "registry") and hasattr(recovery_ctx, "task_id"):
+                ckpt = await recovery_ctx.registry.get_latest_checkpoint(
+                    recovery_ctx.task_id
                 )
-                logger.info("New analysis: starting from queued at 5%")
+                if ckpt and getattr(ckpt, "checkpoint_name", None):
+                    analysis_options["resume_from_step"] = ckpt.checkpoint_name
+                    logger.info(
+                        f"Using checkpoint-based resume step: {ckpt.checkpoint_name}"
+                    )
+        except Exception as ckpt_err:
+            logger.debug(f"No checkpoint-based resume available: {ckpt_err}")
+
+        # =============================================
+        # PHASE 1: COARSE PROGRESS ONLY (skip pre-processing)
+        # =============================================
+
+        # Record a minimal DB-backed milestone to indicate the job is queued/starting
+        # Check if this is a retry operation to preserve progress continuity
+        is_retry = analysis_options.get("is_retry", False)
+        resume_from_step = analysis_options.get("resume_from_step")
+
+        if is_retry and resume_from_step:
+            # For retry operations, preserve the previous progress and show resumption
+            previous_progress = (
+                latest_progress.get("progress_percent", 5) if latest_progress else 5
+            )
+            await update_analysis_progress(
+                user_id,
+                content_hash,
+                progress_percent=previous_progress,
+                current_step="retrying",
+                step_description=f"Resuming analysis from {resume_from_step}...",
+                estimated_completion_minutes=2,
+            )
+            logger.info(
+                f"Retry operation: maintaining progress at {previous_progress}% for step {resume_from_step}"
+            )
+        else:
+            # Normal startup: new analysis
+            await update_analysis_progress(
+                user_id,
+                content_hash,
+                progress_percent=5,
+                current_step="queued",
+                step_description="Queued for AI contract analysis...",
+                estimated_completion_minutes=3,
+            )
+            logger.info("New analysis: starting from queued at 5%")
 
             # Keep the task context fresh for long-running operations
             await recovery_ctx.refresh_context_ttl()

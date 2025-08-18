@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, Mock, patch, MagicMock
 from uuid import uuid4, UUID
 from datetime import datetime
 from typing import Dict, Any
+import time
 
 from app.tasks.background_tasks import (
     update_analysis_progress,
@@ -367,6 +368,147 @@ class TestComprehensiveDocumentAnalysis:
 
         # Verify resume step was set based on progress
         assert analysis_options.get("resume_from_step") == "contract_analysis"
+
+    @pytest.mark.asyncio
+    async def test_comprehensive_document_analysis_proactive_token_refresh(self):
+        """Test comprehensive_document_analysis with proactive token refresh"""
+        # Mock the BackendTokenService
+        with (
+            patch(
+                "app.services.backend_token_service.BackendTokenService"
+            ) as mock_backend_service,
+            patch("app.core.auth_context.AuthContext") as mock_auth_context,
+            patch("app.services.document_service.DocumentService") as mock_doc_service,
+            patch(
+                "app.services.repositories.documents_repository.DocumentsRepository"
+            ) as mock_docs_repo,
+            patch(
+                "app.services.repositories.analysis_progress_repository.AnalysisProgressRepository"
+            ) as mock_progress_repo,
+            patch(
+                "app.services.contract_analysis_service.ContractAnalysisService"
+            ) as mock_contract_service,
+            patch("app.core.task_recovery.CheckpointData") as mock_checkpoint_data,
+            patch(
+                "app.tasks.background_tasks.update_analysis_progress"
+            ) as mock_update_progress,
+            patch(
+                "app.tasks.background_tasks.websocket_manager"
+            ) as mock_websocket_manager,
+            patch(
+                "app.tasks.background_tasks.refresh_current_task_ttl"
+            ) as mock_refresh_ttl,
+        ):
+
+            # Setup mock recovery context
+            mock_recovery_ctx = AsyncMock()
+            mock_recovery_ctx.task_id = "test-task-123"
+            mock_recovery_ctx.refresh_context_ttl = AsyncMock()
+            mock_recovery_ctx.update_progress = AsyncMock()
+            mock_recovery_ctx.create_checkpoint = AsyncMock()
+            mock_recovery_ctx.registry = AsyncMock()
+            mock_recovery_ctx.registry.get_latest_checkpoint = AsyncMock(
+                return_value=None
+            )
+
+            # Setup mock auth context
+            mock_auth_context.get_user_token.return_value = "mock-backend-token"
+            mock_auth_context.get_user_email.return_value = "test@example.com"
+            mock_auth_context.get_auth_metadata.return_value = {}
+            mock_auth_context.get_refresh_token.return_value = "mock-refresh-token"
+
+            # Setup mock backend service for token refresh
+            mock_backend_service.is_backend_token.return_value = True
+            mock_backend_service.verify_backend_token.return_value = {
+                "exp": int(time.time()) + 300,  # Expires in 5 minutes
+                "supa_exp": int(time.time()) + 3600,  # Supabase expires in 1 hour
+                "sub": "test-user-id",
+            }
+            mock_backend_service.refresh_coordinated_tokens = AsyncMock(
+                return_value="refreshed-token"
+            )
+
+            # Setup mock document service
+            mock_doc_service_instance = AsyncMock()
+            mock_doc_service_instance.initialize = AsyncMock()
+            mock_doc_service_instance.get_user_client = AsyncMock(
+                return_value="mock-client"
+            )
+            mock_doc_service.return_value = mock_doc_service_instance
+
+            # Setup mock documents repository
+            mock_docs_repo_instance = AsyncMock()
+            mock_document = AsyncMock()
+            mock_document.id = "doc-123"
+            mock_document.user_id = "test-user-id"
+            mock_document.original_filename = "test.pdf"
+            mock_document.storage_path = "/path/to/test.pdf"
+            mock_document.file_type = "pdf"
+            mock_document.content_hash = "test-hash"
+            mock_document.processing_status = "uploaded"
+            mock_docs_repo_instance.get_document = AsyncMock(return_value=mock_document)
+            mock_docs_repo.return_value = mock_docs_repo_instance
+
+            # Setup mock progress repository
+            mock_progress_repo_instance = AsyncMock()
+            mock_progress_repo_instance.get_latest_progress = AsyncMock(
+                return_value=None
+            )
+            mock_progress_repo.return_value = mock_progress_repo_instance
+
+            # Setup mock contract service
+            mock_contract_service_instance = AsyncMock()
+            mock_contract_service_instance.start_analysis = AsyncMock(
+                return_value={"success": True}
+            )
+            mock_contract_service.return_value = mock_contract_service_instance
+
+            # Setup mock checkpoint data
+            mock_checkpoint_data_instance = AsyncMock()
+            mock_checkpoint_data.return_value = mock_checkpoint_data_instance
+
+            # Setup mock websocket manager
+            mock_websocket_manager_instance = AsyncMock()
+            mock_websocket_manager.return_value = mock_websocket_manager_instance
+
+            # Call the function
+            result = await comprehensive_document_analysis(
+                recovery_ctx=mock_recovery_ctx,
+                context_key="test-context-key",
+                document_id="doc-123",
+                analysis_id="analysis-123",
+                contract_id="contract-123",
+                user_id="test-user-id",
+                analysis_options={"content_hash": "test-hash"},
+            )
+
+            # Verify proactive token refresh was attempted
+            mock_backend_service.is_backend_token.assert_called_once_with(
+                "mock-backend-token"
+            )
+            mock_backend_service.verify_backend_token.assert_called_once_with(
+                "mock-backend-token"
+            )
+            mock_backend_service.refresh_coordinated_tokens.assert_called_once_with(
+                "mock-backend-token"
+            )
+
+            # Verify auth context was updated with new token
+            mock_auth_context.set_auth_context.assert_called_once_with(
+                token="refreshed-token",
+                user_id="test-user-id",
+                user_email="test@example.com",
+                metadata={},
+                refresh_token="mock-refresh-token",
+            )
+
+            # Verify the task continued execution
+            mock_doc_service_instance.initialize.assert_called_once()
+            mock_docs_repo_instance.get_document.assert_called_once()
+            mock_contract_service_instance.start_analysis.assert_called_once()
+
+            # Verify result
+            assert result is not None
 
 
 class TestBackgroundTasksIntegration:

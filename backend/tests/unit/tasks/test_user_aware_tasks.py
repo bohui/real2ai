@@ -5,6 +5,7 @@ Tests for user-aware background tasks with authentication context management.
 import pytest
 from unittest.mock import Mock, AsyncMock, patch
 from typing import Dict, Any
+import time
 
 from app.tasks.user_aware_tasks import run_document_processing_subflow
 from app.core.auth_context import AuthContext
@@ -281,3 +282,115 @@ class TestTaskContextIntegration:
             # Verify client was configured with user token
             mock_client.set_user_token.assert_called_once()
             assert client == mock_client
+
+    @pytest.mark.asyncio
+    async def test_check_token_health_backend_token_healthy(self):
+        """Test check_token_health with a healthy backend token"""
+        with (
+            patch(
+                "app.services.backend_token_service.BackendTokenService"
+            ) as mock_backend_service,
+            patch("app.core.auth_context.AuthContext") as mock_auth_context,
+        ):
+
+            # Setup mock auth context
+            mock_auth_context.get_user_token.return_value = "mock-backend-token"
+            mock_auth_context.get_user_id.return_value = "test-user-id"
+            mock_auth_context.get_user_email.return_value = "test@example.com"
+            mock_auth_context.get_auth_metadata.return_value = {}
+            mock_auth_context.get_refresh_token.return_value = "mock-refresh-token"
+
+            # Setup mock backend service
+            mock_backend_service.is_backend_token.return_value = True
+            mock_backend_service.verify_backend_token.return_value = {
+                "exp": int(time.time()) + 3600,  # Expires in 1 hour
+                "supa_exp": int(time.time()) + 7200,  # Supabase expires in 2 hours
+                "sub": "test-user-id",
+            }
+
+            # Call the function
+            from app.core.task_context import check_token_health
+
+            result = await check_token_health("test-context-key")
+
+            # Verify result
+            assert result["status"] == "healthy"
+            assert result["user_id"] == "test-user-id"
+            assert result["token_type"] == "backend"
+            assert result["message"] == "Backend token is healthy"
+            assert "expiry_info" in result
+            assert (
+                result["expiry_info"]["time_to_backend_expiry_minutes"] > 50
+            )  # Should be around 60 minutes
+
+    @pytest.mark.asyncio
+    async def test_check_token_health_backend_token_critical(self):
+        """Test check_token_health with a critical backend token that needs refresh"""
+        with (
+            patch(
+                "app.services.backend_token_service.BackendTokenService"
+            ) as mock_backend_service,
+            patch("app.core.auth_context.AuthContext") as mock_auth_context,
+        ):
+
+            # Setup mock auth context
+            mock_auth_context.get_user_token.return_value = "mock-backend-token"
+            mock_auth_context.get_user_id.return_value = "test-user-id"
+            mock_auth_context.get_user_email.return_value = "test@example.com"
+            mock_auth_context.get_auth_metadata.return_value = {}
+            mock_auth_context.get_refresh_token.return_value = "mock-refresh-token"
+
+            # Setup mock backend service
+            mock_backend_service.is_backend_token.return_value = True
+            mock_backend_service.verify_backend_token.return_value = {
+                "exp": int(time.time()) + 120,  # Expires in 2 minutes
+                "supa_exp": int(time.time()) + 3600,  # Supabase expires in 1 hour
+                "sub": "test-user-id",
+            }
+            mock_backend_service.refresh_coordinated_tokens = AsyncMock(
+                return_value="refreshed-token"
+            )
+
+            # Call the function
+            from app.core.task_context import check_token_health
+
+            result = await check_token_health("test-context-key")
+
+            # Verify result
+            assert result["status"] == "critical"
+            assert result["user_id"] == "test-user-id"
+            assert result["token_type"] == "backend"
+            assert result["message"] == "Backend token expires very soon"
+            assert result["refresh_attempted"] is True
+            assert result["refresh_successful"] is True
+            assert "new_token_length" in result
+
+            # Verify auth context was updated
+            mock_auth_context.set_auth_context.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_check_token_health_supabase_token(self):
+        """Test check_token_health with a Supabase token"""
+        with (
+            patch(
+                "app.services.backend_token_service.BackendTokenService"
+            ) as mock_backend_service,
+            patch("app.core.auth_context.AuthContext") as mock_auth_context,
+        ):
+
+            # Setup mock auth context
+            mock_auth_context.get_user_token.return_value = "mock-supabase-token"
+            mock_auth_context.get_user_id.return_value = "test-user-id"
+
+            # Setup mock backend service
+            mock_backend_service.is_backend_token.return_value = False
+
+            # Call the function
+            from app.core.task_context import check_token_health
+
+            result = await check_token_health("test-context-key")
+
+            # Verify result
+            assert result["status"] == "unknown"  # Will be determined by JWT analysis
+            assert result["user_id"] == "test-user-id"
+            assert result["token_type"] == "supabase"

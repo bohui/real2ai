@@ -60,9 +60,11 @@ class Settings(BaseSettings):
 
     # Token Coordination Settings
     backend_token_ttl_buffer_minutes: int = (
-        5  # Backend tokens expire 5 min before Supabase
+        15  # Backend tokens expire 15 min before Supabase (increased from 5 to prevent expiration issues)
     )
-    token_refresh_threshold_minutes: int = 10  # Refresh when 10 min or less remaining
+    token_refresh_threshold_minutes: int = (
+        20  # Refresh when 20 min or less remaining (increased from 10)
+    )
     auto_refresh_enabled: bool = True  # Enable proactive token refresh
     supabase_access_token_ttl_minutes: int = 60  # Standard Supabase access token TTL
 
