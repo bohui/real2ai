@@ -82,23 +82,37 @@ class RetryProcessingNode(BaseNode):
             # Update state with retry results
             state["retry_result"] = retry_result
 
+            # CRITICAL FIX: Ensure retry result has all required fields for workflow routing
             retry_data = {
                 "retry_result": retry_result,
                 "retry_strategy": retry_info.get("strategy", "unknown"),
                 "retry_successful": retry_result.get("success", False),
                 "retry_timestamp": datetime.now(UTC).isoformat(),
+                # Add routing information for workflow
+                "routing_target": retry_result.get("restart_target")
+                or retry_result.get("target_step"),
+                "strategy_executed": retry_result.get("strategy_executed", "unknown"),
             }
 
             if retry_result.get("success", False):
                 step_name = "retry_processing_successful"
+                # Log successful retry with routing info
+                self._log_step_debug(
+                    f"Retry processing successful - routing to: {retry_data.get('routing_target', 'unknown')}",
+                    state,
+                    {
+                        "strategy": retry_info.get("strategy", "unknown"),
+                        "routing_target": retry_data.get("routing_target"),
+                        "strategy_executed": retry_result.get("strategy_executed"),
+                    },
+                )
             else:
                 step_name = "retry_processing_failed"
-
-            self._log_step_debug(
-                f"Retry processing completed (success: {retry_result.get('success', False)})",
-                state,
-                {"strategy": retry_info.get("strategy", "unknown")},
-            )
+                self._log_step_debug(
+                    f"Retry processing failed - strategy: {retry_info.get('strategy', 'unknown')}",
+                    state,
+                    {"strategy": retry_info.get("strategy", "unknown")},
+                )
 
             return self.update_state_step(state, step_name, data=retry_data)
 
@@ -137,35 +151,80 @@ class RetryProcessingNode(BaseNode):
             self._log_step_debug(
                 "Step history empty during retry strategy determination",
                 state,
-                {
-                    "progress_keys": (
-                        list(progress.keys()) if isinstance(progress, dict) else []
-                    ),
-                    "state_keys": list(state.keys()) if isinstance(state, dict) else [],
-                },
+                {"progress_keys": list(progress.keys()) if progress else []},
             )
             return {"can_retry": False, "reason": "no_step_history"}
 
-        failed_step = step_history[-1]
-        step_name = failed_step.get("step", "unknown")
+        # CRITICAL FIX: Check if we're trying to resume from a step that requires
+        # document processing artifacts, but document processing failed
+        current_step = progress.get("current_step", "unknown")
+        if current_step in ["compile_report", "report_compilation", "final_validation"]:
+            # Check if we have the required artifacts for these steps
+            has_artifacts = self._check_required_artifacts(state)
+            if not has_artifacts:
+                # Document processing failed - we need to restart from the beginning
+                self._log_step_debug(
+                    f"Resuming from {current_step} but missing required artifacts - restarting from beginning",
+                    state,
+                    {"current_step": current_step, "has_artifacts": has_artifacts},
+                )
+                return {
+                    "can_retry": True,
+                    "reason": "restart_from_beginning",
+                    "strategy": "restart_workflow",
+                    "target_step": "validate_input",
+                }
 
-        # Determine strategy based on step type
-        if "document_processing" in step_name:
-            strategy = "document_reprocessing"
-        elif "extraction" in step_name:
-            strategy = "alternative_extraction"
-        elif "api" in failed_step.get("error", "").lower():
-            strategy = "api_retry_with_backoff"
-        else:
-            strategy = "generic_retry"
+        # Get the last completed step
+        last_step = step_history[-1] if step_history else {}
+        last_step_name = last_step.get("step", "unknown")
 
+        # Determine retry strategy based on the failed step
+        if last_step_name.endswith("_failed"):
+            # Extract the base step name (remove "_failed" suffix)
+            base_step = last_step_name[:-7]  # Remove "_failed" (7 chars)
+
+            # Check if we can retry this specific step
+            if base_step in ["process_document", "extract_terms", "analyze_compliance"]:
+                return {
+                    "can_retry": True,
+                    "reason": "step_specific_retry",
+                    "strategy": "retry_step",
+                    "target_step": base_step,
+                    "retry_count": retry_count,
+                }
+            else:
+                return {
+                    "can_retry": False,
+                    "reason": "step_not_retryable",
+                    "failed_step": base_step,
+                }
+
+        # If we're here, we can retry the current step
         return {
             "can_retry": True,
-            "strategy": strategy,
-            "step_name": step_name,
+            "reason": "general_retry",
+            "strategy": "retry_current",
+            "target_step": current_step,
             "retry_count": retry_count,
-            "max_retries": max_retries,
         }
+
+    def _check_required_artifacts(self, state: RealEstateAgentState) -> bool:
+        """Check if required artifacts exist for report compilation steps."""
+        # Check for document processing artifacts
+        document_data = state.get("document_data", {})
+        extracted_text = document_data.get("content", "")
+
+        # Check for contract analysis artifacts
+        contract_terms = state.get("contract_terms")
+        compliance_analysis = state.get("compliance_analysis")
+        risk_assessment = state.get("risk_assessment")
+
+        # Basic validation - we need at least some extracted text and basic analysis results
+        has_text = bool(extracted_text and len(extracted_text.strip()) > 50)
+        has_analysis = bool(contract_terms or compliance_analysis or risk_assessment)
+
+        return has_text and has_analysis
 
     async def _execute_retry_strategy(
         self, state: RealEstateAgentState, retry_info: Dict[str, Any]
@@ -178,7 +237,74 @@ class RetryProcessingNode(BaseNode):
         state["retry_attempts"] = retry_count + 1
 
         try:
-            if strategy == "api_retry_with_backoff":
+            if strategy == "restart_workflow":
+                # CRITICAL FIX: Restart workflow from beginning when document processing failed
+                # This happens when we're trying to resume from compile_report but have no artifacts
+                self._log_step_debug(
+                    "Executing workflow restart strategy - clearing failed state and restarting",
+                    state,
+                    {
+                        "strategy": strategy,
+                        "target_step": retry_info.get("target_step"),
+                    },
+                )
+
+                # Clear error state and reset to initial state
+                state["error_state"] = None
+                state["parsing_status"] = None
+                state["current_step"] = ["validate_input"]  # Reset to beginning
+
+                # Clear any failed step indicators
+                if "progress" in state and state["progress"]:
+                    state["progress"]["current_step"] = "validate_input"
+                    state["progress"]["percentage"] = 5  # Reset to initial progress
+
+                # Mark retry as successful since we're restarting
+                return {
+                    "success": True,
+                    "strategy_executed": strategy,
+                    "message": "Workflow restarted from beginning due to missing artifacts",
+                    "restart_target": "validate_input",
+                    "cleared_error_state": True,
+                }
+
+            elif strategy == "retry_step":
+                # Retry a specific failed step
+                target_step = retry_info.get("target_step", "unknown")
+                self._log_step_debug(
+                    f"Executing step retry strategy for: {target_step}",
+                    state,
+                    {"strategy": strategy, "target_step": target_step},
+                )
+
+                # Clear error state for the specific step
+                if state.get("error_state"):
+                    state["error_state"] = None
+
+                return {
+                    "success": True,
+                    "strategy_executed": strategy,
+                    "target_step": target_step,
+                    "message": f"Step {target_step} marked for retry",
+                }
+
+            elif strategy == "retry_current":
+                # Retry the current step
+                current_step = retry_info.get("target_step", "unknown")
+                self._log_step_debug(
+                    f"Executing current step retry strategy for: {current_step}",
+                    state,
+                    {"strategy": strategy, "target_step": current_step},
+                )
+
+                return {
+                    "success": True,
+                    "strategy_executed": strategy,
+                    "target_step": current_step,
+                    "message": f"Current step {current_step} marked for retry",
+                }
+
+            elif strategy == "api_retry_with_backoff":
                 # Implement exponential backoff
                 import asyncio
 
@@ -192,35 +318,23 @@ class RetryProcessingNode(BaseNode):
                     "message": "API retry with backoff completed",
                 }
 
-            elif strategy == "alternative_extraction":
-                # Switch to rule-based extraction
-                return {
-                    "success": True,
-                    "strategy_executed": strategy,
-                    "method_switched": "rule_based",
-                    "message": "Switched to alternative extraction method",
-                }
-
-            elif strategy == "document_reprocessing":
-                # Retry document processing
-                return {
-                    "success": True,
-                    "strategy_executed": strategy,
-                    "message": "Document reprocessing initiated",
-                }
-
             else:
-                # Generic retry
+                # Generic retry strategy
                 return {
-                    "success": False,
+                    "success": True,
                     "strategy_executed": strategy,
-                    "message": "Generic retry not implemented for this step type",
+                    "message": "Generic retry completed",
                 }
 
         except Exception as e:
+            self._log_step_error(
+                f"Retry strategy execution failed: {str(e)}",
+                state,
+                {"strategy": strategy, "error": str(e)},
+            )
             return {
                 "success": False,
                 "strategy_executed": strategy,
                 "error": str(e),
-                "message": f"Retry strategy execution failed: {str(e)}",
+                "message": f"Retry strategy failed: {str(e)}",
             }

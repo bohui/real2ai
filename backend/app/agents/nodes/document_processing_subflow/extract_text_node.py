@@ -302,6 +302,28 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                     if self.text_extraction_result
                     else "Text extraction failed"
                 )
+
+                # CRITICAL FIX: Add comprehensive logging for text extraction failures
+                self._log_error(
+                    f"Text extraction failed for document {document_id}: {error_msg}",
+                    extra={
+                        "document_id": document_id,
+                        "storage_path": storage_path,
+                        "file_type": normalized_file_type,
+                        "content_hmac": content_hmac,
+                        "extraction_attempted": True,
+                        "extraction_success": False,
+                        "text_extraction_result": (
+                            self.text_extraction_result.model_dump()
+                            if self.text_extraction_result
+                            and hasattr(self.text_extraction_result, "model_dump")
+                            else str(self.text_extraction_result)
+                        ),
+                        "file_size_bytes": len(file_content) if file_content else 0,
+                        "use_llm": self.use_llm,
+                    },
+                )
+
                 return self._handle_error(
                     state,
                     ValueError(error_msg),
@@ -319,17 +341,36 @@ class ExtractTextNode(DocumentProcessingNodeBase):
             # Validate extracted content
             full_text = self.text_extraction_result.full_text or ""
             if len(full_text.strip()) < 100:
+                # CRITICAL FIX: Add comprehensive logging for insufficient content
+                diagnostic_info = {
+                    "document_id": document_id,
+                    "character_count": len(full_text),
+                    "stripped_character_count": len(full_text.strip()),
+                    "extraction_method": self.text_extraction_result.extraction_methods,
+                    "total_pages": self.text_extraction_result.total_pages,
+                    "content_hmac": content_hmac,
+                    "file_type": normalized_file_type,
+                    "file_size_bytes": len(file_content) if file_content else 0,
+                    "use_llm": self.use_llm,
+                    "extraction_confidence": getattr(
+                        self.text_extraction_result, "overall_confidence", 0.0
+                    ),
+                    "raw_text_sample": (
+                        full_text[:200] + "..." if len(full_text) > 200 else full_text
+                    ),
+                }
+
+                self._log_error(
+                    f"Insufficient text content extracted from document {document_id}: "
+                    f"got {len(full_text.strip())} characters (minimum: 100)",
+                    extra=diagnostic_info,
+                )
+
                 return self._handle_error(
                     state,
                     ValueError("Insufficient text content"),
                     "Insufficient text content extracted from document",
-                    {
-                        "document_id": document_id,
-                        "character_count": len(full_text),
-                        "extraction_method": self.text_extraction_result.extraction_methods,
-                        "total_pages": self.text_extraction_result.total_pages,
-                        "content_hmac": content_hmac,
-                    },
+                    diagnostic_info,
                 )
 
             # Update state with extraction result and artifact metadata
@@ -340,7 +381,7 @@ class ExtractTextNode(DocumentProcessingNodeBase):
             updated_state["algorithm_version"] = algorithm_version
             updated_state["params_fingerprint"] = params_fingerprint
             # Store the artifact_text_id so it can be linked to the document
-            if 'artifact_text_id' in locals() and artifact_text_id:
+            if "artifact_text_id" in locals() and artifact_text_id:
                 updated_state["artifact_text_id"] = artifact_text_id
 
             duration = (datetime.now(timezone.utc) - start_time).total_seconds()
@@ -689,6 +730,15 @@ class ExtractTextNode(DocumentProcessingNodeBase):
     async def _extract_pdf_text_basic(self, file_content: bytes) -> tuple[str, str]:
         """Basic PDF text extraction."""
         try:
+            # CRITICAL FIX: Add logging for basic PDF extraction
+            self._log_info(
+                "Starting basic PDF text extraction",
+                extra={
+                    "file_size_bytes": len(file_content),
+                    "file_size_mb": round(len(file_content) / (1024 * 1024), 2)
+                }
+            )
+            
             # Try PyMuPDF first
             try:
                 import pymupdf
@@ -696,15 +746,32 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                 doc = pymupdf.open(stream=file_content, filetype="pdf")
                 text = ""
                 pages_count = 0
+                page_texts = []
+                
                 for page in doc:
-                    text += page.get_text()
+                    page_text = page.get_text() or ""
+                    text += page_text
+                    page_texts.append(page_text)
                     pages_count += 1
+                
                 doc.close()
+                
+                # CRITICAL FIX: Log detailed extraction results
                 self._log_info(
-                    f"Basic PDF extraction via PyMuPDF", extra={"pages": pages_count}
+                    f"Basic PDF extraction via PyMuPDF completed",
+                    extra={
+                        "pages": pages_count,
+                        "total_text_length": len(text),
+                        "total_text_stripped": len(text.strip()),
+                        "page_text_lengths": [len(pt.strip()) for pt in page_texts],
+                        "page_text_samples": [pt[:100] + "..." if len(pt) > 100 else pt for pt in page_texts],
+                        "extraction_method": "pdf_pymupdf"
+                    }
                 )
+                
                 return text, "pdf_pymupdf"
             except ImportError:
+                self._log_warning("PyMuPDF not available, trying pypdf fallback")
                 pass
 
             # Fallback to pypdf
@@ -714,20 +781,36 @@ class ExtractTextNode(DocumentProcessingNodeBase):
 
                 reader = pypdf.PdfReader(BytesIO(file_content))
                 text = ""
+                page_texts = []
+                
                 for page in reader.pages:
-                    text += page.extract_text()
+                    page_text = page.extract_text() or ""
+                    text += page_text
+                    page_texts.append(page_text)
+                
+                # CRITICAL FIX: Log detailed extraction results
                 self._log_info(
-                    f"Basic PDF extraction via pypdf",
-                    extra={"pages": len(reader.pages)},
+                    f"Basic PDF extraction via pypdf completed",
+                    extra={
+                        "pages": len(reader.pages),
+                        "total_text_length": len(text),
+                        "total_text_stripped": len(text.strip()),
+                        "page_text_lengths": [len(pt.strip()) for pt in page_texts],
+                        "page_text_samples": [pt[:100] + "..." if len(pt) > 100 else pt for pt in page_texts],
+                        "extraction_method": "pdf_pypdf"
+                    }
                 )
+                
                 return text, "pdf_pypdf"
             except ImportError:
+                self._log_warning("pypdf not available")
                 pass
 
+            self._log_warning("No PDF extraction libraries available")
             return "", "pdf_unavailable"
 
         except Exception as e:
-            self._log_warning(f"PDF extraction failed: {e}")
+            self._log_error(f"PDF extraction failed: {e}", extra={"error": str(e)})
             return "", "pdf_failed"
 
     async def _extract_pdf_text_hybrid(
@@ -1089,6 +1172,79 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                 self.diagram_processing_result["detection_summary"][
                     "pages_with_diagrams"
                 ] = len(self.diagram_processing_result["diagram_pages"])
+
+            # CRITICAL FIX: Add comprehensive logging for PDF extraction results
+            self._log_info(
+                f"PDF text extraction completed for document {state.get('document_id', 'unknown')}",
+                extra={
+                    "document_id": state.get("document_id"),
+                    "total_pages": len(pages),
+                    "extraction_methods": extraction_methods,
+                    "full_text_length": len(full_text),
+                    "full_text_sample": (
+                        full_text[:500] + "..." if len(full_text) > 500 else full_text
+                    ),
+                    "overall_confidence": overall_conf,
+                    "total_words": total_words,
+                    "pages_with_text": len(
+                        [
+                            p
+                            for p in pages
+                            if p.text_content and len(p.text_content.strip()) > 0
+                        ]
+                    ),
+                    "pages_without_text": len(
+                        [
+                            p
+                            for p in pages
+                            if not p.text_content or len(p.text_content.strip()) == 0
+                        ]
+                    ),
+                },
+            )
+
+            # CRITICAL FIX: Check if we have sufficient text content
+            if len(full_text.strip()) < 100:
+                self._log_warning(
+                    f"PDF extraction produced insufficient text: {len(full_text.strip())} characters (minimum: 100)",
+                    extra={
+                        "document_id": state.get("document_id"),
+                        "full_text": full_text,
+                        "page_details": [
+                            {
+                                "page": p.page_number,
+                                "text_length": len(p.text_content or ""),
+                                "extraction_method": p.extraction_method,
+                                "confidence": p.confidence,
+                                "has_images": (
+                                    p.content_analysis.layout_features.has_images
+                                    if p.content_analysis
+                                    else False
+                                ),
+                            }
+                            for p in pages
+                        ],
+                    },
+                )
+
+                # Try to provide a more helpful error message
+                if len(pages) == 0:
+                    error_msg = "PDF extraction failed - no pages could be processed"
+                elif all(len(p.text_content or "").strip() < 10 for p in pages):
+                    error_msg = "PDF extraction failed - all pages contain insufficient text (document may be image-based or corrupted)"
+                else:
+                    error_msg = f"PDF extraction failed - extracted only {len(full_text.strip())} characters across {len(pages)} pages"
+
+                return TextExtractionResult(
+                    success=False,
+                    error=error_msg,
+                    full_text=full_text,  # Keep what we have for debugging
+                    pages=pages,
+                    extraction_methods=extraction_methods,
+                    overall_confidence=overall_conf,
+                    total_pages=len(pages),
+                    total_word_count=total_words,
+                )
 
             return TextExtractionResult(
                 success=True,
