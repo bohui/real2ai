@@ -735,10 +735,10 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                 "Starting basic PDF text extraction",
                 extra={
                     "file_size_bytes": len(file_content),
-                    "file_size_mb": round(len(file_content) / (1024 * 1024), 2)
-                }
+                    "file_size_mb": round(len(file_content) / (1024 * 1024), 2),
+                },
             )
-            
+
             # Try PyMuPDF first
             try:
                 import pymupdf
@@ -747,15 +747,15 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                 text = ""
                 pages_count = 0
                 page_texts = []
-                
+
                 for page in doc:
                     page_text = page.get_text() or ""
                     text += page_text
                     page_texts.append(page_text)
                     pages_count += 1
-                
+
                 doc.close()
-                
+
                 # CRITICAL FIX: Log detailed extraction results
                 self._log_info(
                     f"Basic PDF extraction via PyMuPDF completed",
@@ -764,11 +764,14 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                         "total_text_length": len(text),
                         "total_text_stripped": len(text.strip()),
                         "page_text_lengths": [len(pt.strip()) for pt in page_texts],
-                        "page_text_samples": [pt[:100] + "..." if len(pt) > 100 else pt for pt in page_texts],
-                        "extraction_method": "pdf_pymupdf"
-                    }
+                        "page_text_samples": [
+                            pt[:100] + "..." if len(pt) > 100 else pt
+                            for pt in page_texts
+                        ],
+                        "extraction_method": "pdf_pymupdf",
+                    },
                 )
-                
+
                 return text, "pdf_pymupdf"
             except ImportError:
                 self._log_warning("PyMuPDF not available, trying pypdf fallback")
@@ -782,12 +785,12 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                 reader = pypdf.PdfReader(BytesIO(file_content))
                 text = ""
                 page_texts = []
-                
+
                 for page in reader.pages:
                     page_text = page.extract_text() or ""
                     text += page_text
                     page_texts.append(page_text)
-                
+
                 # CRITICAL FIX: Log detailed extraction results
                 self._log_info(
                     f"Basic PDF extraction via pypdf completed",
@@ -796,11 +799,14 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                         "total_text_length": len(text),
                         "total_text_stripped": len(text.strip()),
                         "page_text_lengths": [len(pt.strip()) for pt in page_texts],
-                        "page_text_samples": [pt[:100] + "..." if len(pt) > 100 else pt for pt in page_texts],
-                        "extraction_method": "pdf_pypdf"
-                    }
+                        "page_text_samples": [
+                            pt[:100] + "..." if len(pt) > 100 else pt
+                            for pt in page_texts
+                        ],
+                        "extraction_method": "pdf_pypdf",
+                    },
                 )
-                
+
                 return text, "pdf_pypdf"
             except ImportError:
                 self._log_warning("pypdf not available")
