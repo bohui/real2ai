@@ -180,6 +180,7 @@ class TermsValidationNode(BaseNode):
                 template_name="validation/terms_completeness_validation",
                 context=context,
                 service_name="contract_analysis_workflow",
+                output_parser=self.structured_parsers.get("terms_validation"),
             )
 
             response = await self._generate_content_with_fallback(

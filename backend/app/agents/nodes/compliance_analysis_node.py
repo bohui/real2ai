@@ -173,6 +173,7 @@ class ComplianceAnalysisNode(BaseNode):
                 template_name="analysis/compliance_check",
                 context=context,
                 service_name="contract_analysis_workflow",
+                output_parser=self.structured_parsers.get("compliance_analysis"),
             )
 
             llm_response = await self._generate_content_with_fallback(

@@ -239,6 +239,7 @@ class FinalValidationNode(BaseNode):
                 # Final validation should not fail hard on missing optional context
                 # Disable strict context validation here to allow graceful fallbacks
                 validate=False,
+                output_parser=self.structured_parsers.get("workflow_validation"),
             )
 
             response = await self._generate_content_with_fallback(

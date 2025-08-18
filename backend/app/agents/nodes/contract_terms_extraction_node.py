@@ -351,12 +351,14 @@ class ContractTermsExtractionNode(BaseNode):
                     template_name="analysis/contract_structure",
                     context=context,
                     service_name="contract_analysis_workflow",
+                    output_parser=self.structured_parsers.get("contract_terms"),
                 )
             else:
                 rendered_prompt = await self.prompt_manager.render(
                     template_name="contract_analysis_base",
                     context=context,
                     service_name="contract_analysis_workflow",
+                    output_parser=self.structured_parsers.get("contract_terms"),
                 )
 
             # Generate response with retries

@@ -159,59 +159,6 @@ Provide a comprehensive compliance assessment that includes:
 
 Focus on practical, actionable compliance guidance that helps ensure legal adherence and protects the buyer's interests.
 
-## Required Response Format
-
-You must respond with a valid JSON object matching this exact structure:
-
-```jsonc
-{
-  "overall_compliance_score": <number between 0-10>,
-  "state_compliance": <true|false>,
-  "compliance_issues": [
-    {
-      "area": "<disclosure|cooling_off|financial|property|statutory>",
-      "issue": "<specific compliance issue>",
-      "severity": "<low|medium|high|critical>",
-      "description": "<detailed explanation of the issue>",
-      "legal_reference": "<relevant legislation or regulation>",
-      "corrective_action": "<specific action required to achieve compliance>",
-      "timeline": "<recommended timeline for correction>",
-      "consequences": "<potential consequences if not addressed>"
-    }
-  ],
-  "state_specific_issues": [
-    {
-      "requirement": "<specific state requirement>",
-      "compliance_status": "<compliant|non_compliant|unclear>",
-      "description": "<assessment of compliance with this requirement>",
-      "action_required": "<action needed for full compliance>"
-    }
-  ],
-  "cooling_off_validation": {
-    "compliant": <true|false>,
-    "period_duration": "<duration in business days>",
-    "waiver_status": "<waived|active|unclear>",
-    "issues": ["<issue 1>", "<issue 2>"],
-    "warnings": ["<warning 1>", "<warning 2>"]
-  },
-  "stamp_duty_calculation": {
-    "calculated_amount": <number or null>,
-    "calculation_basis": "<basis for calculation>",
-    "concessions_applicable": ["<concession 1>", "<concession 2>"],
-    "foreign_buyer_duty": <number or null>,
-    "total_government_charges": <number or null>
-  },
-  "professional_advice_required": [
-    "<area requiring professional advice>",
-    "<specific legal issue needing expert review>"
-  ],
-  "compliance_confidence": <number between 0-1>,
-  "analysis_timestamp": "{{analysis_timestamp | default('') }}",
-  "applicable_legislation": [
-    "<relevant act or regulation>",
-    "<additional legislative reference>"
-  ]
-}
-```
-
-**Important**: Return ONLY the JSON object with no additional text, explanations, or formatting.
+{% if expects_structured_output %}
+{{ format_instructions }}
+{% endif %}

@@ -20,16 +20,9 @@ Identify from these property diagram types:
 - Mark as "unknown" if diagram type unclear
 
 ## Output Requirements
-Return ONLY a valid JSON object with this exact structure:
-
-```json
-{
-  "text": "extracted_text_here",
-  "text_confidence": 0.95,
-  "diagrams": ["site_plan", "drainage_plan"],
-  "diagrams_confidence": 0.87
-}
-```
+{% if expects_structured_output %}
+{{ format_instructions }}
+{% endif %}
 
 ## Critical Instructions
 - **JSON ONLY**: No explanations, comments, or additional text

@@ -14,6 +14,11 @@ from .base import BaseNode
 logger = logging.getLogger(__name__)
 
 
+# Module constants to avoid magic numbers
+QUALITY_THRESHOLD: float = 0.6
+DEFAULT_SCORE_VALUE: float = 0.7
+
+
 class DocumentQualityValidationNode(BaseNode):
     """
     Node responsible for validating the quality of processed documents.
@@ -115,8 +120,7 @@ class DocumentQualityValidationNode(BaseNode):
             state["confidence_scores"]["document_quality"] = confidence_score
 
             # Determine if quality is acceptable
-            quality_threshold = 0.6
-            quality_passed = confidence_score >= quality_threshold
+            quality_passed = confidence_score >= QUALITY_THRESHOLD
 
             if quality_passed:
                 self._log_step_debug(
@@ -185,11 +189,9 @@ class DocumentQualityValidationNode(BaseNode):
                     if key in drop_keys:
                         continue
                     if isinstance(value, str):
-                        sanitized[key] = value[:1000] + (
-                            "..." if len(value) > 1000 else ""
-                        )
+                        sanitized[key] = value
                     elif isinstance(value, list):
-                        sanitized[key] = value[:50]
+                        sanitized[key] = value
                     elif isinstance(value, dict):
                         # Shallow sanitize nested dicts to avoid huge payloads
                         nested: Dict[str, Any] = {}
@@ -197,7 +199,7 @@ class DocumentQualityValidationNode(BaseNode):
                             if nk in drop_keys:
                                 continue
                             if isinstance(nv, str):
-                                nested[nk] = nv[:500] + ("..." if len(nv) > 500 else "")
+                                nested[nk] = nv
                             # Skip deeply nested large structures
                         if nested:
                             sanitized[key] = nested
@@ -210,7 +212,7 @@ class DocumentQualityValidationNode(BaseNode):
             context = PromptContext(
                 context_type=ContextType.VALIDATION,
                 variables={
-                    "document_text": text[:2000],  # Limit for LLM processing
+                    "document_text": text,
                     "document_metadata": sanitized_metadata,
                     "validation_type": "document_quality",
                     "quality_criteria": [
@@ -225,7 +227,7 @@ class DocumentQualityValidationNode(BaseNode):
                     "extraction_method": extraction_method_value,
                     "analysis_timestamp": analysis_timestamp_value,
                     # Service mapping required variables (best-effort defaults)
-                    "extracted_text": text[:2000],
+                    "extracted_text": text,
                     "contract_type": (metadata or {}).get("contract_type")
                     or "purchase_agreement",
                     "user_type": (metadata or {}).get("user_type") or "general",
@@ -240,6 +242,7 @@ class DocumentQualityValidationNode(BaseNode):
                 template_name="validation/document_quality_validation",
                 context=context,
                 service_name="contract_analysis_workflow",
+                output_parser=self.structured_parsers.get("document_quality"),
             )
 
             response = await self._generate_content_with_fallback(
@@ -305,12 +308,20 @@ class DocumentQualityValidationNode(BaseNode):
             # Enhance with additional metrics
             words = text.split()
             quality_metrics = {
-                "text_quality_score": validation_dict.get("text_quality_score", 0.7),
-                "completeness_score": validation_dict.get("completeness_score", 0.7),
-                "readability_score": validation_dict.get("readability_score", 0.7),
-                "key_terms_coverage": validation_dict.get("key_terms_coverage", 0.7),
+                "text_quality_score": validation_dict.get(
+                    "text_quality_score", DEFAULT_SCORE_VALUE
+                ),
+                "completeness_score": validation_dict.get(
+                    "completeness_score", DEFAULT_SCORE_VALUE
+                ),
+                "readability_score": validation_dict.get(
+                    "readability_score", DEFAULT_SCORE_VALUE
+                ),
+                "key_terms_coverage": validation_dict.get(
+                    "key_terms_coverage", DEFAULT_SCORE_VALUE
+                ),
                 "extraction_confidence": validation_dict.get(
-                    "extraction_confidence", 0.7
+                    "extraction_confidence", DEFAULT_SCORE_VALUE
                 ),
                 "issues_identified": validation_dict.get("issues_identified", []),
                 "improvement_suggestions": validation_dict.get(

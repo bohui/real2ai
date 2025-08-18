@@ -12,7 +12,7 @@ You are an expert document analysis specialist conducting quality assessment of 
 
 ### Extracted Text
 ```
-{{document_text[:2000]}}
+{{document_text}}
 ```
 
 ### Document Metadata
@@ -124,59 +124,6 @@ Provide a comprehensive quality assessment that includes:
 
 Focus on practical quality metrics that inform whether the document is suitable for automated analysis or requires manual review.
 
-## Required Response Format
-
-You must respond with a valid JSON object matching this exact structure:
-
-```jsonc
-{
-  "text_quality_score": <number between 0-1>,
-  "completeness_score": <number between 0-1>,
-  "readability_score": <number between 0-1>,
-  "key_terms_coverage": <number between 0-1>,
-  "extraction_confidence": <number between 0-1>,
-  "overall_quality_score": <number between 0-1>,
-  "issues_identified": [
-    {
-      "issue": "<specific quality issue>",
-      "severity": "<critical|major|minor|warning>",
-      "description": "<detailed explanation of the issue>",
-      "impact": "<impact on contract analysis reliability>",
-      "location": "<where in document the issue occurs>"
-    }
-  ],
-  "quality_indicators": {
-    "character_count": <number>,
-    "word_count": <number>,
-    "paragraph_count": <number>,
-    "contract_keywords_found": <number>,
-    "ocr_artifacts_detected": <number>,
-    "formatting_preserved": <true|false>
-  },
-  "improvement_suggestions": [
-    "<suggestion 1>",
-    "<suggestion 2>"
-  ],
-  "suitability_assessment": {
-    "automated_analysis_suitable": <true|false>,
-    "manual_review_required": <true|false>,
-    "confidence_level": "<high|medium|low>",
-    "recommended_action": "<proceed|review|rescan|manual_entry>"
-  },
-  "extracted_key_terms": {
-    "purchase_price_visible": <true|false>,
-    "property_address_clear": <true|false>,
-    "settlement_date_readable": <true|false>,
-    "parties_identified": <true|false>,
-    "special_conditions_present": <true|false>
-  },
-  "quality_summary": "<executive summary of document quality>",
-  "analysis_timestamp": "{{analysis_timestamp | default('') }}",
-  "processing_recommendations": [
-    "<processing recommendation 1>",
-    "<processing recommendation 2>"
-  ]
-}
-```
-
-**Important**: Return ONLY the JSON object with no additional text, explanations, or formatting.
+{% if expects_structured_output %}
+{{ format_instructions }}
+{% endif %}

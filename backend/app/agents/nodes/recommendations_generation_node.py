@@ -178,6 +178,7 @@ class RecommendationsGenerationNode(BaseNode):
                 template_name="workflow/contract_recommendations",
                 context=context,
                 service_name="contract_analysis_workflow",
+                output_parser=self.structured_parsers.get("recommendations"),
             )
 
             response = await self._generate_content_with_fallback(

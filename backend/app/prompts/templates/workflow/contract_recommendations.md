@@ -113,36 +113,6 @@ Provide comprehensive, actionable recommendations that address:
 
 Focus on practical, implementable advice that empowers the buyer to take appropriate action while understanding when professional help is essential.
 
-## Required Response Format
-
-You must respond with a valid JSON object matching this exact structure:
-
-```jsonc
-{
-  "recommendations": [
-    {
-      "priority": "<critical|high|medium|low>",
-      "category": "<legal|financial|practical|compliance>",
-      "recommendation": "<specific actionable recommendation>",
-      "action_required": <true|false>,
-      "australian_context": "<state-specific context and requirements>",
-      "estimated_cost": <number in AUD or null>,
-      "timeline": "<suggested timeline for action>",
-      "legal_basis": "<legal requirement or basis if applicable>",
-      "consequences_if_ignored": "<potential consequences if not followed>"
-    }
-  ],
-  "executive_summary": "<concise summary of key recommendations>",
-  "immediate_actions": ["<action 1>", "<action 2>"],
-  "next_steps": ["<step 1>", "<step 2>"],
-  "total_estimated_cost": <total cost in AUD or null>,
-  "compliance_requirements": ["<requirement 1>", "<requirement 2>"],
-  "state_specific_advice": {
-    "professional_services": ["<service 1>", "<service 2>"],
-    "government_processes": ["<process 1>", "<process 2>"],
-    "local_considerations": ["<consideration 1>", "<consideration 2>"]
-  }
-}
-```
-
-**Important**: Return ONLY the JSON object with no additional text, explanations, or formatting.
+{% if expects_structured_output %}
+{{ format_instructions }}
+{% endif %}

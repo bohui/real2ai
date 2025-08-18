@@ -104,29 +104,6 @@ Provide a comprehensive risk assessment that includes:
 
 Focus on practical, actionable insights that help the {{user_experience}} buyer understand their risk exposure and make informed decisions.
 
-## Required Response Format
-
-You must respond with a valid JSON object matching this exact structure:
-
-```jsonc
-{
-  "overall_risk_score": <number between 0-10>,
-  "risk_factors": [
-    {
-      "factor": "<concise risk description>",
-      "severity": "<low|medium|high|critical>",
-      "description": "<detailed explanation>",
-      "impact": "<potential consequences>",
-      "australian_specific": <true|false>,
-      "mitigation_suggestions": ["<suggestion 1>", "<suggestion 2>"],
-      "legal_reference": "<relevant law or regulation if applicable>"
-    }
-  ],
-  "risk_summary": "<executive summary of key risks>",
-  "confidence_level": <number between 0-1>,
-  "critical_issues": ["<critical issue 1>", "<critical issue 2>"],
-  "state_specific_risks": ["<state risk 1>", "<state risk 2>"]
-}
-```
-
-**Important**: Return ONLY the JSON object with no additional text, explanations, or formatting.
+{% if expects_structured_output %}
+{{ format_instructions }}
+{% endif %}
