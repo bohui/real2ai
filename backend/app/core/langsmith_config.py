@@ -199,12 +199,11 @@ def langsmith_trace(name: Optional[str] = None, run_type: str = "llm", **trace_k
                 try:
                     result = await func(*args, **kwargs)
                     # Record outputs generically
-                    if (
-                        isinstance(result, (dict, list, tuple, str, int, float, bool))
-                        or result is None
-                    ):
+                    if isinstance(result, dict):
+                        # Keep dicts as-is after sanitization
                         run.outputs = _sanitize_value(result)
                     else:
+                        # Always wrap non-dict outputs so downstream expects a mapping
                         run.outputs = {"result": _sanitize_value(result)}
                     return result
                 except Exception as e:
@@ -231,10 +230,7 @@ def langsmith_trace(name: Optional[str] = None, run_type: str = "llm", **trace_k
                 run.inputs = _build_inputs_dict(func, args, kwargs)
                 try:
                     result = func(*args, **kwargs)
-                    if (
-                        isinstance(result, (dict, list, tuple, str, int, float, bool))
-                        or result is None
-                    ):
+                    if isinstance(result, dict):
                         run.outputs = _sanitize_value(result)
                     else:
                         run.outputs = {"result": _sanitize_value(result)}

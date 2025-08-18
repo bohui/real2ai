@@ -203,7 +203,12 @@ class PromptManager:
                     required_vars = [
                         v
                         for v in required_vars
-                        if v not in {"format_instructions", "expects_structured_output", "output_format"}
+                        if v
+                        not in {
+                            "format_instructions",
+                            "expects_structured_output",
+                            "output_format",
+                        }
                     ]
 
                 context_validation = self.validator.validate_context(

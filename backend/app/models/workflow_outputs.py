@@ -212,7 +212,7 @@ class ComplianceAnalysisOutput(BaseModel):
     australian_state: str = Field(
         default="NSW", description="Australian state for compliance check"
     )
-    
+
     @validator("australian_state", pre=True)
     def set_default_australian_state(cls, v):
         """Ensure australian_state is never None or empty"""
@@ -288,7 +288,7 @@ class ContractTermsValidationOutput(BaseModel):
     australian_state: str = Field(
         default="NSW", description="Australian state for validation context"
     )
-    
+
     @validator("australian_state", pre=True)
     def set_default_validation_state(cls, v):
         """Ensure australian_state is never None or empty"""
@@ -323,7 +323,7 @@ class ContractTermsOutput(BaseModel):
     australian_state: str = Field(
         default="NSW", description="Australian state for extraction context"
     )
-    
+
     @validator("australian_state", pre=True)
     def set_default_extraction_state(cls, v):
         """Ensure australian_state is never None or empty"""

@@ -147,8 +147,9 @@ class PromptComposer:
                 template = self._load_template(prompt_name, "system")
 
                 # Create system context
+                variables_copy = context.variables.copy() if isinstance(context.variables, dict) else {}
                 system_context = PromptContext(
-                    context_type=ContextType.SYSTEM, variables=context.variables.copy()
+                    context_type=ContextType.SYSTEM, variables=variables_copy
                 )
                 if variables:
                     system_context.variables.update(variables)
@@ -181,8 +182,9 @@ class PromptComposer:
                 template = self._load_template(prompt_name, "user")
 
                 # Create user context
+                variables_copy = context.variables.copy() if isinstance(context.variables, dict) else {}
                 user_context = PromptContext(
-                    context_type=ContextType.USER, variables=context.variables.copy()
+                    context_type=ContextType.USER, variables=variables_copy
                 )
                 if variables:
                     user_context.variables.update(variables)

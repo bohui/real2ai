@@ -136,6 +136,19 @@ class Settings(BaseSettings):
     enable_stamp_duty_calculation: bool = True
     enable_cooling_off_validation: bool = True
 
+    # Prompt Processing Limits
+    max_prompt_length_chars: int = 242144  # Characters limit for rendered prompts
+    max_template_length_chars: int = 242144  # Characters limit for template content
+    prompt_long_variable_value_threshold_chars: int = (
+        242144  # Threshold for detecting overly long variable values
+    )
+    prompt_quality_sweet_spot_min_chars: int = (
+        500  # Lower bound for ideal rendered prompt length
+    )
+    prompt_quality_sweet_spot_max_chars: int = (
+        10000  # Upper bound for ideal rendered prompt length
+    )
+
     # Enhanced Workflow Settings
     enhanced_workflow_validation: bool = True
     enhanced_workflow_quality_checks: bool = True

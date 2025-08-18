@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 # Reasonable defaults; can be tuned via env/config if later exposed
 MAX_CONCURRENT_TASKS = 4
 RETRY_TIMES = 5
-INITIAL_BACKOFF_SECONDS = 5
+INITIAL_BACKOFF_SECONDS = 60
 
 
 class OpenAILLMTaskQueue:

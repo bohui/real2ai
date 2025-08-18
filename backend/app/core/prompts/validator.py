@@ -64,12 +64,27 @@ class ValidationResult:
 class PromptValidator:
     """Comprehensive prompt validator with quality scoring"""
 
-    def __init__(self):
+    def __init__(self, config=None):
+        from app.core.config import get_settings
+
+        # Get configuration
+        self.config = config or get_settings()
+
         # Quality thresholds
         self.min_description_length = 10
-        self.max_template_length = 50000  # ~12.5K tokens
+        self.max_template_length = self.config.max_template_length_chars
+        self.max_prompt_length = self.config.max_prompt_length_chars
         self.min_template_length = 50
         self.max_variable_count = 50
+        self.long_variable_value_threshold = (
+            self.config.prompt_long_variable_value_threshold_chars
+        )
+        self.prompt_quality_sweet_spot_min = (
+            self.config.prompt_quality_sweet_spot_min_chars
+        )
+        self.prompt_quality_sweet_spot_max = (
+            self.config.prompt_quality_sweet_spot_max_chars
+        )
 
         # Pattern validators
         self.security_patterns = [
@@ -234,12 +249,12 @@ class PromptValidator:
                 )
             )
 
-        if prompt_length > self.max_template_length:
+        if prompt_length > self.max_prompt_length:
             issues.append(
                 ValidationIssue(
                     severity=ValidationSeverity.ERROR,
                     code="PROMPT_TOO_LONG",
-                    message=f"Prompt exceeds maximum length ({prompt_length} chars)",
+                    message=f"Prompt exceeds maximum length ({prompt_length} chars > {self.max_prompt_length})",
                     suggestion="Consider breaking into smaller prompts or reducing content",
                 )
             )
@@ -582,7 +597,10 @@ class PromptValidator:
 
         # Check for overly long string values
         for key, value in context_dict.items():
-            if isinstance(value, str) and len(value) > 10000:
+            if (
+                isinstance(value, str)
+                and len(value) > self.long_variable_value_threshold
+            ):
                 issues.append(
                     ValidationIssue(
                         severity=ValidationSeverity.WARNING,
@@ -736,7 +754,11 @@ class PromptValidator:
 
         # Bonus for appropriate length
         prompt_length = metrics.get("prompt_length", 0)
-        if 500 <= prompt_length <= 10000:  # Sweet spot
+        if (
+            self.prompt_quality_sweet_spot_min
+            <= prompt_length
+            <= self.prompt_quality_sweet_spot_max
+        ):  # Sweet spot
             base_score += 0.1
 
         return max(0.0, min(1.0, base_score))

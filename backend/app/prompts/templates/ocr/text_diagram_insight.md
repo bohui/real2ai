@@ -36,11 +36,6 @@ Identify from these property diagram types:
 - Cross sections, elevation views, landscape plans, parking plans
 - Mark as "unknown" if diagram type unclear
 
-## Output Requirements
-{% if expects_structured_output %}
-{{ format_instructions }}
-{% endif %}
-
 ## Critical Instructions
 - **JSON ONLY**: No explanations, comments, or additional text
 - **Empty Lists**: Use `[]` for diagrams if no property diagrams detected
@@ -54,6 +49,7 @@ Identify from these property diagram types:
 - Be conservative with confidence scores
 - Classify as "unknown" when uncertain rather than guessing
 
+## Output Requirements
 {% if expects_structured_output %}
 {{ format_instructions }}
 {% endif %}

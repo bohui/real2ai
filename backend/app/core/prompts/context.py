@@ -57,6 +57,28 @@ class PromptContext:
     analysis_depth: Optional[str] = None
     focus_areas: List[str] = field(default_factory=list)
     
+    def __post_init__(self):
+        """Validate and ensure proper types for critical fields"""
+        # Ensure variables is always a dictionary
+        if not isinstance(self.variables, dict):
+            logger.warning(f"PromptContext variables expected dict, got {type(self.variables)}. Converting to empty dict.")
+            self.variables = {}
+        
+        # Ensure metadata is always a dictionary  
+        if not isinstance(self.metadata, dict):
+            logger.warning(f"PromptContext metadata expected dict, got {type(self.metadata)}. Converting to empty dict.")
+            self.metadata = {}
+            
+        # Ensure document_metadata is always a dictionary
+        if not isinstance(self.document_metadata, dict):
+            logger.warning(f"PromptContext document_metadata expected dict, got {type(self.document_metadata)}. Converting to empty dict.")
+            self.document_metadata = {}
+            
+        # Ensure focus_areas is always a list
+        if not isinstance(self.focus_areas, list):
+            logger.warning(f"PromptContext focus_areas expected list, got {type(self.focus_areas)}. Converting to empty list.")
+            self.focus_areas = []
+    
     def get(self, key: str, default: Any = None) -> Any:
         """Get variable with dot notation support"""
         return self._get_nested(key, default)

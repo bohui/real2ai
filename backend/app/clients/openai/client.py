@@ -457,9 +457,3 @@ class OpenAIClient(BaseClient):
                         client_name=self.client_name,
                         original_error=e,
                     )
-        except Exception as e:
-            raise ClientError(
-                f"Content generation failed: {str(e)}",
-                client_name=self.client_name,
-                original_error=e,
-            )
