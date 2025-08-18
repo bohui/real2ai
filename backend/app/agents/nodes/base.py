@@ -354,6 +354,26 @@ class BaseNode(ABC):
                 )
             ```
         """
+        # Handle case where state is None
+        if state is None:
+            logger.error(
+                f"Node {self.node_name} error handling called with None state: {error_message}",
+                extra={"error": str(error), "context": context},
+            )
+            # Create a minimal error state since we can't update None
+            from app.models.contract_state import create_initial_state
+
+            minimal_state = create_initial_state(
+                user_id="unknown",
+                australian_state="NSW",  # Default state
+                user_type="buyer",
+            )
+            minimal_state["error_state"] = (
+                f"Critical error in {self.node_name}: {error_message}"
+            )
+            minimal_state["parsing_status"] = "FAILED"
+            return minimal_state
+
         self._log_exception(error, state, context)
 
         error_step_name = f"{self.node_name}_error"

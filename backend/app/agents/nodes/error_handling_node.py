@@ -44,13 +44,15 @@ class ErrorHandlingNode(BaseNode):
 
             # Extract error information
             error_info = self._extract_error_info(state)
-            
+
             # Categorize error
             error_category = self._categorize_error(error_info)
-            
+
             # Determine recovery options
-            recovery_options = self._determine_recovery_options(error_info, error_category)
-            
+            recovery_options = self._determine_recovery_options(
+                error_info, error_category
+            )
+
             # Generate error report
             error_report = {
                 "error_info": error_info,
@@ -60,21 +62,18 @@ class ErrorHandlingNode(BaseNode):
                 "recoverable": len(recovery_options) > 0,
             }
 
-            # Update state
-            state["error_report"] = error_report
-            state["processing_status"] = ProcessingStatus.FAILED
-
             error_data = {
                 "error_report": error_report,
                 "error_category": error_category,
                 "recoverable": error_report["recoverable"],
                 "recovery_options_count": len(recovery_options),
+                "processing_status": ProcessingStatus.FAILED,
             }
 
             self._log_step_debug(
                 f"Error handling completed (category: {error_category}, recoverable: {error_report['recoverable']})",
                 state,
-                {"recovery_options": len(recovery_options)}
+                {"recovery_options": len(recovery_options)},
             )
 
             return self.update_state_step(
@@ -87,7 +86,7 @@ class ErrorHandlingNode(BaseNode):
                 state,
                 e,
                 f"Critical error in error handling: {str(e)}",
-                {"original_error": state.get("error", "Unknown")}
+                {"original_error": state.get("error", "Unknown")},
             )
 
     def _extract_error_info(self, state: RealEstateAgentState) -> Dict[str, Any]:
@@ -101,22 +100,24 @@ class ErrorHandlingNode(BaseNode):
         }
 
         # Look for error information in progress history
-        progress = state.get("progress", {})
+        progress = state.get("progress") or {}
         step_history = progress.get("step_history", [])
-        
+
         if step_history:
             latest_step = step_history[-1]
             if latest_step.get("error"):
-                error_info.update({
-                    "error_message": latest_step["error"],
-                    "error_step": latest_step.get("step", "unknown"),
-                    "error_details": latest_step.get("data", {})
-                })
+                error_info.update(
+                    {
+                        "error_message": latest_step["error"],
+                        "error_step": latest_step.get("step", "unknown"),
+                        "error_details": latest_step.get("data", {}),
+                    }
+                )
 
         # Check for specific error fields
         if "error" in state:
             error_info["error_message"] = state["error"]
-            
+
         return error_info
 
     def _categorize_error(self, error_info: Dict[str, Any]) -> str:
@@ -134,7 +135,10 @@ class ErrorHandlingNode(BaseNode):
                 return "document_error"
 
         # LLM/API errors
-        if any(term in error_message for term in ["api", "llm", "openai", "gemini", "timeout"]):
+        if any(
+            term in error_message
+            for term in ["api", "llm", "openai", "gemini", "timeout"]
+        ):
             return "api_error"
 
         # Validation errors
@@ -159,75 +163,97 @@ class ErrorHandlingNode(BaseNode):
         recovery_options = []
 
         if error_category == "missing_document":
-            recovery_options.extend([
-                {
-                    "option": "request_document_reupload",
-                    "description": "Request user to re-upload the document",
-                    "feasibility": "high",
-                    "action": "user_intervention_required"
-                },
-                {
-                    "option": "check_document_id",
-                    "description": "Verify document ID is correct",
-                    "feasibility": "medium",
-                    "action": "system_validation"
-                }
-            ])
+            recovery_options.extend(
+                [
+                    {
+                        "option": "request_document_reupload",
+                        "description": "Request user to re-upload the document",
+                        "feasibility": "high",
+                        "action": "user_intervention_required",
+                    },
+                    {
+                        "option": "check_document_id",
+                        "description": "Verify document ID is correct",
+                        "feasibility": "medium",
+                        "action": "system_validation",
+                    },
+                ]
+            )
 
         elif error_category == "api_error":
-            recovery_options.extend([
-                {
-                    "option": "retry_with_backoff",
-                    "description": "Retry API call with exponential backoff",
-                    "feasibility": "high",
-                    "action": "automatic_retry"
-                },
-                {
-                    "option": "fallback_to_rule_based",
-                    "description": "Use rule-based methods instead of LLM",
-                    "feasibility": "high",
-                    "action": "method_fallback"
-                }
-            ])
+            recovery_options.extend(
+                [
+                    {
+                        "option": "retry_with_backoff",
+                        "description": "Retry API call with exponential backoff",
+                        "feasibility": "high",
+                        "action": "automatic_retry",
+                    },
+                    {
+                        "option": "fallback_to_rule_based",
+                        "description": "Use rule-based methods instead of LLM",
+                        "feasibility": "high",
+                        "action": "method_fallback",
+                    },
+                ]
+            )
 
         elif error_category == "validation_error":
-            recovery_options.extend([
-                {
-                    "option": "skip_validation",
-                    "description": "Continue processing without validation",
-                    "feasibility": "medium",
-                    "action": "process_modification"
-                },
-                {
-                    "option": "manual_validation",
-                    "description": "Flag for manual validation",
-                    "feasibility": "high",
-                    "action": "manual_review"
-                }
-            ])
+            recovery_options.extend(
+                [
+                    {
+                        "option": "skip_validation",
+                        "description": "Continue processing without validation",
+                        "feasibility": "medium",
+                        "action": "process_modification",
+                    },
+                    {
+                        "option": "manual_validation",
+                        "description": "Flag for manual validation",
+                        "feasibility": "high",
+                        "action": "manual_review",
+                    },
+                ]
+            )
 
         elif error_category == "extraction_error":
-            recovery_options.extend([
-                {
-                    "option": "retry_with_different_method",
-                    "description": "Try alternative extraction method",
-                    "feasibility": "high",
-                    "action": "method_switch"
-                },
-                {
-                    "option": "partial_extraction",
-                    "description": "Continue with partial extraction results",
-                    "feasibility": "medium",
-                    "action": "accept_partial"
-                }
-            ])
+            recovery_options.extend(
+                [
+                    {
+                        "option": "retry_with_different_method",
+                        "description": "Try alternative extraction method",
+                        "feasibility": "high",
+                        "action": "method_switch",
+                    },
+                    {
+                        "option": "partial_extraction",
+                        "description": "Continue with partial extraction results",
+                        "feasibility": "medium",
+                        "action": "accept_partial",
+                    },
+                ]
+            )
+
+        elif error_category == "system_error":
+            recovery_options.extend(
+                [
+                    {
+                        "option": "contact_support",
+                        "description": "Contact system support for investigation",
+                        "feasibility": "medium",
+                        "action": "support_intervention",
+                    }
+                ]
+            )
 
         # Always include manual review as an option
-        recovery_options.append({
-            "option": "manual_review",
-            "description": "Flag for manual review and intervention",
-            "feasibility": "high",
-            "action": "human_intervention"
-        })
+        recovery_options.append(
+            {
+                "option": "manual_review",
+                "description": "Flag for manual review and intervention",
+                "feasibility": "high",
+                "action": "human_intervention",
+            }
+        )
 
         return recovery_options
