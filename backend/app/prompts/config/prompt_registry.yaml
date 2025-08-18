@@ -135,14 +135,14 @@ registry:
       estimated_tokens: 3000
       
     contract_workflow:
-      path: "user/workflows/contract_workflow.md"
+      path: "user/workflow/contract_workflow.md"
       category: "workflows"
       system_requirements: ["legal_specialist", "workflow_coordinator"]
       description: "Multi-step contract analysis workflow"
       estimated_tokens: 10000
       
     validation_workflow:
-      path: "user/workflows/validation_workflow.md"
+      path: "user/validation/document_quality_validation.md"
       category: "workflows"
       system_requirements: ["assistant_core"]
       description: "Validation and quality assurance workflow"
@@ -150,31 +150,31 @@ registry:
 
     # Validation templates
     validation_document_quality:
-      path: "validation/document_quality_validation.md"
+      path: "user/validation/document_quality_validation.md"
       category: "validation"
       system_requirements: ["assistant_core", "legal_specialist"]
       description: "Document quality validation template"
       estimated_tokens: 3000
 
     validation_final_output:
-      path: "validation/final_output_validation.md"
+      path: "user/validation/final_output_validation.md"
       category: "validation" 
       system_requirements: ["assistant_core", "legal_specialist"]
       description: "Final output validation template"
       estimated_tokens: 2500
 
     validation_terms_completeness:
-      path: "validation/terms_completeness_validation.md"
+      path: "user/validation/terms_completeness_validation.md"
       category: "validation"
       system_requirements: ["assistant_core", "legal_specialist"]
       description: "Contract terms completeness validation template"
       estimated_tokens: 2000
       
-    clarification_prompts:
-      path: "interactions/clarification.md"
-      category: "interactions"
-      description: "User clarification and follow-up prompts"
-      estimated_tokens: 1000
+    # clarification_prompts:
+    #   path: "interactions/clarification.md"
+    #   category: "interactions"
+    #   description: "User clarification and follow-up prompts"
+    #   estimated_tokens: 1000
       
     state_specific_instructions:
       path: "user/instructions/state_specific_analysis.md"

@@ -48,7 +48,7 @@ class InputValidationNode(BaseNode):
 
             # Validate required input data
             validation_errors = []
-            
+
             # Check for document data
             document_data = state.get("document_data")
             if not document_data:
@@ -81,12 +81,14 @@ class InputValidationNode(BaseNode):
             }
 
             if validation_errors:
-                error_message = f"Input validation failed: {'; '.join(validation_errors)}"
+                error_message = (
+                    f"Input validation failed: {'; '.join(validation_errors)}"
+                )
                 return self._handle_node_error(
                     state,
                     Exception(error_message),
                     error_message,
-                    {"validation_errors": validation_errors}
+                    {"validation_errors": validation_errors},
                 )
 
             # Successful validation
@@ -101,7 +103,10 @@ class InputValidationNode(BaseNode):
             self._log_step_debug(
                 "Input validation completed successfully",
                 state,
-                {"session_id": session_id, "document_id": document_data.get("document_id")}
+                {
+                    "session_id": session_id,
+                    "document_id": document_data.get("document_id"),
+                },
             )
 
             return self.update_state_step(
@@ -113,16 +118,19 @@ class InputValidationNode(BaseNode):
                 state,
                 e,
                 f"Input validation failed: {str(e)}",
-                {"state_keys": list(state.keys()) if isinstance(state, dict) else []}
+                {"state_keys": list(state.keys()) if isinstance(state, dict) else []},
             )
 
-    def _initialize_progress_tracking(self, state: RealEstateAgentState) -> RealEstateAgentState:
+    def _initialize_progress_tracking(
+        self, state: RealEstateAgentState
+    ) -> RealEstateAgentState:
         """Initialize progress tracking for the workflow."""
         # Calculate total steps based on configuration
         base_steps = 8  # Core processing steps
         validation_steps = 3 if self.enable_validation else 0
         total_steps = base_steps + validation_steps
 
+        # CRITICAL FIX: Don't overwrite the entire state, just set the progress field
         state["progress"] = {
             "current_step": 0,
             "total_steps": total_steps,

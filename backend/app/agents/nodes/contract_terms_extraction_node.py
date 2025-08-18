@@ -333,15 +333,22 @@ class ContractTermsExtractionNode(BaseNode):
             context = PromptContext(
                 context_type=ContextType.EXTRACTION,
                 variables={
-                    "extracted_text": text,  # Limit for LLM processing
+                    # Template-required variables
+                    "contract_text": text,  # Template expects 'contract_text', not 'extracted_text'
+                    "australian_state": australian_state_value,
+                    "analysis_type": "contract_terms_extraction",  # Required by template
+                    # Additional context variables
+                    "extracted_text": text,  # Keep for backward compatibility
                     "document_metadata": document_metadata,
                     "extraction_type": "contract_terms",
-                    # Service mapping required variables
-                    "australian_state": australian_state_value,
                     "contract_type": contract_type_value,
                     "user_type": user_type_value,
                     "user_experience_level": user_experience_level_value,
                     "extraction_timestamp": datetime.now(UTC).isoformat(),
+                    # Optional template variables (provide defaults to prevent errors)
+                    "transaction_value": None,  # Will be extracted from contract text
+                    "condition": None,
+                    "specific_concerns": None,
                 },
             )
 

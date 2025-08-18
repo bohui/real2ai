@@ -251,8 +251,8 @@ class FinalValidationNode(BaseNode):
                     parsing_result = self.structured_parsers[
                         "workflow_validation"
                     ].parse(response)
-                    if parsing_result.success and parsing_result.data:
-                        return parsing_result.data
+                    if parsing_result.success and parsing_result.parsed_data:
+                        return parsing_result.parsed_data
 
                 # Fallback to JSON parsing
                 validation_result = self._safe_json_parse(response)

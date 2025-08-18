@@ -195,8 +195,8 @@ class TermsValidationNode(BaseNode):
                     parsing_result = self.structured_parsers["terms_validation"].parse(
                         response
                     )
-                    if parsing_result.success and parsing_result.data:
-                        return parsing_result.data
+                    if parsing_result.success and parsing_result.parsed_data:
+                        return parsing_result.parsed_data
 
                 validation_result = self._safe_json_parse(response)
                 if validation_result:
@@ -255,20 +255,20 @@ class TermsValidationNode(BaseNode):
             # Map tool output to ContractTermsValidationOutput-compatible shape
             terms_validated = {name: name in present_fields for name in required_fields}
             overall_confidence = float(
-                validation_result.get("confidence", completeness_score)
+                getattr(validation_result, "confidence", completeness_score)
             )
 
             enhanced_result = {
                 "terms_validated": terms_validated,
-                "missing_mandatory_terms": validation_result.get(
-                    "missing_terms", missing_fields
+                "missing_mandatory_terms": getattr(
+                    validation_result, "missing_terms", missing_fields
                 ),
-                "incomplete_terms": validation_result.get("incomplete_terms", []),
+                "incomplete_terms": getattr(validation_result, "incomplete_terms", []),
                 "validation_confidence": overall_confidence,
-                "state_specific_requirements": validation_result.get(
-                    "state_requirements", {}
+                "state_specific_requirements": getattr(
+                    validation_result, "state_requirements", {}
                 ),
-                "recommendations": validation_result.get("recommendations", []),
+                "recommendations": getattr(validation_result, "recommendations", []),
                 # Keep legacy fields for internal summaries
                 "completeness_score": completeness_score,
                 "present_fields": present_fields,

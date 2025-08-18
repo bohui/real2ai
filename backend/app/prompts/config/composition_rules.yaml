@@ -42,7 +42,7 @@ compositions:
         path: "system/domain/legal_specialist.md"
         priority: 100
         required: true
-      - name: "australian_context"
+      - name: "australian_legal"
         path: "system/context/australian_legal.md"
         priority: 90
         required: true
@@ -57,7 +57,7 @@ compositions:
         path: "system/domain/legal_specialist.md"
         priority: 100
         required: true
-      - name: "australian_context"
+      - name: "australian_legal"
         path: "system/context/australian_legal.md"
         priority: 90
         required: true
@@ -72,7 +72,7 @@ compositions:
         path: "system/domain/legal_specialist.md"
         priority: 100
         required: true
-      - name: "australian_context"
+      - name: "australian_legal"
         path: "system/context/australian_legal.md"
         priority: 90
         required: true
@@ -87,7 +87,7 @@ compositions:
         path: "system/domain/legal_specialist.md"
         priority: 100
         required: true
-      - name: "australian_context"
+      - name: "australian_legal"
         path: "system/context/australian_legal.md"
         priority: 90
         required: true
@@ -102,7 +102,7 @@ compositions:
         path: "system/domain/legal_specialist.md"
         priority: 100
         required: true
-      - name: "australian_context"
+      - name: "australian_legal"
         path: "system/context/australian_legal.md"
         priority: 90
         required: true
@@ -118,7 +118,7 @@ compositions:
         path: "system/domain/legal_specialist.md"
         priority: 100
         required: true
-      - name: "australian_context"
+      - name: "australian_legal"
         path: "system/context/australian_legal.md"
         priority: 90
         required: true
@@ -133,7 +133,7 @@ compositions:
         path: "system/domain/legal_specialist.md"
         priority: 100
         required: true
-      - name: "australian_context"
+      - name: "australian_legal"
         path: "system/context/australian_legal.md"
         priority: 90
         required: true
@@ -160,7 +160,7 @@ compositions:
         path: "system/domain/legal_specialist.md"
         priority: 100
         required: true
-      - name: "australian_context"
+      - name: "australian_legal"
         path: "system/context/australian_legal.md"
         priority: 90
         required: true
@@ -189,12 +189,12 @@ global_settings:
 state_overrides:
   NSW:
     system_prompt_overrides:
-      australian_context: "system/context/state_specific/nsw_context.md"
+      australian_legal: "system/context/state_specific/nsw_context.md"
   
   VIC:
     system_prompt_overrides:
-      australian_context: "system/context/state_specific/vic_context.md"
+      australian_legal: "system/context/state_specific/vic_context.md"
   
   QLD:
     system_prompt_overrides:
-      australian_context: "system/context/state_specific/qld_context.md"
+      australian_legal: "system/context/state_specific/qld_context.md"

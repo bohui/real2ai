@@ -435,7 +435,19 @@ class BaseNode(ABC):
 
         self._node_metrics["executions"] += 1
 
-        return update_state_step(state, step_name, data=data, error=error)
+        # CRITICAL FIX: Get the state update and merge it with existing state
+        # instead of returning minimal updates that lose data
+        state_update = update_state_step(state, step_name, data=data, error=error)
+
+        # Merge the update with the existing state to preserve all original data
+        if isinstance(state_update, dict):
+            # Create a copy of the state to avoid modifying the original
+            updated_state = dict(state)
+            updated_state.update(state_update)
+            return updated_state
+
+        # Fallback: return original state if update is invalid
+        return state
 
     def _get_progress_update(self, state: RealEstateAgentState) -> Dict[str, Any]:
         """

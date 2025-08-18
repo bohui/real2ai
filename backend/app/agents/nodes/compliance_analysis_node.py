@@ -166,6 +166,9 @@ class ComplianceAnalysisNode(BaseNode):
                     "analysis_type": "compliance_check",
                     "user_experience": "intermediate",  # For template compatibility
                     "analysis_timestamp": datetime.now(UTC).isoformat(),
+                    "transaction_value": contract_terms.get("purchase_price")
+                    or contract_terms.get("rental_amount")
+                    or "[Extract from contract]",
                 },
             )
 
@@ -226,10 +229,14 @@ class ComplianceAnalysisNode(BaseNode):
                 fallback_prompt = self._create_compliance_fallback_prompt(
                     contract_terms, australian_state
                 )
+                # Use empty system prompt for fallback if original failed
+                fallback_system_prompt = (
+                    system_prompt if "system_prompt" in locals() else ""
+                )
                 llm_response = await self._generate_content_with_fallback(
                     fallback_prompt,
                     use_gemini_fallback=True,
-                    system_prompt=system_prompt,
+                    system_prompt=fallback_system_prompt,
                 )
 
                 if llm_response:

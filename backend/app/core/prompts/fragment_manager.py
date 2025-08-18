@@ -17,11 +17,17 @@ logger = logging.getLogger(__name__)
 class FragmentRule:
     """Rule for including fragments based on conditions"""
 
-    condition: str
+    condition: Optional[str] = None
     composition: str = "replace"  # replace, union, intersection
     mappings: Dict[str, List[str]] = None
     always_include: List[str] = None
     priority: int = 50
+
+    def __post_init__(self):
+        if self.mappings is None:
+            self.mappings = {}
+        if self.always_include is None:
+            self.always_include = []
 
 
 @dataclass
@@ -33,6 +39,10 @@ class Fragment:
     content: str
     metadata: Dict[str, Any]
     tags: List[str] = None
+
+    def __post_init__(self):
+        if self.tags is None:
+            self.tags = []
 
 
 class FragmentManager:
@@ -66,7 +76,7 @@ class FragmentManager:
         # Process each fragment rule
         for rule_name, rule_config in config.get("fragments", {}).items():
             rule = FragmentRule(
-                condition=rule_config["condition"],
+                condition=rule_config.get("condition"),
                 composition=rule_config.get("composition", "replace"),
                 mappings=rule_config.get("mappings", {}),
                 always_include=rule_config.get("always_include", []),
@@ -80,15 +90,16 @@ class FragmentManager:
                     if fragment:
                         resolved_fragments.append(fragment)
 
-            # Conditional fragments
-            condition_value = self._evaluate_condition(rule.condition, context)
-            if condition_value and condition_value in rule.mappings:
-                fragment_paths = rule.mappings[condition_value]
+            # Conditional fragments (only if condition exists)
+            if rule.condition and rule.mappings:
+                condition_value = self._evaluate_condition(rule.condition, context)
+                if condition_value and condition_value in rule.mappings:
+                    fragment_paths = rule.mappings[condition_value]
 
-                for fragment_path in fragment_paths:
-                    fragment = self._load_fragment(fragment_path)
-                    if fragment:
-                        resolved_fragments.append(fragment)
+                    for fragment_path in fragment_paths:
+                        fragment = self._load_fragment(fragment_path)
+                        if fragment:
+                            resolved_fragments.append(fragment)
 
         # Sort by priority and remove duplicates
         unique_fragments = {}
@@ -126,8 +137,29 @@ class FragmentManager:
         for category, contents in fragment_content.items():
             fragment_vars[f"{category}_fragments"] = "\n\n".join(contents)
 
+        # Provide default empty values for expected fragment variables to prevent template errors
+        expected_fragments = [
+            "state_legal_requirements_fragments",
+            "consumer_protection_fragments",
+            "contract_type_specific_fragments",
+            "experience_level_guidance_fragments",
+            "analysis_depth_fragments",
+            "state_specific_fragments",
+            "contract_type_fragments",
+            "quality_requirements_fragments",
+            "user_experience_fragments",
+            "financial_risk_fragments",
+            "experience_level_fragments",
+            "state_specific_analysis_fragments",
+            "state_compliance_fragments",
+        ]
+
+        for fragment_var in expected_fragments:
+            if fragment_var not in fragment_vars:
+                fragment_vars[fragment_var] = ""
+
         # Render base template with fragment content
-        from jinja2 import Environment, BaseLoader, StrictUndefined
+        from jinja2 import Environment, BaseLoader, Undefined
 
         class StringLoader(BaseLoader):
             def get_source(self, environment, template):
@@ -135,7 +167,7 @@ class FragmentManager:
 
         env = Environment(
             loader=StringLoader(),
-            undefined=StrictUndefined,
+            undefined=jinja2.Undefined,  # Allow undefined variables to render as empty strings
             trim_blocks=True,
             lstrip_blocks=True,
         )
@@ -227,10 +259,28 @@ class FragmentManager:
         if fragment_path in self._fragment_cache:
             return self._fragment_cache[fragment_path]
 
-        full_path = self.fragments_dir / fragment_path
+        # Strip leading "fragments/" if present to avoid double path issues
+        clean_path = fragment_path
+        if fragment_path.startswith("fragments/"):
+            clean_path = fragment_path[10:]  # Remove "fragments/" prefix
+            logger.debug(
+                f"Stripped 'fragments/' prefix: '{fragment_path}' -> '{clean_path}'"
+            )
+
+        full_path = self.fragments_dir / clean_path
+        logger.debug(f"Resolving fragment path: '{fragment_path}' -> '{full_path}'")
 
         if not full_path.exists():
             logger.warning(f"Fragment not found: {full_path}")
+            # Log additional context for debugging
+            if not self.fragments_dir.exists():
+                logger.error(
+                    f"Fragments directory does not exist: {self.fragments_dir}"
+                )
+            elif not (self.fragments_dir / clean_path).parent.exists():
+                logger.warning(
+                    f"Fragment directory does not exist: {(self.fragments_dir / clean_path).parent}"
+                )
             return None
 
         try:
@@ -271,13 +321,13 @@ class FragmentManager:
             return None
 
     def _evaluate_condition(
-        self, condition: str, context: PromptContext
+        self, condition: Optional[str], context: PromptContext
     ) -> Optional[str]:
         """Evaluate condition against context variables"""
         variables = context.variables
 
         # Simple variable lookup
-        if condition in variables:
+        if condition and condition in variables:
             return str(variables[condition])
 
         # Support for complex conditions (future enhancement)

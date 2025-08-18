@@ -193,8 +193,8 @@ class RecommendationsGenerationNode(BaseNode):
                     parsing_result = self.structured_parsers["recommendations"].parse(
                         response
                     )
-                    if parsing_result.success and parsing_result.data:
-                        return parsing_result.data
+                    if parsing_result.success and parsing_result.parsed_data:
+                        return parsing_result.parsed_data
 
                 # Fallback to JSON parsing
                 recommendations_result = self._safe_json_parse(response)
