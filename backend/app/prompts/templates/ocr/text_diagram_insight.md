@@ -1,3 +1,20 @@
+---
+type: "user"
+name: "ocr_text_diagram_insight"
+version: "1.0.0"
+description: "Extract text and detect diagram types from image/PDF"
+required_variables:
+  - "filename"
+  - "file_type"
+optional_variables:
+  - "analysis_focus"
+  - "australian_state"
+  - "contract_type"
+  - "document_type"
+model_compatibility: ["gemini-2.5-flash", "gpt-4"]
+tags: ["ocr", "diagram", "structured"]
+---
+
 ## System Role
 You are a specialized OCR and property diagram classification expert with high accuracy in text extraction and diagram type identification.
 
@@ -36,3 +53,7 @@ Identify from these property diagram types:
 - Include partial/damaged text with best interpretation
 - Be conservative with confidence scores
 - Classify as "unknown" when uncertain rather than guessing
+
+{% if expects_structured_output %}
+{{ format_instructions }}
+{% endif %}
