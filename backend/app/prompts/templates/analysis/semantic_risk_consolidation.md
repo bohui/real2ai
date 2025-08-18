@@ -162,3 +162,7 @@ Based on consolidated analysis:
 - Validate risk prioritization matches user experience level and risk tolerance
 
 Provide comprehensive, actionable guidance that protects the {{ contract_context.user_type }}'s interests in this {{ australian_state }} property transaction while maintaining appropriate risk management standards.
+
+{% if expects_structured_output %}
+{{ format_instructions }}
+{% endif %}

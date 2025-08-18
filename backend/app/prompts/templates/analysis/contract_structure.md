@@ -135,3 +135,7 @@ Analyze this {{ contract_type }} and extract structured information for a {{ use
 {% if expects_structured_output %}
 Ensure numeric values are formatted as numbers (not strings) and dates use ISO format (YYYY-MM-DD) where possible.
 {% endif %}
+
+{% if expects_structured_output %}
+{{ format_instructions }}
+{% endif %}

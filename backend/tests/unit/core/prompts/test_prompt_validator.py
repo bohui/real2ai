@@ -42,7 +42,7 @@ def sample_template():
     )
     
     return PromptTemplate(
-        content="Test template content with {{test_var}}",
+        template_content="Test template content with {{test_var}}",
         metadata=metadata
     )
 
@@ -60,7 +60,7 @@ class TestPromptValidatorInitialization:
         assert validator.prompt_quality_sweet_spot_min == 500
         assert validator.prompt_quality_sweet_spot_max == 10000
     
-    @patch('app.core.prompts.validator.get_settings')
+    @patch('app.core.config.get_settings')
     def test_validator_gets_default_config(self, mock_get_settings):
         """Test that validator gets default config when none provided"""
         mock_get_settings.return_value = MockConfig()
@@ -110,16 +110,17 @@ class TestPromptLengthValidation:
     
     def test_template_length_validation(self, validator):
         """Test template content length validation"""
-        # Create metadata
+        # Create metadata with required fields
         metadata = TemplateMetadata(
             name="long_template",
             description="Template with very long content",
-            version="1.0.0"
+            version="1.0.0",
+            required_variables=[]
         )
         
         # Create template with content exceeding template limit
         long_content = "A" * 60000  # Exceeds 50000 char limit
-        template = PromptTemplate(content=long_content, metadata=metadata)
+        template = PromptTemplate(template_content=long_content, metadata=metadata)
         
         result = validator.validate_template(template)
         
@@ -235,7 +236,7 @@ class TestConfigurationIntegration:
 class TestPromptManagerIntegration:
     """Test integration with PromptManager"""
     
-    @patch('app.core.prompts.manager.get_settings')
+    @patch('app.core.config.get_settings')
     def test_prompt_manager_passes_config_to_validator(self, mock_get_settings):
         """Test that PromptManager passes app config to validator"""
         from app.core.prompts.manager import PromptManager, PromptManagerConfig

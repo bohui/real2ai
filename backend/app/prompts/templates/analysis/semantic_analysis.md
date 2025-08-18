@@ -122,3 +122,7 @@ Rank all identified issues by:
 3. **Long-term Considerations** (for property ownership/development)
 
 Focus on practical property implications for a {{ contract_context.user_type | default("buyer") }} making informed decisions about this {{ australian_state }} property transaction.
+
+{% if expects_structured_output %}
+{{ format_instructions }}
+{% endif %}

@@ -217,3 +217,7 @@ Return a comprehensive JSON structure following the ImageSemantics schema includ
 {% endif %}
 
 Begin semantic analysis of the provided image now. Return only the structured JSON output following the ImageSemantics schema.
+
+{% if expects_structured_output %}
+{{ format_instructions }}
+{% endif %}
