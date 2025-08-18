@@ -190,21 +190,30 @@ class TestFragmentManager:
     def test_evaluate_condition_with_condition(self, fragment_manager):
         """Test condition evaluation when condition exists"""
         from app.core.prompts import ContextType
-        context = PromptContext(context_type=ContextType.ANALYSIS, variables={"test_var": "test_value"})
+
+        context = PromptContext(
+            context_type=ContextType.ANALYSIS, variables={"test_var": "test_value"}
+        )
         result = fragment_manager._evaluate_condition("test_var", context)
         assert result == "test_value"
 
     def test_evaluate_condition_without_condition(self, fragment_manager):
         """Test condition evaluation when condition is None (fix for optional condition)"""
         from app.core.prompts import ContextType
-        context = PromptContext(context_type=ContextType.ANALYSIS, variables={"test_var": "test_value"})
+
+        context = PromptContext(
+            context_type=ContextType.ANALYSIS, variables={"test_var": "test_value"}
+        )
         result = fragment_manager._evaluate_condition(None, context)
         assert result is None
 
     def test_evaluate_condition_condition_not_in_context(self, fragment_manager):
         """Test condition evaluation when condition is not in context"""
         from app.core.prompts import ContextType
-        context = PromptContext(context_type=ContextType.ANALYSIS, variables={"other_var": "other_value"})
+
+        context = PromptContext(
+            context_type=ContextType.ANALYSIS, variables={"other_var": "other_value"}
+        )
         result = fragment_manager._evaluate_condition("test_var", context)
         assert result is None
 
@@ -233,7 +242,10 @@ class TestFragmentManager:
 
         # Create context with the required variable
         from app.core.prompts import ContextType
-        context = PromptContext(context_type=ContextType.ANALYSIS, variables={"australian_state": "NSW"})
+
+        context = PromptContext(
+            context_type=ContextType.ANALYSIS, variables={"australian_state": "NSW"}
+        )
 
         # Mock the config file loading
         with patch("builtins.open", mock_open(read_data="test")):
@@ -268,6 +280,7 @@ class TestFragmentManager:
 
         # Create context
         from app.core.prompts import ContextType
+
         context = PromptContext(context_type=ContextType.ANALYSIS, variables={})
 
         # Mock the config file loading
@@ -311,7 +324,10 @@ class TestFragmentManager:
 
         # Create context with the required variable
         from app.core.prompts import ContextType
-        context = PromptContext(context_type=ContextType.ANALYSIS, variables={"australian_state": "NSW"})
+
+        context = PromptContext(
+            context_type=ContextType.ANALYSIS, variables={"australian_state": "NSW"}
+        )
 
         # Mock the config file loading
         with patch("builtins.open", mock_open(read_data="test")):
@@ -347,6 +363,7 @@ class TestFragmentManager:
 
         # This should not crash, just log warnings
         from app.core.prompts import ContextType
+
         context = PromptContext(context_type=ContextType.ANALYSIS, variables={})
         fragments = fragment_manager.resolve_fragments("test", context)
 
