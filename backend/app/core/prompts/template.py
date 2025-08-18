@@ -105,7 +105,15 @@ class PromptTemplate:
                 render_vars["expects_structured_output"] = False
 
             # Validate required variables
-            self._validate_variables(render_vars)
+            # Skip internal auto-injected fields from validation requirements
+            filtered_render_vars = dict(render_vars)
+            # These are injected above when an output parser is set
+            filtered_render_vars.setdefault("expects_structured_output", True if self.output_parser else False)
+            if self.output_parser:
+                filtered_render_vars.setdefault("format_instructions", "")
+                filtered_render_vars.setdefault("output_format", self.output_parser.output_format.value)
+
+            self._validate_variables(filtered_render_vars)
 
             # Render template
             rendered = self.template.render(**render_vars)

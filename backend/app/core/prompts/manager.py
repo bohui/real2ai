@@ -61,7 +61,10 @@ class PromptManager:
         )
 
         self.loader = PromptLoader(config.templates_dir, loader_config)
-        self.validator = PromptValidator() if config.validation_enabled else None
+        # Pass app config to validator for limits
+        from app.core.config import get_settings
+        app_config = get_settings()
+        self.validator = PromptValidator(app_config) if config.validation_enabled else None
 
         # Initialize composition system
         if config.enable_composition and config.config_dir:
@@ -191,8 +194,20 @@ class PromptManager:
                 validate if validate is not None else self.config.validation_enabled
             )
             if should_validate and self.validator:
+                # When an output parser is provided, some variables (like
+                # 'format_instructions' and 'expects_structured_output') are
+                # auto-injected during rendering, so we should not require them
+                # to be present in the input context for validation.
+                required_vars = list(template.metadata.required_variables or [])
+                if output_parser is not None:
+                    required_vars = [
+                        v
+                        for v in required_vars
+                        if v not in {"format_instructions", "expects_structured_output", "output_format"}
+                    ]
+
                 context_validation = self.validator.validate_context(
-                    context, template.metadata.required_variables
+                    context, required_vars
                 )
 
                 if not context_validation.is_valid:
