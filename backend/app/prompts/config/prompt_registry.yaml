@@ -183,6 +183,35 @@ registry:
       description: "State-specific analysis instructions"
       estimated_tokens: 4000
 
+    # OCR User Prompts
+    ocr_text_diagram_insight:
+      path: "user/ocr/text_diagram_insight.md"
+      category: "ocr"
+      system_requirements: ["ocr_processor", "legal_specialist"]
+      description: "Extract insights from text and diagram content in documents"
+      estimated_tokens: 3000
+
+    ocr_whole_document_extraction:
+      path: "user/ocr/whole_document_extraction.md"
+      category: "ocr"
+      system_requirements: ["ocr_processor", "legal_specialist"]
+      description: "Extract text from entire document with OCR"
+      estimated_tokens: 4000
+
+    ocr_general_document_extraction:
+      path: "user/ocr/general_document_extraction.md"
+      category: "ocr"
+      system_requirements: ["ocr_processor"]
+      description: "General document text extraction and processing"
+      estimated_tokens: 3000
+
+    ocr_extraction:
+      path: "user/ocr/ocr_extraction.md"
+      category: "ocr"
+      system_requirements: ["ocr_processor"]
+      description: "Standard OCR text extraction template"
+      estimated_tokens: 2500
+
   shared_components:
     legal_terms:
       path: "shared/fragments/legal_terms.md"

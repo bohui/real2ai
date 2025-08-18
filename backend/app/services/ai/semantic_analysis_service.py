@@ -47,7 +47,7 @@ class SemanticAnalysisWorkflow(UserAwareService):
             else:
                 # For system-level operations, don't pass user client
                 self.ocr_service = GeminiOCRService()
-            
+
             await self.ocr_service.initialize()
 
             # Use dependency injection for document service
@@ -124,8 +124,10 @@ class SemanticAnalysisService(PromptEnabledService, UserAwareService):
 
         try:
             # Log semantic analysis operation
-            self.log_operation("analyze_semantics", "document", document_id or storage_path)
-            
+            self.log_operation(
+                "analyze_semantics", "document", document_id or storage_path
+            )
+
             # Stage 1: Document Processing and OCR
             if document_id:
                 await self._track_progress(
@@ -142,7 +144,7 @@ class SemanticAnalysisService(PromptEnabledService, UserAwareService):
             file_content = await self.workflow.document_service.get_file_content(
                 storage_path
             )
-            
+
             # Log file access for audit trail
             self.log_operation("read", "document_content", storage_path)
 
@@ -353,8 +355,10 @@ class SemanticAnalysisService(PromptEnabledService, UserAwareService):
 
         try:
             # Log contract diagram analysis operation
-            self.log_operation("analyze_contract_diagrams", "document", document_id or "batch_analysis")
-            
+            self.log_operation(
+                "analyze_contract_diagrams", "document", document_id or "batch_analysis"
+            )
+
             # Analyze each diagram individually
             for i, storage_path in enumerate(storage_paths):
                 if document_id:
@@ -578,7 +582,9 @@ class SemanticAnalysisService(PromptEnabledService, UserAwareService):
 
     def _determine_risk_severity(self, element: Dict[str, Any]) -> str:
         """Determine risk severity from semantic element"""
-        confidence = element.get("confidence", "low")  # Default to low for unknown elements
+        confidence = element.get(
+            "confidence", "low"
+        )  # Default to low for unknown elements
         risk_relevance = element.get("risk_relevance", "").lower()
 
         if confidence == "high" and "critical" in risk_relevance:
@@ -1017,8 +1023,10 @@ class SemanticAnalysisService(PromptEnabledService, UserAwareService):
     async def health_check(self) -> Dict[str, Any]:
         """Health check for semantic analysis service"""
         # Get base health check from UserAwareService
-        base_health = await super().health_check() if hasattr(super(), 'health_check') else {}
-        
+        base_health = (
+            await super().health_check() if hasattr(super(), "health_check") else {}
+        )
+
         health_status = {
             **base_health,
             "service": "SemanticAnalysisService",
@@ -1026,7 +1034,7 @@ class SemanticAnalysisService(PromptEnabledService, UserAwareService):
             "dependencies": {},
             "capabilities": [
                 "image_semantic_analysis",
-                "multi_diagram_analysis",
+                "semantic_analysis_only",
                 "risk_assessment_integration",
                 "prompt_engineering_enhancement",
                 "progress_tracking",

@@ -11,12 +11,12 @@ compositions:
         path: "system/domain/ocr_processor.md"
         priority: 100
         required: true
-      - name: "australian_context"
+      - name: "australian_legal"
         path: "system/context/australian_legal.md"
         priority: 80
         required: true
     user_prompts:
-      - "ocr/whole_document_extraction"
+      - "ocr_whole_document_extraction"
 
   ocr_text_diagram_insight:
     description: "Extract insights from text and diagram content"
@@ -31,7 +31,7 @@ compositions:
         priority: 90
         required: true
     user_prompts:
-      - "ocr/text_diagram_insight"
+      - "ocr_text_diagram_insight"
 
   # Analysis Compositions
   structure_analysis_only:

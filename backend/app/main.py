@@ -5,13 +5,11 @@ Australian Real Estate AI Assistant
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import HTTPBearer
 from contextlib import asynccontextmanager
 import uvicorn
 import os
 import logging
 from typing import Dict, Optional, Any
-from asyncio import AbstractEventLoop
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 from app.core.config import get_settings
@@ -38,11 +36,6 @@ for logger_name in (
 logger = logging.getLogger(__name__)
 
 # Import application modules
-from app.models.contract_state import RealEstateAgentState, create_initial_state
-from app.agents.contract_workflow import ContractAnalysisWorkflow
-from app.clients.factory import get_supabase_client
-from app.clients.supabase.client import SupabaseClient
-from app.services.document_service import DocumentService
 from app.services.communication.websocket_singleton import websocket_manager
 from app.core.langsmith_init import initialize_langsmith, get_langsmith_status
 
@@ -87,16 +80,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
-# Initialize services
-security = HTTPBearer()
-# db_client will be initialized in lifespan function
-db_client: Optional[SupabaseClient] = None
-document_service = DocumentService(use_llm_document_processing=True)
-
-# Initialize LangGraph workflow (will be initialized in lifespan)
-contract_workflow = ContractAnalysisWorkflow(
-    model_name=None,
-)
+# Initialize services (no global service instances required)
 
 
 @asynccontextmanager
@@ -176,15 +160,7 @@ async def lifespan(app: FastAPI) -> Any:
         logger.error(f"JWT validation failed with error: {e}")
         logger.error("Continuing startup but JWT security may be compromised")
 
-    # Initialize database client and connection
-    global db_client
-    db_client = await get_supabase_client()
-
-    # Initialize document service
-    await document_service.initialize()
-
-    # Initialize contract workflow
-    await contract_workflow.initialize()
+    # No global service initializations required
 
     # Initialize task recovery system
     logger.info("Initializing task recovery system...")
@@ -220,9 +196,6 @@ async def lifespan(app: FastAPI) -> Any:
         logger.info("Recovery monitoring stopped")
     except Exception as e:
         logger.error(f"Failed to stop recovery monitoring: {e}")
-
-    # Close database connections
-    await db_client.close()
 
     # Close websocket connections
     await websocket_manager.disconnect_all()

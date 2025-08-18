@@ -18,7 +18,7 @@ mappings:
         description: "OCR text enhancement and cleanup"
     
     compositions:
-      - name: "ocr_to_analysis"
+      - name: "ocr_whole_document_extraction"
         description: "OCR extraction followed by structure analysis"
         priority: 90
     
@@ -52,10 +52,10 @@ mappings:
         description: "Financial terms analysis template"
     
     compositions:
-      - name: "complete_contract_analysis"
+      - name: "structure_analysis_only"
         description: "Full contract analysis workflow"
         priority: 100
-      - name: "quick_contract_review"
+      - name: "compliance_check_only"
         description: "Abbreviated contract analysis"
         priority: 70
     
@@ -98,7 +98,7 @@ mappings:
         priority: 75
         description: "Structured risk analysis"
     compositions:
-      - name: "complete_contract_analysis"
+      - name: "structure_analysis_only"
         description: "Full contract analysis workflow"
         priority: 100
     context_requirements:
@@ -192,10 +192,10 @@ mappings:
         description: "Base risk assessment template"
     
     compositions:
-      - name: "multi_diagram_analysis"
+      - name: "semantic_analysis_only"
         description: "Complete multi-diagram semantic analysis workflow"
         priority: 95
-      - name: "single_diagram_analysis"
+      - name: "image_semantics_only"
         description: "Single diagram semantic analysis workflow"
         priority: 90
     
@@ -237,14 +237,14 @@ discovery_rules:
 # Composition routing rules
 composition_routing:
   # Route composition requests to appropriate services
-  ocr_to_analysis:
-    primary_service: "gemini_ocr"
+  ocr_whole_document_extraction:
+    primary_service: "geminiocr"
     secondary_service: "contract_analysis"
     coordination_required: true
   
-  complete_contract_analysis:
+  structure_analysis_only:
     primary_service: "contract_analysis"
-    dependencies: ["gemini_ocr"]
+    dependencies: ["geminiocr"]
     parallel_execution: false
   
   property_market_analysis:

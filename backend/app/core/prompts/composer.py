@@ -21,8 +21,10 @@ class CompositionRule:
 
     name: str
     description: str
-    system_prompts: List[str]
-    user_prompts: List[str]
+    system_prompts: List[
+        Dict[str, Any]
+    ]  # List of dicts with name, path, priority, required
+    user_prompts: List[str]  # List of prompt names as strings
     merge_strategy: str = "sequential"  # sequential, parallel, hierarchical
     priority_order: List[str] = None
 
@@ -137,8 +139,9 @@ class PromptComposer:
         """Compose system prompts according to rule"""
         system_parts = []
 
-        # Load and render system prompts in priority order
-        system_prompts = self._sort_by_priority(rule.system_prompts, "system")
+        # Extract prompt names from system prompt objects and sort by priority
+        system_prompt_names = [prompt["name"] for prompt in rule.system_prompts]
+        system_prompts = self._sort_by_priority(system_prompt_names, "system")
 
         for prompt_name in system_prompts:
             try:
@@ -453,11 +456,12 @@ class PromptComposer:
         issues = []
 
         # Check system prompts exist
-        for prompt_name in rule.system_prompts:
+        for prompt_obj in rule.system_prompts:
+            prompt_name = prompt_obj["name"]
             if prompt_name not in self.prompt_registry.get("system_prompts", {}):
                 issues.append(f"System prompt not found: {prompt_name}")
 
-        # Check user prompts exist
+        # Check user prompts exist (these are strings)
         for prompt_name in rule.user_prompts:
             if prompt_name not in self.prompt_registry.get("user_prompts", {}):
                 issues.append(f"User prompt not found: {prompt_name}")
