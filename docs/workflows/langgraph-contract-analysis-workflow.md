@@ -46,12 +46,13 @@ graph TD
     START([Start: Contract Upload]) --> VI[validate_input]
     
     %% Core Processing Flow with Enhanced Validation
-    VI --> VDQ{enable_validation?}
-    VDQ -->|Yes| VDQ_NODE[validate_document_quality]
-    VDQ -->|No| PD[process_document]
-    VDQ_NODE --> PD
+    VI --> PD[process_document]
     
-    PD --> ET[extract_contract_terms]
+    PD --> VDQ{enable_validation?}
+    VDQ -->|Yes| VDQ_NODE[validate_document_quality]
+    VDQ -->|No| ET[extract_contract_terms]
+    VDQ_NODE --> ET
+    
     ET --> VTC{enable_validation?}
     VTC -->|Yes| VTC_NODE[validate_terms_completeness]
     VTC -->|No| AC[analyze_australian_compliance]
@@ -69,18 +70,18 @@ graph TD
     
     %% Error Handling Nodes
     HE[handle_processing_error] --> END
-    RP[retry_failed_step]
+    RP[retry_processing]
     
     %% Conditional Decision Points
     PD --> CPS{check_processing_success}
-    CPS -->|success| ET
+    CPS -->|success| VDQ
     CPS -->|retry| RP
     CPS -->|error| HE
     
     ET --> CEQ{check_extraction_quality}
-    CEQ -->|high_confidence ≥0.7| AC
-    CEQ -->|low_confidence 0.4-0.7| RP
-    CEQ -->|error <0.4| HE
+    CEQ -->|high_confidence ≥0.3| VTC
+    CEQ -->|low_confidence <0.3| RP
+    CEQ -->|error| HE
     
     RP --> PD
     
