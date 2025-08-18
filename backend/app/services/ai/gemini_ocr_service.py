@@ -52,10 +52,10 @@ GENERATION_TOP_P = 1
 GENERATION_SEED = 0
 GENERATION_MAX_OUTPUT_TOKENS = 65535
 
-# Truncation lengths
-PROMPT_INPUT_TRUNCATE_LENGTH = 4000
-RESPONSE_PREVIEW_TRUNCATE_LENGTH = 200
-RAW_TEXT_FALLBACK_TRUNCATE_LENGTH = 1000
+# Truncation behavior disabled per requirements
+PROMPT_INPUT_TRUNCATE_LENGTH = None
+RESPONSE_PREVIEW_TRUNCATE_LENGTH = None
+RAW_TEXT_FALLBACK_TRUNCATE_LENGTH = None
 
 # Other defaults
 ESTIMATED_PAGES_DEFAULT = 1
@@ -676,6 +676,12 @@ Focus on accuracy and completeness. Extract all visible text content."""
 
             parser = create_parser(TextDiagramInsightList)
 
+            # Ensure latest templates (frontmatter/required vars) are loaded
+            try:
+                await self.prompt_manager.reload_templates()
+            except Exception:
+                pass
+
             # Render prompt using PromptManager with format instructions
             rendered_prompt = await self.render_with_parser(
                 template_name="ocr/text_diagram_insight",
@@ -743,7 +749,7 @@ Focus on accuracy and completeness. Extract all visible text content."""
                     # Record critical inputs
                     llm_run.inputs = {
                         "model": model_name,
-                        "prompt": rendered_prompt[:PROMPT_INPUT_TRUNCATE_LENGTH],
+                        "prompt": rendered_prompt,
                         "mime_type": mime_type,
                         "generation_config": {
                             "temperature": generate_config.temperature,
@@ -833,9 +839,7 @@ Focus on accuracy and completeness. Extract all visible text content."""
                 try:
                     llm_run.outputs = {
                         "response_length": len(ai_text or ""),
-                        "response_preview": (ai_text or "")[
-                            :RESPONSE_PREVIEW_TRUNCATE_LENGTH
-                        ],
+                        "response_preview": ai_text or "",
                         **(
                             {"usage": usage_dict}
                             if "usage_dict" in locals() and usage_dict
@@ -966,9 +970,7 @@ Focus on accuracy and completeness. Extract all visible text content."""
                     "overall_risk_level": "unknown",
                     "risk_factors": [],
                 },
-                "extracted_text": raw_output[
-                    :RAW_TEXT_FALLBACK_TRUNCATE_LENGTH
-                ],  # First N chars as fallback
+                "extracted_text": raw_output,
                 "analysis_quality": "low_confidence_fallback",
             }
 
