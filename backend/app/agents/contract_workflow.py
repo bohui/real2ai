@@ -169,6 +169,16 @@ class ContractAnalysisWorkflow:
             RecommendationsOutput, strict_mode=False
         )
 
+        # Initialize state-aware parsers for different Australian states
+        from app.core.prompts.state_aware_parser import StateAwareParserFactory
+
+        self.state_aware_parsers = {
+            "contract_terms": StateAwareParserFactory.create_contract_terms_parser(),
+            "compliance_analysis": StateAwareParserFactory.create_compliance_parser(),
+            "risk_analysis": StateAwareParserFactory.create_risk_parser(),
+        }
+
+        # Keep legacy structured_parsers for backward compatibility
         self.structured_parsers = {
             "risk_analysis": create_parser(
                 RiskAnalysisOutput, strict_mode=False, retry_on_failure=True

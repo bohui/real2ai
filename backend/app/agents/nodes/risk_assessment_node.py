@@ -194,10 +194,16 @@ class RiskAssessmentNode(BaseNode):
                 },
             )
 
+            # Get state-aware parser for risk analysis
+            state_aware_parser = self.get_state_aware_parser(
+                "risk_analysis", australian_state_value
+            )
+
             rendered_prompt = await self.prompt_manager.render(
                 template_name="analysis/risk_analysis_structured",
                 context=context,
                 service_name="contract_analysis_workflow",
+                output_parser=state_aware_parser,
             )
 
             response = await self._generate_content_with_fallback(
@@ -206,12 +212,19 @@ class RiskAssessmentNode(BaseNode):
 
             # Parse structured response if we got one
             if response:
-                if self.structured_parsers.get("risk_analysis"):
-                    parsing_result = self.structured_parsers["risk_analysis"].parse(
-                        response
+                # Use state-aware parser for structured parsing
+                state_aware_parser = self.get_state_aware_parser(
+                    "risk_analysis", australian_state_value
+                )
+                if state_aware_parser:
+                    parsing_result = state_aware_parser.parse_with_retry(
+                        response, australian_state_value
                     )
-                    if parsing_result.success and parsing_result.data:
-                        return parsing_result.data
+                    if parsing_result.success and parsing_result.parsed_data:
+                        # Convert Pydantic model to dict if needed
+                        if hasattr(parsing_result.parsed_data, "dict"):
+                            return parsing_result.parsed_data.dict()
+                        return parsing_result.parsed_data
 
                 # Fallback to JSON parsing
                 risk_result = self._safe_json_parse(response)

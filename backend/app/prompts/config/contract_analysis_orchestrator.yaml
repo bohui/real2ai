@@ -61,13 +61,16 @@ fragments:
     priority: 60
     mappings:
       novice:
+        - "fragments/analysis/novice_user_considerations.md"
         - "fragments/guidance/first_time_buyer.md"
         - "fragments/guidance/key_terminology.md"
         - "fragments/guidance/common_pitfalls.md"
-      experienced:
+      intermediate:
+        - "fragments/analysis/intermediate_user_focus.md"
         - "fragments/guidance/advanced_considerations.md"
         - "fragments/guidance/market_variations.md"
-      professional:
+      expert:
+        - "fragments/analysis/expert_user_analysis.md"
         - "fragments/guidance/technical_analysis.md"
         - "fragments/guidance/precedent_references.md"
   

@@ -169,11 +169,16 @@ class ComplianceAnalysisNode(BaseNode):
                 },
             )
 
+            # Get state-aware parser for compliance analysis
+            state_aware_parser = self.get_state_aware_parser(
+                "compliance_analysis", australian_state
+            )
+
             rendered_prompt = await self.prompt_manager.render(
                 template_name="analysis/compliance_check",
                 context=context,
                 service_name="contract_analysis_workflow",
-                output_parser=self.structured_parsers.get("compliance_analysis"),
+                output_parser=state_aware_parser,
             )
 
             llm_response = await self._generate_content_with_fallback(
@@ -182,12 +187,19 @@ class ComplianceAnalysisNode(BaseNode):
 
             # Parse structured response if we got one
             if llm_response:
-                if self.structured_parsers.get("compliance_analysis"):
-                    parsing_result = self.structured_parsers[
-                        "compliance_analysis"
-                    ].parse(llm_response)
-                    if parsing_result.success and parsing_result.data:
-                        return parsing_result.data
+                # Use state-aware parser for structured parsing
+                state_aware_parser = self.get_state_aware_parser(
+                    "compliance_analysis", australian_state
+                )
+                if state_aware_parser:
+                    parsing_result = state_aware_parser.parse_with_retry(
+                        llm_response, australian_state
+                    )
+                    if parsing_result.success and parsing_result.parsed_data:
+                        # Convert Pydantic model to dict if needed
+                        if hasattr(parsing_result.parsed_data, "dict"):
+                            return parsing_result.parsed_data.dict()
+                        return parsing_result.parsed_data
 
                 # Fallback to JSON parsing
                 compliance_result = self._safe_json_parse(llm_response)

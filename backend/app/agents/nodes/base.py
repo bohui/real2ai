@@ -93,6 +93,9 @@ class BaseNode(ABC):
         self.prompt_manager = workflow.prompt_manager
         self.structured_parsers = workflow.structured_parsers
 
+        # Add access to state-aware parsers if available
+        self.state_aware_parsers = getattr(workflow, "state_aware_parsers", {})
+
         # Environment and logging configuration
         self._settings = get_settings()
         self._is_production = self._settings.environment.lower() in (
@@ -119,6 +122,44 @@ class BaseNode(ABC):
         self.workflow_state_safe_get = (
             lambda s, k, d=None: (s.get(k) if isinstance(s, dict) else d) or d
         )
+
+    def get_state_aware_parser(self, parser_type: str, state: str) -> Any:
+        """
+        Get a state-aware parser for the specified type and state.
+
+        Args:
+            parser_type: Type of parser (e.g., 'contract_terms', 'compliance_analysis')
+            state: Australian state code
+
+        Returns:
+            State-aware parser instance or fallback to regular parser
+        """
+        if parser_type in self.state_aware_parsers:
+            return self.state_aware_parsers[parser_type]
+
+        # Fallback to regular structured parsers
+        return self.structured_parsers.get(parser_type)
+
+    def get_format_instructions_for_state(self, parser_type: str, state: str) -> str:
+        """
+        Get format instructions for a specific parser type and state.
+
+        Args:
+            parser_type: Type of parser
+            state: Australian state code
+
+        Returns:
+            Format instructions string
+        """
+        parser = self.get_state_aware_parser(parser_type, state)
+        if hasattr(parser, "get_format_instructions"):
+            return parser.get_format_instructions(state)
+
+        # Fallback for regular parsers
+        if hasattr(parser, "get_format_instructions"):
+            return parser.get_format_instructions()
+
+        return ""
 
     @abstractmethod
     async def execute(self, state: RealEstateAgentState) -> RealEstateAgentState:

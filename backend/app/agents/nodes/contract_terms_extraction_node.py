@@ -347,18 +347,28 @@ class ContractTermsExtractionNode(BaseNode):
 
             # Use fragment-based prompts if enabled; ensure we always pass required context defaults
             if self.extraction_config.get("use_fragments", True):
+                # Get state-aware parser for the specific Australian state
+                state_aware_parser = self.get_state_aware_parser(
+                    "contract_terms", australian_state_value
+                )
+
                 rendered_prompt = await self.prompt_manager.render(
                     template_name="analysis/contract_structure",
                     context=context,
                     service_name="contract_analysis_workflow",
-                    output_parser=self.structured_parsers.get("contract_terms"),
+                    output_parser=state_aware_parser,
                 )
             else:
+                # Get state-aware parser for the specific Australian state
+                state_aware_parser = self.get_state_aware_parser(
+                    "contract_terms", australian_state_value
+                )
+
                 rendered_prompt = await self.prompt_manager.render(
                     template_name="contract_analysis_base",
                     context=context,
                     service_name="contract_analysis_workflow",
-                    output_parser=self.structured_parsers.get("contract_terms"),
+                    output_parser=state_aware_parser,
                 )
 
             # Generate response with retries
@@ -372,12 +382,19 @@ class ContractTermsExtractionNode(BaseNode):
 
                     # Parse structured response if we got one
                     if response:
-                        if self.structured_parsers.get("contract_terms"):
-                            parsing_result = self.structured_parsers[
-                                "contract_terms"
-                            ].parse(response)
-                            if parsing_result.success and parsing_result.data:
-                                return parsing_result.data
+                        # Use state-aware parser for structured parsing
+                        state_aware_parser = self.get_state_aware_parser(
+                            "contract_terms", australian_state_value
+                        )
+                        if state_aware_parser:
+                            parsing_result = state_aware_parser.parse_with_retry(
+                                response, australian_state_value
+                            )
+                            if parsing_result.success and parsing_result.parsed_data:
+                                # Convert Pydantic model to dict if needed
+                                if hasattr(parsing_result.parsed_data, "dict"):
+                                    return parsing_result.parsed_data.dict()
+                                return parsing_result.parsed_data
 
                         # Fallback to JSON parsing with braces recovery
                         contract_terms = self._safe_json_parse(response)
