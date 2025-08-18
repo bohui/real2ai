@@ -256,7 +256,7 @@ backend/app/prompts/
 **Example Template: OCR Extraction**
 ```markdown
 ---
-# backend/app/prompts/templates/ocr/ocr_extraction.md
+# backend/app/prompts/user/ocr/ocr_extraction.md
 type: "user"
 name: "ocr_extraction"
 version: "1.0.0"

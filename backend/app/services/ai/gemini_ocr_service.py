@@ -295,14 +295,14 @@ Focus on accuracy and completeness. Extract all visible text content."""
                 **kwargs,
             )
 
-            # Render prompt with automatic format instructions for structured output
-            structured_prompt = await self.render_with_parser(
-                template_name="ocr/whole_document_extraction",
+            # Use composition for OCR with structured output
+            composition_result = await self.render_composed(
+                composition_name="ocr_whole_document_extraction",
                 context=context,
                 output_parser=ocr_parser,
-                validate=True,
-                use_cache=True,
             )
+            structured_prompt = composition_result["user_prompt"]
+            system_prompt = composition_result.get("system_prompt", "")
 
             logger.debug(
                 f"Generated structured OCR prompt for entire document: {filename}"
@@ -323,6 +323,7 @@ Focus on accuracy and completeness. Extract all visible text content."""
                         content_type=content_type,
                         analysis_context={
                             "prompt": structured_prompt,
+                            "system_prompt": system_prompt,
                             "expects_structured_output": True,
                             "output_format": "json",
                             "schema_type": schema_class.__name__,
@@ -332,7 +333,7 @@ Focus on accuracy and completeness. Extract all visible text content."""
 
                 # Parse AI response using integrated parser
                 parsing_result = await self.parse_ai_response(
-                    template_name="ocr/whole_document_extraction",
+                    template_name="user/ocr/whole_document_insight",
                     ai_response=ai_response.get("content", ""),
                     output_parser=ocr_parser,
                     use_retry=True,
@@ -547,14 +548,14 @@ Focus on accuracy and completeness. Extract all visible text content."""
                 file_type=file_type,
             )
 
-            # Render prompt with automatic format instructions
-            analysis_prompt = await self.render_with_parser(
-                template_name="image_semantics",
+            # Use composition for image semantics analysis
+            composition_result = await self.render_composed(
+                composition_name="image_semantics_only",
                 context=context,
                 output_parser=semantic_parser,
-                validate=True,
-                use_cache=True,
             )
+            analysis_prompt = composition_result["user_prompt"]
+            system_prompt = composition_result.get("system_prompt", "")
 
             logger.debug(f"Generated structured prompt for {filename}")
 
@@ -570,6 +571,7 @@ Focus on accuracy and completeness. Extract all visible text content."""
                         ),
                         analysis_context={
                             "prompt": analysis_prompt,
+                            "system_prompt": system_prompt,
                             "expects_structured_output": True,
                             "output_format": "json",
                         },
@@ -682,9 +684,9 @@ Focus on accuracy and completeness. Extract all visible text content."""
             except Exception:
                 pass
 
-            # Render prompt using PromptManager with format instructions
-            rendered_prompt = await self.render_with_parser(
-                template_name="ocr/text_diagram_insight",
+            # Use composition for text + diagram insight analysis
+            composition_result = await self.render_composed(
+                composition_name="ocr_text_diagram_insight",
                 context={
                     "filename": filename,
                     "file_type": file_type,
@@ -694,9 +696,9 @@ Focus on accuracy and completeness. Extract all visible text content."""
                     "document_type": document_type,
                 },
                 output_parser=parser,
-                validate=True,
-                use_cache=True,
             )
+            rendered_prompt = composition_result["user_prompt"]
+            system_prompt = composition_result.get("system_prompt", "")
 
             # Build multimodal content (prompt + image)
             mime_type = (
@@ -730,6 +732,7 @@ Focus on accuracy and completeness. Extract all visible text content."""
                 ],
                 response_mime_type="application/json",
                 response_schema=TextDiagramInsightList,
+                system_instruction=system_prompt if system_prompt else None,
             )
 
             # Execute model call (single LLM call) with detailed LangSmith nested trace
@@ -828,7 +831,7 @@ Focus on accuracy and completeness. Extract all visible text content."""
 
             # Parse structured output
             parsing_result = await self.parse_ai_response(
-                template_name="ocr/text_diagram_insight",
+                template_name="user/ocr/text_diagram_insight",
                 ai_response=ai_text,
                 output_parser=parser,
                 use_retry=True,

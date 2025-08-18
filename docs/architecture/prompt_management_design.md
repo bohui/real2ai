@@ -128,7 +128,6 @@ name: "contract_analysis"
 version: "1.4.0"
 description: "Instructions for analyzing Australian real estate contracts"
 system_requirements: ["legal_specialist", "australian_legal"]
-output_template: "analysis_report"
 required_variables:
   - "contract_text"
   - "australian_state"
@@ -200,8 +199,6 @@ compositions:
       - "system/context/australian_legal"
     user_prompts:
       - "user/instructions/contract_analysis"
-    output_template: "user/templates/outputs/analysis_report"
-    validation: "user/workflows/validation_workflow"
 ```
 
 ### 2. Version Management
@@ -252,7 +249,6 @@ registry:
       path: "user/instructions/contract_analysis.md"
       category: "instructions"
       system_requirements: ["legal_specialist", "australian_legal"]
-      output_template: "analysis_report"
 
   shared_components:
     legal_terms:
@@ -316,7 +312,7 @@ registry:
 
 ### Current State → Target State
 
-1. **Audit existing prompts** in `backend/app/prompts/templates/`
+1. **Audit existing prompts** in `backend/app/prompts/user/`
 2. **Extract system behavior** from current templates
 3. **Create base system prompts** for AI personality
 4. **Refactor user-facing prompts** to remove system concerns

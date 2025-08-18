@@ -264,7 +264,8 @@ class UsageLog(TimestampedBaseModel):
     timestamp: Optional[datetime] = None
 
     # Override field name for this model since it uses 'timestamp' instead of 'created_at'
-    model_config = {"fields": {"created_at": "timestamp"}}
+    # Note: In Pydantic V2, field aliases are handled differently
+    model_config = {"from_attributes": True}
 
 
 # User Tracking Models
@@ -581,7 +582,8 @@ class PropertyAPIUsage(TimestampedBaseModel):
     timestamp: datetime
 
     # Override field name for this model since it uses 'timestamp' instead of 'created_at'
-    model_config = {"fields": {"created_at": "timestamp"}}
+    # Note: In Pydantic V2, field aliases are handled differently
+    model_config = {"from_attributes": True}
 
 
 class MarketInsight(TimestampedBaseModel):

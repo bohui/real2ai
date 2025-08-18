@@ -20,7 +20,7 @@ from .context import PromptContext, ContextType, ContextBuilder, ContextPresets
 
 # Phase 1 enhancements
 from .service_mixin import PromptEnabledService
-from .workflow_engine import WorkflowExecutionEngine, WorkflowConfiguration, WorkflowStep
+# Workflow engine removed - LangGraph handles orchestration
 from .config_manager import ConfigurationManager, ServiceMapping, CompositionRule
 from .factory import PromptManagerFactory, create_prompt_manager_for_app, create_service_prompt_manager
 
@@ -61,9 +61,7 @@ __all__ = [
     
     # Phase 1 enhancements
     "PromptEnabledService",
-    "WorkflowExecutionEngine",
-    "WorkflowConfiguration",
-    "WorkflowStep",
+    # Workflow engine removed - LangGraph handles orchestration
     "ConfigurationManager",
     "ServiceMapping",
     "CompositionRule",

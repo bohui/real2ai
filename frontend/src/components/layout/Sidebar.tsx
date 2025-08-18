@@ -11,6 +11,7 @@ import {
   Building,
   TrendingUp,
   Calculator,
+  TestTube2,
 } from "lucide-react";
 import { motion } from "framer-motion";
 
@@ -67,6 +68,13 @@ const Sidebar: React.FC = () => {
       href: "/app/financial-analysis",
       icon: Calculator,
       current: location.pathname === "/app/financial-analysis",
+      badge: "NEW",
+    },
+    {
+      name: "LLM Evaluation",
+      href: "/app/evaluation",
+      icon: TestTube2,
+      current: location.pathname === "/app/evaluation",
       badge: "NEW",
     },
     {

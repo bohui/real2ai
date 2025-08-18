@@ -13,7 +13,6 @@ from .template import PromptTemplate
 from .context import PromptContext, ContextType, ContextBuilder, ContextPresets
 from .validator import PromptValidator, ValidationResult
 from .composer import PromptComposer, ComposedPrompt
-from .workflow_engine import WorkflowExecutionEngine, WorkflowConfiguration
 from .config_manager import ConfigurationManager, ServiceMapping
 from .exceptions import (
     PromptNotFoundError,
@@ -75,11 +74,8 @@ class PromptManager:
         else:
             self.composer = None
 
-        # Initialize workflow execution engine
-        if config.enable_workflows:
-            self.workflow_engine = WorkflowExecutionEngine(self)
-        else:
-            self.workflow_engine = None
+        # Workflow engine removed - LangGraph handles orchestration
+        self.workflow_engine = None
 
         # Initialize configuration manager
         if config.enable_service_integration and config.config_dir:
@@ -138,7 +134,10 @@ class PromptManager:
         output_parser: Optional["BaseOutputParser"] = None,
         **kwargs,
     ) -> str:
-        """Render a prompt template with full validation and caching
+        """DEPRECATED: Render a prompt template with full validation and caching
+        
+        This method is deprecated. Use render_composed() with appropriate compositions instead.
+        Legacy method for backward compatibility only.
 
         Args:
             template_name: Name of the template to render
@@ -159,6 +158,11 @@ class PromptManager:
             PromptValidationError: Validation failed
             PromptContextError: Context is invalid
         """
+        # Log deprecation warning
+        logger.warning(
+            f"DEPRECATED: render() method called for template '{template_name}'. "
+            "Use render_composed() with appropriate compositions instead."
+        )
         start_time = datetime.now(UTC)
 
         try:
@@ -198,18 +202,6 @@ class PromptManager:
             )
             if should_validate and self.validator:
                 required_vars = list(template.metadata.required_variables or [])
-                # If an output parser is provided, skip validation for auto-injected vars
-                if output_parser is not None:
-                    required_vars = [
-                        v
-                        for v in required_vars
-                        if v
-                        not in {
-                            "format_instructions",
-                            "expects_structured_output",
-                            "output_format",
-                        }
-                    ]
 
                 context_validation = self.validator.validate_context(
                     context, required_vars
@@ -286,46 +278,6 @@ class PromptManager:
                 prompt_id=template_name,
                 details={"error_type": type(e).__name__},
             )
-
-    async def render_with_parser(
-        self,
-        template_name: str,
-        context: Union[PromptContext, Dict[str, Any]],
-        output_parser: "BaseOutputParser",
-        version: str = None,
-        model: str = None,
-        validate: bool = None,
-        cache_key: str = None,
-        service_name: str = None,
-        **kwargs,
-    ) -> str:
-        """Render template with automatic format instructions injection
-
-        Args:
-            template_name: Name of the template to render
-            context: Prompt context or dictionary of variables
-            output_parser: Output parser for structured output
-            version: Specific template version (defaults to latest)
-            model: Target AI model for validation
-            validate: Override validation setting
-            cache_key: Custom cache key for result caching
-            service_name: Service name for tracking
-            **kwargs: Additional template variables
-
-        Returns:
-            Rendered prompt string with format instructions
-        """
-        return await self.render(
-            template_name=template_name,
-            context=context,
-            version=version,
-            model=model,
-            validate=validate,
-            cache_key=cache_key,
-            service_name=service_name,
-            output_parser=output_parser,
-            **kwargs,
-        )
 
     async def parse_ai_response(
         self,
@@ -485,35 +437,48 @@ class PromptManager:
         composition_name: str,
         context: Union[PromptContext, Dict[str, Any]],
         variables: Dict[str, Any] = None,
-        return_parts: bool = False,
+        output_parser: Optional["BaseOutputParser"] = None,
         **kwargs,
-    ) -> Union[str, Dict[str, str]]:
+    ) -> Dict[str, Any]:
         """Compose and render a complete prompt
 
         Args:
             composition_name: Name of composition rule
             context: Context for rendering
             variables: Additional variables
-            return_parts: If True, return dict with 'system' and 'user' keys
+            output_parser: Optional output parser for structured output (applied to user prompt only)
             **kwargs: Additional options
 
         Returns:
-            Combined prompt string or dict with separate parts
+            Dict with 'system_prompt', 'user_prompt', and 'metadata' keys
         """
         composed = await self.compose_prompt(
             composition_name, context, variables, **kwargs
         )
 
-        if return_parts:
-            return {
-                "system": composed.system_content,
-                "user": composed.user_content,
-                "metadata": composed.metadata,
+        # Use composed content directly (no re-rendering through render())
+        system_prompt = composed.system_content or ""
+        user_prompt = composed.user_content or ""
+
+        # Apply output parser format instructions to user prompt if provided
+        if output_parser:
+            try:
+                format_instructions = output_parser.get_format_instructions()
+                if format_instructions:
+                    user_prompt = f"{user_prompt}\n\n{format_instructions}"
+            except Exception as e:
+                logger.warning(f"Failed to apply output parser format instructions: {e}")
+
+        return {
+            "system_prompt": system_prompt,
+            "user_prompt": user_prompt,
+            "metadata": {
+                "composition": composition_name,
+                "fragments": getattr(composed, 'fragments', []),
+                "composed_at": composed.composed_at.isoformat(),
+                **composed.metadata
             }
-        else:
-            # Combine system and user content
-            combined = f"{composed.system_content}\n\n---\n\n{composed.user_content}"
-            return combined
+        }
 
     def list_compositions(self) -> List[Dict[str, Any]]:
         """List all available prompt compositions"""
@@ -529,91 +494,6 @@ class PromptManager:
 
     # Workflow Execution Methods
 
-    async def execute_workflow(
-        self,
-        composition_name: str,
-        context: Union[PromptContext, Dict[str, Any]],
-        variables: Dict[str, Any] = None,
-        workflow_id: str = None,
-        service_name: str = None,
-    ) -> Dict[str, Any]:
-        """Execute a workflow composition
-
-        Args:
-            composition_name: Name of composition to execute
-            context: Context for workflow execution
-            variables: Additional variables
-            workflow_id: Optional workflow ID for tracking
-            service_name: Service executing the workflow
-
-        Returns:
-            Workflow execution results
-
-        Raises:
-            PromptCompositionError: If workflow execution fails
-            PromptServiceError: If service integration fails
-        """
-        if not self.workflow_engine:
-            raise PromptCompositionError("Workflow execution not enabled")
-
-        if not self.config_manager:
-            raise PromptServiceError(
-                "Service integration not enabled",
-                service_name=service_name or "unknown",
-            )
-
-        try:
-            # Ensure initialization
-            if not self._initialized:
-                await self.initialize()
-
-            # Convert dict to PromptContext if needed
-            if isinstance(context, dict):
-                context = PromptContext(
-                    context_type=ContextType.USER, variables=context
-                )
-
-            # Create workflow configuration from composition rule
-            workflow_config = self.config_manager.create_workflow_configuration(
-                composition_name=composition_name, context_overrides=context.variables
-            )
-
-            # Execute workflow
-            result = await self.workflow_engine.execute_workflow(
-                workflow_config=workflow_config,
-                context=context,
-                variables=variables,
-                workflow_id=workflow_id,
-            )
-
-            # Update metrics
-            self._metrics["workflows_executed"] += 1
-            if result.get("status") == "success":
-                success_rate = (
-                    self._metrics.get("workflow_success_rate", 0)
-                    * (self._metrics["workflows_executed"] - 1)
-                    + 1.0
-                ) / self._metrics["workflows_executed"]
-                self._metrics["workflow_success_rate"] = success_rate
-
-            logger.info(f"Workflow '{composition_name}' executed successfully")
-            return result
-
-        except Exception as e:
-            logger.error(f"Workflow execution failed for '{composition_name}': {e}")
-            raise
-
-    def get_workflow_status(self, workflow_id: str) -> Optional[Dict[str, Any]]:
-        """Get status of active workflow"""
-        if not self.workflow_engine:
-            return None
-        return self.workflow_engine.get_workflow_status(workflow_id)
-
-    def list_active_workflows(self) -> List[Dict[str, Any]]:
-        """List all active workflows"""
-        if not self.workflow_engine:
-            return []
-        return self.workflow_engine.list_active_workflows()
 
     # Service Integration Methods
 
@@ -785,27 +665,12 @@ class PromptManager:
         else:
             health["components"]["validator"] = {"status": "disabled", "enabled": False}
 
-        # Check workflow engine
-        if self.workflow_engine:
-            try:
-                workflow_metrics = self.workflow_engine.get_execution_metrics()
-                health["components"]["workflow_engine"] = {
-                    "status": "healthy",
-                    "enabled": True,
-                    "total_workflows": workflow_metrics.get("total_workflows", 0),
-                }
-            except Exception as e:
-                health["components"]["workflow_engine"] = {
-                    "status": "error",
-                    "enabled": True,
-                    "error": str(e),
-                }
-                health["status"] = "degraded"
-        else:
-            health["components"]["workflow_engine"] = {
-                "status": "disabled",
-                "enabled": False,
-            }
+        # Workflow engine removed - LangGraph handles orchestration
+        health["components"]["workflow_engine"] = {
+            "status": "disabled",
+            "enabled": False,
+            "message": "Removed - LangGraph handles orchestration",
+        }
 
         # Check configuration manager
         if self.config_manager:

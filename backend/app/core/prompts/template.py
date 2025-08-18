@@ -30,8 +30,6 @@ class TemplateMetadata:
     temperature_range: tuple = (0.0, 1.0)
     created_at: datetime = None
     tags: List[str] = None
-    output_parser_enabled: bool = False
-    expects_structured_output: bool = False
 
 
 class PromptTemplate:
@@ -48,11 +46,6 @@ class PromptTemplate:
         self.metadata = metadata
         self.template_dir = template_dir
         self.output_parser = output_parser
-
-        # Update metadata if parser is provided
-        if output_parser is not None:
-            self.metadata.output_parser_enabled = True
-            self.metadata.expects_structured_output = True
 
         # Set up Jinja2 environment
         if template_dir:
@@ -209,8 +202,6 @@ class PromptTemplate:
             parser: Output parser instance
         """
         self.output_parser = parser
-        self.metadata.output_parser_enabled = True
-        self.metadata.expects_structured_output = True
 
         logger.debug(f"Set output parser for template {self.metadata.name}")
 

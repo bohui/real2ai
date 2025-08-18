@@ -30,6 +30,7 @@ const MarketAnalysisPage = React.lazy(
 const FinancialAnalysisPage = React.lazy(
   () => import("@/pages/FinancialAnalysisPage")
 );
+const EvaluationPage = React.lazy(() => import("@/pages/EvaluationPage"));
 
 // Components
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
@@ -321,6 +322,14 @@ const App: React.FC = () => {
                     element={
                       <Suspense fallback={<FinancialSkeleton />}>
                         <FinancialAnalysisPage />
+                      </Suspense>
+                    }
+                  />
+                  <Route 
+                    path="evaluation" 
+                    element={
+                      <Suspense fallback={<IntelligenceSkeleton />}>
+                        <EvaluationPage />
                       </Suspense>
                     }
                   />

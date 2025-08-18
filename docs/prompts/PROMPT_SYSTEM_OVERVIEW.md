@@ -707,7 +707,7 @@ jurisdiction: "NSW"
 
 ### 2. Contract Type Specialization
 
-**Purchase Agreement Template (`templates/analysis/contract_structure.md`):**
+**Purchase Agreement Template (`user/analysis/contract_structure.md`):**
 ```markdown
 ---
 type: "user"
@@ -832,16 +832,16 @@ class ContractAnalysisService(PromptEnabledService):
 cd backend/app/prompts
 
 # 1. Create new template
-cp templates/template_example.md templates/analysis/new_analysis.md
+cp user/template_example.md user/analysis/new_analysis.md
 
 # 2. Edit template with proper frontmatter
 # Add required_variables, model_compatibility, etc.
 
 # 3. Validate template
-python -m app.core.prompts.validator validate templates/analysis/new_analysis.md
+python -m app.core.prompts.validator validate user/analysis/new_analysis.md
 
 # 4. Test rendering
-python -m app.core.prompts.test_template templates/analysis/new_analysis.md \
+python -m app.core.prompts.test_template user/analysis/new_analysis.md \
   --context '{"australian_state": "NSW", "contract_type": "purchase_agreement"}'
 
 # 5. Update service mappings

@@ -103,7 +103,6 @@ registry:
       path: "user/instructions/contract_analysis_base.md"
       category: "instructions"
       system_requirements: ["legal_specialist", "australian_legal"]
-      output_template: "analysis_report"
       description: "Fragment-based comprehensive contract analysis instructions"
       estimated_tokens: 8000
       
@@ -118,7 +117,6 @@ registry:
       path: "user/instructions/risk_assessment_base.md"
       category: "instructions"
       system_requirements: ["legal_specialist", "australian_legal"]
-      output_template: "risk_summary"
       description: "Fragment-based risk assessment and evaluation instructions"
       estimated_tokens: 8000
       
@@ -152,28 +150,28 @@ registry:
 
     # Validation templates
     validation_document_quality:
-      path: "user/templates/validation/document_quality_validation.md"
+      path: "validation/document_quality_validation.md"
       category: "validation"
       system_requirements: ["assistant_core", "legal_specialist"]
       description: "Document quality validation template"
       estimated_tokens: 3000
 
     validation_final_output:
-      path: "user/templates/validation/final_output_validation.md"
+      path: "validation/final_output_validation.md"
       category: "validation" 
       system_requirements: ["assistant_core", "legal_specialist"]
       description: "Final output validation template"
       estimated_tokens: 2500
 
     validation_terms_completeness:
-      path: "user/templates/validation/terms_completeness_validation.md"
+      path: "validation/terms_completeness_validation.md"
       category: "validation"
       system_requirements: ["assistant_core", "legal_specialist"]
       description: "Contract terms completeness validation template"
       estimated_tokens: 2000
       
     clarification_prompts:
-      path: "user/templates/interactions/clarification.md"
+      path: "interactions/clarification.md"
       category: "interactions"
       description: "User clarification and follow-up prompts"
       estimated_tokens: 1000
@@ -216,21 +214,6 @@ registry:
       reusable: true
       description: "Jinja2 macros for date formatting"
 
-  output_templates:
-    analysis_report:
-      path: "user/templates/outputs/analysis_report.md"
-      type: "output_template"
-      description: "Structured contract analysis report template"
-      
-    risk_summary:
-      path: "user/templates/outputs/risk_summary.md"
-      type: "output_template"
-      description: "Risk assessment summary template"
-      
-    error_response:
-      path: "user/templates/outputs/error_response.md"
-      type: "output_template"
-      description: "Standardized error response template"
 
 # Composition compatibility matrix
 compatibility:

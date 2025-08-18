@@ -88,7 +88,7 @@ graph TB
 - ✅ Performance monitoring and metrics collection
 - ✅ Graceful fallback mechanisms
 
-**Template Library** (`backend/app/prompts/templates/`):
+**Template Library** (`backend/app/prompts/user/`):
 - ✅ 25+ specialized templates for Australian legal analysis
 - ✅ State-specific fragments (NSW, VIC, QLD, SA, WA, TAS, ACT, NT)
 - ✅ Contract type variations (purchase, lease, off-plan, auction)

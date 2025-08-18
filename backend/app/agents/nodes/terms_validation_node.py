@@ -176,15 +176,17 @@ class TermsValidationNode(BaseNode):
                 },
             )
 
-            rendered_prompt = await self.prompt_manager.render(
-                template_name="validation/terms_completeness_validation",
+            # Use composition for terms validation
+            composition_result = await self.prompt_manager.render_composed(
+                composition_name="terms_validation_only",
                 context=context,
-                service_name="contract_analysis_workflow",
                 output_parser=self.structured_parsers.get("terms_validation"),
             )
+            rendered_prompt = composition_result["user_prompt"]
+            system_prompt = composition_result.get("system_prompt", "")
 
             response = await self._generate_content_with_fallback(
-                rendered_prompt, use_gemini_fallback=True
+                rendered_prompt, use_gemini_fallback=True, system_prompt=system_prompt
             )
 
             # Parse LLM response if we got one

@@ -345,31 +345,19 @@ class ContractTermsExtractionNode(BaseNode):
                 },
             )
 
-            # Use fragment-based prompts if enabled; ensure we always pass required context defaults
-            if self.extraction_config.get("use_fragments", True):
-                # Get state-aware parser for the specific Australian state
-                state_aware_parser = self.get_state_aware_parser(
-                    "contract_terms", australian_state_value
-                )
+            # Get state-aware parser for the specific Australian state
+            state_aware_parser = self.get_state_aware_parser(
+                "contract_terms", australian_state_value
+            )
 
-                rendered_prompt = await self.prompt_manager.render(
-                    template_name="analysis/contract_structure",
-                    context=context,
-                    service_name="contract_analysis_workflow",
-                    output_parser=state_aware_parser,
-                )
-            else:
-                # Get state-aware parser for the specific Australian state
-                state_aware_parser = self.get_state_aware_parser(
-                    "contract_terms", australian_state_value
-                )
-
-                rendered_prompt = await self.prompt_manager.render(
-                    template_name="contract_analysis_base",
-                    context=context,
-                    service_name="contract_analysis_workflow",
-                    output_parser=state_aware_parser,
-                )
+            # Use composition for structure analysis
+            composition_result = await self.prompt_manager.render_composed(
+                composition_name="structure_analysis_only",
+                context=context,
+                output_parser=state_aware_parser,
+            )
+            rendered_prompt = composition_result["user_prompt"]
+            system_prompt = composition_result.get("system_prompt", "")
 
             # Generate response with retries
             max_retries = self.extraction_config.get("max_retries", 2)
@@ -377,7 +365,9 @@ class ContractTermsExtractionNode(BaseNode):
             for attempt in range(max_retries + 1):
                 try:
                     response = await self._generate_content_with_fallback(
-                        rendered_prompt, use_gemini_fallback=True
+                        rendered_prompt,
+                        use_gemini_fallback=True,
+                        system_prompt=system_prompt,
                     )
 
                     # Parse structured response if we got one
@@ -433,9 +423,6 @@ class ContractTermsExtractionNode(BaseNode):
 
         except Exception as e:
             self._log_exception(e, state, {"extraction_method": "llm"})
-            if not self.enable_fallbacks:
-                raise
-            # Will fallback to rule-based extraction
             raise e
 
     async def _extract_terms_rule_based(

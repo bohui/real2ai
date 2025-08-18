@@ -435,6 +435,73 @@ class ContractAnalysisWorkflow:
             },
         )
 
+        # Add conditional edges to check for error states after critical nodes
+        if self.enable_validation:
+            workflow.add_conditional_edges(
+                "validate_terms_completeness",
+                self.check_terms_validation_success,
+                {
+                    "success": "analyze_compliance",
+                    "retry": "retry_processing",
+                    "error": "handle_error",
+                },
+            )
+
+        workflow.add_conditional_edges(
+            "analyze_compliance",
+            self.check_compliance_analysis_success,
+            {
+                "success": "analyze_contract_diagrams",
+                "retry": "retry_processing",
+                "error": "handle_error",
+            },
+        )
+
+        workflow.add_conditional_edges(
+            "analyze_contract_diagrams",
+            self.check_diagram_analysis_success,
+            {
+                "success": "assess_risks",
+                "retry": "retry_processing",
+                "error": "handle_error",
+            },
+        )
+
+        workflow.add_conditional_edges(
+            "assess_risks",
+            self.check_risk_assessment_success,
+            {
+                "success": "generate_recommendations",
+                "retry": "retry_processing",
+                "error": "handle_error",
+            },
+        )
+
+        workflow.add_conditional_edges(
+            "generate_recommendations",
+            self.check_recommendations_success,
+            {
+                "success": (
+                    "validate_final_output"
+                    if self.enable_validation
+                    else "compile_report"
+                ),
+                "retry": "retry_processing",
+                "error": "handle_error",
+            },
+        )
+
+        if self.enable_validation:
+            workflow.add_conditional_edges(
+                "validate_final_output",
+                self.check_final_validation_success,
+                {
+                    "success": "compile_report",
+                    "retry": "retry_processing",
+                    "error": "handle_error",
+                },
+            )
+
         # Terminal conditions
         workflow.add_edge("compile_report", "__end__")
         workflow.add_edge("handle_error", "__end__")
@@ -722,8 +789,21 @@ class ContractAnalysisWorkflow:
         return self._run_async_node(self.retry_processing_node.execute(state))
 
     # Conditional edge check methods (kept simple for orchestration)
+    def _has_error_state(self, state: RealEstateAgentState) -> bool:
+        """Check if the workflow state has any error indicators."""
+        return (
+            state.get("error") is not None
+            or state.get("error_state") is not None
+            or any(key.endswith("_error") for key in state.keys())
+            or state.get("parsing_status") == ProcessingStatus.FAILED
+        )
+
     def check_processing_success(self, state: RealEstateAgentState) -> str:
         """Check if document processing was successful."""
+        # Check for error state first - this prevents workflow from continuing
+        if self._has_error_state(state):
+            return "error"
+
         if state.get("parsing_status") == ProcessingStatus.COMPLETED:
             return "success"
         elif state.get("retry_attempts", 0) < 3:
@@ -733,6 +813,10 @@ class ContractAnalysisWorkflow:
 
     def check_document_quality(self, state: RealEstateAgentState) -> str:
         """Check document quality validation results."""
+        # Check for error state first - this prevents workflow from continuing
+        if self._has_error_state(state):
+            return "error"
+
         quality_metrics = state.get("document_quality_metrics", {})
         overall_confidence = quality_metrics.get("overall_confidence", 0)
 
@@ -745,6 +829,15 @@ class ContractAnalysisWorkflow:
 
     def check_extraction_quality(self, state: RealEstateAgentState) -> str:
         """Check contract terms extraction quality."""
+        # Check for error state first - this prevents workflow from continuing
+        if self._has_error_state(state):
+            return "error"
+
+        # Check if contract terms were actually extracted
+        contract_terms = state.get("contract_terms", {})
+        if not contract_terms:
+            return "error"
+
         confidence_scores = state.get("confidence_scores", {})
         extraction_confidence = confidence_scores.get("contract_extraction", 0)
 
@@ -756,6 +849,94 @@ class ContractAnalysisWorkflow:
             "max_retries", 2
         ):
             return "low_confidence"
+        else:
+            return "error"
+
+    def check_terms_validation_success(self, state: RealEstateAgentState) -> str:
+        """Check if terms validation was successful."""
+        # Check for error state first
+        if self._has_error_state(state):
+            return "error"
+
+        validation_result = state.get("terms_validation_result", {})
+        validation_passed = validation_result.get("validation_passed", False)
+
+        if validation_passed:
+            return "success"
+        elif state.get("retry_attempts", 0) < 2:
+            return "retry"
+        else:
+            return "error"
+
+    def check_compliance_analysis_success(self, state: RealEstateAgentState) -> str:
+        """Check if compliance analysis was successful."""
+        # Check for error state first
+        if self._has_error_state(state):
+            return "error"
+
+        compliance_result = state.get("compliance_analysis_result", {})
+        if compliance_result and not state.get("error"):
+            return "success"
+        elif state.get("retry_attempts", 0) < 2:
+            return "retry"
+        else:
+            return "error"
+
+    def check_diagram_analysis_success(self, state: RealEstateAgentState) -> str:
+        """Check if diagram analysis was successful."""
+        # Check for error state first
+        if self._has_error_state(state):
+            return "error"
+
+        diagram_result = state.get("diagram_analysis_result", {})
+        if diagram_result and not state.get("error"):
+            return "success"
+        elif state.get("retry_attempts", 0) < 2:
+            return "retry"
+        else:
+            return "error"
+
+    def check_risk_assessment_success(self, state: RealEstateAgentState) -> str:
+        """Check if risk assessment was successful."""
+        # Check for error state first
+        if self._has_error_state(state):
+            return "error"
+
+        risk_result = state.get("risk_analysis_result", {})
+        if risk_result and not state.get("error"):
+            return "success"
+        elif state.get("retry_attempts", 0) < 2:
+            return "retry"
+        else:
+            return "error"
+
+    def check_recommendations_success(self, state: RealEstateAgentState) -> str:
+        """Check if recommendations generation was successful."""
+        # Check for error state first
+        if self._has_error_state(state):
+            return "error"
+
+        recommendations_result = state.get("recommendations_result", {})
+        if recommendations_result and not state.get("error"):
+            return "success"
+        elif state.get("retry_attempts", 0) < 2:
+            return "retry"
+        else:
+            return "error"
+
+    def check_final_validation_success(self, state: RealEstateAgentState) -> str:
+        """Check if final validation was successful."""
+        # Check for error state first
+        if self._has_error_state(state):
+            return "error"
+
+        final_validation_result = state.get("final_validation_result", {})
+        validation_passed = final_validation_result.get("validation_passed", False)
+
+        if validation_passed:
+            return "success"
+        elif state.get("retry_attempts", 0) < 2:
+            return "retry"
         else:
             return "error"
 

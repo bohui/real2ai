@@ -23,8 +23,6 @@ class CompositionRule:
     description: str
     system_prompts: List[str]
     user_prompts: List[str]
-    output_template: Optional[str] = None
-    validation_workflow: Optional[str] = None
     merge_strategy: str = "sequential"  # sequential, parallel, hierarchical
     priority_order: List[str] = None
 
@@ -388,8 +386,6 @@ class PromptComposer:
                     description=rule_data.get("description", ""),
                     system_prompts=rule_data.get("system_prompts", []),
                     user_prompts=rule_data.get("user_prompts", []),
-                    output_template=rule_data.get("output_template"),
-                    validation_workflow=rule_data.get("validation"),
                     merge_strategy=rule_data.get("merge_strategy", "sequential"),
                     priority_order=rule_data.get("priority_order"),
                 )

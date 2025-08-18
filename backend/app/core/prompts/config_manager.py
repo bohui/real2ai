@@ -12,7 +12,6 @@ from datetime import datetime, UTC
 import hashlib
 
 from .exceptions import PromptCompositionError, PromptServiceError
-from .workflow_engine import WorkflowConfiguration, WorkflowStep
 
 logger = logging.getLogger(__name__)
 
@@ -36,9 +35,6 @@ class CompositionRule:
     description: str
     version: str
     system_prompts: List[Dict[str, Any]] = field(default_factory=list)
-    workflow_steps: List[Dict[str, Any]] = field(default_factory=list)
-    output_template: Optional[str] = None
-    validation_template: Optional[str] = None
     estimated_duration_seconds: int = 60
     max_tokens_total: int = 50000
     error_handling: Dict[str, Any] = field(default_factory=dict)
@@ -170,9 +166,6 @@ class ConfigurationManager:
                 description=comp_data.get('description', ''),
                 version=comp_data.get('version', '1.0.0'),
                 system_prompts=comp_data.get('system_prompts', []),
-                workflow_steps=comp_data.get('workflow_steps', []),
-                output_template=comp_data.get('output_template'),
-                validation_template=comp_data.get('validation_template'),
                 estimated_duration_seconds=comp_data.get('estimated_duration_seconds', 60),
                 max_tokens_total=comp_data.get('max_tokens_total', 50000),
                 error_handling=comp_data.get('error_handling', {}),
@@ -239,18 +232,8 @@ class ConfigurationManager:
         
         # Validate composition rules
         for comp_name, rule in self._composition_rules.items():
-            if not rule.system_prompts and not rule.workflow_steps:
-                validation_errors.append(f"Composition '{comp_name}' has no system prompts or workflow steps")
-            
-            # Validate workflow step dependencies
-            if rule.workflow_steps:
-                step_names = {step.get('step') for step in rule.workflow_steps}
-                for step in rule.workflow_steps:
-                    for dep in step.get('dependencies', []):
-                        if dep not in step_names:
-                            validation_errors.append(
-                                f"Composition '{comp_name}' step '{step.get('step')}' has unknown dependency: {dep}"
-                            )
+            if not rule.system_prompts:
+                validation_errors.append(f"Composition '{comp_name}' has no system prompts")
         
         if validation_errors:
             error_msg = f"Configuration validation failed: {'; '.join(validation_errors)}"
@@ -330,57 +313,7 @@ class ConfigurationManager:
         """Get composition rule configuration"""
         return self._composition_rules.get(composition_name)
     
-    def create_workflow_configuration(
-        self, 
-        composition_name: str,
-        context_overrides: Dict[str, Any] = None
-    ) -> WorkflowConfiguration:
-        """Create workflow configuration from composition rule"""
-        rule = self.get_composition_rule(composition_name)
-        if not rule:
-            raise PromptCompositionError(
-                f"Composition rule not found: {composition_name}",
-                composition_name=composition_name
-            )
-        
-        # Apply context-based overrides
-        effective_rule = self._apply_context_overrides(rule, context_overrides or {})
-        
-        # Convert workflow steps
-        workflow_steps = []
-        for step_data in effective_rule.workflow_steps:
-            workflow_steps.append(WorkflowStep(
-                name=step_data.get('step'),
-                description=step_data.get('description', ''),
-                template=step_data.get('template'),
-                required_context=step_data.get('required_context', []),
-                optional_context=step_data.get('optional_context', []),
-                input_variables=step_data.get('input_variables', []),
-                output_variable=step_data.get('output_variable'),
-                dependencies=step_data.get('dependencies', []),
-                parallel_with=step_data.get('parallel_with', []),
-                timeout_seconds=step_data.get('timeout_seconds', self._global_config.step_timeout_seconds),
-                critical=step_data.get('critical', True),
-                max_retries=effective_rule.error_handling.get('max_retries', 2)
-            ))
-        
-        return WorkflowConfiguration(
-            name=effective_rule.name,
-            description=effective_rule.description,
-            version=effective_rule.version,
-            steps=workflow_steps,
-            system_prompts=effective_rule.system_prompts,
-            output_template=effective_rule.output_template,
-            validation_template=effective_rule.validation_template,
-            max_parallel_steps=self._global_config.max_parallel_steps,
-            step_timeout_seconds=self._global_config.step_timeout_seconds,
-            max_tokens_total=effective_rule.max_tokens_total,
-            estimated_duration_seconds=effective_rule.estimated_duration_seconds,
-            enable_step_caching=self._global_config.enable_step_caching,
-            cache_ttl_seconds=self._global_config.cache_ttl_seconds,
-            save_partial_results=effective_rule.error_handling.get('save_partial_results', True),
-            continue_on_non_critical_failure=effective_rule.error_handling.get('continue_on_non_critical_failure', True)
-        )
+    # Workflow configuration removed - LangGraph handles orchestration
     
     def _apply_context_overrides(
         self, 
@@ -394,9 +327,6 @@ class ConfigurationManager:
             description=rule.description,
             version=rule.version,
             system_prompts=rule.system_prompts.copy(),
-            workflow_steps=rule.workflow_steps.copy(),
-            output_template=rule.output_template,
-            validation_template=rule.validation_template,
             estimated_duration_seconds=rule.estimated_duration_seconds,
             max_tokens_total=rule.max_tokens_total,
             error_handling=rule.error_handling.copy()
@@ -417,21 +347,7 @@ class ConfigurationManager:
                         'path': prompt_overrides[prompt_name]
                     }
         
-        # Apply user experience level adjustments
-        user_experience = context.get('user_experience_level')
-        if user_experience and user_experience in self._user_experience_adjustments:
-            exp_config = self._user_experience_adjustments[user_experience]
-            
-            # Add additional steps
-            additional_steps = exp_config.get('additional_steps', [])
-            effective_rule.workflow_steps.extend(additional_steps)
-            
-            # Modify templates
-            template_modifications = exp_config.get('modified_templates', {})
-            for step in effective_rule.workflow_steps:
-                step_name = step.get('step')
-                if step_name in template_modifications:
-                    step['template'] = template_modifications[step_name]
+        # Apply user experience level adjustments - removed workflow_steps references
         
         return effective_rule
     
@@ -446,8 +362,7 @@ class ConfigurationManager:
                 'version': rule.version,
                 'deprecated': rule.deprecated,
                 'replacement': rule.replacement,
-                'estimated_duration_seconds': rule.estimated_duration_seconds,
-                'step_count': len(rule.workflow_steps)
+                'estimated_duration_seconds': rule.estimated_duration_seconds
             }
             
             # Filter by service if specified

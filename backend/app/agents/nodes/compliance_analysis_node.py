@@ -174,15 +174,17 @@ class ComplianceAnalysisNode(BaseNode):
                 "compliance_analysis", australian_state
             )
 
-            rendered_prompt = await self.prompt_manager.render(
-                template_name="analysis/compliance_check",
+            # Use composition for compliance analysis
+            composition_result = await self.prompt_manager.render_composed(
+                composition_name="compliance_check_only",
                 context=context,
-                service_name="contract_analysis_workflow",
                 output_parser=state_aware_parser,
             )
+            rendered_prompt = composition_result["user_prompt"]
+            system_prompt = composition_result.get("system_prompt", "")
 
             llm_response = await self._generate_content_with_fallback(
-                rendered_prompt, use_gemini_fallback=True
+                rendered_prompt, use_gemini_fallback=True, system_prompt=system_prompt
             )
 
             # Parse structured response if we got one
@@ -225,7 +227,9 @@ class ComplianceAnalysisNode(BaseNode):
                     contract_terms, australian_state
                 )
                 llm_response = await self._generate_content_with_fallback(
-                    fallback_prompt, use_gemini_fallback=True
+                    fallback_prompt,
+                    use_gemini_fallback=True,
+                    system_prompt=system_prompt,
                 )
 
                 if llm_response:

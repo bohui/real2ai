@@ -1,3 +1,16 @@
+---
+name: "document_quality_validation"
+version: "2.0"
+description: "Quality assessment of extracted contract text for reliability and completeness"
+required_variables: ["document_text", "australian_state"]
+optional_variables: ["document_type", "extraction_method", "document_metadata", "expects_structured_output", "format_instructions"]
+model_compatibility: ["gemini-2.5-flash", "gpt-4", "claude-3-5-sonnet"]
+max_tokens: 4000
+temperature_range: [0.1, 0.3]
+tags: ["validation", "document_quality", "ocr", "text_analysis", "contract"]
+
+---
+
 # Document Quality Validation
 
 You are an expert document analysis specialist conducting quality assessment of extracted contract text. Your task is to evaluate document quality across multiple dimensions to ensure reliable contract analysis.
@@ -124,6 +137,3 @@ Provide a comprehensive quality assessment that includes:
 
 Focus on practical quality metrics that inform whether the document is suitable for automated analysis or requires manual review.
 
-{% if expects_structured_output %}
-{{ format_instructions }}
-{% endif %}

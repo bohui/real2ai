@@ -174,15 +174,17 @@ class RecommendationsGenerationNode(BaseNode):
                 },
             )
 
-            rendered_prompt = await self.prompt_manager.render(
-                template_name="workflow/contract_recommendations",
+            # Use composition for recommendations generation
+            composition_result = await self.prompt_manager.render_composed(
+                composition_name="recommendations_only",
                 context=context,
-                service_name="contract_analysis_workflow",
                 output_parser=self.structured_parsers.get("recommendations"),
             )
+            rendered_prompt = composition_result["user_prompt"]
+            system_prompt = composition_result.get("system_prompt", "")
 
             response = await self._generate_content_with_fallback(
-                rendered_prompt, use_gemini_fallback=True
+                rendered_prompt, use_gemini_fallback=True, system_prompt=system_prompt
             )
 
             # Parse structured response if we got one

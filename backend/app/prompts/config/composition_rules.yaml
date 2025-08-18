@@ -1,195 +1,11 @@
-# Prompt Composition Rules
-# Defines how system and user prompts are combined for complex workflows
+# Prompt Composition Rules - Single-Use Compositions for LangGraph Orchestration
+# Each composition maps to a single user prompt plus system prompts
 
 compositions:
-  # Complete contract analysis workflow
-  complete_contract_analysis:
-    description: "End-to-end contract analysis from OCR to recommendations"
+  # OCR Compositions
+  ocr_whole_document_extraction:
+    description: "Extract text from entire document with OCR"
     version: "1.0.0"
-    
-    system_prompts:
-      - name: "legal_specialist"
-        path: "system/domain/legal_specialist.md"
-        priority: 100
-        required: true
-      - name: "australian_context"
-        path: "system/context/australian_legal.md"
-        priority: 90
-        required: true
-      - name: "assistant_core"
-        path: "system/base/assistant_core.md"
-        priority: 80
-        required: true
-    
-    workflow_steps:
-      - step: "ocr_extraction"
-        description: "Extract text from document image"
-        template: "ocr/ocr_extraction"
-        output_variable: "extracted_text"
-        required_context:
-          - "australian_state"
-          - "contract_type"
-          - "document_type"
-        optional_context:
-          - "quality_requirements"
-        
-      - step: "structure_analysis"
-        description: "Analyze extracted text for structure"
-        template: "analysis/contract_structure"
-        input_variables: ["extracted_text"]
-        output_variable: "structured_data"
-        required_context:
-          - "australian_state"
-          - "contract_type"
-          - "user_type"
-          - "user_experience_level"
-        dependencies: ["ocr_extraction"]
-        
-      - step: "risk_assessment"
-        description: "Evaluate contract risks"
-        template: "workflow/contract_risk_assessment"
-        input_variables: ["structured_data"]
-        output_variable: "risk_analysis"
-        required_context:
-          - "australian_state"
-          - "contract_type"
-          - "user_type"
-        dependencies: ["structure_analysis"]
-        
-      - step: "compliance_check"
-        description: "Check legal compliance"
-        template: "analysis/compliance_check"
-        input_variables: ["structured_data"]
-        output_variable: "compliance_result"
-        required_context:
-          - "australian_state"
-          - "contract_type"
-        dependencies: ["structure_analysis"]
-        parallel_with: ["risk_assessment"]
-        
-      - step: "financial_analysis"
-        description: "Analyze financial terms"
-        template: "analysis/financial_analysis"
-        input_variables: ["structured_data"]
-        output_variable: "financial_analysis"
-        required_context:
-          - "australian_state"
-          - "contract_type"
-          - "user_type"
-        optional_context:
-          - "user_financial_profile"
-        dependencies: ["structure_analysis"]
-        parallel_with: ["risk_assessment", "compliance_check"]
-        
-      - step: "recommendations"
-        description: "Generate final recommendations"
-        template: "workflow/contract_recommendations"
-        input_variables: [
-          "structured_data",
-          "risk_analysis", 
-          "compliance_result",
-          "financial_analysis"
-        ]
-        output_variable: "final_recommendations"
-        dependencies: [
-          "risk_assessment",
-          "compliance_check", 
-          "financial_analysis"
-        ]
-    
-    output_template: "reports/complete_analysis_report"
-    validation_template: "validation/contract_analysis_validation"
-    
-    estimated_duration_seconds: 45
-    max_tokens_total: 50000
-    
-    error_handling:
-      retry_failed_steps: true
-      max_retries: 2
-      continue_on_non_critical_failure: true
-      critical_steps: ["ocr_extraction", "structure_analysis"]
-
-  # OCR to Analysis composition
-  ocr_to_analysis:
-    description: "Streamlined OCR followed by structure analysis"
-    version: "1.0.0"
-    
-    system_prompts:
-      - name: "legal_specialist"
-        path: "system/domain/legal_specialist.md"
-        priority: 100
-        required: true
-      - name: "assistant_core"
-        path: "system/base/assistant_core.md"
-        priority: 80
-        required: true
-    
-    workflow_steps:
-      - step: "ocr_extraction"
-        description: "Extract text from document using OCR"
-        template: "ocr/whole_document_extraction"
-        output_variable: "extracted_text"
-        
-      - step: "structure_analysis"
-        description: "Analyze contract structure and sections"
-        template: "analysis/contract_structure_analysis"
-        input_variables: ["extracted_text"]
-        output_variable: "structure_result"
-        dependencies: ["ocr_extraction"]
-    
-    output_template: "reports/ocr_analysis_report"
-    estimated_duration_seconds: 20
-    max_tokens_total: 25000
-    
-    error_handling:
-      retry_failed_steps: true
-      max_retries: 2
-      critical_steps: ["ocr_extraction"]
-
-  # Quick contract review for time-sensitive situations
-  quick_contract_review:
-    description: "Abbreviated contract analysis focusing on key risks"
-    version: "1.0.0"
-    
-    system_prompts:
-      - name: "legal_specialist"
-        path: "system/domain/legal_specialist.md"
-        priority: 100
-        required: true
-      - name: "australian_context"
-        path: "system/context/australian_legal.md"
-        priority: 90
-        required: true
-    
-    workflow_steps:
-      - step: "quick_ocr"
-        description: "Fast text extraction focusing on key sections"
-        template: "ocr/ocr_extraction_quick"
-        output_variable: "extracted_text"
-        
-      - step: "key_terms_analysis"
-        description: "Analyze critical contract terms only"
-        template: "analysis/key_terms_analysis"
-        input_variables: ["extracted_text"]
-        output_variable: "key_terms"
-        dependencies: ["quick_ocr"]
-        
-      - step: "critical_risk_check"
-        description: "Identify only high-priority risks"
-        template: "analysis/critical_risks"
-        input_variables: ["key_terms"]
-        output_variable: "critical_risks"
-        dependencies: ["key_terms_analysis"]
-    
-    output_template: "reports/quick_review_report"
-    estimated_duration_seconds: 15
-    max_tokens_total: 20000
-
-  # OCR to structured data pipeline
-  ocr_to_structured_data:
-    description: "Convert document image to structured JSON data"
-    version: "1.0.0"
-    
     system_prompts:
       - name: "ocr_processor"
         path: "system/domain/ocr_processor.md"
@@ -199,36 +15,28 @@ compositions:
         path: "system/context/australian_legal.md"
         priority: 80
         required: true
-    
-    workflow_steps:
-      - step: "text_extraction"
-        description: "Extract raw text from image"
-        template: "ocr/ocr_extraction"
-        output_variable: "raw_text"
-        
-      - step: "text_cleanup"
-        description: "Clean and enhance extracted text"
-        template: "ocr/text_enhancement"
-        input_variables: ["raw_text"]
-        output_variable: "clean_text"
-        dependencies: ["text_extraction"]
-        
-      - step: "structure_extraction"
-        description: "Convert to structured data"
-        template: "analysis/contract_structure"
-        input_variables: ["clean_text"]
-        output_variable: "structured_data"
-        dependencies: ["text_cleanup"]
-    
-    output_template: "data/structured_contract_data"
-    estimated_duration_seconds: 20
-    max_tokens_total: 25000
+    user_prompts:
+      - "ocr/whole_document_extraction"
 
-  # Semantic analysis workflows
-  single_diagram_analysis:
-    description: "Semantic analysis of a single property diagram"
+  ocr_text_diagram_insight:
+    description: "Extract insights from text and diagram content"
     version: "1.0.0"
-    
+    system_prompts:
+      - name: "ocr_processor"
+        path: "system/domain/ocr_processor.md"
+        priority: 100
+        required: true
+      - name: "legal_specialist"
+        path: "system/domain/legal_specialist.md"
+        priority: 90
+        required: true
+    user_prompts:
+      - "ocr/text_diagram_insight"
+
+  # Analysis Compositions
+  structure_analysis_only:
+    description: "Analyze contract structure from extracted text"
+    version: "1.0.0"
     system_prompts:
       - name: "legal_specialist"
         path: "system/domain/legal_specialist.md"
@@ -238,35 +46,12 @@ compositions:
         path: "system/context/australian_legal.md"
         priority: 90
         required: true
-    
-    workflow_steps:
-      - step: "semantic_analysis"
-        description: "Extract semantic meaning from diagram"
-        template: "analysis/semantic_analysis"
-        output_variable: "semantic_data"
-        required_context:
-          - "image_type"
-          - "analysis_focus"
-          - "australian_state"
-          - "contract_context"
-        optional_context:
-          - "risk_categories"
-          
-      - step: "risk_assessment"
-        description: "Assess risks from semantic analysis"
-        template: "workflow/contract_risk_assessment"
-        input_variables: ["semantic_data"]
-        output_variable: "risk_analysis"
-        dependencies: ["semantic_analysis"]
-    
-    output_template: "reports/semantic_analysis_report"
-    estimated_duration_seconds: 15
-    max_tokens_total: 15000
+    user_prompts:
+      - "analysis/contract_structure"
 
-  multi_diagram_analysis:
-    description: "Comprehensive analysis of multiple property diagrams with risk consolidation"
+  compliance_check_only:
+    description: "Check legal compliance requirements"
     version: "1.0.0"
-    
     system_prompts:
       - name: "legal_specialist"
         path: "system/domain/legal_specialist.md"
@@ -276,148 +61,140 @@ compositions:
         path: "system/context/australian_legal.md"
         priority: 90
         required: true
-    
-    workflow_steps:
-      - step: "individual_diagram_analysis"
-        description: "Analyze each diagram individually"
-        template: "analysis/semantic_analysis"
-        output_variable: "individual_analyses"
-        parallel_execution: true
-        required_context:
-          - "diagram_paths"
-          - "australian_state"
-          - "contract_context"
-          
-      - step: "risk_consolidation"
-        description: "Consolidate risks across all diagrams"
-        template: "analysis/semantic_risk_consolidation"
-        input_variables: ["individual_analyses"]
-        output_variable: "consolidated_risks"
-        dependencies: ["individual_diagram_analysis"]
-        required_context:
-          - "australian_state"
-          - "contract_context"
-          
-      - step: "final_recommendations"
-        description: "Generate comprehensive recommendations"
-        template: "analysis/recommendations"
-        input_variables: ["consolidated_risks"]
-        output_variable: "final_recommendations"
-        dependencies: ["risk_consolidation"]
-    
-    output_template: "reports/multi_diagram_analysis_report"
-    estimated_duration_seconds: 45
-    max_tokens_total: 40000
-
-  # Legacy compositions for backward compatibility
-  contract_analysis_complete:
-    description: "Complete contract analysis with legal expertise and Australian context"
-    system_prompts:
-      - "assistant_core"
-      - "legal_specialist"
-      - "australian_legal"
     user_prompts:
-      - "contract_analysis_base"
-    output_template: "analysis_report"
-    validation: "validation_workflow"
-    merge_strategy: "sequential"
-    deprecated: true
-    replacement: "complete_contract_analysis"
-    
-  ocr_extraction_specialized:
-    description: "OCR extraction with document processing expertise"
-    system_prompts:
-      - "assistant_core"
-      - "ocr_processor"
-    user_prompts:
-      - "ocr_extraction_base"
-    merge_strategy: "sequential"
-    deprecated: true
-    replacement: "ocr_to_structured_data"
+      - "analysis/compliance_check"
 
-# Global composition settings
+  financial_analysis_only:
+    description: "Analyze financial terms and obligations"
+    version: "1.0.0"
+    system_prompts:
+      - name: "legal_specialist"
+        path: "system/domain/legal_specialist.md"
+        priority: 100
+        required: true
+      - name: "australian_context"
+        path: "system/context/australian_legal.md"
+        priority: 90
+        required: true
+    user_prompts:
+      - "analysis/financial_analysis"
+
+  risk_assessment_only:
+    description: "Assess contract risks and potential issues"
+    version: "1.0.0"
+    system_prompts:
+      - name: "legal_specialist"
+        path: "system/domain/legal_specialist.md"
+        priority: 100
+        required: true
+      - name: "australian_context"
+        path: "system/context/australian_legal.md"
+        priority: 90
+        required: true
+    user_prompts:
+      - "workflow/contract_risk_assessment"
+
+  recommendations_only:
+    description: "Generate contract recommendations"
+    version: "1.0.0"
+    system_prompts:
+      - name: "legal_specialist"
+        path: "system/domain/legal_specialist.md"
+        priority: 100
+        required: true
+      - name: "australian_context"
+        path: "system/context/australian_legal.md"
+        priority: 90
+        required: true
+    user_prompts:
+      - "workflow/contract_recommendations"
+
+  # Semantic Analysis Compositions
+  semantic_analysis_only:
+    description: "Extract semantic meaning from diagrams"
+    version: "1.0.0"
+    system_prompts:
+      - name: "legal_specialist"
+        path: "system/domain/legal_specialist.md"
+        priority: 100
+        required: true
+      - name: "australian_context"
+        path: "system/context/australian_legal.md"
+        priority: 90
+        required: true
+    user_prompts:
+      - "analysis/semantic_analysis"
+
+  image_semantics_only:
+    description: "Analyze image semantics and content"
+    version: "1.0.0"
+    system_prompts:
+      - name: "legal_specialist"
+        path: "system/domain/legal_specialist.md"
+        priority: 100
+        required: true
+      - name: "australian_context"
+        path: "system/context/australian_legal.md"
+        priority: 90
+        required: true
+    user_prompts:
+      - "analysis/image_semantics"
+
+  # Validation Compositions
+  document_quality_validation_only:
+    description: "Validate document quality and completeness"
+    version: "1.0.0"
+    system_prompts:
+      - name: "legal_specialist"
+        path: "system/domain/legal_specialist.md"
+        priority: 100
+        required: true
+    user_prompts:
+      - "validation/document_quality_validation"
+
+  terms_validation_only:
+    description: "Validate contract terms completeness"
+    version: "1.0.0"
+    system_prompts:
+      - name: "legal_specialist"
+        path: "system/domain/legal_specialist.md"
+        priority: 100
+        required: true
+      - name: "australian_context"
+        path: "system/context/australian_legal.md"
+        priority: 90
+        required: true
+    user_prompts:
+      - "validation/terms_completeness_validation"
+
+  final_validation_only:
+    description: "Perform final output validation"
+    version: "1.0.0"
+    system_prompts:
+      - name: "legal_specialist"
+        path: "system/domain/legal_specialist.md"
+        priority: 100
+        required: true
+    user_prompts:
+      - "validation/final_output_validation"
+
+# Global composition settings (simplified)
 global_settings:
-  max_parallel_steps: 3
-  step_timeout_seconds: 30
-  enable_step_caching: true
   cache_ttl_seconds: 1800  # 30 minutes
-  
-  retry_policy:
-    max_retries: 2
-    retry_delay_seconds: 5
-    exponential_backoff: true
-    
   validation:
     validate_inputs: true
     validate_outputs: true
-    validate_dependencies: true
-    
-  monitoring:
-    track_step_performance: true
-    track_composition_success_rate: true
-    alert_on_failures: true
-    
-  error_recovery:
-    save_partial_results: true
-    enable_step_skipping: false
-    fallback_to_simple_templates: true
 
-# State-specific composition overrides
+# State-specific system prompt overrides
 state_overrides:
   NSW:
     system_prompt_overrides:
       australian_context: "system/context/state_specific/nsw_context.md"
-    
-    additional_validation:
-      - template: "validation/nsw_compliance"
-        apply_to_steps: ["compliance_check"]
   
   VIC:
     system_prompt_overrides:
       australian_context: "system/context/state_specific/vic_context.md"
-    
-    additional_validation:
-      - template: "validation/vic_compliance"
-        apply_to_steps: ["compliance_check"]
   
   QLD:
     system_prompt_overrides:
       australian_context: "system/context/state_specific/qld_context.md"
-    
-    additional_validation:
-      - template: "validation/qld_compliance"
-        apply_to_steps: ["compliance_check"]
-
-# User experience level composition adjustments
-user_experience_adjustments:
-  novice:
-    additional_steps:
-      - step: "explanation_generation"
-        description: "Generate detailed explanations for novice users"
-        template: "education/novice_explanations"
-        dependencies: ["recommendations"]
-    
-    modified_templates:
-      recommendations: "analysis/recommendations_novice"
-  
-  intermediate:
-    modified_templates:
-      recommendations: "analysis/recommendations_intermediate"
-  
-  expert:
-    simplified_workflow: true
-    skip_steps: ["explanation_generation"]
-    modified_templates:
-      recommendations: "analysis/recommendations_expert"
-
-# Dynamic composition rules (resolved at runtime)
-dynamic_compositions:
-  state_aware_analysis:
-    description: "State-aware analysis that includes appropriate state context"
-    base_composition: "complete_contract_analysis"
-    dynamic_system_prompts:
-      - template: "state_context_{australian_state}"
-        condition: "australian_state in ['NSW', 'VIC', 'QLD', 'SA', 'WA', 'TAS', 'ACT', 'NT']"
-    dynamic_user_prompts:
-      - template: "state_specific_instructions_{australian_state}"
-        condition: "analysis_type == 'comprehensive'"

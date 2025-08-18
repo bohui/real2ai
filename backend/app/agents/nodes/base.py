@@ -464,7 +464,10 @@ class BaseNode(ABC):
         }
 
     async def _generate_content_with_fallback(
-        self, prompt: str, use_gemini_fallback: bool = True
+        self,
+        prompt: str,
+        use_gemini_fallback: bool = True,
+        system_prompt: Optional[str] = None,
     ) -> Optional[str]:
         """
         Generate content with client fallback logic.
@@ -478,6 +481,7 @@ class BaseNode(ABC):
         Args:
             prompt: The prompt to send to the LLM
             use_gemini_fallback: Whether to use Gemini as fallback (default: True)
+            system_prompt: Optional system prompt to guide the model (default: None)
 
         Returns:
             Generated content string or None if fallbacks fail
@@ -500,7 +504,12 @@ class BaseNode(ABC):
 
         if self.openai_client:
             try:
-                response = await self.openai_client.generate_content(prompt)
+                # Pass system prompt if provided
+                kwargs = {}
+                if system_prompt:
+                    kwargs["system_message"] = system_prompt
+
+                response = await self.openai_client.generate_content(prompt, **kwargs)
                 if response and response.strip():
                     return response
             except Exception as e:
@@ -522,7 +531,12 @@ class BaseNode(ABC):
         # Fall back to Gemini client if enabled
         if use_gemini_fallback and self.gemini_client:
             try:
-                response = await self.gemini_client.generate_content(prompt)
+                # Pass system prompt if provided
+                kwargs = {}
+                if system_prompt:
+                    kwargs["system_prompt"] = system_prompt
+
+                response = await self.gemini_client.generate_content(prompt, **kwargs)
                 if response and response.strip():
                     return response
             except Exception as e:

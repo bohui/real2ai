@@ -464,6 +464,17 @@ class GeminiClient(BaseClient):
             ]
             content_obj = Content(role="user", parts=parts)
 
+            # Create generation config with optional system instruction
+            config_kwargs = {
+                "safety_settings": self._get_safety_settings()
+            }
+            
+            # Add system instruction if provided
+            if "system_prompt" in analysis_context and analysis_context["system_prompt"]:
+                config_kwargs["system_instruction"] = analysis_context["system_prompt"]
+            
+            generate_config = GenerateContentConfig(**config_kwargs)
+
             # Generate analysis
             import asyncio
 
@@ -472,9 +483,7 @@ class GeminiClient(BaseClient):
                 lambda: self.client.models.generate_content(
                     model=self.config.model_name,
                     contents=[content_obj],
-                    config=GenerateContentConfig(
-                        safety_settings=self._get_safety_settings()
-                    ),
+                    config=generate_config,
                 ),
             )
 

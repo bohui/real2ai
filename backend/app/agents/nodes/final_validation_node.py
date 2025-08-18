@@ -232,18 +232,17 @@ class FinalValidationNode(BaseNode):
                 },
             )
 
-            rendered_prompt = await self.prompt_manager.render(
-                template_name="validation/final_output_validation",
+            # Use composition for final validation
+            composition_result = await self.prompt_manager.render_composed(
+                composition_name="final_validation_only",
                 context=context,
-                service_name="contract_analysis_workflow",
-                # Final validation should not fail hard on missing optional context
-                # Disable strict context validation here to allow graceful fallbacks
-                validate=False,
                 output_parser=self.structured_parsers.get("workflow_validation"),
             )
+            rendered_prompt = composition_result["user_prompt"]
+            system_prompt = composition_result.get("system_prompt", "")
 
             response = await self._generate_content_with_fallback(
-                rendered_prompt, use_gemini_fallback=True
+                rendered_prompt, use_gemini_fallback=True, system_prompt=system_prompt
             )
 
             # Parse structured response if we got one

@@ -199,15 +199,17 @@ class RiskAssessmentNode(BaseNode):
                 "risk_analysis", australian_state_value
             )
 
-            rendered_prompt = await self.prompt_manager.render(
-                template_name="analysis/risk_analysis_structured",
+            # Use composition for risk assessment
+            composition_result = await self.prompt_manager.render_composed(
+                composition_name="risk_assessment_only",
                 context=context,
-                service_name="contract_analysis_workflow",
                 output_parser=state_aware_parser,
             )
+            rendered_prompt = composition_result["user_prompt"]
+            system_prompt = composition_result.get("system_prompt", "")
 
             response = await self._generate_content_with_fallback(
-                rendered_prompt, use_gemini_fallback=True
+                rendered_prompt, use_gemini_fallback=True, system_prompt=system_prompt
             )
 
             # Parse structured response if we got one
