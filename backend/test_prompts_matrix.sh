@@ -66,6 +66,7 @@ TXT_FILE="$TEST_FILES_DIR/contract.txt"
 declare -a OPENAI_MODELS=(
     "deepseek/deepseek-chat-v3-0324:free"
     "deepseek/deepseek-r1-0528:free"
+    "openai/gpt-oss-20b:free"
     "anthropic/claude-3.5-sonnet"
     "meta-llama/llama-3.1-405b-instruct"
     "meta-llama/llama-3.1-8b-instruct"

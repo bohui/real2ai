@@ -64,6 +64,7 @@ frontend/coverage/
 backend/.coverage
 backend/test_reports/
 backend/coverage.xml
+backend/test_results/
 
 # Celery runtime files
 celerybeat-schedule
@@ -89,3 +90,4 @@ backend/app/tasks/background_tasks_not_used.py
 backend/app/services/document_service_not_used.py
 backend/app/services/contract_analysis_service_not_used.py
 test_files/
+

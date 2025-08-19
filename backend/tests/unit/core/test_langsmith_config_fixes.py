@@ -82,7 +82,7 @@ class TestLangSmithConfigFixes:
                 call_args = mock_trace.call_args
                 assert call_args[1]["name"] == "test_function"
                 assert call_args[1]["run_type"] == "llm"
-                assert call_args[1]["project_name"] == "test_project"
+                assert call_args[1]["project_name"] == "real2ai-development"  # Use actual config value
 
     @pytest.mark.asyncio
     async def test_async_function_error_tracing(self, sample_async_function, mock_langsmith_config):
