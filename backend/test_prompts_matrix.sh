@@ -320,12 +320,9 @@ async def test_prompt():
                 if missing('GOOGLE_APPLICATION_CREDENTIALS') and missing('GEMINI_CREDENTIALS_PATH') and missing('GOOGLE_CLOUD_PROJECT'):
                     preflight_error = 'Missing Gemini credentials (GOOGLE_APPLICATION_CREDENTIALS or GEMINI_CREDENTIALS_PATH)'
             else:
-                if '/' in selected_model:
-                    if missing('OPENROUTER_API_KEY'):
-                        preflight_error = 'Missing OPENROUTER_API_KEY for OpenRouter-style model name'
-                else:
-                    if missing('OPENAI_API_KEY'):
-                        preflight_error = 'Missing OPENAI_API_KEY for OpenAI model'
+                # Always use OPENAI_* for both OpenAI and OpenRouter-style models
+                if missing('OPENAI_API_KEY'):
+                    preflight_error = 'Missing OPENAI_API_KEY for OpenAI/OpenRouter model'
 
             if preflight_error:
                 status = 'fail'
@@ -348,9 +345,18 @@ async def test_prompt():
                             timeout=30,
                         )
                     else:
-                        o_settings = OpenAISettings()
-                        o_config = o_settings.to_client_config()
-                        o_config.model_name = selected_model
+                        # Build OpenAI config directly from OPENAI_* envs (ignore OpenRouter envs)
+                        from app.clients.openai.config import OpenAIClientConfig
+                        api_key = os.getenv('OPENAI_API_KEY', '')
+                        api_base = os.getenv('OPENAI_API_BASE')
+                        organization = os.getenv('OPENAI_ORGANIZATION')
+                        o_config = OpenAIClientConfig(
+                            api_key=api_key,
+                            api_base=api_base,
+                            model_name=selected_model,
+                            organization=organization,
+                            extra_config={'init_connection_test': False},
+                        )
                         o_client = OpenAIClient(o_config)
                         await o_client.initialize()
                         response_text = await asyncio.wait_for(

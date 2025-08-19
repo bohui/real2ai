@@ -124,13 +124,36 @@ class FragmentManager:
         """
         fragments = self.resolve_fragments(orchestration_id, context)
 
-        # Build fragment content by category
-        fragment_content = {}
+        # Build fragment content by category with alias normalization to match template placeholders
+        # Many existing fragments use broad categories (e.g., "state_specific", "legal_framework")
+        # while base templates expect placeholders aligned with orchestration rule names
+        # (e.g., "state_legal_requirements", "consumer_protection").
+        # This alias map bridges that gap without requiring content edits.
+        category_alias_map = {
+            # State-specific requirements
+            "state_specific": "state_legal_requirements",
+            # Consumer protection framework
+            "legal_framework": "consumer_protection",
+            # Contract type specific analysis
+            "purchase": "contract_type_specific",
+            "lease": "contract_type_specific",
+            "option": "contract_type_specific",
+            # Experience level guidance
+            "user_experience": "experience_level_guidance",
+            "guidance": "experience_level_guidance",
+            # Analysis depth and focus
+            "analysis": "analysis_depth",
+        }
+
+        fragment_content: Dict[str, List[str]] = {}
         for fragment in fragments:
-            category = fragment.metadata.get("category", "default")
-            if category not in fragment_content:
-                fragment_content[category] = []
-            fragment_content[category].append(fragment.content)
+            original_category = fragment.metadata.get("category", "default")
+            normalized_category = category_alias_map.get(
+                original_category, original_category
+            )
+            if normalized_category not in fragment_content:
+                fragment_content[normalized_category] = []
+            fragment_content[normalized_category].append(fragment.content)
 
         # Prepare fragment variables for template rendering
         fragment_vars = {}

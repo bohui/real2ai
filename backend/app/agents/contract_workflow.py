@@ -372,28 +372,8 @@ class ContractAnalysisWorkflow:
         # Set entry point
         workflow.set_entry_point("validate_input")
 
-        # Define workflow edges based on validation configuration
-        if self.enable_validation:
-            # Full validation workflow
-            workflow.add_edge("validate_input", "process_document")
-            workflow.add_edge("process_document", "validate_document_quality")
-            workflow.add_edge("validate_document_quality", "extract_terms")
-            workflow.add_edge("extract_terms", "validate_terms_completeness")
-            workflow.add_edge("validate_terms_completeness", "analyze_compliance")
-            workflow.add_edge("analyze_compliance", "analyze_contract_diagrams")
-            workflow.add_edge("analyze_contract_diagrams", "assess_risks")
-            workflow.add_edge("assess_risks", "generate_recommendations")
-            workflow.add_edge("generate_recommendations", "validate_final_output")
-            workflow.add_edge("validate_final_output", "compile_report")
-        else:
-            # Standard workflow without intermediate validation
-            workflow.add_edge("validate_input", "process_document")
-            workflow.add_edge("process_document", "extract_terms")
-            workflow.add_edge("extract_terms", "analyze_compliance")
-            workflow.add_edge("analyze_compliance", "analyze_contract_diagrams")
-            workflow.add_edge("analyze_contract_diagrams", "assess_risks")
-            workflow.add_edge("assess_risks", "generate_recommendations")
-            workflow.add_edge("generate_recommendations", "compile_report")
+        # Minimal static edge to kick off processing; rely on conditional edges for flow
+        workflow.add_edge("validate_input", "process_document")
 
         # Add conditional edges for error handling
         workflow.add_conditional_edges(
@@ -520,7 +500,11 @@ class ContractAnalysisWorkflow:
                 "retry_diagrams": "analyze_contract_diagrams",
                 "retry_risks": "assess_risks",
                 "retry_recommendations": "generate_recommendations",
-                "retry_validation": "validate_final_output" if self.enable_validation else "compile_report",
+                "retry_validation": (
+                    "validate_final_output"
+                    if self.enable_validation
+                    else "compile_report"
+                ),
                 "continue_workflow": "extract_terms",  # Default fallback
             },
         )
@@ -962,28 +946,30 @@ class ContractAnalysisWorkflow:
     def _route_after_retry(self, state: RealEstateAgentState) -> str:
         """
         Route workflow after retry processing completes.
-        
+
         This method determines where to send the workflow based on the retry result
         and the current state.
         """
         try:
             retry_result = state.get("retry_result", {})
             strategy = retry_result.get("strategy_executed", "unknown")
-            
+
             # Check if retry was successful
             if not retry_result.get("success", False):
                 # Retry failed - go to error handling
-                return "continue_workflow"  # This will route to extract_terms as fallback
-            
+                return (
+                    "continue_workflow"  # This will route to extract_terms as fallback
+                )
+
             # Route based on retry strategy
             if strategy == "restart_workflow":
                 # Workflow restart - go back to beginning
                 return "restart_workflow"
-                
+
             elif strategy == "retry_step":
                 # Specific step retry - route to that step
                 target_step = retry_result.get("target_step", "unknown")
-                
+
                 if target_step == "process_document":
                     return "retry_document_processing"
                 elif target_step == "extract_terms":
@@ -1001,11 +987,11 @@ class ContractAnalysisWorkflow:
                 else:
                     # Unknown target step - use default fallback
                     return "continue_workflow"
-                    
+
             elif strategy == "retry_current":
                 # Current step retry - route to current step
                 current_step = retry_result.get("target_step", "unknown")
-                
+
                 if current_step == "process_document":
                     return "retry_document_processing"
                 elif current_step == "extract_terms":
@@ -1023,11 +1009,11 @@ class ContractAnalysisWorkflow:
                 else:
                     # Unknown current step - use default fallback
                     return "continue_workflow"
-            
+
             else:
                 # Generic retry - continue workflow
                 return "continue_workflow"
-                
+
         except Exception as e:
             logger.error(f"Error in retry routing: {e}")
             # On error, use safe fallback
