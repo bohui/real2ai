@@ -47,6 +47,16 @@ Make progress steps consistent across backend and frontend, with clear early sig
   - `data`: `{ session_id, contract_id, current_step, progress_percent, step_description, estimated_completion_minutes? }`
 - Map page-based updates into the same event.
 
+#### Monotonic Guard and Manual Force Restart
+- Default (auto/system restart): enforce monotonic progress; skip emitting when `new_percent <= last_percent`.
+- Manual restart via API: pass `user_preferences.force_restart: true`.
+  - Optional `user_preferences.restart_from_step: <step_key>` allows replay starting from any prior successful/current failing step.
+  - Baseline for replay uses step→percent mapping below; if omitted/unknown, baseline is from the beginning (allow full replay).
+  - Auto/system restarts MUST NOT set `force_restart` and remain strictly monotonic.
+
+Baseline mapping for manual restart:
+`{"document_uploaded":5,"validate_input":7,"document_processing":7,"validate_document_quality":34,"extract_terms":42,"validate_terms_completeness":50,"analyze_compliance":57,"assess_risks":71,"generate_recommendations":85,"compile_report":98,"analysis_complete":100}`
+
 ### Frontend
 - Update `AnalysisProgress` steps to include (and render conditionally as needed):
   - `document_uploaded` (title: "Upload document")
@@ -72,6 +82,7 @@ Make progress steps consistent across backend and frontend, with clear early sig
   - Verify emissions occur at exact percentages per step.
   - Per-page mapping: N pages -> last page maps to 30%, rounded, strictly increasing.
   - Skipping validation by flag yields correct next-step percentage.
+  - Manual restart: verify baseline replay from provided `restart_from_step` and strict monotonicity for auto restarts.
 - Integration (backend):
   - Upload emits 5% immediately; reconnect replays last persisted progress; final 100% only on success.
 - Frontend:

@@ -12,33 +12,35 @@ import {
 } from "@/services/api";
 import { logger } from "@/utils/logger";
 
-// Normalize backend step keys to match frontend UI step keys
+// Normalize backend step keys to match the UI step keys defined in AnalysisProgress.tsx
+// Important: UI expects these exact keys for highlighting:
+// ["document_uploaded","validate_input","document_processing","validate_document_quality","extract_terms","validate_terms_completeness","analyze_compliance","assess_risks","generate_recommendations","compile_report"]
 const normalizeStepKey = (step: string): string => {
   switch (step) {
-    // Verb form mismatches between backend and UI
+    // Identity mappings (ensure we don't convert to gerunds)
     case "validate_input":
-      return "validating_input";
-    case "process_document":
-      return "processing_document";
+    case "document_uploaded":
+    case "document_processing":
+    case "validate_document_quality":
     case "extract_terms":
-      return "extracting_terms";
-    case "extract_terms_failed":
-      return "extracting_terms";
+    case "validate_terms_completeness":
     case "analyze_compliance":
-      return "analyzing_compliance";
     case "assess_risks":
-      return "assessing_risks";
     case "generate_recommendations":
-      return "generating_recommendations";
     case "compile_report":
-      return "compiling_report";
-    // Newer backend step names to align with UI
+      return step;
+
+    // Backend variants mapped to nearest UI step
+    case "process_document":
+      return "document_processing";
+    case "extract_terms_failed":
+      return "extract_terms";
     case "validate_final_output":
-      // Treat final validation as our finalizing/compiling step in UI
-      return "compiling_report";
+      // Treat final validation as part of compiling the final report in UI
+      return "compile_report";
     case "analyze_contract_diagrams":
-      // Map to closest existing UI phase
-      return "extracting_terms";
+      // Closest visible UI phase after diagrams analysis is risk assessment
+      return "assess_risks";
     default:
       return step;
   }

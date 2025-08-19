@@ -14,7 +14,7 @@ Architecture:
 """
 
 import logging
-from typing import Dict, Any, Optional, TypedDict
+from typing import Dict, Any, Optional, TypedDict, Callable, Awaitable
 from datetime import datetime, timezone
 from langgraph.graph import StateGraph
 from pydantic import BaseModel
@@ -71,6 +71,10 @@ class DocumentProcessingState(TypedDict):
     Error fields:
     - error: Error message if processing fails
     - error_details: Detailed error information
+    
+    Progress fields:
+    - notify_progress: Optional callback for per-page progress updates
+    - contract_id: Optional contract ID for progress routing
     """
 
     # Required input
@@ -99,6 +103,12 @@ class DocumentProcessingState(TypedDict):
     # Error handling
     error: Optional[str]
     error_details: Optional[ErrorDetails]
+    
+    # Progress callback for per-page progress updates
+    notify_progress: Optional[Callable[[str, int, str], Awaitable[None]]]
+    
+    # Contract ID if nodes need it for progress routing
+    contract_id: Optional[str]
 
 
 class DocumentProcessingWorkflow:
@@ -349,6 +359,8 @@ class DocumentProcessingWorkflow:
         australian_state: Optional[str] = None,
         contract_type: Optional[str] = None,
         document_type: Optional[str] = None,
+        notify_progress: Optional[Callable[[str, int, str], Awaitable[None]]] = None,
+        contract_id: Optional[str] = None,
     ) -> ProcessedDocumentSummary | ProcessingErrorResponse:
         """
         Main entry point for document processing.
@@ -360,6 +372,8 @@ class DocumentProcessingWorkflow:
             australian_state: Australian state for context (optional)
             contract_type: Contract type for context (optional)
             document_type: Document type for context (optional)
+            notify_progress: Callback for per-page progress updates (optional)
+            contract_id: Contract ID for progress routing (optional)
 
         Returns:
             ProcessedDocumentSummary on success or ProcessingErrorResponse on failure
@@ -375,6 +389,8 @@ class DocumentProcessingWorkflow:
                 australian_state=australian_state,
                 contract_type=contract_type,
                 document_type=document_type,
+                notify_progress=notify_progress,
+                contract_id=contract_id,
                 storage_path=None,
                 file_type=None,
                 text_extraction_result=None,
@@ -384,6 +400,10 @@ class DocumentProcessingWorkflow:
                 error_details=None,
             )
 
+            # Wire progress callback to extract_text_node if provided
+            if notify_progress:
+                self.extract_text_node.set_progress_callback(notify_progress)
+            
             # Execute workflow
             result_state = await self.workflow.ainvoke(initial_state)
 

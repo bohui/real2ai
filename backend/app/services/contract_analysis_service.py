@@ -140,6 +140,24 @@ class ContractAnalysisService:
             f"Unified contract analysis service initialized with config: {config_validation['config_summary']}"
         )
 
+        # PRD step -> base percent mapping (document_processing uses 7 as start of 7-30 range)
+        self._step_percent_map = {
+            "document_uploaded": 5,
+            "validate_input": 7,
+            "document_processing": 7,
+            "validate_document_quality": 34,
+            "extract_terms": 42,
+            "validate_terms_completeness": 50,
+            "analyze_compliance": 57,
+            "assess_risks": 71,
+            "generate_recommendations": 85,
+            "compile_report": 98,
+            "analysis_complete": 100,
+        }
+
+    def _percent_for_step(self, step: str) -> int:
+        return int(self._step_percent_map.get(step, -1))
+
     async def _ensure_workflow_initialized(self):
         """Ensure the workflow is initialized before use."""
         if not self._workflow_initialized:
@@ -229,7 +247,32 @@ class ContractAnalysisService:
             )
 
             # Initialize analysis tracking if WebSocket is enabled
-            contract_id = initial_state["session_id"]
+            # Resolve contract_id: prefer provided state value, else derive from content_hash, else session_id
+            contract_id = initial_state.get("contract_id")
+            if not contract_id:
+                try:
+                    content_hash = (document_data or {}).get("content_hash") or (
+                        document_data or {}
+                    ).get("content_hmac")
+                    if content_hash:
+                        contract_id = await ensure_contract(
+                            service_client=None,
+                            content_hash=content_hash,
+                            contract_type=contract_type,
+                            australian_state=(
+                                state_enum.value
+                                if hasattr(state_enum, "value")
+                                else str(state_enum)
+                            ),
+                        )
+                except Exception as cid_err:
+                    logger.warning(
+                        f"Failed to resolve contract_id from content_hash; falling back to session id: {cid_err}"
+                    )
+                if not contract_id:
+                    contract_id = initial_state["session_id"]
+            # Store resolved contract_id back into state for downstream consumers
+            initial_state["contract_id"] = contract_id
             if use_websocket_progress:
                 self.active_analyses[contract_id] = {
                     "start_time": start_time,
@@ -239,12 +282,43 @@ class ContractAnalysisService:
                     "progress": 0,
                 }
 
+                # If caller requested a manual force restart, allow restarting from a specific step
+                # user_preferences.force_restart: True/False
+                # user_preferences.restart_from_step: step key (e.g., "extract_terms")
+                if (user_preferences or {}).get("force_restart"):
+                    try:
+                        restart_from = (user_preferences or {}).get("restart_from_step")
+                        restart_percent = (
+                            self._percent_for_step(restart_from) if restart_from else -1
+                        )
+                        # If an explicit step is provided and recognized, set baseline to that step's percent
+                        # Otherwise set to -1 to allow full replay from start
+                        self.active_analyses[contract_id]["progress"] = (
+                            restart_percent if restart_percent >= 0 else -1
+                        )
+                        self.active_analyses[contract_id]["manual_restart"] = True
+                        if restart_from:
+                            self.active_analyses[contract_id][
+                                "manual_restart_from"
+                            ] = restart_from
+                    except Exception:
+                        pass
+
                 # Send analysis started event
                 if self.websocket_manager:
                     await self.websocket_manager.send_message(
                         session_id,
                         WebSocketEvents.analysis_started(contract_id, estimated_time=3),
                     )
+
+                # PRD: Emit 0% immediately when session/analysis initializes
+                self._schedule_progress_update(
+                    session_id,
+                    contract_id,
+                    "initialized",
+                    0,
+                    "Analysis initialized",
+                )
 
             # Initialize prompt manager if needed
             if self.prompt_manager:
@@ -259,6 +333,27 @@ class ContractAnalysisService:
 
             # Execute analysis with optional progress tracking
             if use_websocket_progress:
+                # PRD: Emit 5% just as workflow starts
+                self._schedule_progress_update(
+                    session_id,
+                    contract_id,
+                    "document_uploaded",
+                    5,
+                    "Upload document",
+                )
+
+                # Provide a notify callback to nodes via state for page-based increments
+                async def _notify_progress(step: str, percent: int, desc: str):
+                    self._schedule_progress_update(
+                        session_id,
+                        contract_id,
+                        step,
+                        percent,
+                        desc,
+                    )
+
+                # Inject notify callback into initial state so subflow nodes can call it
+                initial_state["notify_progress"] = _notify_progress
                 final_state = await self._execute_with_progress_tracking(
                     initial_state,
                     session_id,
@@ -674,17 +769,17 @@ class ContractAnalysisService:
                 self.progress_callback = progress_callback
                 # Fixed order of primary steps for resume logic per PRD
                 self._step_order = [
-                    "document_uploaded",      # 5% - Added per PRD
-                    "validate_input",         # 7% - Updated per PRD  
-                    "document_processing",    # 7-30% - Updated per PRD
-                    "validate_document_quality", # 34% - Added per PRD
-                    "extract_terms",          # 42%
-                    "validate_terms_completeness", # 50%
-                    "analyze_compliance",     # 57%
-                    "assess_risks",           # 71%
-                    "generate_recommendations", # 85%
-                    "compile_report",         # 98%
-                    "analysis_complete",      # 100% - Added per PRD
+                    "document_uploaded",  # 5% - Added per PRD
+                    "validate_input",  # 7% - Updated per PRD
+                    "document_processing",  # 7-30% - Updated per PRD
+                    "validate_document_quality",  # 34% - Added per PRD
+                    "extract_terms",  # 42%
+                    "validate_terms_completeness",  # 50%
+                    "analyze_compliance",  # 57%
+                    "assess_risks",  # 71%
+                    "generate_recommendations",  # 85%
+                    "compile_report",  # 98%
+                    "analysis_complete",  # 100% - Added per PRD
                 ]
                 try:
                     # Handle both normal step names and failed step names (e.g., "extract_terms_failed")
@@ -804,40 +899,10 @@ class ContractAnalysisService:
                     "Extract text & diagrams",
                 )
 
-                # Simulate per-page progress for demonstration
-                # In a real implementation, this would be integrated with the actual OCR processing
-                document_metadata = state.get("document_metadata", {})
-                total_pages = document_metadata.get("total_pages", 1)
-                
-                # Emit incremental progress if pages are available
-                if total_pages > 1:
-                    for page in range(1, min(total_pages + 1, 10)):  # Cap at 10 pages for demo
-                        progress_percent = 7 + int((page / total_pages) * 23)  # 7-30% range
-                        progress_percent = min(30, progress_percent)
-                        
-                        self.parent_service._schedule_progress_update(
-                            self.session_id,
-                            self.contract_id,
-                            "document_processing",
-                            progress_percent,
-                            f"Extract text & diagrams (page {page}/{total_pages})",
-                        )
-                        
-                        # Small delay to make progress visible
-                        import asyncio
-                        await asyncio.sleep(0.1)
-
                 # Execute the actual document processing step
                 result = super().process_document(state)
 
-                # Mark completion at 30%
-                self.parent_service._schedule_progress_update(
-                    self.session_id,
-                    self.contract_id,
-                    "document_processing",
-                    30,
-                    "Extract text & diagrams",
-                )
+                # Node emits per-page increments and final 30%
                 await self._schedule_persist(
                     "document_processing",
                     30,
@@ -856,23 +921,22 @@ class ContractAnalysisService:
                     # Skip this step if disabled
                     return state
 
-                # Execute the step first
-                result = super().validate_document_quality_step(state)
+                # Emit progress at step start
+                self.parent_service._schedule_progress_update(
+                    self.session_id,
+                    self.contract_id,
+                    "validate_document_quality",
+                    34,
+                    "Validating document quality and readability",
+                )
+                await self._schedule_persist(
+                    "validate_document_quality",
+                    34,
+                    "Validating document quality and readability",
+                )
 
-                # Only send progress updates and persist checkpoints AFTER successful completion
-                if not (isinstance(result, dict) and result.get("error_state")):
-                    self.parent_service._schedule_progress_update(
-                        self.session_id,
-                        self.contract_id,
-                        "validate_document_quality",
-                        34,
-                        "Validating document quality and readability",
-                    )
-                    await self._schedule_persist(
-                        "validate_document_quality",
-                        34,
-                        "Validating document quality and readability",
-                    )
+                # Execute the step
+                result = super().validate_document_quality_step(state)
 
                 return result
 
@@ -880,24 +944,23 @@ class ContractAnalysisService:
                 if self._should_skip("extract_terms"):
                     return state
 
-                # Execute the step first
+                # Emit progress at step start
+                self.parent_service._schedule_progress_update(
+                    self.session_id,
+                    self.contract_id,
+                    "extract_terms",
+                    42,
+                    "Extracting key contract terms using Australian tools",
+                )
+                await self._schedule_persist(
+                    "extract_terms",
+                    42,
+                    "Extracting key contract terms using Australian tools",
+                )
+
+                # Execute the step
                 try:
                     result = super().extract_contract_terms(state)
-
-                    # Only send progress updates and persist checkpoints AFTER successful completion
-                    self.parent_service._schedule_progress_update(
-                        self.session_id,
-                        self.contract_id,
-                        "extract_terms",
-                        42,
-                        "Extracting key contract terms using Australian tools",
-                    )
-                    await self._schedule_persist(
-                        "extract_terms",
-                        42,
-                        "Extracting key contract terms using Australian tools",
-                    )
-
                     return result
                 except Exception as e:
                     # Send failure progress for clarity
@@ -912,10 +975,7 @@ class ContractAnalysisService:
                 if self._should_skip("analyze_compliance"):
                     return state
 
-                # Execute the step first
-                result = super().analyze_australian_compliance(state)
-
-                # Only send progress updates and persist checkpoints AFTER successful completion
+                # Emit progress at step start
                 self.parent_service._schedule_progress_update(
                     self.session_id,
                     self.contract_id,
@@ -929,16 +989,16 @@ class ContractAnalysisService:
                     "Analyzing compliance with Australian property laws",
                 )
 
+                # Execute the step
+                result = super().analyze_australian_compliance(state)
+
                 return result
 
             async def assess_contract_risks(self, state):
                 if self._should_skip("assess_risks"):
                     return state
 
-                # Execute the step first
-                result = super().assess_contract_risks(state)
-
-                # Only send progress updates and persist checkpoints AFTER successful completion
+                # Emit progress at step start
                 self.parent_service._schedule_progress_update(
                     self.session_id,
                     self.contract_id,
@@ -950,29 +1010,31 @@ class ContractAnalysisService:
                     "assess_risks", 71, "Assessing contract risks and potential issues"
                 )
 
+                # Execute the step
+                result = super().assess_contract_risks(state)
+
                 return result
 
             async def generate_recommendations(self, state):
                 if self._should_skip("generate_recommendations"):
                     return state
 
-                # Execute the step first
-                result = super().generate_recommendations(state)
+                # Emit progress at step start
+                self.parent_service._schedule_progress_update(
+                    self.session_id,
+                    self.contract_id,
+                    "generate_recommendations",
+                    85,
+                    "Generating actionable recommendations",
+                )
+                await self._schedule_persist(
+                    "generate_recommendations",
+                    85,
+                    "Generating actionable recommendations",
+                )
 
-                # Only send progress updates and persist checkpoints AFTER successful completion
-                if not (isinstance(result, dict) and result.get("error_state")):
-                    self.parent_service._schedule_progress_update(
-                        self.session_id,
-                        self.contract_id,
-                        "generate_recommendations",
-                        85,
-                        "Generating actionable recommendations",
-                    )
-                    await self._schedule_persist(
-                        "generate_recommendations",
-                        85,
-                        "Generating actionable recommendations",
-                    )
+                # Execute the step
+                result = super().generate_recommendations(state)
 
                 return result
 
@@ -980,21 +1042,20 @@ class ContractAnalysisService:
                 if self._should_skip("compile_report"):
                     return state
 
-                # Execute the step first
-                result = super().compile_analysis_report(state)
+                # Emit progress at step start
+                self.parent_service._schedule_progress_update(
+                    self.session_id,
+                    self.contract_id,
+                    "compile_report",
+                    98,
+                    "Compiling final analysis report",
+                )
+                await self._schedule_persist(
+                    "compile_report", 98, "Compiling final analysis report"
+                )
 
-                # Only send progress updates and persist checkpoints AFTER successful completion
-                if not (isinstance(result, dict) and result.get("error_state")):
-                    self.parent_service._schedule_progress_update(
-                        self.session_id,
-                        self.contract_id,
-                        "compile_report",
-                        98,
-                        "Compiling final analysis report",
-                    )
-                    await self._schedule_persist(
-                        "compile_report", 98, "Compiling final analysis report"
-                    )
+                # Execute the step
+                result = super().compile_analysis_report(state)
 
                 return result
 
@@ -1018,51 +1079,29 @@ class ContractAnalysisService:
                     return "high_confidence"
                 return super().check_extraction_quality(state)
 
-            async def validate_document_quality_step(self, state):
-                if self._should_skip("validate_document_quality"):
-                    return state
-
-                # Execute the step first
-                result = super().validate_document_quality_step(state)
-
-                # Only send progress updates and persist checkpoints AFTER successful completion
-                if not (isinstance(result, dict) and result.get("error_state")):
-                    self.parent_service._schedule_progress_update(
-                        self.session_id,
-                        self.contract_id,
-                        "validate_document_quality",
-                        18,
-                        "Validating document quality and readability",
-                    )
-                    await self._schedule_persist(
-                        "validate_document_quality",
-                        18,
-                        "Validating document quality and readability",
-                    )
-
-                return result
+            # This duplicate method has been removed to avoid conflicts
+            # The correct validate_document_quality_step method is defined above with 34% per PRD
 
             async def validate_terms_completeness_step(self, state):
                 if self._should_skip("validate_terms_completeness"):
                     return state
 
-                # Execute the step first
-                result = super().validate_terms_completeness_step(state)
+                # Emit progress at step start
+                self.parent_service._schedule_progress_update(
+                    self.session_id,
+                    self.contract_id,
+                    "validate_terms_completeness",
+                    50,
+                    "Validating completeness of extracted terms",
+                )
+                await self._schedule_persist(
+                    "validate_terms_completeness",
+                    50,
+                    "Validating completeness of extracted terms",
+                )
 
-                # Only send progress updates and persist checkpoints AFTER successful completion
-                if not (isinstance(result, dict) and result.get("error_state")):
-                    self.parent_service._schedule_progress_update(
-                        self.session_id,
-                        self.contract_id,
-                        "validate_terms_completeness",
-                        50,
-                        "Validating completeness of extracted terms",
-                    )
-                    await self._schedule_persist(
-                        "validate_terms_completeness",
-                        50,
-                        "Validating completeness of extracted terms",
-                    )
+                # Execute the step
+                result = super().validate_terms_completeness_step(state)
 
                 return result
 
@@ -1132,10 +1171,11 @@ class ContractAnalysisService:
 
         # Execute the workflow
         final_state = await progress_workflow.analyze_contract(initial_state)
-        
+
         # Emit 100% completion if successful
-        if (final_state.get("parsing_status") == ProcessingStatus.COMPLETED and 
-            not final_state.get("error_state")):
+        if final_state.get(
+            "parsing_status"
+        ) == ProcessingStatus.COMPLETED and not final_state.get("error_state"):
             self._schedule_progress_update(
                 session_id,
                 contract_id,
@@ -1147,7 +1187,7 @@ class ContractAnalysisService:
                 await progress_callback("analysis_complete", 100, "Analysis complete")
             except Exception:
                 pass  # Best effort
-        
+
         return final_state
 
     async def _send_progress_update(
@@ -1189,6 +1229,25 @@ class ContractAnalysisService:
         - If no loop is running (e.g., inside a Celery worker sync context),
           publish via Redis synchronously so the FastAPI process can fan out to WS.
         """
+        # Monotonic guard: skip if not increasing
+        try:
+            last = None
+            manual_restart = False
+            if contract_id in self.active_analyses:
+                last = self.active_analyses[contract_id].get("progress")
+                manual_restart = bool(
+                    self.active_analyses[contract_id].get("manual_restart")
+                )
+            # Enforce monotonicity unless this session is marked as a manual restart
+            if (
+                not manual_restart
+                and last is not None
+                and progress_percent <= int(last)
+            ):
+                return
+        except Exception:
+            pass
+
         # Update local tracking immediately
         try:
             if contract_id in self.active_analyses:
@@ -1209,14 +1268,14 @@ class ContractAnalysisService:
                     "contract_id": contract_id,  # Use actual contract UUID
                     "current_step": step,
                     "progress_percent": progress_percent,
-                    "step_description": description
-                }
+                    "step_description": description,
+                },
             }
-            
+
             # Primary channel: session_id for UI WebSocket subscription
             if session_id:
                 publish_progress_sync(session_id, message)
-                
+
             # Secondary channel: contract_id for contract-specific subscriptions
             if contract_id and contract_id != session_id:
                 publish_progress_sync(contract_id, message)

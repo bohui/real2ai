@@ -500,11 +500,12 @@ async def comprehensive_document_analysis(
             # =============================================
 
             # Step: Contract Analysis Start (coarse milestone)
+            # Fixed: Use 7% to match PRD validate_input step percentage
             await update_analysis_progress(
                 user_id,
                 content_hash,
-                progress_percent=10,
-                current_step="contract_analysis",
+                progress_percent=7,
+                current_step="contract_analysis", 
                 step_description="Starting AI contract analysis...",
                 estimated_completion_minutes=1,
             )

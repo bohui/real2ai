@@ -203,6 +203,10 @@ sys.path.insert(0, str(backend_dir))
 
 from app.core.prompts.manager import get_prompt_manager
 from app.core.prompts.context import PromptContext, ContextType
+from app.clients.openai.config import OpenAISettings
+from app.clients.openai.client import OpenAIClient
+from app.clients.gemini.config import GeminiSettings
+from app.clients.gemini.client import GeminiClient
 
 async def test_prompt():
     """Test the specific prompt with the given model"""
@@ -274,11 +278,21 @@ async def test_prompt():
             prompts_dir.mkdir(parents=True, exist_ok=True)
             outputs_dir.mkdir(parents=True, exist_ok=True)
 
+            def sanitize(name: str) -> str:
+                return (
+                    name.replace('/', '_')
+                    .replace(' ', '_')
+                    .replace(':', '_')
+                )
+
+            comp_safe = sanitize(composition_name)
+            model_safe = sanitize('$model_name')
+
             def save_text(content: str, kind: str, ext: str = 'md') -> str:
                 if not content:
                     return ''
                 h = hashlib.sha256(content.encode('utf-8')).hexdigest()[:16]
-                fname = f"{kind}-{h}.{ext}"
+                fname = f"{comp_safe}__{model_safe}__{kind}__{h}.{ext}"
                 target_dir = prompts_dir if kind in ('system', 'user') else outputs_dir
                 fpath = target_dir / fname
                 if not fpath.exists():
@@ -289,7 +303,74 @@ async def test_prompt():
 
             system_prompt_path = save_text(system_prompt, 'system', 'md')
             user_prompt_path = save_text(user_prompt, 'user', 'md')
-            output_path = ''  # No model execution here; leave blank
+            # Execute model via existing clients and save output
+            selected_model = "$model_name"
+            output_path = ''
+            # Disable tracing/instrumentation to avoid hanging if not configured
+            os.environ.setdefault("LANGSMITH_TRACING", "0")
+            os.environ.setdefault("LANGSMITH_API_KEY", "")
+            os.environ.setdefault("OPENAI_INIT_CONNECTION_TEST", "false")
+
+            # Credential preflight
+            def missing(env):
+                return not os.getenv(env)
+
+            preflight_error = None
+            if selected_model.lower().startswith('gemini'):
+                if missing('GOOGLE_APPLICATION_CREDENTIALS') and missing('GEMINI_CREDENTIALS_PATH') and missing('GOOGLE_CLOUD_PROJECT'):
+                    preflight_error = 'Missing Gemini credentials (GOOGLE_APPLICATION_CREDENTIALS or GEMINI_CREDENTIALS_PATH)'
+            else:
+                if '/' in selected_model:
+                    if missing('OPENROUTER_API_KEY'):
+                        preflight_error = 'Missing OPENROUTER_API_KEY for OpenRouter-style model name'
+                else:
+                    if missing('OPENAI_API_KEY'):
+                        preflight_error = 'Missing OPENAI_API_KEY for OpenAI model'
+
+            if preflight_error:
+                status = 'fail'
+                output_path = save_text(f'preflight_error: {preflight_error}', 'output', 'txt')
+            else:
+                try:
+                    response_text = ''
+                    if selected_model.lower().startswith('gemini'):
+                        g_settings = GeminiSettings()
+                        g_config = g_settings.to_client_config()
+                        g_config.model_name = selected_model
+                        g_client = GeminiClient(g_config)
+                        await g_client.initialize()
+                        response_text = await asyncio.wait_for(
+                            g_client.generate_content(
+                                user_prompt,
+                                system_prompt=system_prompt,
+                                model=g_config.model_name,
+                            ),
+                            timeout=30,
+                        )
+                    else:
+                        o_settings = OpenAISettings()
+                        o_config = o_settings.to_client_config()
+                        o_config.model_name = selected_model
+                        o_client = OpenAIClient(o_config)
+                        await o_client.initialize()
+                        response_text = await asyncio.wait_for(
+                            o_client.generate_content(
+                                user_prompt,
+                                system_prompt=system_prompt,
+                                model=o_config.model_name,
+                            ),
+                            timeout=30,
+                        )
+                    # Save output; prefer JSON parse, else wrap in {text}
+                    try:
+                        parsed = json.loads(response_text)
+                        output_json = json.dumps(parsed, ensure_ascii=False, indent=2)
+                    except Exception:
+                        output_json = json.dumps({'text': response_text}, ensure_ascii=False, indent=2)
+                    output_path = save_text(output_json, 'output', 'json')
+                except Exception as model_error:
+                    status = 'fail'
+                    output_path = save_text(f'model_error: {str(model_error)}', 'output', 'txt')
             # Prepare CSV header and row
             header = [
                 'timestamp', 'model', 'composition_name', 'composition_version', 'result',

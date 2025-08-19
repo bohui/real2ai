@@ -184,7 +184,7 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({ className }) => {
   console.log("✅ AnalysisProgress: Rendering component");
 
   const progress = analysisProgress?.progress_percent || 0;
-  
+
   // Filter steps based on configuration and current progress
   const visibleSteps = steps.filter((step) => {
     // Always show validate_document_quality step unless we know it's disabled
@@ -201,7 +201,9 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({ className }) => {
   });
 
   const currentStepIndex = analysisProgress
-    ? visibleSteps.findIndex((step) => step.key === analysisProgress.current_step)
+    ? visibleSteps.findIndex(
+        (step) => step.key === analysisProgress.current_step
+      )
     : -1;
   const isConnected = wsService?.isWebSocketConnected() || false;
 
@@ -303,28 +305,7 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({ className }) => {
           </div>
         )}
 
-        {/* Current Step Description */}
-        {analysisProgress && (
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="p-4 bg-gradient-to-r from-primary-50 to-primary-100/50 rounded-xl border border-primary-200 shadow-sm"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-primary-600 rounded-full flex items-center justify-center shadow-sm">
-                <div className="w-3 h-3 bg-white rounded-full animate-pulse" />
-              </div>
-              <div>
-                <p className="font-semibold text-primary-900">
-                  {analysisProgress.step_description || "Processing..."}
-                </p>
-                <p className="text-sm text-primary-700">
-                  This may take a few moments
-                </p>
-              </div>
-            </div>
-          </motion.div>
-        )}
+        {/* Removed inline current-step banner to avoid duplication with step list */}
 
         {/* Step List */}
         <div className="space-y-3">

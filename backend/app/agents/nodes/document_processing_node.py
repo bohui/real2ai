@@ -129,6 +129,8 @@ class DocumentProcessingNode(BaseNode):
                         australian_state=australian_state,
                         contract_type=state.get("contract_type", "purchase_agreement"),
                         document_type=state.get("document_type", "contract"),
+                        notify_progress=state.get("notify_progress"),
+                        contract_id=state.get("contract_id"),
                     )
                     summary = result
             except Exception as subflow_error:

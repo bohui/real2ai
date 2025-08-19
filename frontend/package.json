@@ -48,8 +48,6 @@
     "zustand": "^5.0.7"
   },
   "devDependencies": {
-    "@stagewise-plugins/react": "0.5.2",
-    "@stagewise/toolbar-react": "0.5.2",
     "@tailwindcss/postcss": "^4.1.11",
     "@testing-library/jest-dom": "^6.6.4",
     "@testing-library/react": "^16.3.0",

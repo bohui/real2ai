@@ -5,7 +5,7 @@ This node migrates the _extract_text_with_comprehensive_analysis method from Doc
 into a dedicated node for the document processing subflow.
 """
 
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional, Tuple, Callable, Awaitable
 import os
 import tempfile
 import uuid
@@ -50,6 +50,7 @@ class ExtractTextNode(DocumentProcessingNodeBase):
         self.storage_service = None
         self.visual_artifact_service = None
         self.text_extraction_result = None
+        self._progress_callback: Optional[Callable[[str, int, str], Awaitable[None]]] = None
         # Heuristics / thresholds
         self._min_text_len_for_ocr = 100
         self._ocr_zoom = 2.0
@@ -93,6 +94,15 @@ class ExtractTextNode(DocumentProcessingNodeBase):
         if self.artifacts_repo:
             self.artifacts_repo = None
         # Storage service doesn't need cleanup
+
+    def set_progress_callback(self, callback: Optional[Callable[[str, int, str], Awaitable[None]]]) -> None:
+        """
+        Set explicit progress callback to avoid it being dropped by state reducers.
+        
+        Args:
+            callback: Progress callback function that takes (step, percent, description)
+        """
+        self._progress_callback = callback
 
     async def execute(self, state: DocumentProcessingState) -> DocumentProcessingState:
         """
@@ -292,6 +302,43 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                             params,
                         )
 
+            # If diagram processing result wasn't produced during extraction (e.g., artifact reuse or non-PDF),
+            # try to hydrate it from stored visual artifacts
+            if (
+                not hasattr(self, "diagram_processing_result")
+                or self.diagram_processing_result is None
+            ):
+                try:
+                    hydrated = await self._hydrate_diagram_result_from_artifacts(
+                        content_hmac=content_hmac,
+                        algorithm_version=algorithm_version,
+                        params_fingerprint=params_fingerprint,
+                    )
+                    self.diagram_processing_result = hydrated
+                    self._log_debug(
+                        "Hydrated diagram_processing_result from artifacts",
+                        total_diagrams=getattr(hydrated, "total_diagrams", 0),
+                    )
+                except Exception as hydrate_err:
+                    # Best-effort; fall back to empty result
+                    self._log_warning(
+                        f"Failed to hydrate diagram artifacts: {hydrate_err}"
+                    )
+                    self.diagram_processing_result = DiagramProcessingResult(
+                        total_diagrams=0,
+                        diagram_pages=[],
+                        diagram_types={},
+                        detection_summary={
+                            "processing_method": "none",
+                            "detection_source": "none",
+                        },
+                        processing_notes=[],
+                        success=True,
+                        diagrams=[],
+                        pages_processed=[],
+                        processing_timestamp=datetime.now(timezone.utc).isoformat(),
+                    )
+
             # Validate extraction result
             if (
                 not self.text_extraction_result
@@ -376,7 +423,27 @@ class ExtractTextNode(DocumentProcessingNodeBase):
             # Update state with extraction result and artifact metadata
 
             updated_state["text_extraction_result"] = self.text_extraction_result
-            updated_state["diagram_processing_result"] = self.diagram_processing_result
+
+            # Ensure diagram_processing_result is always present to avoid AttributeError
+            if (
+                hasattr(self, "diagram_processing_result")
+                and self.diagram_processing_result is not None
+            ):
+                diagram_result = self.diagram_processing_result
+            else:
+                # Provide a safe, empty default result
+                diagram_result = DiagramProcessingResult(
+                    total_diagrams=0,
+                    diagram_pages=[],
+                    diagram_types={},
+                    detection_summary={},
+                    processing_notes=[],
+                    success=True,
+                    diagrams=[],
+                    pages_processed=[],
+                    processing_timestamp=datetime.now(timezone.utc).isoformat(),
+                )
+            updated_state["diagram_processing_result"] = diagram_result
             updated_state["content_hmac"] = content_hmac
             updated_state["algorithm_version"] = algorithm_version
             updated_state["params_fingerprint"] = params_fingerprint
@@ -419,6 +486,107 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                     "operation": "text_extraction",
                 },
             )
+
+    async def _hydrate_diagram_result_from_artifacts(
+        self,
+        content_hmac: str,
+        algorithm_version: int,
+        params_fingerprint: str,
+    ) -> DiagramProcessingResult:
+        """
+        Build DiagramProcessingResult by inspecting stored visual artifacts.
+
+        This covers code paths that reuse artifacts for text and do not run PDF extraction
+        (which normally initializes diagram_processing_result), ensuring downstream nodes
+        have a consistent state.
+        """
+        # Ensure repo is available
+        if not self.artifacts_repo:
+            await self.initialize()
+
+        visuals = await self.artifacts_repo.get_all_visual_artifacts(
+            content_hmac, algorithm_version, params_fingerprint
+        )
+
+        # Also load page artifacts to infer diagram presence from layout/metrics
+        pages = await self.artifacts_repo.get_all_page_artifacts(
+            content_hmac, algorithm_version, params_fingerprint
+        )
+
+        if not visuals and not pages:
+            return DiagramProcessingResult(
+                total_diagrams=0,
+                diagram_pages=[],
+                diagram_types={},
+                detection_summary={
+                    "processing_method": "artifact_reuse",
+                    "pages_analyzed": 0,
+                    "pages_with_diagrams": 0,
+                    "detection_source": "artifacts",
+                },
+                processing_notes=[],
+                success=True,
+                diagrams=[],
+                pages_processed=[],
+                processing_timestamp=datetime.now(timezone.utc).isoformat(),
+            )
+
+        # Count only diagram-type visuals for diagram metrics
+        diagram_items = [
+            v for v in visuals if getattr(v, "artifact_type", "diagram") == "diagram"
+        ]
+        total_diagrams = len(diagram_items)
+        diagram_pages_from_visuals = {
+            getattr(v, "page_number", None)
+            for v in diagram_items
+            if getattr(v, "page_number", None) is not None
+        }
+
+        # Infer diagram pages from page artifacts' layout/metrics when possible
+        diagram_pages_from_layout = {
+            getattr(p, "page_number", None)
+            for p in pages
+            if getattr(p, "page_number", None) is not None
+            and (
+                ((getattr(p, "layout", {}) or {}).get("has_diagrams") is True)
+                or ((getattr(p, "metrics", {}) or {}).get("has_diagrams") is True)
+            )
+        }
+
+        pages_with_diagrams = sorted(
+            set(diagram_pages_from_visuals) | set(diagram_pages_from_layout)
+        )
+
+        # Aggregate types if provided in diagram_meta
+        diagram_types: Dict[str, int] = {}
+        for v in diagram_items:
+            meta = getattr(v, "diagram_meta", {}) or {}
+            diagram_type = meta.get("type") or meta.get("diagram_type")
+            if diagram_type:
+                diagram_types[diagram_type] = diagram_types.get(diagram_type, 0) + 1
+
+        return DiagramProcessingResult(
+            total_diagrams=total_diagrams,
+            diagram_pages=[],  # Keep simple; downstream does not rely on detailed page summaries
+            diagram_types=diagram_types,
+            detection_summary={
+                "processing_method": "artifact_reuse",
+                "pages_analyzed": len(pages) if pages else 0,
+                "pages_with_diagrams": len(pages_with_diagrams),
+                "detection_source": "artifacts",
+            },
+            processing_notes=[],
+            success=True,
+            diagrams=[],
+            pages_processed=sorted(
+                {
+                    getattr(p, "page_number", None)
+                    for p in pages
+                    if getattr(p, "page_number", None) is not None
+                }
+            ),
+            processing_timestamp=datetime.now(timezone.utc).isoformat(),
+        )
 
     async def _build_result_from_artifacts(
         self, text_artifact, page_artifacts
@@ -865,8 +1033,12 @@ class ExtractTextNode(DocumentProcessingNodeBase):
             pages: List[PageExtraction] = []
             extraction_methods: List[str] = []
             full_text_parts: List[str] = []
+            # PRD: prepare notify callback (explicit takes precedence over state) for incremental progress 7-30%
+            notify_cb = self._progress_callback or state.get("notify_progress")
+            last_sent_percent = 7
 
-            for idx in range(len(doc)):
+            total_pages = len(doc)
+            for idx in range(total_pages):
                 page = doc.load_page(idx)
                 raw_text = page.get_text() or ""
                 method = "pymupdf"
@@ -1160,6 +1332,22 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                 if method not in extraction_methods:
                     extraction_methods.append(method)
 
+                # Emit incremental page progress mapped to 7-30%
+                if notify_cb:
+                    try:
+                        mapped = 7 + int(((idx + 1) / max(1, total_pages)) * 23)
+                        mapped = max(8, min(30, mapped))
+                        if mapped > last_sent_percent:
+                            await notify_cb(
+                                "document_processing",
+                                mapped,
+                                f"Extract text & diagrams (page {idx + 1}/{total_pages})",
+                            )
+                            last_sent_percent = mapped
+                    except Exception:
+                        # Best-effort; do not break processing
+                        pass
+
             doc.close()
 
             full_text = "".join(full_text_parts)
@@ -1252,7 +1440,7 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                     total_word_count=total_words,
                 )
 
-            return TextExtractionResult(
+            result = TextExtractionResult(
                 success=True,
                 full_text=full_text,
                 pages=pages,
@@ -1261,6 +1449,17 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                 total_word_count=total_words,
                 overall_confidence=overall_conf,
             )
+            # Ensure a final 30% emit after extraction completes
+            if notify_cb and last_sent_percent < 30:
+                try:
+                    await notify_cb(
+                        "document_processing",
+                        30,
+                        "Extract text & diagrams",
+                    )
+                except Exception:
+                    pass
+            return result
         except Exception as e:
             self._log_warning(f"Hybrid PDF extraction failed: {e}")
             # Clean up diagram processing result on failure

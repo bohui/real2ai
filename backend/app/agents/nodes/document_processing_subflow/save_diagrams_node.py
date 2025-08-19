@@ -243,9 +243,12 @@ class SaveDiagramsNode(DocumentProcessingNodeBase):
                 detection_summary={
                     "artifacts_created": len(diagram_artifacts),
                     "user_mappings_created": diagrams_saved,
+                    # Standardize to string labels for consistency across nodes
+                    # "ocr_detection" when there was a current detection result present,
+                    # otherwise "legacy_analysis" when saving without a detection pass
                     "processing_method": (
-                        1 if current_result else 0
-                    ),  # 1 for ocr_detection, 0 for legacy_analysis
+                        "ocr_detection" if current_result else "legacy_analysis"
+                    ),
                 },
             )
 

@@ -87,16 +87,19 @@ class FinalValidationNode(BaseNode):
                     workflow_outputs
                 )
 
+            # Normalize potential Pydantic model to plain dict for safe access/storage
+            normalized_validation = self._normalize_validation_result(validation_result)
+
             # Update state with validation results
-            state["final_validation_result"] = validation_result
-            validation_confidence = validation_result.get("overall_confidence", 0.5)
+            state["final_validation_result"] = normalized_validation
+            validation_confidence = normalized_validation.get("overall_confidence", 0.5)
             # Defensive access for confidence_scores
             state.setdefault("confidence_scores", {})[
                 "final_validation"
             ] = validation_confidence
 
             # Determine overall validation status
-            validation_passed = validation_result.get("validation_passed", False)
+            validation_passed = normalized_validation.get("validation_passed", False)
             validation_threshold = 0.7
 
             if validation_confidence >= validation_threshold and validation_passed:
@@ -109,7 +112,7 @@ class FinalValidationNode(BaseNode):
             state["final_workflow_confidence"] = final_confidence
 
             validation_data = {
-                "validation_result": validation_result,
+                "validation_result": normalized_validation,
                 "validation_status": validation_status,
                 "validation_confidence": validation_confidence,
                 "final_workflow_confidence": final_confidence,
@@ -131,6 +134,64 @@ class FinalValidationNode(BaseNode):
             return self._handle_node_error(
                 state, e, f"Final validation failed: {str(e)}", {"use_llm": use_llm}
             )
+
+    def _normalize_validation_result(self, result: Any) -> Dict[str, Any]:
+        """Coerce validation result (dict or Pydantic model) into a plain dict with expected keys.
+
+        - Supports Pydantic v1 (dict()) and v2 (model_dump())
+        - Maps alternative confidence keys to "overall_confidence"
+        """
+        data: Dict[str, Any]
+
+        if isinstance(result, dict):
+            data = dict(result)
+        else:
+            # Lazy import to avoid hard dependency at import time
+            try:
+                from pydantic import BaseModel  # type: ignore
+            except Exception:
+                BaseModel = object  # type: ignore
+
+            if isinstance(result, BaseModel):
+                # Try Pydantic v2 first, then v1
+                if hasattr(result, "model_dump"):
+                    data = result.model_dump()  # type: ignore[attr-defined]
+                elif hasattr(result, "dict"):
+                    data = result.dict()  # type: ignore[attr-defined]
+                else:
+                    data = {"validation_passed": False}
+            else:
+                # Best-effort fallback
+                try:
+                    data = dict(result)  # type: ignore[arg-type]
+                except Exception:
+                    data = {"validation_passed": False}
+
+        # Normalize confidence key
+        if "overall_confidence" not in data:
+            if "validation_score" in data:
+                data["overall_confidence"] = data.get("validation_score", 0.5)
+            elif "confidence_score" in data:
+                data["overall_confidence"] = data.get("confidence_score", 0.5)
+            elif isinstance(
+                data.get("metadata"), dict
+            ) and "overall_confidence" in data.get("metadata", {}):
+                data["overall_confidence"] = data["metadata"].get(
+                    "overall_confidence", 0.5
+                )
+
+        # Ensure type safety for confidence value
+        try:
+            data["overall_confidence"] = float(data.get("overall_confidence", 0.5))
+        except Exception:
+            data["overall_confidence"] = 0.5
+
+        # Ensure validation_passed key exists
+        if "validation_passed" not in data:
+            # Fallback: treat high confidence as pass
+            data["validation_passed"] = data.get("overall_confidence", 0.0) >= 0.7
+
+        return data
 
     def _gather_workflow_outputs(self, state: RealEstateAgentState) -> Dict[str, Any]:
         """Gather all workflow outputs for validation."""

@@ -14,6 +14,8 @@ from app.router.websockets import (
     handle_status_request,
     handle_cancellation_request,
     _dispatch_analysis_task,
+    replay_last_progress_on_reconnect,
+    CacheStatus,
 )
 from app.services.repositories.documents_repository import DocumentsRepository
 from app.models.supabase_models import Document
@@ -376,6 +378,135 @@ class TestWebSocketsRepositoryMigration:
 
         # Verify contract view creation was called (since we returned empty list)
         mock_contract_views_repo.create_contract_view.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_replay_last_progress_on_reconnect_with_progress(self):
+        """Test progress replay when progress exists (PRD requirement)"""
+        
+        mock_websocket = AsyncMock()
+        cache_status_result = {
+            "content_hash": self.content_hash,
+            "contract_id": self.contract_id,
+            "cache_status": CacheStatus.IN_PROGRESS
+        }
+        
+        # Mock existing progress
+        mock_progress_repo = AsyncMock()
+        mock_progress_repo.get_latest_progress.return_value = {
+            "current_step": "extract_terms",
+            "progress_percent": 42,
+            "step_description": "Extracting contract terms",
+            "session_id": self.document_id,
+            "estimated_completion_minutes": 2
+        }
+        
+        with (
+            patch("app.router.websockets.AnalysisProgressRepository", return_value=mock_progress_repo),
+            patch("app.router.websockets.websocket_manager") as mock_ws_manager
+        ):
+            await replay_last_progress_on_reconnect(
+                mock_websocket, self.document_id, cache_status_result, self.user_id
+            )
+        
+        # Verify progress lookup was called
+        mock_progress_repo.get_latest_progress.assert_called_once_with(
+            self.content_hash,
+            self.user_id,
+            columns=(
+                "current_step, progress_percent, step_description, status, "
+                "estimated_completion_minutes, updated_at, session_id"
+            )
+        )
+        
+        # Verify replay message was sent via websocket manager
+        mock_ws_manager.send_personal_message.assert_called_once()
+        call_args = mock_ws_manager.send_personal_message.call_args[0]
+        assert call_args[0] == self.document_id
+        assert call_args[1] == mock_websocket
+        message = call_args[2]
+        assert message["event_type"] == "analysis_progress" 
+        assert message["data"]["progress_percent"] == 42
+        assert message["data"]["current_step"] == "extract_terms"
+        assert message["data"]["is_replay"] is True
+
+    @pytest.mark.asyncio 
+    async def test_replay_last_progress_in_progress_no_detailed_progress(self):
+        """Test progress replay for in-progress analysis with no detailed progress (PRD requirement)"""
+        
+        mock_websocket = AsyncMock()
+        cache_status_result = {
+            "content_hash": self.content_hash,
+            "contract_id": self.contract_id,
+            "cache_status": CacheStatus.IN_PROGRESS
+        }
+        
+        # Mock no existing progress (but with progress lookup called since it's IN_PROGRESS)
+        mock_progress_repo = AsyncMock() 
+        mock_progress_repo.get_latest_progress.return_value = None
+        
+        with (
+            patch("app.router.websockets.AnalysisProgressRepository", return_value=mock_progress_repo),
+            patch("app.router.websockets.websocket_manager") as mock_ws_manager
+        ):
+            await replay_last_progress_on_reconnect(
+                mock_websocket, self.document_id, cache_status_result, self.user_id
+            )
+        
+        # Verify 0% initialization was sent via websocket manager  
+        mock_ws_manager.send_personal_message.assert_called_once()
+        call_args = mock_ws_manager.send_personal_message.call_args[0]
+        message = call_args[2]
+        assert message["event_type"] == "analysis_progress"
+        assert message["data"]["progress_percent"] == 0
+        assert message["data"]["current_step"] == "document_uploaded"
+        assert message["data"]["step_description"] == "Analysis initialized"
+        assert message["data"]["is_replay"] is True
+
+    @pytest.mark.asyncio
+    async def test_replay_last_progress_complete_status_no_replay(self):
+        """Test no progress replay for completed analysis (PRD requirement)"""
+        
+        mock_websocket = AsyncMock()
+        cache_status_result = {
+            "content_hash": self.content_hash,
+            "contract_id": self.contract_id,
+            "cache_status": CacheStatus.COMPLETE
+        }
+        
+        mock_progress_repo = AsyncMock()
+        
+        with (
+            patch("app.router.websockets.AnalysisProgressRepository", return_value=mock_progress_repo),
+            patch("app.router.websockets.websocket_manager") as mock_ws_manager
+        ):
+            await replay_last_progress_on_reconnect(
+                mock_websocket, self.document_id, cache_status_result, self.user_id
+            )
+        
+        # Verify no progress lookup was performed for completed analysis
+        mock_progress_repo.get_latest_progress.assert_not_called()
+        
+        # Verify no message was sent
+        mock_ws_manager.send_personal_message.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_replay_last_progress_no_content_hash(self):
+        """Test progress replay gracefully handles missing content_hash"""
+        
+        mock_websocket = AsyncMock()
+        cache_status_result = {
+            "content_hash": None,
+            "contract_id": self.contract_id,
+            "cache_status": CacheStatus.IN_PROGRESS
+        }
+        
+        with patch("app.router.websockets.websocket_manager") as mock_ws_manager:
+            await replay_last_progress_on_reconnect(
+                mock_websocket, self.document_id, cache_status_result, self.user_id
+            )
+        
+        # Verify no message was sent
+        mock_ws_manager.send_personal_message.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_user_client_database_usage_eliminated(self):

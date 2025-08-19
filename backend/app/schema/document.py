@@ -1,6 +1,6 @@
 """Document-related schemas."""
 
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Union
 from pydantic import BaseModel, Field
 from datetime import datetime
 
@@ -107,7 +107,7 @@ class DiagramProcessingResult(SchemaBase):
     total_diagrams: int = 0
     diagram_pages: List[DiagramPageSummary] = Field(default_factory=list)
     diagram_types: Dict[str, int] = Field(default_factory=dict)
-    detection_summary: Dict[str, int] = Field(default_factory=dict)
+    detection_summary: Dict[str, Union[int, str]] = Field(default_factory=dict)
     processing_notes: Optional[List[str]] = Field(default_factory=list)
 
     # Additional fields used by nodes

@@ -489,6 +489,11 @@ async def document_analysis_websocket(
             },
         )
 
+        # STEP 4.5: Replay last persisted progress for reconnect (PRD requirement)
+        await replay_last_progress_on_reconnect(
+            websocket, document_id, cache_status_result, str(user.id)
+        )
+
         # Send document_uploaded notification if this is a recent upload
         try:
             # Get document details to check upload time
@@ -1312,6 +1317,103 @@ async def _dispatch_analysis_task(
     except Exception as e:
         logger.error(f"Failed to dispatch analysis task: {str(e)}")
         raise ValueError(f"Analysis dispatch failed: {str(e)}")
+
+
+async def replay_last_progress_on_reconnect(
+    websocket: WebSocket, 
+    document_id: str, 
+    cache_status_result: Dict[str, Any], 
+    user_id: str
+):
+    """
+    Replay the last persisted progress so the UI can redraw current state.
+    
+    Per PRD requirements:
+    - When a client (re)subscribes to the session channel, replay last persisted progress
+    - Only replay if progress exists and analysis is in progress or recently completed
+    - Emit 0% if no progress exists but analysis is initialized
+    """
+    try:
+        content_hash = cache_status_result.get("content_hash")
+        contract_id = cache_status_result.get("contract_id")
+        cache_status = cache_status_result.get("cache_status")
+        
+        if not content_hash:
+            logger.debug(f"No content_hash available for progress replay on document {document_id}")
+            return
+        
+        # Skip progress replay for completed analyses (no need to redraw UI)
+        if cache_status == CacheStatus.COMPLETE:
+            logger.debug(f"No progress replay needed for completed analysis on document {document_id}")
+            return
+        
+        # Get the last persisted progress from analysis_progress table
+        progress_repo = AnalysisProgressRepository()
+        progress_data = await progress_repo.get_latest_progress(
+            content_hash,
+            user_id,
+            columns=(
+                "current_step, progress_percent, step_description, status, "
+                "estimated_completion_minutes, updated_at, session_id"
+            ),
+        )
+        
+        if progress_data and progress_data.get("progress_percent", 0) > 0:
+            # Replay the last progress state for UI redraw
+            replay_message = {
+                "event_type": "analysis_progress",
+                "timestamp": datetime.now(UTC).isoformat(),
+                "data": {
+                    "session_id": progress_data.get("session_id") or document_id,
+                    "contract_id": contract_id or "unknown",
+                    "current_step": progress_data.get("current_step", "document_uploaded"),
+                    "progress_percent": progress_data.get("progress_percent", 0),
+                    "step_description": progress_data.get("step_description", ""),
+                    "estimated_completion_minutes": progress_data.get("estimated_completion_minutes"),
+                    "is_replay": True,  # Flag to indicate this is a replay
+                }
+            }
+            
+            await websocket_manager.send_personal_message(
+                document_id, websocket, replay_message
+            )
+            
+            logger.info(
+                f"Replayed progress {progress_data.get('progress_percent', 0)}% "
+                f"at step '{progress_data.get('current_step', 'unknown')}' "
+                f"for document {document_id} on reconnect"
+            )
+            
+        elif cache_status == CacheStatus.IN_PROGRESS:
+            # Analysis is in progress but no detailed progress found - emit 0% initialization
+            initialization_message = {
+                "event_type": "analysis_progress", 
+                "timestamp": datetime.now(UTC).isoformat(),
+                "data": {
+                    "session_id": document_id,
+                    "contract_id": contract_id or "unknown", 
+                    "current_step": "document_uploaded",
+                    "progress_percent": 0,
+                    "step_description": "Analysis initialized",
+                    "is_replay": True,
+                }
+            }
+            
+            await websocket_manager.send_personal_message(
+                document_id, websocket, initialization_message  
+            )
+            
+            logger.info(f"Replayed 0% initialization for in-progress analysis on document {document_id}")
+            
+        else:
+            logger.debug(
+                f"No progress replay needed for document {document_id} "
+                f"(cache_status: {cache_status}, has_progress: {bool(progress_data)})"
+            )
+            
+    except Exception as e:
+        # Don't fail the connection if progress replay fails
+        logger.warning(f"Failed to replay progress for document {document_id}: {e}")
 
 
 def get_progress_from_status(status: str) -> int:

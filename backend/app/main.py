@@ -215,10 +215,7 @@ app = FastAPI(
 
 # Configure CORS
 # Get allowed origins from environment variable or use defaults
-allowed_origins = os.getenv(
-    "ALLOWED_ORIGINS",
-    "http://localhost:3000,http://localhost:3100,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:3100,http://127.0.0.1:5173",
-).split(",")
+allowed_origins = os.getenv("ALLOWED_ORIGINS", "").split(",")
 
 # Add production origins if configured
 if os.getenv("ENVIRONMENT") == "production":

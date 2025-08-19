@@ -2,7 +2,7 @@
 LangGraph State Models for Real2.AI Contract Analysis
 """
 
-from typing import TypedDict, Optional, Dict, List, Any, Annotated
+from typing import TypedDict, Optional, Dict, List, Any, Annotated, Callable, Awaitable
 from datetime import datetime
 import uuid
 from operator import add
@@ -19,6 +19,8 @@ class RealEstateAgentState(TypedDict):
     agent_version: Annotated[
         str, lambda x, y: y
     ]  # Last value wins for concurrent updates
+    # Contract identifier for UI progress payloads (UUID)
+    contract_id: Annotated[Optional[str], lambda x, y: y]
 
     # Document Processing
     document_data: Annotated[
@@ -70,6 +72,11 @@ class RealEstateAgentState(TypedDict):
     confidence_scores: Annotated[Dict[str, float], lambda x, y: y]  # Last value wins
     processing_time: Annotated[Optional[float], lambda x, y: y]  # Last value wins
     progress: Annotated[Optional[Dict[str, Any]], lambda x, y: y]  # Last value wins
+    # Optional callback to emit progress from subflow nodes (step, percent, description)
+    notify_progress: Annotated[
+        Optional[Callable[[str, int, str], Awaitable[None]]],
+        lambda x, y: y,
+    ]
 
     # Output
     analysis_results: Annotated[
@@ -160,6 +167,7 @@ def create_initial_state(
         user_id=user_id,
         session_id=str(uuid.uuid4()),
         agent_version="1.0",
+        contract_id=None,
         # Document Processing
         document_data=None,
         document_metadata=None,
@@ -185,6 +193,7 @@ def create_initial_state(
         confidence_scores={},
         processing_time=None,
         progress={"percentage": 0, "step": "initialized"},
+        notify_progress=None,
         # Output
         analysis_results={},
         report_data=None,
