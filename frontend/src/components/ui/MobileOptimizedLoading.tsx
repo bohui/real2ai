@@ -15,7 +15,7 @@ const MobileOptimizedLoading: React.FC<MobileOptimizedLoadingProps> = ({
   title = "Analyzing Contract",
   subtitle = "Our AI is reviewing your document...",
   progress = 0,
-  currentStep = "Processing document",
+  currentStep = "Upload document",
   estimatedTime,
   className = "",
 }) => {

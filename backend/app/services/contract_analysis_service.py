@@ -803,13 +803,13 @@ class ContractAnalysisService:
                     self.session_id,
                     self.contract_id,
                     "process_document",
-                    28,
-                    "Processing document and extracting text content",
+                    5,
+                    "Upload document",
                 )
                 await self._schedule_persist(
                     "process_document",
-                    28,
-                    "Processing document and extracting text content",
+                    5,
+                    "Upload document",
                 )
 
                 return result

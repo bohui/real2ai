@@ -208,6 +208,7 @@ def langsmith_trace(name: Optional[str] = None, run_type: str = "llm", **trace_k
                     return result
                 except Exception as e:
                     run.error = str(e)
+                    # Ensure run is properly ended with error
                     run.end(error=str(e))
                     raise
 

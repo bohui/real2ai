@@ -90,7 +90,18 @@ class RecommendationsGenerationNode(BaseNode):
                 )
 
             # Update state with recommendations
-            state["recommendations"] = recommendations_result
+            # Fix: Extract the recommendations list from the result, not assign the entire dict
+            if isinstance(recommendations_result, dict):
+                # Extract the actual recommendations list from the result
+                recommendations_list = recommendations_result.get("recommendations", [])
+                # Ensure it's a list
+                if not isinstance(recommendations_list, list):
+                    recommendations_list = []
+                state["recommendations"] = recommendations_list
+            else:
+                # Fallback: ensure recommendations is always a list
+                state["recommendations"] = []
+            
             recommendations_confidence = recommendations_result.get(
                 "overall_confidence", 0.5
             )
@@ -190,18 +201,44 @@ class RecommendationsGenerationNode(BaseNode):
             # Parse structured response if we got one
             if response:
                 if self.structured_parsers.get("recommendations"):
-                    parsing_result = self.structured_parsers["recommendations"].parse(
-                        response
-                    )
-                    if parsing_result.success and parsing_result.parsed_data:
-                        return parsing_result.parsed_data
+                    try:
+                        parsing_result = self.structured_parsers["recommendations"].parse(
+                            response
+                        )
+                        if parsing_result.success and parsing_result.parsed_data:
+                            # Validate that we have proper recommendations structure
+                            parsed_data = parsing_result.parsed_data
+                            if hasattr(parsed_data, "recommendations"):
+                                # Ensure recommendations is a list
+                                recommendations_list = parsed_data.recommendations
+                                if isinstance(recommendations_list, list):
+                                    return {
+                                        "recommendations": recommendations_list,
+                                        "priority_actions": getattr(parsed_data, "priority_actions", []),
+                                        "overall_confidence": getattr(parsed_data, "overall_confidence", 0.8),
+                                        "generation_method": "llm_structured"
+                                    }
+                    except Exception as parse_error:
+                        logger.warning(f"Structured parsing failed: {parse_error}")
 
                 # Fallback to JSON parsing
-                recommendations_result = self._safe_json_parse(response)
-                if recommendations_result:
-                    return recommendations_result
+                try:
+                    recommendations_result = self._safe_json_parse(response)
+                    if recommendations_result and isinstance(recommendations_result, dict):
+                        # Validate the JSON result structure
+                        recommendations_list = recommendations_result.get("recommendations", [])
+                        if isinstance(recommendations_list, list):
+                            return {
+                                "recommendations": recommendations_list,
+                                "priority_actions": recommendations_result.get("priority_actions", []),
+                                "overall_confidence": recommendations_result.get("overall_confidence", 0.7),
+                                "generation_method": "llm_json"
+                            }
+                except Exception as json_error:
+                    logger.warning(f"JSON parsing failed: {json_error}")
 
             # Fallback to rule-based generation if no response or parsing fails
+            logger.info("Using rule-based recommendations generation as fallback")
             return await self._generate_recommendations_rule_based(
                 contract_terms, compliance_analysis, risk_assessment
             )
@@ -402,3 +439,52 @@ class RecommendationsGenerationNode(BaseNode):
         summary += f"Total of {total_recommendations} recommendation(s) generated for contract review."
 
         return summary
+
+    def _clean_recommendations_data(self, raw_data: Any) -> List[Dict[str, Any]]:
+        """Clean and validate recommendations data to ensure proper structure."""
+        if not raw_data:
+            return []
+        
+        if isinstance(raw_data, list):
+            cleaned = []
+            for item in raw_data:
+                if isinstance(item, dict):
+                    # Ensure required fields exist
+                    cleaned_item = {
+                        "action": item.get("action", item.get("description", "Action required")),
+                        "priority": item.get("priority", "medium"),
+                        "category": item.get("category", "general"),
+                        "rationale": item.get("rationale", ""),
+                        "type": item.get("type", "general")
+                    }
+                    cleaned.append(cleaned_item)
+                elif isinstance(item, str):
+                    # Convert string recommendations to proper structure
+                    cleaned.append({
+                        "action": item,
+                        "priority": "medium",
+                        "category": "general",
+                        "rationale": "Generated from LLM response",
+                        "type": "general"
+                    })
+            return cleaned
+        
+        elif isinstance(raw_data, dict):
+            # Extract recommendations from dict structure
+            recommendations = raw_data.get("recommendations", [])
+            if isinstance(recommendations, list):
+                return self._clean_recommendations_data(recommendations)
+            else:
+                return []
+        
+        return []
+
+    def _safe_json_parse(self, response: str) -> Optional[Dict[str, Any]]:
+        """Safely parse JSON response with error handling."""
+        try:
+            import json
+            if response and response.strip():
+                return json.loads(response)
+        except (json.JSONDecodeError, ValueError, TypeError) as e:
+            logger.warning(f"JSON parsing failed: {e}")
+        return None

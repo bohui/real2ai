@@ -54,15 +54,49 @@ Evaluate risks across these dimensions:
 
 ## State-Specific Risk Indicators
 
+{% if state_specific_fragments %}
 {{ state_specific_fragments }}
+{% else %}
+**{{ australian_state }} Specific Risk Factors:**
+- State-specific regulations and compliance requirements
+- Local market conditions and trends
+- State-specific legal precedents and case law
+- Regional planning and zoning considerations
+{% endif %}
 
 ## Financial Risk Assessment
 
+{% if financial_risk_fragments %}
 {{ financial_risk_fragments }}
+{% else %}
+**Financial Risk Analysis:**
+- Purchase price vs. market value assessment
+- Financing risks and interest rate exposure
+- Additional costs (stamp duty, legal fees, inspections)
+- Market volatility and timing risks
+- Investment return projections and cash flow analysis
+{% endif %}
 
 ## User Experience Guidance
 
+{% if experience_level_fragments %}
 {{ experience_level_fragments }}
+{% else %}
+**Experience-Based Risk Assessment:**
+{% if user_experience == "novice" %}
+- Focus on fundamental legal and financial risks
+- Emphasize professional advice requirements
+- Highlight common pitfalls for first-time buyers
+{% elif user_experience == "intermediate" %}
+- Consider advanced risk factors and market timing
+- Evaluate complex contract terms and conditions
+- Assess investment strategy alignment
+{% else %}
+- Advanced risk modeling and scenario analysis
+- Strategic risk management and mitigation planning
+- Portfolio impact and diversification considerations
+{% endif %}
+{% endif %}
 
 ## Analysis Output Requirements
 

@@ -237,7 +237,6 @@ async def update_analysis_progress(
 @user_aware_task(recovery_enabled=True, checkpoint_frequency=25, recovery_priority=2)
 async def comprehensive_document_analysis(
     recovery_ctx,
-    context_key: str,
     document_id: str,
     analysis_id: str,
     contract_id: str,
@@ -252,7 +251,6 @@ async def comprehensive_document_analysis(
 
     Args:
         recovery_ctx: Recovery context for checkpointing
-        context_key: Task context key for authentication
         document_id: Document ID to analyze
         analysis_id: Analysis ID for tracking
         contract_id: Contract ID for context
@@ -273,7 +271,6 @@ async def comprehensive_document_analysis(
             "analysis_id": analysis_id,
             "contract_id": contract_id,
             "user_id": user_id,
-            "context_key": context_key,
             "analysis_options": analysis_options,
         },
     )

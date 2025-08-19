@@ -175,7 +175,8 @@ class EnhancedContractAnalysisWorkflow:
                 
                 # Update state
                 state["recommendations"] = recommendations_list
-                state["final_recommendations"] = recommendations_data
+                # Fix: final_recommendations should be a list, not the entire data dict
+                state["final_recommendations"] = recommendations_list
                 state["confidence_scores"]["recommendations"] = parsing_result.confidence_score
                 
                 return update_state_step(state, ["generate_recommendations"])
@@ -432,10 +433,8 @@ Ensure the australian_state field is set to: {australian_state}
         ]
         
         state["recommendations"] = fallback_recommendations
-        state["final_recommendations"] = {
-            "recommendations": fallback_recommendations,
-            "executive_summary": "Automated analysis incomplete - professional review recommended"
-        }
+        # Fix: final_recommendations should be a list, not a dict
+        state["final_recommendations"] = fallback_recommendations
         state["confidence_scores"]["recommendations"] = 0.3
         
         return update_state_step(state, ["generate_recommendations"])

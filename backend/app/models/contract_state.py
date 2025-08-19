@@ -14,9 +14,11 @@ class RealEstateAgentState(TypedDict):
     """Central state for all Real2.AI agents"""
 
     # Session Management
-    user_id: str
-    session_id: str
-    agent_version: str
+    user_id: Annotated[str, lambda x, y: y]  # Last value wins for concurrent updates
+    session_id: Annotated[str, lambda x, y: y]  # Last value wins for concurrent updates
+    agent_version: Annotated[
+        str, lambda x, y: y
+    ]  # Last value wins for concurrent updates
 
     # Document Processing
     document_data: Annotated[
@@ -30,40 +32,54 @@ class RealEstateAgentState(TypedDict):
     ]  # Last value wins for status updates
 
     # Contract Analysis
-    contract_terms: Optional[Dict[str, Any]]
-    risk_assessment: Optional[Dict[str, Any]]
-    compliance_check: Optional[Dict[str, Any]]
+    contract_terms: Annotated[
+        Optional[Dict[str, Any]], lambda x, y: y
+    ]  # Last value wins
+    risk_assessment: Annotated[
+        Optional[Dict[str, Any]], lambda x, y: y
+    ]  # Last value wins
+    compliance_check: Annotated[
+        Optional[Dict[str, Any]], lambda x, y: y
+    ]  # Last value wins
     recommendations: Annotated[
         List[Dict[str, Any]], add
     ]  # Use add for list concatenation
 
     # Property Data (Phase 2+)
-    property_data: Optional[Dict[str, Any]]
-    market_analysis: Optional[Dict[str, Any]]
-    financial_analysis: Optional[Dict[str, Any]]
+    property_data: Annotated[
+        Optional[Dict[str, Any]], lambda x, y: y
+    ]  # Last value wins
+    market_analysis: Annotated[
+        Optional[Dict[str, Any]], lambda x, y: y
+    ]  # Last value wins
+    financial_analysis: Annotated[
+        Optional[Dict[str, Any]], lambda x, y: y
+    ]  # Last value wins
 
     # User Context
-    user_preferences: Dict[str, Any]
-    australian_state: AustralianState
-    user_type: str  # buyer, investor, agent
-    contract_type: Optional[str]  # purchase_agreement, lease, etc.
-    document_type: Optional[str]  # contract, legal_document, etc.
+    user_preferences: Annotated[Dict[str, Any], lambda x, y: y]  # Last value wins
+    australian_state: Annotated[AustralianState, lambda x, y: y]  # Last value wins
+    user_type: Annotated[str, lambda x, y: y]  # Last value wins
+    contract_type: Annotated[Optional[str], lambda x, y: y]  # Last value wins
+    document_type: Annotated[Optional[str], lambda x, y: y]  # Last value wins
 
     # Processing State
-    current_step: Annotated[List[str], add]  # Use Annotated for concurrent updates
+    current_step: Annotated[List[str], add]  # Use add for list concatenation
     # Allow concurrent writes; last update wins to satisfy LangGraph's reducer requirement
     error_state: Annotated[Optional[str], lambda existing, incoming: incoming]
-    confidence_scores: Dict[str, float]
-    processing_time: Optional[float]
-    progress: Optional[Dict[str, Any]]
+    confidence_scores: Annotated[Dict[str, float], lambda x, y: y]  # Last value wins
+    processing_time: Annotated[Optional[float], lambda x, y: y]  # Last value wins
+    progress: Annotated[Optional[Dict[str, Any]], lambda x, y: y]  # Last value wins
 
     # Output
     analysis_results: Annotated[
         Dict[str, Any],
         lambda existing, incoming: {**(existing or {}), **(incoming or {})},
     ]
-    report_data: Optional[Dict[str, Any]]
-    final_recommendations: List[Dict[str, Any]]
+    report_data: Annotated[Optional[Dict[str, Any]], lambda x, y: y]  # Last value wins
+    final_recommendations: Annotated[
+        List[Dict[str, Any]], add
+    ]  # Use add for list concatenation
 
 
 class ContractTerms(TypedDict):
@@ -220,9 +236,11 @@ def update_state_step(
                     # Extend lists
                     updated_state[key] = state[key] + value
                 else:
-                    # Direct assignment
+                    # Direct assignment - ensure this field is Annotated in the state model
                     updated_state[key] = value
 
+    # CRITICAL: Ensure all fields in the update are properly handled for concurrent updates
+    # This prevents LangGraph InvalidUpdateError
     return updated_state
 
 

@@ -86,7 +86,30 @@ class TermsValidationNode(BaseNode):
 
             # Update state with validation results
             state["terms_validation_result"] = validation_result
-            validation_confidence = validation_result.get("overall_confidence", 0.5)
+
+            # Fix: Handle Pydantic model properly - access attribute directly or convert to dict
+            if hasattr(validation_result, "validation_confidence"):
+                validation_confidence = validation_result.validation_confidence
+            elif hasattr(validation_result, "overall_confidence"):
+                validation_confidence = validation_result.overall_confidence
+            elif hasattr(validation_result, "model_dump"):
+                # Convert Pydantic model to dict and get confidence
+                validation_dict = validation_result.model_dump()
+                validation_confidence = validation_dict.get(
+                    "validation_confidence",
+                    validation_dict.get("overall_confidence", 0.5),
+                )
+            else:
+                # Fallback: try to access as dict if it's already a dict
+                validation_confidence = (
+                    validation_result.get(
+                        "validation_confidence",
+                        validation_result.get("overall_confidence", 0.5),
+                    )
+                    if isinstance(validation_result, dict)
+                    else 0.5
+                )
+
             state["confidence_scores"]["terms_validation"] = validation_confidence
 
             # Determine validation outcome

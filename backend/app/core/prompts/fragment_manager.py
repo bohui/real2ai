@@ -167,7 +167,7 @@ class FragmentManager:
 
         env = Environment(
             loader=StringLoader(),
-            undefined=jinja2.Undefined,  # Allow undefined variables to render as empty strings
+            undefined=Undefined,  # Allow undefined variables to render as empty strings
             trim_blocks=True,
             lstrip_blocks=True,
         )
