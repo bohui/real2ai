@@ -238,18 +238,28 @@ class ContractAnalysisState(TypedDict):
 ```
 
 ### **WebSocket Progress Integration**
-Real-time progress updates for each workflow step:
+Real-time progress updates for each workflow step per PRD specifications:
 ```python
 workflow_progress = {
-    "document_validation": 14,
-    "detailed_entity_extraction": 28,
-    "page_diagram_analysis": 42,
-    "compliance_analysis": 57,
-    "risk_assessment": 71,
-    "recommendation_generation": 85,
-    "report_compilation": 100
+    "document_uploaded": 5,             # Document uploaded successfully
+    "validate_input": 7,                # Initialize analysis  
+    "document_processing": "7-30",      # Extract text & diagrams (incremental per page)
+    "validate_document_quality": 34,    # Validate document quality (conditional)
+    "extract_terms": 42,                # Extract contract terms
+    "validate_terms_completeness": 50,  # Validate terms completeness
+    "analyze_compliance": 57,           # Analyze compliance  
+    "assess_risks": 71,                 # Assess risks
+    "generate_recommendations": 85,     # Generate recommendations
+    "compile_report": 98,               # Compile report
+    "analysis_complete": 100            # Analysis complete
 }
 ```
+
+**Configuration Flags**:
+- `ENABLE_DOCUMENT_QUALITY_VALIDATION`: Controls step 4 (34%)
+- `ENABLE_PER_PAGE_PROGRESS`: Enables incremental 7-30% progress during document processing
+
+**Idempotent Progress Tracking**: Progress percentages only increase, ensuring reliable progress indication even with retries or duplicate updates.
 
 ### **API Interface**
 ```python

@@ -1,3 +1,0 @@
-SUPABASE_JWT_SECRET not configured. Database RLS will fail token verification.
-DEPRECATED: render() method called for template 'ocr/whole_document_extraction'. Use render_composed() with appropriate compositions instead.
-✗ Error testing prompt: Template 'ocr/whole_document_extraction' not found

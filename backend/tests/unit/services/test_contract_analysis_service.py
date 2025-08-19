@@ -531,12 +531,12 @@ class TestContractAnalysisServiceProgressTracking:
             session_id=session_id,
             contract_id=contract_id,
             step="validate_input",
-            progress_percent=25,
-            description="Validating contract terms",
+            progress_percent=7,
+            description="Initialize analysis",
         )
 
         # Verify internal tracking was updated
-        assert service.active_analyses[contract_id]["progress"] == 25
+        assert service.active_analyses[contract_id]["progress"] == 7
         assert service.active_analyses[contract_id]["current_step"] == "validate_input"
 
         # Verify WebSocket message was sent

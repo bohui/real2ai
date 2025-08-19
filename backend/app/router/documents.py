@@ -11,6 +11,7 @@ from fastapi import (
 )
 from typing import Optional, Dict, Any, List
 import logging
+from datetime import datetime
 
 from app.core.auth import get_current_user, User
 from app.core.auth_context import AuthContext
@@ -23,6 +24,7 @@ from app.schema.enums import ContractType, AustralianState
 from app.services.document_service import DocumentService
 from app.services.communication.websocket_singleton import websocket_manager
 from app.services.communication.websocket_service import WebSocketEvents
+from app.services.repositories.analysis_progress_repository import AnalysisProgressRepository
 from app.schema.document import (
     DocumentUploadResponse,
     ReportGenerationRequest,
@@ -239,6 +241,44 @@ async def upload_document(
             )
 
         logger.info("Fast document upload completed successfully")
+
+        # Emit 5% progress for document_uploaded step according to PRD
+        try:
+            progress_repo = AnalysisProgressRepository()
+            document_metadata = upload_result.document_metadata or {}
+            content_hash = document_metadata.get('content_hash', upload_result.document_id)
+            
+            progress_data = {
+                "current_step": "document_uploaded",
+                "progress_percent": 5,
+                "step_description": "Document uploaded successfully",
+                "status": "in_progress",
+                "step_started_at": datetime.now().isoformat(),
+            }
+            
+            # Persist progress
+            await progress_repo.upsert_progress(content_hash, str(user.id), progress_data)
+            
+            # Emit WebSocket progress as analysis_progress event
+            if websocket_manager:
+                await websocket_manager.send_message(
+                    str(user.id),  # Use user_id as session_id for upload progress
+                    {
+                        "event_type": "analysis_progress",
+                        "timestamp": datetime.now().isoformat(),
+                        "data": {
+                            "contract_id": upload_result.document_id,
+                            "current_step": "document_uploaded",
+                            "progress_percent": 5,
+                            "step_description": "Upload document"
+                        }
+                    }
+                )
+            
+            logger.info(f"Emitted 5% progress for document upload: {upload_result.document_id}")
+        except Exception as progress_error:
+            # Don't fail upload if progress emission fails
+            logger.warning(f"Failed to emit upload progress: {progress_error}")
 
         response = DocumentUploadResponse(
             document_id=upload_result.document_id,

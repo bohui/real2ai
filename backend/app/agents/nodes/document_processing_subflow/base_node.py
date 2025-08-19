@@ -45,6 +45,9 @@ class DocumentProcessingNodeBase(ABC):
             "total_duration": 0.0,
             "average_duration": 0.0,
         }
+        
+        # Progress tracking
+        self.progress_callback = None
 
     @abstractmethod
     async def execute(self, state: DocumentProcessingState) -> DocumentProcessingState:
@@ -524,3 +527,93 @@ class DocumentProcessingNodeBase(ABC):
                 break
 
         return chain
+    
+    def set_progress_callback(self, callback):
+        """Set progress callback for emitting incremental progress updates."""
+        self.progress_callback = callback
+    
+    async def emit_page_progress(self, current_page: int, total_pages: int, description: str = "Processing pages"):
+        """
+        Emit incremental progress updates for page-based processing via contract/session channel.
+        Maps page progress to 7-30% range as specified in PRD.
+        
+        Args:
+            current_page: Current page being processed (1-based)
+            total_pages: Total number of pages to process
+            description: Description of the processing step
+        """
+        if not self.progress_callback:
+            return
+            
+        try:
+            # Map to 7-30% range as specified in PRD
+            base_progress = 7
+            max_progress = 30
+            progress_range = max_progress - base_progress
+            
+            # Calculate progress percentage within the range
+            if total_pages > 0:
+                page_progress = (current_page / total_pages) * progress_range
+                final_progress = min(max_progress, base_progress + int(page_progress))
+            else:
+                final_progress = base_progress
+            
+            # Emit progress directly via contract analysis service broadcasting
+            await self.progress_callback(
+                "document_processing", 
+                final_progress, 
+                f"{description} (page {current_page}/{total_pages})"
+            )
+            
+            self._log_debug(
+                f"Emitted page progress to contract/session channel: {current_page}/{total_pages} -> {final_progress}%",
+                current_page=current_page,
+                total_pages=total_pages,
+                progress_percent=final_progress
+            )
+            
+        except Exception as e:
+            # Don't fail processing if progress emission fails
+            self._log_warning(f"Failed to emit page progress: {e}")
+    
+    async def emit_progress_via_session_channel(self, session_id: str, contract_id: str, step: str, progress_percent: int, description: str):
+        """
+        Emit progress directly via session channel for real-time UI updates.
+        This bypasses document-specific channels and uses the contract analysis service's broadcasting.
+        
+        Args:
+            session_id: Session ID for WebSocket routing
+            contract_id: Contract UUID for identification
+            step: Current processing step
+            progress_percent: Progress percentage (7-30% for document processing)
+            description: Step description
+        """
+        try:
+            from app.services.communication.redis_pubsub import publish_progress_sync
+            from datetime import datetime
+
+            message = {
+                "event_type": "analysis_progress",
+                "timestamp": datetime.now().isoformat(),
+                "data": {
+                    "contract_id": contract_id,
+                    "current_step": step,
+                    "progress_percent": progress_percent,
+                    "step_description": description
+                }
+            }
+            
+            # Publish to session channel for UI consumption
+            if session_id:
+                publish_progress_sync(session_id, message)
+                
+            self._log_debug(
+                f"Emitted progress to session channel {session_id}: {step} -> {progress_percent}%",
+                session_id=session_id,
+                contract_id=contract_id,
+                step=step,
+                progress_percent=progress_percent
+            )
+            
+        except Exception as e:
+            self._log_warning(f"Failed to emit progress via session channel: {e}")

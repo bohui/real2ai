@@ -23,45 +23,63 @@ interface AnalysisProgressProps {
 
 const steps = [
   {
-    key: "validating_input",
+    key: "document_uploaded",
     icon: CheckCircle,
-    title: "Validating Document",
+    title: "Upload document",
+    description: "Document uploaded successfully",
+  },
+  {
+    key: "validate_input",
+    icon: CheckCircle,
+    title: "Initialize analysis",
     description: "Checking file format and content quality",
   },
   {
-    key: "processing_document",
+    key: "document_processing",
     icon: FileText,
-    title: "Extracting Text",
+    title: "Extract text & diagrams",
     description: "Reading contract content using OCR technology",
   },
   {
-    key: "extracting_terms",
+    key: "validate_document_quality",
+    icon: Shield,
+    title: "Validate document quality",
+    description: "Validating document quality and readability",
+  },
+  {
+    key: "extract_terms",
     icon: Search,
-    title: "Identifying Terms",
+    title: "Extract contract terms",
     description: "Finding key contract clauses and conditions",
   },
   {
-    key: "analyzing_compliance",
+    key: "validate_terms_completeness",
+    icon: CheckCircle,
+    title: "Validate terms completeness",
+    description: "Validating completeness of extracted terms",
+  },
+  {
+    key: "analyze_compliance",
     icon: Shield,
-    title: "Checking Compliance",
+    title: "Analyze compliance",
     description: "Verifying Australian legal requirements",
   },
   {
-    key: "assessing_risks",
+    key: "assess_risks",
     icon: AlertCircle,
-    title: "Assessing Risks",
+    title: "Assess risks",
     description: "Evaluating potential issues and concerns",
   },
   {
-    key: "generating_recommendations",
+    key: "generate_recommendations",
     icon: TrendingUp,
-    title: "Creating Recommendations",
+    title: "Generate recommendations",
     description: "Generating actionable advice",
   },
   {
-    key: "compiling_report",
+    key: "compile_report",
     icon: FileCheck,
-    title: "Finalizing Report",
+    title: "Compile report",
     description: "Preparing comprehensive analysis",
   },
 ];
@@ -165,11 +183,26 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({ className }) => {
 
   console.log("✅ AnalysisProgress: Rendering component");
 
-  const currentStepIndex = analysisProgress
-    ? steps.findIndex((step) => step.key === analysisProgress.current_step)
-    : -1;
-
   const progress = analysisProgress?.progress_percent || 0;
+  
+  // Filter steps based on configuration and current progress
+  const visibleSteps = steps.filter((step) => {
+    // Always show validate_document_quality step unless we know it's disabled
+    // If we skipped from <=30% to 42%, then the step was disabled
+    if (step.key === "validate_document_quality") {
+      if (analysisProgress && progress > 30 && progress >= 42) {
+        // If we jumped from document_processing (30%) to extract_terms (42%), skip this step
+        if (analysisProgress.current_step === "extract_terms") {
+          return false;
+        }
+      }
+    }
+    return true;
+  });
+
+  const currentStepIndex = analysisProgress
+    ? visibleSteps.findIndex((step) => step.key === analysisProgress.current_step)
+    : -1;
   const isConnected = wsService?.isWebSocketConnected() || false;
 
   const handleCancelAnalysis = () => {
@@ -295,7 +328,7 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({ className }) => {
 
         {/* Step List */}
         <div className="space-y-3">
-          {steps.map((step, index) => {
+          {visibleSteps.map((step, index) => {
             const isCompleted =
               currentStepIndex > index || (!isAnalyzing && currentAnalysis);
             const isCurrent = currentStepIndex === index && isAnalyzing;

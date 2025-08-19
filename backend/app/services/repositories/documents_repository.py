@@ -89,7 +89,7 @@ class DocumentsRepository:
                 processing_status=row["processing_status"],
                 processing_started_at=row["processing_started_at"],
                 processing_completed_at=row["processing_completed_at"],
-                processing_errors=row["processing_errors"],
+                processing_errors=safe_json_loads(row["processing_errors"]),
                 artifact_text_id=row["artifact_text_id"],
                 total_pages=row["total_pages"] or 0,
                 total_word_count=row["total_word_count"] or 0,
@@ -164,7 +164,7 @@ class DocumentsRepository:
                 processing_status=row["processing_status"],
                 processing_started_at=row["processing_started_at"],
                 processing_completed_at=row["processing_completed_at"],
-                processing_errors=row["processing_errors"],
+                processing_errors=safe_json_loads(row["processing_errors"]),
                 artifact_text_id=row["artifact_text_id"],
                 total_pages=row["total_pages"],
                 total_word_count=row["total_word_count"],
@@ -348,7 +348,7 @@ class DocumentsRepository:
                     processing_status=row["processing_status"],
                     processing_started_at=row["processing_started_at"],
                     processing_completed_at=row["processing_completed_at"],
-                    processing_errors=row["processing_errors"],
+                    processing_errors=safe_json_loads(row["processing_errors"]),
                     artifact_text_id=row["artifact_text_id"],
                     total_pages=row["total_pages"],
                     total_word_count=row["total_word_count"],
@@ -543,7 +543,7 @@ class DocumentsRepository:
                         processing_status=row["processing_status"],
                         processing_started_at=row["processing_started_at"],
                         processing_completed_at=row["processing_completed_at"],
-                        processing_errors=row["processing_errors"],
+                        processing_errors=safe_json_loads(row["processing_errors"]),
                         artifact_text_id=row["artifact_text_id"],
                         total_pages=row["total_pages"],
                         total_word_count=row["total_word_count"],
@@ -607,7 +607,7 @@ class DocumentsRepository:
 
         # Extract artifact_text_id if present
         artifact_text_id = results.pop("artifact_text_id", None) if results else None
-        
+
         async with get_user_connection(self.user_id) as conn:
             # Build dynamic SQL based on what fields we're updating
             if artifact_text_id:

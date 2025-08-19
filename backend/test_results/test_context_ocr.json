@@ -4,6 +4,7 @@
     "contract_type": "residential",
     "filename": "contract.pdf",
     "file_type": "pdf",
+    "process_entire_document": true,
     "is_multi_page": false,
     "use_quick_mode": false
 }

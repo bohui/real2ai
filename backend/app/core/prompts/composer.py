@@ -27,6 +27,7 @@ class CompositionRule:
     user_prompts: List[str]  # List of prompt names as strings
     merge_strategy: str = "sequential"  # sequential, parallel, hierarchical
     priority_order: List[str] = None
+    version: str = ""
 
 
 @dataclass
@@ -106,8 +107,25 @@ class PromptComposer:
                 rule, context, variables, **kwargs
             )
 
-            # Create metadata
-            metadata = self._create_composition_metadata(rule, context)
+            # Create metadata with version info
+            system_versions: Dict[str, str] = {}
+            user_versions: Dict[str, str] = {}
+            try:
+                for sp_obj in rule.system_prompts:
+                    sp_name = (
+                        sp_obj["name"] if isinstance(sp_obj, dict) else str(sp_obj)
+                    )
+                    t = self._load_template(sp_name, "system")
+                    system_versions[sp_name] = getattr(t.metadata, "version", "")
+                for up_name in rule.user_prompts:
+                    t = self._load_template(up_name, "user")
+                    user_versions[up_name] = getattr(t.metadata, "version", "")
+            except Exception:
+                pass
+
+            metadata = self._create_composition_metadata(
+                rule, context, system_versions, user_versions
+            )
 
             composed = ComposedPrompt(
                 name=composition_name,
@@ -356,13 +374,20 @@ class PromptComposer:
             return "\n\n---\n\n".join(parts)
 
     def _create_composition_metadata(
-        self, rule: CompositionRule, context: PromptContext
+        self,
+        rule: CompositionRule,
+        context: PromptContext,
+        system_versions: Dict[str, str],
+        user_versions: Dict[str, str],
     ) -> Dict[str, Any]:
         """Create metadata for composed prompt"""
         return {
             "composition_rule": rule.name,
+            "composition_version": getattr(rule, "version", ""),
             "system_prompts": rule.system_prompts,
             "user_prompts": rule.user_prompts,
+            "system_prompt_versions": system_versions,
+            "user_prompt_versions": user_versions,
             "context_type": context.context_type.value,
             "merge_strategy": rule.merge_strategy,
             "composed_at": datetime.now(UTC).isoformat(),
@@ -391,6 +416,7 @@ class PromptComposer:
                     user_prompts=rule_data.get("user_prompts", []),
                     merge_strategy=rule_data.get("merge_strategy", "sequential"),
                     priority_order=rule_data.get("priority_order"),
+                    version=rule_data.get("version", ""),
                 )
 
             logger.info(f"Loaded {len(rules)} composition rules")

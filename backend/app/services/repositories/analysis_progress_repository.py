@@ -109,7 +109,7 @@ class AnalysisProgressRepository:
                     ON CONFLICT (content_hash, user_id) 
                     DO UPDATE SET
                         current_step = EXCLUDED.current_step,
-                        progress_percent = EXCLUDED.progress_percent,
+                        progress_percent = GREATEST(analysis_progress.progress_percent, EXCLUDED.progress_percent),
                         step_description = EXCLUDED.step_description,
                         step_started_at = EXCLUDED.step_started_at,
                         estimated_completion_minutes = EXCLUDED.estimated_completion_minutes,

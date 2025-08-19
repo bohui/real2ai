@@ -197,6 +197,10 @@ class Settings(BaseSettings):
     enhanced_workflow_metrics: bool = True
     enhanced_workflow_detailed_logging: bool = True
     enhanced_workflow_log_parsing_failures: bool = True
+
+    # Analysis Progress Settings
+    enable_document_quality_validation: bool = True
+    enable_per_page_progress: bool = True
     enhanced_workflow_log_fallback_usage: bool = True
 
     @property

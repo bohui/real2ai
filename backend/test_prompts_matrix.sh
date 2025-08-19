@@ -19,6 +19,12 @@ TEST_FILES_DIR="$SCRIPT_DIR/../test_files"
 OUTPUT_DIR="$SCRIPT_DIR/test_results"
 LOG_FILE="$OUTPUT_DIR/prompt_testing.log"
 
+# Prefer project venv python if available
+PYTHON_BIN="python3"
+if [[ -x "$SCRIPT_DIR/venv/bin/python" ]]; then
+    PYTHON_BIN="$SCRIPT_DIR/venv/bin/python"
+fi
+
 # Load environment variables from .env.local if it exists
 load_environment() {
     local env_file="$SCRIPT_DIR/.env.local"
@@ -52,6 +58,11 @@ load_environment() {
         echo -e "${YELLOW}⚠  .env.local file not found at $env_file${NC}"
         echo -e "${YELLOW}  Make sure to set required environment variables manually${NC}"
         echo ""
+    fi
+
+    # Ensure a default to silence non-production warning in tests
+    if [[ -z "$SUPABASE_JWT_SECRET" ]]; then
+        export SUPABASE_JWT_SECRET="test-secret"
     fi
 }
 
@@ -117,6 +128,7 @@ create_test_context() {
     "contract_type": "residential",
     "filename": "contract.pdf",
     "file_type": "pdf",
+    "process_entire_document": true,
     "is_multi_page": false,
     "use_quick_mode": false
 }
@@ -181,6 +193,9 @@ import json
 import sys
 import os
 from pathlib import Path
+from datetime import datetime, timezone
+import csv
+import hashlib
 
 # Add the backend directory to Python path
 backend_dir = Path(__file__).parent.parent
@@ -207,28 +222,132 @@ async def test_prompt():
         )
         
         # Test prompt rendering
+        result = None
         if "$test_type" == "composition":
             result = await prompt_manager.render_composed(
                 composition_name="$prompt_name",
                 context=context
             )
-            print(f"✓ Composition rendered successfully")
-            print(f"  System prompt length: {len(result.get('system_prompt', ''))}")
-            print(f"  User prompt length: {len(result.get('user_prompt', ''))}")
         else:
             rendered = await prompt_manager.render(
                 template_name="$prompt_name",
                 context=context,
                 model="$model_name"
             )
-            print(f"✓ Prompt rendered successfully")
-            print(f"  Length: {len(rendered)} characters")
-            print(f"  Preview: {rendered[:200]}...")
+            # Wrap legacy render into composition-like structure
+            result = {
+                "system_prompt": "",
+                "user_prompt": rendered,
+                "metadata": {
+                    "composition": "$prompt_name",
+                    "composition_version": "",
+                    "user_prompts": ["$prompt_name"],
+                    "user_prompt_versions": {},
+                    "system_prompts": [],
+                    "system_prompt_versions": {},
+                    "composed_at": datetime.now(timezone.utc).isoformat(),
+                }
+            }
+        
+        # Prepare artifacts (deduplicated by content hash) and emit CSV row (only table output)
+        try:
+            now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            meta = result.get('metadata', {})
+            composition_name = meta.get('composition', '$prompt_name')
+            composition_version = meta.get('composition_version', '')
+            system_prompts = meta.get('system_prompts', [])
+            user_prompts = meta.get('user_prompts', [])
+            system_versions = meta.get('system_prompt_versions', {})
+            user_versions = meta.get('user_prompt_versions', {})
+            system_names = "; ".join([p.get('name', str(p)) if isinstance(p, dict) else str(p) for p in system_prompts]) if isinstance(system_prompts, list) else str(system_prompts)
+            user_names = "; ".join(user_prompts) if isinstance(user_prompts, list) else str(user_prompts)
+            system_versions_str = "; ".join([f"{k}:{v}" for k,v in system_versions.items()])
+            user_versions_str = "; ".join([f"{k}:{v}" for k,v in user_versions.items()])
+            system_prompt = (result.get('system_prompt', '') or '')
+            user_prompt = (result.get('user_prompt', '') or '')
+            status = 'success'
+
+            # Save artifacts with content hash to avoid duplicates
+            artifacts_dir = Path('$OUTPUT_DIR') / 'artifacts'
+            prompts_dir = artifacts_dir / 'prompts'
+            outputs_dir = artifacts_dir / 'outputs'
+            prompts_dir.mkdir(parents=True, exist_ok=True)
+            outputs_dir.mkdir(parents=True, exist_ok=True)
+
+            def save_text(content: str, kind: str, ext: str = 'md') -> str:
+                if not content:
+                    return ''
+                h = hashlib.sha256(content.encode('utf-8')).hexdigest()[:16]
+                fname = f"{kind}-{h}.{ext}"
+                target_dir = prompts_dir if kind in ('system', 'user') else outputs_dir
+                fpath = target_dir / fname
+                if not fpath.exists():
+                    # Write content
+                    with open(fpath, 'w', encoding='utf-8') as fp:
+                        fp.write(content)
+                return str(fpath.resolve())
+
+            system_prompt_path = save_text(system_prompt, 'system', 'md')
+            user_prompt_path = save_text(user_prompt, 'user', 'md')
+            output_path = ''  # No model execution here; leave blank
+            # Prepare CSV header and row
+            header = [
+                'timestamp', 'model', 'composition_name', 'composition_version', 'result',
+                'user_prompt_names', 'user_prompt_versions',
+                'system_prompt_names', 'system_prompt_versions',
+                'system_prompt_path', 'user_prompt_path', 'output_path'
+            ]
+            row = [
+                now_str, '$model_name', composition_name, composition_version, status,
+                user_names, user_versions_str,
+                system_names, system_versions_str,
+                system_prompt_path, user_prompt_path, output_path
+            ]
+            # Write to shared CSV file
+            csv_path = str(Path('$OUTPUT_DIR') / 'metrics.csv')
+            file_exists = Path(csv_path).exists() and Path(csv_path).stat().st_size > 0
+            with open(csv_path, 'a', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                if not file_exists:
+                    writer.writerow(header)
+                writer.writerow(row)
+            # Only CSV to stdout (use csv.writer for proper quoting)
+            sw = csv.writer(sys.stdout)
+            sw.writerow(header)
+            sw.writerow(row)
+        except Exception:
+            pass
         
         return True
         
     except Exception as e:
-        print(f"✗ Error testing prompt: {e}")
+        # Emit failure CSV table
+        try:
+            now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            header = [
+                'timestamp', 'model', 'composition_name', 'composition_version', 'result',
+                'user_prompt_names', 'user_prompt_versions',
+                'system_prompt_names', 'system_prompt_versions',
+                'system_prompt_path', 'user_prompt_path', 'output_path'
+            ]
+            row = [
+                now_str, '$model_name', '$prompt_name', '', 'fail',
+                '', '',
+                '', '',
+                '', '', str(e)
+            ]
+            csv_path = str(Path('$OUTPUT_DIR') / 'metrics.csv')
+            file_exists = Path(csv_path).exists() and Path(csv_path).stat().st_size > 0
+            with open(csv_path, 'a', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                if not file_exists:
+                    writer.writerow(header)
+                writer.writerow(row)
+            sw = csv.writer(sys.stdout)
+            sw.writerow(header)
+            sw.writerow(row)
+        except Exception:
+            pass
         return False
 
 if __name__ == "__main__":
@@ -242,7 +361,7 @@ EOF
     # Run the test
     local result_file="$OUTPUT_DIR/result_${prompt_name//\//_}_${model_name//[^a-zA-Z0-9]/_}.txt"
     
-    if python3 "$test_script" > "$result_file" 2>&1; then
+    if "$PYTHON_BIN" "$test_script" > "$result_file" 2>&1; then
         echo -e "${GREEN}✓ PASSED${NC}"
         echo "  Results saved to: $result_file"
     else
@@ -317,6 +436,14 @@ test_specific() {
         context_type="analysis"
     elif [[ " ${COMPOSITIONS[@]} " =~ " ${prompt_name} " ]]; then
         context_type="composition"
+    fi
+
+    # Special-case mapping: deprecated template should use its composition
+    if [[ "$prompt_name" == "user/ocr/whole_document_extraction" ]]; then
+        test_type="composition"
+        prompt_name="ocr_whole_document_extraction"
+        # Keep OCR context for required variables
+        context_type="ocr"
     fi
     
     local context_file=$(create_test_context "$context_type")

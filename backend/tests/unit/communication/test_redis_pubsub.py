@@ -50,9 +50,9 @@ async def test_redis_pubsub():
                 "timestamp": "2024-01-01T00:01:00Z",
                 "data": {
                     "contract_id": contract_id,
-                    "current_step": "validating_input",
-                    "progress_percent": 20,
-                    "step_description": "Validating user credentials and document access",
+                    "current_step": "validate_input",
+                    "progress_percent": 7,
+                    "step_description": "Initialize analysis",
                     "estimated_completion_minutes": 4
                 }
             },
@@ -61,9 +61,9 @@ async def test_redis_pubsub():
                 "timestamp": "2024-01-01T00:02:00Z", 
                 "data": {
                     "contract_id": contract_id,
-                    "current_step": "analyzing_compliance",
-                    "progress_percent": 60,
-                    "step_description": "AI is analyzing contract terms and compliance requirements",
+                    "current_step": "analyze_compliance",
+                    "progress_percent": 57,
+                    "step_description": "Analyzing compliance with Australian property laws",
                     "estimated_completion_minutes": 2
                 }
             },
@@ -129,9 +129,9 @@ async def test_sync_publish():
             "timestamp": "2024-01-01T00:00:00Z",
             "data": {
                 "contract_id": contract_id,
-                "current_step": "processing_document", 
+                "current_step": "document_processing", 
                 "progress_percent": 30,
-                "step_description": "Processing document content with OCR"
+                "step_description": "Extract text & diagrams"
             }
         }
         
