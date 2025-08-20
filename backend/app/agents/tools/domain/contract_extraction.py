@@ -116,7 +116,8 @@ def _infer_purchase_method(document_text: str) -> tuple[Optional[str], float, Li
             matches = list(re.finditer(pattern, document_text, re.IGNORECASE))
             if matches:
                 # Weight by number of matches and pattern specificity
-                pattern_confidence = min(0.9, 0.3 + (len(matches) * 0.2))
+                # Start with higher base confidence for clear pattern matches
+                pattern_confidence = min(0.95, 0.6 + (len(matches) * 0.15))
                 method_confidence = max(method_confidence, pattern_confidence)
                 method_evidence.extend([match.group(0) for match in matches])
         
@@ -142,7 +143,7 @@ def _infer_purchase_method(document_text: str) -> tuple[Optional[str], float, Li
         
         if standard_evidence:
             best_method = PurchaseMethod.STANDARD.value
-            highest_confidence = 0.6
+            highest_confidence = 0.7
             evidence_found = standard_evidence
     
     return best_method, highest_confidence, evidence_found
@@ -211,7 +212,8 @@ def _infer_use_category(document_text: str) -> tuple[Optional[str], float, List[
             matches = list(re.finditer(pattern, document_text, re.IGNORECASE))
             if matches:
                 # Weight by number of matches and pattern specificity
-                pattern_confidence = min(0.9, 0.4 + (len(matches) * 0.2))
+                # Start with higher base confidence for clear pattern matches
+                pattern_confidence = min(0.95, 0.65 + (len(matches) * 0.15))
                 category_confidence = max(category_confidence, pattern_confidence)
                 category_evidence.extend([match.group(0) for match in matches])
         

@@ -7,6 +7,7 @@ and upserts the contract record by content hash.
 """
 
 from typing import Dict, Any, Optional
+import re
 from datetime import datetime, timezone
 
 from app.agents.subflows.document_processing_workflow import DocumentProcessingState
@@ -92,76 +93,221 @@ class LayoutSummariseNode(DocumentProcessingNodeBase):
 
             output_parser = create_parser(ContractLayoutSummary)
 
-            # Render prompt via composition and include format instructions automatically
-            context = {
-                "full_text": full_text,
-                "australian_state": australian_state,
-                "document_type": state.get("document_type"),
-                "contract_type_hint": contract_type_hint,
-                "purchase_method_hint": purchase_method_hint,
-                "use_category_hint": use_category_hint,
-            }
+            # Split full_text into chunks by page delimiter if needed to avoid token limits
+            MAX_CHUNK_CHARACTERS = 32768
 
-            composition = await prompt_manager.render_composed(
-                composition_name="layout_summarise_only",
-                context=context,
-                output_parser=output_parser,
+            def _split_into_page_blocks(text: str) -> list[str]:
+                pattern = re.compile(r"^--- Page \d+ ---\n", re.MULTILINE)
+                blocks: list[str] = []
+                matches = list(pattern.finditer(text))
+                if not matches:
+                    return [text]
+                # Include any preface content before the first page marker
+                cursor = 0
+                if matches[0].start() > 0:
+                    blocks.append(text[0 : matches[0].start()])
+                    cursor = matches[0].start()
+                for i, m in enumerate(matches):
+                    start = m.start()
+                    end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
+                    blocks.append(text[start:end])
+                    cursor = end
+                if cursor < len(text):
+                    blocks.append(text[cursor:])
+                return blocks
+
+            def _chunk_blocks_by_size(blocks: list[str], max_len: int) -> list[str]:
+                chunks: list[str] = []
+                current: list[str] = []
+                current_len = 0
+                for block in blocks:
+                    block_len = len(block)
+                    if block_len > max_len:
+                        # Fallback: split oversized block by newline boundaries under max_len
+                        self._log_warning(
+                            "Single page block exceeds max chunk size; splitting by length",
+                            extra={
+                                "document_id": document_id,
+                                "block_length": block_len,
+                                "max_len": max_len,
+                            },
+                        )
+                        start = 0
+                        while start < block_len:
+                            end = min(start + max_len, block_len)
+                            # Try to cut at the last newline within range to avoid mid-line splits
+                            newline_pos = block.rfind("\n", start, end)
+                            if newline_pos != -1 and newline_pos > start:
+                                end = newline_pos + 1
+                            part = block[start:end]
+                            if current_len + len(part) > max_len and current:
+                                chunks.append("".join(current))
+                                current = []
+                                current_len = 0
+                            current.append(part)
+                            current_len += len(part)
+                            if current_len >= max_len:
+                                chunks.append("".join(current))
+                                current = []
+                                current_len = 0
+                            start = end
+                        continue
+
+                    if current_len + block_len <= max_len:
+                        current.append(block)
+                        current_len += block_len
+                    else:
+                        if current:
+                            chunks.append("".join(current))
+                        current = [block]
+                        current_len = block_len
+                if current:
+                    chunks.append("".join(current))
+                return chunks
+
+            if len(full_text) > MAX_CHUNK_CHARACTERS:
+                page_blocks = _split_into_page_blocks(full_text)
+                chunks = _chunk_blocks_by_size(page_blocks, MAX_CHUNK_CHARACTERS)
+            else:
+                chunks = [full_text]
+
+            self._log_info(
+                "Layout summarise chunking prepared",
+                extra={
+                    "document_id": document_id,
+                    "num_chunks": len(chunks),
+                    "max_chunk_chars": MAX_CHUNK_CHARACTERS,
+                },
             )
-            system_prompt = composition.get("system_prompt", "")
-            rendered_prompt = composition.get("user_prompt", "")
 
-            # Generate response via clients with fallback
+            # Render and call LLM for each chunk
             from app.clients.factory import get_openai_client, get_gemini_client
 
-            response: Optional[str] = None
-            # Try OpenAI first
-            try:
-                openai_client = await get_openai_client()
-                response = await openai_client.generate_content(
-                    rendered_prompt, system_prompt=system_prompt
-                )
-            except Exception as e:
-                self._log_error(
-                    f"Error generating content from OpenAI for layout summarise: {e}",
-                    exc_info=True,
-                )
-                response = None
+            summaries: list[ContractLayoutSummary] = []
+            for idx, chunk_text in enumerate(chunks):
+                context = {
+                    "full_text": chunk_text,
+                    "australian_state": australian_state,
+                    "document_type": state.get("document_type"),
+                    "contract_type_hint": contract_type_hint,
+                    "purchase_method_hint": purchase_method_hint,
+                    "use_category_hint": use_category_hint,
+                }
 
-            if not response:
+                composition = await prompt_manager.render_composed(
+                    composition_name="layout_summarise_only",
+                    context=context,
+                    output_parser=output_parser,
+                )
+                system_prompt = composition.get("system_prompt", "")
+                rendered_prompt = composition.get("user_prompt", "")
+
+                response: Optional[str] = None
                 try:
-                    gemini_client = await get_gemini_client()
-                    response = await gemini_client.generate_content(
+                    openai_client = await get_openai_client()
+                    response = await openai_client.generate_content(
                         rendered_prompt, system_prompt=system_prompt
                     )
                 except Exception as e:
                     self._log_error(
-                        f"Error generating content from Gemini for layout summarise: {e}",
+                        f"Error generating content from OpenAI for layout summarise (chunk {idx + 1}/{len(chunks)}): {e}",
                         exc_info=True,
                     )
                     response = None
 
-            if not response:
-                return self._handle_error(
-                    state,
-                    ValueError("No response from LLM"),
-                    "Failed to obtain layout summary from model",
-                    {"document_id": document_id},
-                )
+                if not response:
+                    try:
+                        gemini_client = await get_gemini_client()
+                        response = await gemini_client.generate_content(
+                            rendered_prompt, system_prompt=system_prompt
+                        )
+                    except Exception as e:
+                        self._log_error(
+                            f"Error generating content from Gemini for layout summarise (chunk {idx + 1}/{len(chunks)}): {e}",
+                            exc_info=True,
+                        )
+                        response = None
 
-            # Parse response
-            parsing_result = output_parser.parse_with_retry(response)
-            if not parsing_result.success or not parsing_result.parsed_data:
-                return self._handle_error(
-                    state,
-                    ValueError("Parsing failed"),
-                    "Failed to parse layout summary output",
-                    {
-                        "document_id": document_id,
-                        "parsing_errors": parsing_result.parsing_errors,
-                    },
-                )
+                if not response:
+                    return self._handle_error(
+                        state,
+                        ValueError("No response from LLM"),
+                        "Failed to obtain layout summary from model",
+                        {"document_id": document_id, "chunk_index": idx},
+                    )
 
-            summary = parsing_result.parsed_data
+                parsing_result = output_parser.parse_with_retry(response)
+                if not parsing_result.success or not parsing_result.parsed_data:
+                    return self._handle_error(
+                        state,
+                        ValueError("Parsing failed"),
+                        "Failed to parse layout summary output",
+                        {
+                            "document_id": document_id,
+                            "chunk_index": idx,
+                            "parsing_errors": parsing_result.parsing_errors,
+                        },
+                    )
+
+                summaries.append(parsing_result.parsed_data)
+
+            # Merge chunked summaries
+            def _first_non_empty(values: list[Any]) -> Any:
+                for v in values:
+                    if v is None:
+                        continue
+                    if isinstance(v, str) and v.strip() == "":
+                        continue
+                    if isinstance(v, dict) and not v:
+                        continue
+                    return v
+                return None
+
+            merged_raw_text = "".join([s.raw_text for s in summaries])
+            merged_contract_type = _first_non_empty(
+                [getattr(s, "contract_type", None) for s in summaries]
+            )
+            merged_purchase_method = _first_non_empty(
+                [getattr(s, "purchase_method", None) for s in summaries]
+            )
+            merged_use_category = _first_non_empty(
+                [getattr(s, "use_category", None) for s in summaries]
+            )
+            merged_australian_state = _first_non_empty(
+                [getattr(s, "australian_state", None) for s in summaries]
+            )
+            merged_property_address = _first_non_empty(
+                [getattr(s, "property_address", None) for s in summaries]
+            )
+            merged_contract_terms = (
+                _first_non_empty(
+                    [getattr(s, "contract_terms", None) for s in summaries]
+                )
+                or {}
+            )
+            merged_ocr_confidence = (
+                _first_non_empty(
+                    [getattr(s, "ocr_confidence", None) for s in summaries]
+                )
+                or {}
+            )
+
+            # Fallbacks for required fields
+            if merged_contract_type is None:
+                from app.schema.enums import ContractType as _ContractType
+
+                merged_contract_type = _ContractType.unknown
+
+            summary = ContractLayoutSummary(
+                raw_text=merged_raw_text,
+                contract_type=merged_contract_type,
+                purchase_method=merged_purchase_method,
+                use_category=merged_use_category,
+                australian_state=merged_australian_state,
+                contract_terms=merged_contract_terms,
+                property_address=merged_property_address,
+                ocr_confidence=merged_ocr_confidence,
+            )
 
             # Upsert into contracts by content hash
             content_hash = state.get("content_hash")

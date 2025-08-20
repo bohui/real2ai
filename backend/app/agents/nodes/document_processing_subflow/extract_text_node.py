@@ -1628,7 +1628,9 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                 line_raw_parts: List[str] = []
                 line_decorated_parts: List[str] = []
                 for span in line.get("spans") or []:
-                    span_text = span.get("text") or ""
+                    span_text = (span.get("text") or "").strip()
+                    if not span_text:
+                        continue
                     size = span.get("size")
                     try:
                         size_value = float(size)
