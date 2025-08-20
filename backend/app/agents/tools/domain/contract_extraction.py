@@ -6,7 +6,221 @@ from typing import Dict, List, Any, Optional
 from langchain.tools import tool
 import re
 
-from app.schema.enums import AustralianState, RiskLevel
+from app.schema.enums import AustralianState, RiskLevel, ContractType, PurchaseMethod, UseCategory
+
+
+@tool
+def infer_contract_taxonomy(document_text: str, user_contract_type: str) -> Dict[str, Any]:
+    """
+    Infer purchase_method and use_category from OCR text based on user-provided contract_type.
+    Implements the contract type taxonomy from contract-type-taxonomy-story.md
+    
+    Updated to infer use_category for both purchase_agreement and lease_agreement types.
+    """
+    
+    result = {
+        "contract_type": user_contract_type,
+        "purchase_method": None,
+        "use_category": None,
+        "confidence_scores": {},
+        "inference_evidence": {}
+    }
+    
+    # Convert string to enum for validation
+    try:
+        contract_type_enum = ContractType(user_contract_type)
+    except ValueError:
+        result["error"] = f"Invalid contract_type: {user_contract_type}"
+        return result
+    
+    # Infer purchase_method for purchase agreements
+    if contract_type_enum == ContractType.PURCHASE_AGREEMENT:
+        purchase_method, confidence, evidence = _infer_purchase_method(document_text)
+        result["purchase_method"] = purchase_method
+        result["confidence_scores"]["purchase_method"] = confidence
+        result["inference_evidence"]["purchase_method"] = evidence
+        
+        # Also infer use_category for purchase agreements
+        use_category, use_confidence, use_evidence = _infer_use_category(document_text)
+        if use_category:
+            result["use_category"] = use_category
+            result["confidence_scores"]["use_category"] = use_confidence
+            result["inference_evidence"]["use_category"] = use_evidence
+    
+    # Infer use_category for lease agreements (no purchase_method)
+    elif contract_type_enum == ContractType.LEASE_AGREEMENT:
+        use_category, confidence, evidence = _infer_use_category(document_text)
+        if use_category:
+            result["use_category"] = use_category
+            result["confidence_scores"]["use_category"] = confidence
+            result["inference_evidence"]["use_category"] = evidence
+    
+    # Option to purchase and unknown types need no inference
+    
+    return result
+
+
+def _infer_purchase_method(document_text: str) -> tuple[Optional[str], float, List[str]]:
+    """Infer purchase method from document text with confidence scoring"""
+    
+    # Purchase method detection patterns
+    patterns = {
+        PurchaseMethod.OFF_PLAN: [
+            r"off[\s\-]?the[\s\-]?plan",
+            r"proposed\s+development",
+            r"future\s+construction", 
+            r"plan\s+of\s+subdivision",
+            r"building\s+works\s+to\s+be\s+commenced",
+            r"completion\s+certificate",
+            r"occupation\s+certificate"
+        ],
+        PurchaseMethod.AUCTION: [
+            r"auction\s+sale",
+            r"highest\s+bidder",
+            r"hammer\s+falls",
+            r"auctioneer",
+            r"reserve\s+price",
+            r"bidding\s+process",
+            r"auction\s+conditions"
+        ],
+        PurchaseMethod.PRIVATE_TREATY: [
+            r"private\s+treaty",
+            r"by\s+private\s+negotiation",
+            r"direct\s+negotiation",
+            r"private\s+sale"
+        ],
+        PurchaseMethod.TENDER: [
+            r"tender\s+process",
+            r"call\s+for\s+tenders",
+            r"submission\s+of\s+tender",
+            r"tender\s+documents",
+            r"highest\s+conforming\s+tender"
+        ],
+        PurchaseMethod.EXPRESSION_OF_INTEREST: [
+            r"expression\s+of\s+interest",
+            r"EOI\s+process",
+            r"invitation\s+to\s+treat",
+            r"preliminary\s+offer"
+        ]
+    }
+    
+    best_method = None
+    highest_confidence = 0.0
+    evidence_found = []
+    
+    for method, method_patterns in patterns.items():
+        method_confidence = 0.0
+        method_evidence = []
+        
+        for pattern in method_patterns:
+            matches = list(re.finditer(pattern, document_text, re.IGNORECASE))
+            if matches:
+                # Weight by number of matches and pattern specificity
+                pattern_confidence = min(0.9, 0.3 + (len(matches) * 0.2))
+                method_confidence = max(method_confidence, pattern_confidence)
+                method_evidence.extend([match.group(0) for match in matches])
+        
+        if method_confidence > highest_confidence:
+            highest_confidence = method_confidence
+            best_method = method.value
+            evidence_found = method_evidence
+    
+    # Default to standard if no specific method detected but sufficient generic purchase language
+    if not best_method:
+        standard_patterns = [
+            r"contract\s+of\s+sale",
+            r"purchase\s+agreement", 
+            r"sale\s+agreement",
+            r"vendor\s+and\s+purchaser"
+        ]
+        
+        standard_evidence = []
+        for pattern in standard_patterns:
+            matches = list(re.finditer(pattern, document_text, re.IGNORECASE))
+            if matches:
+                standard_evidence.extend([match.group(0) for match in matches])
+        
+        if standard_evidence:
+            best_method = PurchaseMethod.STANDARD.value
+            highest_confidence = 0.6
+            evidence_found = standard_evidence
+    
+    return best_method, highest_confidence, evidence_found
+
+
+def _infer_use_category(document_text: str) -> tuple[Optional[str], float, List[str]]:
+    """Infer property use category from document text with confidence scoring
+    
+    Applies to both purchase agreements and lease agreements.
+    """
+    
+    # Use category detection patterns
+    patterns = {
+        UseCategory.RESIDENTIAL: [
+            r"residential\s+(?:lease|agreement|premises|property|use)",
+            r"dwelling\s+(?:rental|property|use)",
+            r"residential\s+tenancy",
+            r"house\s+(?:rental|purchase|sale)",
+            r"apartment\s+(?:lease|purchase|sale)",
+            r"unit\s+(?:rental|purchase|sale)",
+            r"home\s+(?:purchase|sale)",
+            r"private\s+residence",
+            r"family\s+home"
+        ],
+        UseCategory.COMMERCIAL: [
+            r"commercial\s+(?:lease|agreement|premises|property|use)",
+            r"business\s+premises",
+            r"office\s+(?:space|premises|building)",
+            r"commercial\s+tenancy",
+            r"commercial\s+rental",
+            r"business\s+(?:purchase|sale)",
+            r"office\s+(?:purchase|sale)",
+            r"commercial\s+building"
+        ],
+        UseCategory.INDUSTRIAL: [
+            r"industrial\s+(?:lease|agreement|premises|property|use)",
+            r"warehouse\s+(?:rental|lease|purchase|sale)",
+            r"factory\s+(?:lease|purchase|sale)",
+            r"industrial\s+premises",
+            r"manufacturing\s+facility",
+            r"storage\s+facility",
+            r"industrial\s+building",
+            r"logistics\s+(?:facility|premises)"
+        ],
+        UseCategory.RETAIL: [
+            r"retail\s+(?:lease|agreement|premises|property|use)",
+            r"shop\s+(?:lease|purchase|sale)", 
+            r"retail\s+premises",
+            r"shopping\s+centre",
+            r"retail\s+tenancy",
+            r"store\s+(?:rental|lease|purchase|sale)",
+            r"retail\s+space",
+            r"showroom\s+(?:lease|purchase|sale)"
+        ]
+    }
+    
+    best_category = None
+    highest_confidence = 0.0
+    evidence_found = []
+    
+    for category, category_patterns in patterns.items():
+        category_confidence = 0.0
+        category_evidence = []
+        
+        for pattern in category_patterns:
+            matches = list(re.finditer(pattern, document_text, re.IGNORECASE))
+            if matches:
+                # Weight by number of matches and pattern specificity
+                pattern_confidence = min(0.9, 0.4 + (len(matches) * 0.2))
+                category_confidence = max(category_confidence, pattern_confidence)
+                category_evidence.extend([match.group(0) for match in matches])
+        
+        if category_confidence > highest_confidence:
+            highest_confidence = category_confidence
+            best_category = category.value
+            evidence_found = category_evidence
+    
+    return best_category, highest_confidence, evidence_found
 
 
 @tool

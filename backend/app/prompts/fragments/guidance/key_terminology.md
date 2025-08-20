@@ -1,10 +1,22 @@
 ---
-type: "fragment"
-name: "key_terminology"
-version: "1.0.0"
-description: "Explanation of key legal and real estate terminology"
-category: "guidance"
-tags: ["guidance", "terminology", "novice", "education"]
+category: guidance
+context:
+  state: '*'
+  contract_type: '*'
+  purchase_method: '*'
+  use_category: '*'
+  user_experience: '*'
+  analysis_depth: '*'
+priority: 70
+version: 1.0.0
+description: Explanation of key legal and real estate terminology
+tags:
+- guidance
+- terminology
+- novice
+- education
+type: fragment
+name: key_terminology
 ---
 
 ### Key Terminology Guide:

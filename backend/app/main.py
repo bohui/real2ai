@@ -52,6 +52,7 @@ from app.router.property_profile import router as property_profile_router
 from app.router.property_intelligence import router as property_intelligence_router
 from app.router.cache import router as cache_router
 from app.middleware.auth_middleware import setup_auth_middleware
+from app.clients.factory import get_supabase_client
 
 # Simple rate limiting middleware (IP + path windowed)
 import time
@@ -274,6 +275,10 @@ app.add_middleware(
 
 # Add authentication middleware
 setup_auth_middleware(app, validate_token=True)
+
+# Expose a module-level database client placeholder for tests to patch
+# Tests expect `app.main.db_client` to exist and be patchable
+db_client = None
 
 # Include routers
 app.include_router(health_router)

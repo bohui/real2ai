@@ -6,182 +6,229 @@ from typing import Dict, Any, List, Optional
 from pathlib import Path
 from dataclasses import dataclass
 
-from .template import PromptTemplate, TemplateMetadata
 from .context import PromptContext
-from .exceptions import PromptCompositionError
+from .context_matcher import ContextMatcher
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass
-class FragmentRule:
-    """Rule for including fragments based on conditions"""
-
-    condition: Optional[str] = None
-    composition: str = "replace"  # replace, union, intersection
-    mappings: Dict[str, List[str]] = None
-    always_include: List[str] = None
-    priority: int = 50
-
-    def __post_init__(self):
-        if self.mappings is None:
-            self.mappings = {}
-        if self.always_include is None:
-            self.always_include = []
-
-
-@dataclass
 class Fragment:
-    """Individual prompt fragment"""
+    """Individual prompt fragment with folder-derived grouping"""
 
     name: str
     path: Path
     content: str
     metadata: Dict[str, Any]
-    tags: List[str] = None
+    group: str
+    priority: int = 50
 
-    def __post_init__(self):
-        if self.tags is None:
-            self.tags = []
+    @property
+    def context(self) -> Dict[str, Any]:
+        return self.metadata.get("context", {})
 
 
 class FragmentManager:
-    """Advanced fragment-based prompt composition"""
+    """Folder-structure-driven prompt fragment manager (legacy orchestrator removed)"""
 
-    def __init__(self, fragments_dir: Path, config_dir: Path):
+    def __init__(self, fragments_dir: Path):
         self.fragments_dir = Path(fragments_dir)
-        self.config_dir = Path(config_dir)
 
-        # Fragment cache
+        # Caches
         self._fragment_cache: Dict[str, Fragment] = {}
-        self._orchestration_configs: Dict[str, Dict[str, Any]] = {}
+        self._groups_cache: Dict[str, List[Fragment]] = {}
 
-        logger.info(f"FragmentManager initialized with fragments from {fragments_dir}")
+        # Generic context matcher
+        self.context_matcher = ContextMatcher()
 
-    def resolve_fragments(
-        self, orchestration_id: str, context: PromptContext
-    ) -> List[Fragment]:
-        """Resolve fragments based on orchestration rules and context
+        logger.info(
+            f"FragmentManager (folder-driven) initialized with fragments from {fragments_dir}"
+        )
 
-        Args:
-            orchestration_id: ID of orchestration configuration
-            context: Context containing variables for condition evaluation
+    def get_available_groups(self) -> List[str]:
+        """Get all available fragment groups from folder structure"""
+        groups: List[str] = []
+        if not self.fragments_dir.exists():
+            logger.warning(f"Fragments directory does not exist: {self.fragments_dir}")
+            return groups
+        for item in self.fragments_dir.iterdir():
+            if item.is_dir() and not item.name.startswith("."):
+                groups.append(item.name)
+        return sorted(groups)
 
-        Returns:
-            List of resolved fragments in priority order
-        """
-        config = self._load_orchestration_config(orchestration_id)
-        resolved_fragments = []
+    def load_fragments_for_group(self, group_name: str) -> List[Fragment]:
+        """Load all fragments for a specific group"""
+        if group_name in self._groups_cache:
+            return self._groups_cache[group_name]
 
-        # Process each fragment rule
-        for rule_name, rule_config in config.get("fragments", {}).items():
-            rule = FragmentRule(
-                condition=rule_config.get("condition"),
-                composition=rule_config.get("composition", "replace"),
-                mappings=rule_config.get("mappings", {}),
-                always_include=rule_config.get("always_include", []),
-                priority=rule_config.get("priority", 50),
+        group_dir = self.fragments_dir / group_name
+        if not group_dir.exists():
+            logger.warning(f"Group directory does not exist: {group_dir}")
+            return []
+
+        fragments: List[Fragment] = []
+        for fragment_file in group_dir.rglob("*.md"):
+            try:
+                fragment = self._load_fragment_from_path(fragment_file, group_name)
+                if fragment:
+                    fragments.append(fragment)
+            except Exception as e:
+                logger.error(f"Failed to load fragment {fragment_file}: {e}")
+
+        fragments.sort(key=lambda f: f.priority, reverse=True)
+        self._groups_cache[group_name] = fragments
+        return fragments
+
+    def compose_fragments(
+        self,
+        runtime_context: Dict[str, Any],
+        requested_groups: Optional[List[str]] = None,
+    ) -> Dict[str, str]:
+        """Compose fragments into group variables based on runtime context."""
+        if requested_groups is None:
+            requested_groups = self.get_available_groups()
+
+        group_variables: Dict[str, str] = {}
+        for group_name in requested_groups:
+            all_fragments = self.load_fragments_for_group(group_name)
+
+            fragment_dicts = [
+                {
+                    "name": f.name,
+                    "metadata": f.metadata,
+                    "content": f.content,
+                    "priority": f.priority,
+                }
+                for f in all_fragments
+            ]
+
+            matching_fragments = self.context_matcher.filter_fragments(
+                fragment_dicts, runtime_context
             )
 
-            # Always include fragments
-            if rule.always_include:
-                for fragment_path in rule.always_include:
-                    fragment = self._load_fragment(fragment_path)
-                    if fragment:
-                        resolved_fragments.append(fragment)
+            logger.debug(f"Group '{group_name}' fragment matching decisions:")
+            for fragment in all_fragments:
+                fragment_context = fragment.metadata.get("context", {})
+                matches = self.context_matcher.matches_context(
+                    fragment_context, runtime_context
+                )
+                logger.debug(
+                    f"  Fragment '{fragment.name}': {'MATCH' if matches else 'NO_MATCH'} "
+                    f"(context: {fragment_context}, priority: {fragment.priority})"
+                )
 
-            # Conditional fragments (only if condition exists)
-            if rule.condition and rule.mappings:
-                condition_value = self._evaluate_condition(rule.condition, context)
-                if condition_value and condition_value in rule.mappings:
-                    fragment_paths = rule.mappings[condition_value]
+            matching_fragments.sort(key=lambda f: f["priority"], reverse=True)
 
-                    for fragment_path in fragment_paths:
-                        fragment = self._load_fragment(fragment_path)
-                        if fragment:
-                            resolved_fragments.append(fragment)
+            if matching_fragments:
+                content_parts = [f["content"] for f in matching_fragments]
+                group_variables[group_name] = "\n\n".join(content_parts)
+                fragment_names = [f["name"] for f in matching_fragments]
+                logger.info(
+                    f"Group '{group_name}': {len(matching_fragments)} matching fragments "
+                    f"(out of {len(all_fragments)} total) - included: {fragment_names}"
+                )
+            else:
+                group_variables[group_name] = ""
+                logger.info(f"Group '{group_name}': no matching fragments")
 
-        # Sort by priority and remove duplicates
-        unique_fragments = {}
-        for fragment in resolved_fragments:
-            if fragment.name not in unique_fragments:
-                unique_fragments[fragment.name] = fragment
+        return group_variables
 
-        return list(unique_fragments.values())
+    # Removed legacy resolve_fragments and compose_with_fragments in favor of folder-driven composition
 
-    def compose_with_fragments(
-        self, base_template: str, orchestration_id: str, context: PromptContext
+    def compose_with_folder_fragments(
+        self, base_template: str, context: PromptContext
     ) -> str:
-        """Compose final prompt with base template and resolved fragments
+        """Compose final prompt using folder-driven fragment grouping with generic context matching
+
+        This is the new implementation following the delta plan that uses:
+        - Folder structure as the single source of truth for template variables
+        - Generic context matching with wildcards and lists
+        - No hardcoded aliases or mappings
 
         Args:
             base_template: Base prompt template content
-            orchestration_id: Orchestration configuration ID
             context: Context for fragment resolution
 
         Returns:
             Composed prompt with fragments integrated
         """
-        fragments = self.resolve_fragments(orchestration_id, context)
+        # Discover all fragments from folder structure
+        all_fragments = []
+        for fragment_file in self.fragments_dir.rglob("*.md"):
+            try:
+                relative_path = fragment_file.relative_to(self.fragments_dir)
+                fragment = self._load_fragment(str(relative_path))
+                if fragment:
+                    all_fragments.append(fragment)
+            except Exception as e:
+                logger.warning(f"Could not load fragment {fragment_file}: {e}")
 
-        # Build fragment content by category with alias normalization to match template placeholders
-        # Many existing fragments use broad categories (e.g., "state_specific", "legal_framework")
-        # while base templates expect placeholders aligned with orchestration rule names
-        # (e.g., "state_legal_requirements", "consumer_protection").
-        # This alias map bridges that gap without requiring content edits.
-        category_alias_map = {
-            # State-specific requirements
-            "state_specific": "state_legal_requirements",
-            # Consumer protection framework
-            "legal_framework": "consumer_protection",
-            # Contract type specific analysis
-            "purchase": "contract_type_specific",
-            "lease": "contract_type_specific",
-            "option": "contract_type_specific",
-            # Experience level guidance
-            "user_experience": "experience_level_guidance",
-            "guidance": "experience_level_guidance",
-            # Analysis depth and focus
-            "analysis": "analysis_depth",
-        }
+        # Convert context to dictionary for generic matcher
+        runtime_context = context.to_dict()
 
-        fragment_content: Dict[str, List[str]] = {}
-        for fragment in fragments:
-            original_category = fragment.metadata.get("category", "default")
-            normalized_category = category_alias_map.get(
-                original_category, original_category
-            )
-            if normalized_category not in fragment_content:
-                fragment_content[normalized_category] = []
-            fragment_content[normalized_category].append(fragment.content)
+        # Filter fragments using generic context matcher (dict-based API)
+        fragment_dicts = [
+            {
+                "name": f.name,
+                "metadata": f.metadata,
+                "content": f.content,
+                "priority": getattr(f, "priority", 50),
+                "path": str(f.path),
+            }
+            for f in all_fragments
+        ]
+        matching_fragments = self.context_matcher.filter_fragments(
+            fragment_dicts, runtime_context
+        )
+
+        # Group fragments by folder structure
+        # - Provide variables for top-level folder (backward compatible)
+        # - Also provide variables for the full directory path joined with underscores
+        fragment_groups: Dict[str, List[str]] = {}
+        for fragment in matching_fragments:
+            try:
+                full_path = Path(fragment.get("path", ""))
+                relative_path = full_path.relative_to(self.fragments_dir)
+                parts = list(relative_path.parts)
+                dir_parts = parts[:-1] if len(parts) > 1 else []
+                top_level = dir_parts[0] if dir_parts else "default"
+                full_dir_key = "_".join(dir_parts) if dir_parts else "default"
+            except Exception:
+                top_level = "default"
+                full_dir_key = "default"
+
+            for key in {top_level, full_dir_key}:
+                if key not in fragment_groups:
+                    fragment_groups[key] = []
+                fragment_groups[key].append(fragment.content)
 
         # Prepare fragment variables for template rendering
         fragment_vars = {}
-        for category, contents in fragment_content.items():
-            fragment_vars[f"{category}_fragments"] = "\n\n".join(contents)
+        for group_name, contents in fragment_groups.items():
+            # Sort by priority if available, otherwise use original order
+            # Note: Priority sorting is handled in filter_fragments
+            fragment_vars[group_name] = "\n\n".join(contents)
 
-        # Provide default empty values for expected fragment variables to prevent template errors
-        expected_fragments = [
-            "state_legal_requirements_fragments",
-            "consumer_protection_fragments",
-            "contract_type_specific_fragments",
-            "experience_level_guidance_fragments",
-            "analysis_depth_fragments",
-            "state_specific_fragments",
-            "contract_type_fragments",
-            "quality_requirements_fragments",
-            "user_experience_fragments",
-            "financial_risk_fragments",
-            "experience_level_fragments",
-            "state_specific_analysis_fragments",
-            "state_compliance_fragments",
-        ]
+        # Auto-discover all available directory groups (recursive) to provide empty defaults
+        available_groups = set()
+        for directory in self.fragments_dir.rglob("*"):
+            if directory.is_dir() and not directory.name.startswith("."):
+                # Add top-level name
+                try:
+                    relative = directory.relative_to(self.fragments_dir)
+                    parts = list(relative.parts)
+                    if parts:
+                        available_groups.add(parts[0])
+                        available_groups.add("_".join(parts))
+                except Exception:
+                    continue
 
-        for fragment_var in expected_fragments:
-            if fragment_var not in fragment_vars:
-                fragment_vars[fragment_var] = ""
+        # Provide empty strings for all discovered groups not present
+        for group_name in available_groups:
+            if group_name and group_name not in fragment_vars:
+                fragment_vars[group_name] = ""
 
-        # Render base template with fragment content
+        # Render template with fragment content
         from jinja2 import Environment, BaseLoader, Undefined
 
         class StringLoader(BaseLoader):
@@ -195,19 +242,23 @@ class FragmentManager:
             lstrip_blocks=True,
         )
 
-        # Add custom filters (similar to PromptTemplate)
+        # Add custom filters
         self._register_custom_filters(env)
 
         template = env.get_template("")
 
         # Merge context variables with fragment variables
-        render_vars = context.to_dict()
+        render_vars = runtime_context.copy()
         render_vars.update(fragment_vars)
 
         # Add helper functions
         from datetime import datetime, UTC
 
         render_vars["now"] = datetime.now(UTC)
+
+        logger.info(
+            f"Composed template with {len(fragment_groups)} fragment groups: {list(fragment_groups.keys())}"
+        )
 
         return template.render(**render_vars)
 
@@ -248,37 +299,51 @@ class FragmentManager:
         env.filters["australian_date"] = australian_date
         env.filters["tojsonpretty"] = tojsonpretty
 
-    def _load_orchestration_config(self, orchestration_id: str) -> Dict[str, Any]:
-        """Load orchestration configuration"""
-        if orchestration_id not in self._orchestration_configs:
-            # Accept both raw IDs (e.g., "contract_analysis") and fully-suffixed IDs
-            # (e.g., "contract_analysis_orchestrator"). Normalize to a single filename.
-            filename = orchestration_id
-            if not filename.endswith("_orchestrator"):
-                filename = f"{filename}_orchestrator"
-            config_file = self.config_dir / f"{filename}.yaml"
+    def _load_fragment_from_path(
+        self, fragment_path: Path, group_name: str
+    ) -> Optional[Fragment]:
+        """Load individual fragment from an absolute path and group name."""
+        cache_key = str(fragment_path)
+        if cache_key in self._fragment_cache:
+            return self._fragment_cache[cache_key]
 
-            if not config_file.exists():
-                raise PromptCompositionError(
-                    f"Orchestration config not found: {config_file}",
-                    composition_name=orchestration_id,
-                )
+        try:
+            content = fragment_path.read_text(encoding="utf-8")
 
-            try:
-                with open(config_file, "r", encoding="utf-8") as f:
-                    config = yaml.safe_load(f)
-                self._orchestration_configs[orchestration_id] = config
+            metadata: Dict[str, Any] = {}
+            fragment_content = content
+            if content.startswith("---"):
+                end_pos = content.find("---", 3)
+                if end_pos > 0:
+                    frontmatter = content[3:end_pos].strip()
+                    fragment_content = content[end_pos + 3 :].strip()
+                    try:
+                        metadata = yaml.safe_load(frontmatter) or {}
+                    except yaml.YAMLError as e:
+                        logger.warning(
+                            f"Invalid YAML frontmatter in {fragment_path}: {e}"
+                        )
 
-            except Exception as e:
-                raise PromptCompositionError(
-                    f"Failed to load orchestration config: {e}",
-                    composition_name=orchestration_id,
-                )
+            relative_path = fragment_path.relative_to(self.fragments_dir)
+            fragment_name = metadata.get("name", str(relative_path))
 
-        return self._orchestration_configs[orchestration_id]
+            fragment = Fragment(
+                name=fragment_name,
+                path=fragment_path,
+                content=fragment_content,
+                metadata=metadata,
+                group=group_name,
+                priority=int(metadata.get("priority", 50)),
+            )
+
+            self._fragment_cache[cache_key] = fragment
+            return fragment
+        except Exception as e:
+            logger.error(f"Failed to load fragment {fragment_path}: {e}")
+            return None
 
     def _load_fragment(self, fragment_path: str) -> Optional[Fragment]:
-        """Load individual fragment from file"""
+        """Load individual fragment from a path relative to fragments_dir."""
         if fragment_path in self._fragment_cache:
             return self._fragment_cache[fragment_path]
 
@@ -328,12 +393,19 @@ class FragmentManager:
             # Use fragment_path as name if not provided in metadata
             fragment_name = metadata.get("name", fragment_path)
 
+            # Derive group from the first directory segment of the relative path
+            try:
+                first_segment = str(clean_path).split("/", 1)[0]
+            except Exception:
+                first_segment = "default"
+
             fragment = Fragment(
                 name=fragment_name,
                 path=full_path,
                 content=fragment_content,
                 metadata=metadata,
-                tags=metadata.get("tags", []),
+                group=first_segment or "default",
+                priority=int(metadata.get("priority", 50)),
             )
 
             self._fragment_cache[fragment_path] = fragment
@@ -343,100 +415,76 @@ class FragmentManager:
             logger.error(f"Failed to load fragment {fragment_path}: {e}")
             return None
 
-    def _evaluate_condition(
-        self, condition: Optional[str], context: PromptContext
-    ) -> Optional[str]:
-        """Evaluate condition against context variables"""
-        variables = context.variables
+    def validate_group_structure(self) -> Dict[str, Any]:
+        """Validate folder structure and fragment metadata"""
+        issues: List[str] = []
+        groups = self.get_available_groups()
 
-        # Simple variable lookup
-        if condition and condition in variables:
-            return str(variables[condition])
+        import re
 
-        # Support for complex conditions (future enhancement)
-        # Could support expressions like "australian_state && contract_type"
+        valid_name_pattern = re.compile(r"^[a-zA-Z][a-zA-Z0-9_]*$")
+        for group in groups:
+            if not valid_name_pattern.match(group):
+                issues.append(
+                    f"Invalid group name: '{group}' (must start with letter, contain only letters, digits, underscore)"
+                )
 
-        return None
-
-    def list_available_fragments(self) -> List[Dict[str, Any]]:
-        """List all available fragments with metadata"""
-        fragments = []
-
-        for fragment_file in self.fragments_dir.rglob("*.md"):
-            try:
-                relative_path = fragment_file.relative_to(self.fragments_dir)
-                fragment = self._load_fragment(str(relative_path))
-
-                if fragment:
-                    fragments.append(
-                        {
-                            "name": fragment.name,
-                            "path": str(fragment.path),
-                            "category": fragment.metadata.get(
-                                "category", "uncategorized"
-                            ),
-                            "tags": fragment.tags or [],
-                            "description": fragment.metadata.get("description", ""),
-                        }
+        fragment_count = 0
+        deprecated_fields_found: List[str] = []
+        for group in groups:
+            fragments = self.load_fragments_for_group(group)
+            fragment_count += len(fragments)
+            for fragment in fragments:
+                if "group" in fragment.metadata:
+                    deprecated_fields_found.append(
+                        f"{fragment.name}: 'group' field deprecated"
+                    )
+                if "domain" in fragment.metadata:
+                    deprecated_fields_found.append(
+                        f"{fragment.name}: 'domain' field deprecated"
                     )
 
-            except Exception as e:
-                logger.warning(f"Could not process fragment {fragment_file}: {e}")
+                ctx = fragment.context
+                if ctx:
+                    for key, value in ctx.items():
+                        if not isinstance(key, str):
+                            issues.append(
+                                f"{fragment.name}: context key must be string, got {type(key)}"
+                            )
+                        if not (
+                            isinstance(value, str)
+                            or isinstance(value, list)
+                            or value == "*"
+                        ):
+                            issues.append(
+                                f"{fragment.name}: context value must be string, list, or '*', got {type(value)}"
+                            )
 
-        return fragments
-
-    def validate_orchestration(self, orchestration_id: str) -> Dict[str, Any]:
-        """Validate orchestration configuration"""
-        try:
-            config = self._load_orchestration_config(orchestration_id)
-            issues = []
-
-            # Check base template exists
-            base_template = config.get("base_template")
-            if base_template:
-                base_path = self.fragments_dir.parent / base_template
-                if not base_path.exists():
-                    issues.append(f"Base template not found: {base_template}")
-
-            # Check all fragment references
-            for rule_name, rule_config in config.get("fragments", {}).items():
-                mappings = rule_config.get("mappings", {})
-                always_include = rule_config.get("always_include", [])
-
-                # Check always_include fragments
-                for fragment_path in always_include:
-                    if not (self.fragments_dir / fragment_path).exists():
-                        issues.append(f"Fragment not found: {fragment_path}")
-
-                # Check mapping fragments
-                for condition_value, fragment_paths in mappings.items():
-                    for fragment_path in fragment_paths:
-                        if not (self.fragments_dir / fragment_path).exists():
-                            issues.append(f"Fragment not found: {fragment_path}")
-
-            return {
-                "valid": len(issues) == 0,
-                "issues": issues,
-                "fragment_count": len(config.get("fragments", {})),
-            }
-
-        except Exception as e:
-            return {
-                "valid": False,
-                "issues": [f"Configuration error: {str(e)}"],
-                "fragment_count": 0,
-            }
+        return {
+            "valid": len(issues) == 0,
+            "issues": issues,
+            "deprecated_warnings": deprecated_fields_found,
+            "total_groups": len(groups),
+            "total_fragments": fragment_count,
+            "groups": groups,
+        }
 
     def clear_cache(self):
         """Clear fragment cache"""
         self._fragment_cache.clear()
-        self._orchestration_configs.clear()
+        self._groups_cache.clear()
         logger.info("Fragment cache cleared")
 
     def get_metrics(self) -> Dict[str, Any]:
         """Get fragment manager metrics"""
+        groups = self.get_available_groups()
+        total_fragments = sum(
+            len(self.load_fragments_for_group(group)) for group in groups
+        )
         return {
+            "total_groups": len(groups),
+            "total_fragments": total_fragments,
             "cached_fragments": len(self._fragment_cache),
-            "cached_orchestrations": len(self._orchestration_configs),
-            "total_available_fragments": len(self.list_available_fragments()),
+            "cached_groups": len(self._groups_cache),
+            "available_groups": groups,
         }

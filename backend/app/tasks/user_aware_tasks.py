@@ -17,7 +17,7 @@ from app.core.auth_context import AuthContext
 from app.core.async_utils import celery_async_task
 from app.services.document_service import DocumentService
 from app.services.base.user_aware_service import UserAwareService
-from app.agents.subflows.document_processing_workflow import DocumentProcessingWorkflow
+from app.agents.contract_workflow import ContractAnalysisWorkflow
 
 logger = logging.getLogger(__name__)
 
@@ -164,10 +164,11 @@ async def run_document_processing_subflow(
     content_hash: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
-    Run DocumentProcessingWorkflow subflow with user context.
+    Run unified contract workflow's document processing with user context.
 
-    This task runs the new DocumentProcessingWorkflow subflow while maintaining
-    user authentication context for RLS enforcement.
+    This task uses the single ContractAnalysisWorkflow and executes the
+    document processing node while maintaining user authentication context
+    for RLS enforcement and progress tracking.
 
     Args:
         document_id: ID of document to process
@@ -204,10 +205,8 @@ async def run_document_processing_subflow(
             },
         )
 
-        # Initialize and run document processing workflow
-        workflow = DocumentProcessingWorkflow(
-            use_llm_document_processing=use_llm, storage_bucket="documents"
-        )
+        # Initialize unified contract workflow
+        workflow = ContractAnalysisWorkflow()
 
         # Update progress
         self.update_state(
@@ -218,23 +217,44 @@ async def run_document_processing_subflow(
             },
         )
 
-        # Run the workflow
-        result = await workflow.process_document(
-            document_id=document_id, use_llm=use_llm, content_hash=content_hash
-        )
+        # Build minimal state expected by ContractAnalysisWorkflow
+        state = {
+            "user_id": user_id,
+            "document_data": {"document_id": document_id, "content_hash": content_hash},
+            "australian_state": (
+                AuthContext.get_user_state()
+                if hasattr(AuthContext, "get_user_state")
+                else "NSW"
+            ),
+            "contract_type": "purchase_agreement",
+            "document_type": "contract",
+            # Optional progress callback can be injected by caller if needed
+        }
 
-        # Update progress based on result type
-        if result.success if hasattr(result, "success") else False:
+        # Run just the document processing node
+        result = workflow.process_document(state)
+
+        # Update progress based on updated state
+        parsing_completed = (
+            result.get("parsing_status") == ProcessingStatus.COMPLETED
+            if isinstance(result, dict)
+            else False
+        )
+        if parsing_completed:
             self.update_state(
                 state="PROCESSING",
                 meta={
                     "status": "Document processing completed successfully",
                     "progress": 90,
-                    "extraction_method": getattr(
-                        result, "extraction_method", "unknown"
+                    "extraction_method": result.get("document_metadata", {}).get(
+                        "extraction_method", "unknown"
                     ),
-                    "total_pages": getattr(result, "total_pages", 0),
-                    "character_count": getattr(result, "character_count", 0),
+                    "total_pages": result.get("document_metadata", {}).get(
+                        "total_pages", 0
+                    ),
+                    "character_count": result.get("document_metadata", {}).get(
+                        "character_count", 0
+                    ),
                 },
             )
         else:
@@ -243,7 +263,11 @@ async def run_document_processing_subflow(
                 meta={
                     "status": "Document processing failed",
                     "progress": 50,
-                    "error": getattr(result, "error", "Unknown error"),
+                    "error": (
+                        result.get("error", "Unknown error")
+                        if isinstance(result, dict)
+                        else "Unknown error"
+                    ),
                 },
             )
 
@@ -251,13 +275,13 @@ async def run_document_processing_subflow(
         processing_time = (datetime.now(UTC) - task_start).total_seconds()
 
         final_result = {
-            "success": result.success if hasattr(result, "success") else False,
+            "success": parsing_completed,
             "document_id": document_id,
             "user_id": user_id,
             "processing_time": processing_time,
             "task_id": self.request.id,
             "completed_at": datetime.now(UTC).isoformat(),
-            "workflow_type": "document_processing_subflow",
+            "workflow_type": "contract_workflow_document_processing",
             "use_llm": use_llm,
             "result": result,
         }
@@ -286,9 +310,11 @@ async def run_document_processing_subflow(
             from app.models.supabase_models import ProcessingStatus
 
             # Update document status using repository
-            from app.services.repositories.documents_repository import DocumentsRepository
+            from app.services.repositories.documents_repository import (
+                DocumentsRepository,
+            )
             from uuid import UUID
-            
+
             docs_repo = DocumentsRepository()
             await docs_repo.update_processing_status_and_results(
                 UUID(document_id),
@@ -300,7 +326,7 @@ async def run_document_processing_subflow(
                     "failed_at": datetime.now(UTC).isoformat(),
                     "workflow_type": "document_processing_subflow",
                     "processing_completed_at": datetime.now(UTC).isoformat(),
-                }
+                },
             )
         except Exception as update_error:
             logger.error(

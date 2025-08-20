@@ -8,11 +8,11 @@ compositions:
     version: "1.0.0"
     system_prompts:
       - name: "ocr_processor"
-        path: "system/domain/ocr_processor.md"
+        path: "system/ocr_processor.md"
         priority: 100
         required: true
       - name: "australian_legal"
-        path: "system/context/australian_legal.md"
+        path: "system/conveyancer.md"
         priority: 80
         required: true
     user_prompts:
@@ -23,15 +23,30 @@ compositions:
     version: "1.0.0"
     system_prompts:
       - name: "ocr_processor"
-        path: "system/domain/ocr_processor.md"
+        path: "system/ocr_processor.md"
         priority: 100
         required: true
       - name: "legal_specialist"
-        path: "system/domain/legal_specialist.md"
+        path: "system/realestate_lawyer.md"
         priority: 90
         required: true
     user_prompts:
       - "ocr_text_diagram_insight"
+
+  layout_summarise_only:
+    description: "Summarise layout and extract contract taxonomy/terms"
+    version: "1.0.0"
+    system_prompts:
+      - name: "ocr_processor"
+        path: "system/ocr_processor.md"
+        priority: 100
+        required: true
+      - name: "australian_legal"
+        path: "system/conveyancer.md"
+        priority: 90
+        required: true
+    user_prompts:
+      - "layout_summarise"
 
   # Analysis Compositions
   structure_analysis_only:
@@ -39,11 +54,11 @@ compositions:
     version: "1.0.0"
     system_prompts:
       - name: "legal_specialist"
-        path: "system/domain/legal_specialist.md"
+        path: "system/realestate_lawyer.md"
         priority: 100
         required: true
       - name: "australian_legal"
-        path: "system/context/australian_legal.md"
+        path: "system/conveyancer.md"
         priority: 90
         required: true
     user_prompts:
@@ -54,11 +69,11 @@ compositions:
     version: "1.0.0"
     system_prompts:
       - name: "legal_specialist"
-        path: "system/domain/legal_specialist.md"
+        path: "system/realestate_lawyer.md"
         priority: 100
         required: true
       - name: "australian_legal"
-        path: "system/context/australian_legal.md"
+        path: "system/conveyancer.md"
         priority: 90
         required: true
     user_prompts:
@@ -69,11 +84,11 @@ compositions:
     version: "1.0.0"
     system_prompts:
       - name: "legal_specialist"
-        path: "system/domain/legal_specialist.md"
+        path: "system/realestate_lawyer.md"
         priority: 100
         required: true
       - name: "australian_legal"
-        path: "system/context/australian_legal.md"
+        path: "system/conveyancer.md"
         priority: 90
         required: true
     user_prompts:
@@ -84,11 +99,11 @@ compositions:
     version: "1.0.0"
     system_prompts:
       - name: "legal_specialist"
-        path: "system/domain/legal_specialist.md"
+        path: "system/realestate_lawyer.md"
         priority: 100
         required: true
       - name: "australian_legal"
-        path: "system/context/australian_legal.md"
+        path: "system/conveyancer.md"
         priority: 90
         required: true
     user_prompts:
@@ -99,15 +114,15 @@ compositions:
     version: "1.0.0"
     system_prompts:
       - name: "legal_specialist"
-        path: "system/domain/legal_specialist.md"
+        path: "system/realestate_lawyer.md"
         priority: 100
         required: true
       - name: "australian_legal"
-        path: "system/context/australian_legal.md"
+        path: "system/conveyancer.md"
         priority: 90
         required: true
     user_prompts:
-      - "contract_workflow"
+      - "contract_recommendations"
 
   # Semantic Analysis Compositions
   semantic_analysis_only:
@@ -115,11 +130,11 @@ compositions:
     version: "1.0.0"
     system_prompts:
       - name: "legal_specialist"
-        path: "system/domain/legal_specialist.md"
+        path: "system/realestate_lawyer.md"
         priority: 100
         required: true
       - name: "australian_legal"
-        path: "system/context/australian_legal.md"
+        path: "system/conveyancer.md"
         priority: 90
         required: true
     user_prompts:
@@ -130,11 +145,11 @@ compositions:
     version: "1.0.0"
     system_prompts:
       - name: "legal_specialist"
-        path: "system/domain/legal_specialist.md"
+        path: "system/realestate_lawyer.md"
         priority: 100
         required: true
       - name: "australian_legal"
-        path: "system/context/australian_legal.md"
+        path: "system/conveyancer.md"
         priority: 90
         required: true
     user_prompts:
@@ -146,7 +161,7 @@ compositions:
     version: "1.0.0"
     system_prompts:
       - name: "legal_specialist"
-        path: "system/domain/legal_specialist.md"
+        path: "system/realestate_lawyer.md"
         priority: 100
         required: true
     user_prompts:
@@ -157,11 +172,11 @@ compositions:
     version: "1.0.0"
     system_prompts:
       - name: "legal_specialist"
-        path: "system/domain/legal_specialist.md"
+        path: "system/realestate_lawyer.md"
         priority: 100
         required: true
       - name: "australian_legal"
-        path: "system/context/australian_legal.md"
+        path: "system/conveyancer.md"
         priority: 90
         required: true
     user_prompts:
@@ -172,7 +187,7 @@ compositions:
     version: "1.0.0"
     system_prompts:
       - name: "legal_specialist"
-        path: "system/domain/legal_specialist.md"
+        path: "system/realestate_lawyer.md"
         priority: 100
         required: true
     user_prompts:
@@ -189,12 +204,12 @@ global_settings:
 state_overrides:
   NSW:
     system_prompt_overrides:
-      australian_legal: "system/context/state_specific/nsw_context.md"
+      australian_legal: "fragments/state_requirements/NSW/ocr_terminology.md"
   
   VIC:
     system_prompt_overrides:
-      australian_legal: "system/context/state_specific/vic_context.md"
+      australian_legal: "fragments/state_requirements/VIC/ocr_terminology.md"
   
   QLD:
     system_prompt_overrides:
-      australian_legal: "system/context/state_specific/qld_context.md"
+      australian_legal: "fragments/state_requirements/QLD/risk_indicators.md"

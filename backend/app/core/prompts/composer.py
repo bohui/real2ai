@@ -49,10 +49,8 @@ class PromptComposer:
         self.prompts_dir = Path(prompts_dir)
         self.config_dir = Path(config_dir)
 
-        # Initialize fragment manager
-        self.fragment_manager = FragmentManager(
-            fragments_dir=prompts_dir / "fragments", config_dir=config_dir
-        )
+        # Initialize unified folder-driven fragment manager
+        self.fragment_manager = FragmentManager(fragments_dir=prompts_dir / "fragments")
 
         # Load configuration
         self.composition_rules = self._load_composition_rules()
@@ -233,10 +231,9 @@ class PromptComposer:
                     )
 
                 if orchestration_id:
-                    # Use fragment manager to compose with fragments
-                    rendered = self.fragment_manager.compose_with_fragments(
+                    # Use new folder-driven fragments logic (ignores orchestrator mappings)
+                    rendered = self.fragment_manager.compose_with_folder_fragments(
                         base_template=template.content,
-                        orchestration_id=orchestration_id,
                         context=user_context,
                     )
                 else:
@@ -254,6 +251,43 @@ class PromptComposer:
                 )
 
         return self._merge_prompt_parts(user_parts, rule.merge_strategy)
+
+    def _register_custom_filters(self, env):
+        """Register custom filters for template rendering"""
+        import json
+
+        def currency_filter(value):
+            """Format value as Australian currency"""
+            if isinstance(value, (int, float)):
+                return f"${value:,.2f}"
+            return str(value)
+
+        def legal_format(text):
+            """Format text for legal documents"""
+            if not text:
+                return ""
+            return text.strip().replace("\n", " ").replace("  ", " ")
+
+        def australian_date(date_obj):
+            """Format date in Australian format"""
+            if isinstance(date_obj, str):
+                return date_obj
+            if hasattr(date_obj, "strftime"):
+                return date_obj.strftime("%d/%m/%Y")
+            return str(date_obj)
+
+        def tojsonpretty(value):
+            """Convert value to pretty-printed JSON"""
+            try:
+                return json.dumps(value, indent=2, ensure_ascii=False, default=str)
+            except (TypeError, ValueError):
+                return str(value)
+
+        # Register filters
+        env.filters["currency"] = currency_filter
+        env.filters["legal_format"] = legal_format
+        env.filters["australian_date"] = australian_date
+        env.filters["tojsonpretty"] = tojsonpretty
 
     def _load_template(self, prompt_name: str, prompt_type: str) -> PromptTemplate:
         """Load and cache template"""

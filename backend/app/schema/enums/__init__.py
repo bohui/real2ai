@@ -16,6 +16,8 @@ from .property import (
     DocumentType,
     DocumentStatus,
     ProcessingStatus,
+    PurchaseMethod,
+    UseCategory,
 )
 
 # Valuation & Market Enums
@@ -93,6 +95,8 @@ __all__ = [
     "DocumentType",
     "DocumentStatus",
     "ProcessingStatus",
+    "PurchaseMethod",
+    "UseCategory",
     # Valuation & Market
     "ValuationSource",
     "ValuationType",

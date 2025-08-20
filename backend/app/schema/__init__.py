@@ -17,7 +17,7 @@ from .common import (
 )
 
 # Contract schemas
-from .contract import (
+from .contract_analysis import (
     AnalysisOptions,
     ContractAnalysisRequest,
     ContractAnalysisResponse,

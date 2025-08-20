@@ -19,14 +19,16 @@ from app.core.notification_system import (
     notification_system,
     notify_user_error,
 )
-from app.schema.contract import (
+from app.schema.contract_analysis import (
     ContractAnalysisResponse,
 )
 from app.clients.supabase.client import SupabaseClient
 from app.services.repositories.analyses_repository import AnalysesRepository
 from app.services.repositories.documents_repository import DocumentsRepository
 from app.services.repositories.contracts_repository import ContractsRepository
-from app.services.repositories.user_contract_views_repository import UserContractViewsRepository
+from app.services.repositories.user_contract_views_repository import (
+    UserContractViewsRepository,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -627,9 +629,7 @@ async def _get_user_document(
         docs_repo = DocumentsRepository()
         document = await docs_repo.get_document(UUID(document_id))
 
-        logger.debug(
-            f"Document query result for {document_id}: {document is not None}"
-        )
+        logger.debug(f"Document query result for {document_id}: {document is not None}")
 
         if not document:
             logger.warning(f"Document {document_id} not found for user {user_id}")
@@ -687,7 +687,7 @@ async def _create_contract_record_with_cache(
     """Create contract record with cache integration using repository pattern."""
     try:
         contracts_repo = ContractsRepository()
-        
+
         # Extract property address from document if available
         property_address = None
         processing_results = document.get("processing_results", {})
@@ -695,17 +695,23 @@ async def _create_contract_record_with_cache(
             contract_terms = processing_results.get("contract_terms", {})
             if isinstance(contract_terms, dict):
                 property_address = contract_terms.get("property_address")
-        
+
+        # Defer setting purchase_agreement until purchase_method is known to satisfy DB constraints
+        requested_type = document.get("contract_type", "purchase_agreement")
+        initial_contract_type = (
+            "unknown" if requested_type == "purchase_agreement" else requested_type
+        )
+
         contract = await contracts_repo.upsert_contract_by_content_hash(
             content_hash=content_hash,
-            contract_type=document.get("contract_type", "purchase_agreement"),
+            contract_type=initial_contract_type,
             australian_state=user.australian_state,
             metadata={
                 "property_address": property_address,
                 "file_name": document.get("original_filename", "unknown"),
                 "file_type": document.get("file_type", "pdf"),
-                "user_id": str(user.id)
-            }
+                "user_id": str(user.id),
+            },
         )
 
         if not contract.id:
@@ -715,7 +721,9 @@ async def _create_contract_record_with_cache(
         return str(contract.id)
 
     except Exception as e:
-        logger.error(f"Contract repository create failed for content_hash {content_hash}: {str(e)}")
+        logger.error(
+            f"Contract repository create failed for content_hash {content_hash}: {str(e)}"
+        )
         raise ValueError(f"Failed to create contract record: {str(e)}")
 
 
@@ -733,7 +741,7 @@ async def _create_analysis_record_with_cache(
     try:
         # Use AnalysesRepository for shared analyses
         analyses_repo = AnalysesRepository(use_service_role=True)
-        
+
         analysis = await analyses_repo.upsert_analysis(
             content_hash=content_hash,
             agent_version="1.0",
@@ -748,7 +756,9 @@ async def _create_analysis_record_with_cache(
         return str(analysis.id)
 
     except Exception as e:
-        logger.error(f"Analysis repository upsert failed for content_hash {content_hash}: {str(e)}")
+        logger.error(
+            f"Analysis repository upsert failed for content_hash {content_hash}: {str(e)}"
+        )
         raise ValueError(f"Failed to create analysis record: {str(e)}")
 
 
@@ -888,15 +898,11 @@ async def get_contract_analysis(
         # Also check documents table for additional access
         docs_repo = DocumentsRepository()
         user_documents = await docs_repo.list_user_documents(limit=1000)
-        
+
         if user_documents:
-            logger.info(
-                f"documents rows for user {user.id}: {len(user_documents)}"
-            )
+            logger.info(f"documents rows for user {user.id}: {len(user_documents)}")
             doc_content_hashes = [
-                doc.content_hash
-                for doc in user_documents
-                if doc.content_hash
+                doc.content_hash for doc in user_documents if doc.content_hash
             ]
             user_content_hashes.extend(doc_content_hashes)
 
@@ -960,7 +966,9 @@ async def get_contract_analysis(
             "analysis_result": analysis_result,
             "risk_score": risk_score,
             "processing_time": None,  # Not stored in analyses table
-            "created_at": analysis.created_at.isoformat() if analysis.created_at else None,
+            "created_at": (
+                analysis.created_at.isoformat() if analysis.created_at else None
+            ),
         }
 
         # Add cache information if available
@@ -1077,12 +1085,10 @@ async def delete_contract_analysis(
         # Also check documents table for additional access
         docs_repo = DocumentsRepository()
         user_documents = await docs_repo.list_user_documents(limit=1000)
-        
+
         if user_documents:
             doc_content_hashes = [
-                doc.content_hash
-                for doc in user_documents
-                if doc.content_hash
+                doc.content_hash for doc in user_documents if doc.content_hash
             ]
             user_content_hashes.extend(doc_content_hashes)
 
@@ -1111,14 +1117,18 @@ async def delete_contract_analysis(
 
         # Delete user's view of this contract (contracts and analyses are shared resources)
         # Find and delete the specific contract view by content_hash
-        user_views = await user_contract_views_repo.get_user_contract_views(str(user.id))
+        user_views = await user_contract_views_repo.get_user_contract_views(
+            str(user.id)
+        )
         for view in user_views:
             if view.get("content_hash") == content_hash:
                 await user_contract_views_repo.delete_contract_view(view["id"])
                 break
 
         # Also remove user's documents with this content_hash
-        user_docs_with_hash = [doc for doc in user_documents if doc.content_hash == content_hash]
+        user_docs_with_hash = [
+            doc for doc in user_documents if doc.content_hash == content_hash
+        ]
         for doc in user_docs_with_hash:
             await docs_repo.delete_document(doc.id)
 
@@ -1133,3 +1143,100 @@ async def delete_contract_analysis(
     except Exception as e:
         logger.error(f"Delete contract error: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.get("/analytics/taxonomy")
+async def get_contract_taxonomy_analytics(
+    start_date: Optional[datetime] = Query(
+        None, description="Start date for analytics period"
+    ),
+    end_date: Optional[datetime] = Query(
+        None, description="End date for analytics period"
+    ),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Get comprehensive analytics for contract type taxonomy.
+
+    Provides insights into:
+    - Contract type distribution and trends
+    - OCR inference accuracy and performance
+    - Purchase method and lease category analytics
+    - Confidence score analysis
+    - Geographic distribution
+    """
+    try:
+        from app.services.analytics.contract_analytics_service import (
+            ContractAnalyticsService,
+        )
+
+        analytics_service = ContractAnalyticsService()
+        analytics = await analytics_service.get_taxonomy_analytics(start_date, end_date)
+
+        return analytics
+
+    except Exception as e:
+        logger.error(f"Analytics error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to generate analytics")
+
+
+@router.get("/analytics/performance-insights")
+async def get_ocr_performance_insights(
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Get insights for improving OCR inference performance.
+
+    Provides recommendations for:
+    - Low-confidence inference patterns
+    - High-performing detection categories
+    - Improvement opportunities
+    """
+    try:
+        from app.services.analytics.contract_analytics_service import (
+            ContractAnalyticsService,
+        )
+
+        analytics_service = ContractAnalyticsService()
+        insights = await analytics_service.get_performance_insights()
+
+        return insights
+
+    except Exception as e:
+        logger.error(f"Performance insights error: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail="Failed to generate performance insights"
+        )
+
+
+@router.post("/analytics/track-inference")
+async def track_inference_performance(
+    contract_id: str = Body(..., description="Contract ID"),
+    inference_result: Dict[str, Any] = Body(..., description="OCR inference results"),
+    manual_validation: Optional[Dict[str, Any]] = Body(
+        None, description="Manual validation results"
+    ),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Track OCR inference performance for continuous improvement.
+
+    Used to collect data on inference accuracy and identify areas for improvement.
+    """
+    try:
+        from app.services.analytics.contract_analytics_service import (
+            ContractAnalyticsService,
+        )
+
+        analytics_service = ContractAnalyticsService()
+        await analytics_service.track_inference_performance(
+            contract_id, inference_result, manual_validation
+        )
+
+        return {"message": "Inference performance tracked successfully"}
+
+    except Exception as e:
+        logger.error(f"Track inference error: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail="Failed to track inference performance"
+        )

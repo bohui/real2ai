@@ -3,147 +3,89 @@
 registry:
   system_prompts:
     assistant_core:
-      path: "system/base/assistant_core.md"
+      path: "system/assistant_core.md"
       category: "base"
       priority: 100
       dependencies: []
       description: "Core AI assistant behavior and personality"
       required_for: ["contract_analysis_complete", "ocr_extraction_specialized"]
       
-    safety_guidelines:
-      path: "system/base/safety_guidelines.md"
-      category: "base"
-      priority: 95
-      dependencies: ["assistant_core"]
-      description: "Safety and ethical guidelines for AI responses"
-      
     reasoning_framework:
-      path: "system/base/reasoning_framework.md"
+      path: "system/realestate_lawyer.md"
       category: "base"
       priority: 90
       dependencies: ["assistant_core"]
       description: "Logical reasoning and analysis framework"
       
     legal_specialist:
-      path: "system/domain/legal_specialist.md"
+      path: "system/realestate_lawyer.md"
       category: "domain"
       priority: 80
-      dependencies: ["assistant_core", "reasoning_framework"]
+      dependencies: ["assistant_core"]
       description: "Legal domain expertise and analysis capabilities"
       required_for: ["contract_analysis_complete", "risk_assessment_comprehensive"]
       
-    contract_analyst:
-      path: "system/domain/contract_analyst.md"
-      category: "domain"
-      priority: 75
-      dependencies: ["legal_specialist"]
-      description: "Specialized contract analysis expertise"
-      
     ocr_processor:
-      path: "system/domain/ocr_processor.md"
+      path: "system/ocr_processor.md"
       category: "domain"
       priority: 70
       dependencies: ["assistant_core"]
       description: "OCR processing and document extraction behavior"
       required_for: ["ocr_extraction_specialized"]
       
-    risk_analyst:
-      path: "system/domain/risk_analyst.md"
-      category: "domain"
-      priority: 75
-      dependencies: ["legal_specialist", "reasoning_framework"]
-      description: "Risk assessment and analysis expertise"
-      
-    workflow_coordinator:
-      path: "system/domain/workflow_coordinator.md"
-      category: "domain"
-      priority: 65
-      dependencies: ["assistant_core"]
-      description: "Multi-step workflow coordination and user guidance"
-      
     australian_legal:
-      path: "system/context/australian_legal.md"
+      path: "system/conveyancer.md"
       category: "context"
       priority: 85
       dependencies: ["legal_specialist"]
       description: "Australian legal system context and terminology"
-      required_for: ["contract_analysis_complete", "risk_assessment_comprehensive"]
-      
-    state_context:
-      path: "system/context/state_specific/dynamic_state.md"
-      category: "context"
-      priority: 60
-      dependencies: ["australian_legal"]
-      description: "Dynamic state-specific legal context (resolved at runtime)"
-      
-    # State-specific contexts
-    nsw_context:
-      path: "system/context/state_specific/nsw_context.md"
-      category: "context"
-      priority: 60
-      dependencies: ["australian_legal"]
-      description: "NSW-specific legal context and requirements"
-      
-    vic_context:
-      path: "system/context/state_specific/vic_context.md"
-      category: "context"
-      priority: 60
-      dependencies: ["australian_legal"]
-      description: "Victoria-specific legal context and requirements"
-      
-    qld_context:
-      path: "system/context/state_specific/qld_context.md"
-      category: "context"
-      priority: 60
-      dependencies: ["australian_legal"]
-      description: "Queensland-specific legal context and requirements"
 
   user_prompts:
     contract_analysis_base:
-      path: "user/instructions/contract_analysis_base.md"
-      category: "instructions"
+      path: "user/analysis/contract_analysis_base.md"
+      category: "analysis"
       system_requirements: ["legal_specialist", "australian_legal"]
       description: "Fragment-based comprehensive contract analysis instructions"
       estimated_tokens: 8000
       
     ocr_extraction_base:
-      path: "user/instructions/ocr_extraction_base.md"
-      category: "instructions"
+      path: "user/ocr/ocr_extraction_base.md"
+      category: "ocr"
       system_requirements: ["ocr_processor"]
       description: "Fragment-based OCR extraction and document processing instructions"
       estimated_tokens: 4000
       
     risk_assessment_base:
-      path: "user/instructions/risk_assessment_base.md"
-      category: "instructions"
+      path: "user/analysis/risk_assessment_legal.md"
+      category: "analysis"
       system_requirements: ["legal_specialist", "australian_legal"]
       description: "Fragment-based risk assessment and evaluation instructions"
       estimated_tokens: 8000
       
     financial_analysis:
-      path: "user/instructions/financial_analysis.md"
-      category: "instructions"
-      system_requirements: ["legal_specialist", "risk_analyst"]
+      path: "user/analysis/financial_analysis.md"
+      category: "analysis"
+      system_requirements: ["legal_specialist"]
       description: "Financial terms and obligations analysis"
       estimated_tokens: 5000
       
     quick_analysis:
-      path: "user/instructions/quick_analysis.md"
-      category: "instructions"
+      path: "user/analysis/contract_structure.md"
+      category: "analysis"
       system_requirements: ["legal_specialist"]
       description: "Fast contract analysis for basic checks"
       estimated_tokens: 3000
       
-    contract_workflow:
-      path: "user/workflow/contract_workflow.md"
-      category: "workflows"
-      system_requirements: ["legal_specialist", "workflow_coordinator"]
-      description: "Multi-step contract analysis workflow"
-      estimated_tokens: 10000
+    contract_recommendations:
+      path: "user/analysis/contract_recommendations.md"
+      category: "analysis"
+      system_requirements: ["legal_specialist"]
+      description: "Generate contract recommendations"
+      estimated_tokens: 6000
       
     validation_workflow:
       path: "user/validation/document_quality_validation.md"
-      category: "workflows"
+      category: "validation"
       system_requirements: ["assistant_core"]
       description: "Validation and quality assurance workflow"
       estimated_tokens: 2000
@@ -177,8 +119,8 @@ registry:
     #   estimated_tokens: 1000
       
     state_specific_instructions:
-      path: "user/instructions/state_specific_analysis.md"
-      category: "instructions"
+      path: "user/analysis/contract_analysis_base.md"
+      category: "analysis"
       system_requirements: ["legal_specialist", "australian_legal"]
       description: "State-specific analysis instructions"
       estimated_tokens: 4000
@@ -210,6 +152,11 @@ registry:
       category: "ocr"
       system_requirements: ["ocr_processor"]
       description: "Standard OCR text extraction template"
+    layout_summarise:
+      path: "user/ocr/layout_summarise.md"
+      category: "ocr"
+      system_requirements: ["ocr_processor"]
+      description: "Clean text and extract basic contract taxonomy/terms"
       estimated_tokens: 2500
 
   shared_components:

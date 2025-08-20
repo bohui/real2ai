@@ -18,8 +18,8 @@ const uploadSchema = z.object({
   contract_type: z.enum([
     "purchase_agreement",
     "lease_agreement",
-    "off_plan",
-    "auction",
+    "option_to_purchase",
+    "unknown",
   ]),
   australian_state: z.enum([
     "NSW",
@@ -74,7 +74,7 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({
   } = useForm<UploadFormData>({
     resolver: zodResolver(uploadSchema),
     defaultValues: {
-      contract_type: "purchase_agreement",
+      contract_type: "unknown",
       australian_state: user?.australian_state || "NSW",
       user_notes: "",
     },
@@ -226,8 +226,8 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({
   const contractTypeOptions = [
     { value: "purchase_agreement", label: "Purchase Agreement" },
     { value: "lease_agreement", label: "Lease Agreement" },
-    { value: "off_plan", label: "Off the Plan Contract" },
-    { value: "auction", label: "Auction Contract" },
+    { value: "option_to_purchase", label: "Option to Purchase" },
+    { value: "unknown", label: "Unknown/Other" },
   ];
 
   return (
@@ -241,23 +241,28 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
             {/* Contract Type and State Selection */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Controller
-                name="contract_type"
-                control={control}
-                render={({ field }) => (
-                  <Select
-                    label="Contract Type"
-                    error={errors.contract_type?.message}
-                    {...field}
-                  >
-                    {contractTypeOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </Select>
-                )}
-              />
+              <div>
+                <Controller
+                  name="contract_type"
+                  control={control}
+                  render={({ field }) => (
+                    <Select
+                      label="Contract Type"
+                      error={errors.contract_type?.message}
+                      {...field}
+                    >
+                      {contractTypeOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </Select>
+                  )}
+                />
+                <p className="mt-1 text-xs text-neutral-500">
+                  Specific details (like auction vs off-plan) will be automatically detected from the document
+                </p>
+              </div>
 
               <Controller
                 name="australian_state"

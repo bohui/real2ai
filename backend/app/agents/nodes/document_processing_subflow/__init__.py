@@ -9,6 +9,7 @@ from .fetch_document_node import FetchDocumentRecordNode
 from .already_processed_check_node import AlreadyProcessedCheckNode
 from .mark_processing_started_node import MarkProcessingStartedNode
 from .extract_text_node import ExtractTextNode
+from .layout_summarise_node import LayoutSummariseNode
 
 from .save_pages_node import SavePagesNode
 from .save_diagrams_node import SaveDiagramsNode
@@ -22,6 +23,7 @@ __all__ = [
     "AlreadyProcessedCheckNode",
     "MarkProcessingStartedNode",
     "ExtractTextNode",
+    "LayoutSummariseNode",
     "DetectDiagramsWithOCRNode",
     "SavePagesNode",
     "SaveDiagramsNode",

@@ -2,7 +2,7 @@
 
 import logging
 import asyncio
-from typing import Dict, Any, Optional, List, Union
+from typing import Dict, Any, Optional, List, Union, TYPE_CHECKING
 from pathlib import Path
 from datetime import datetime, UTC
 from dataclasses import dataclass
@@ -23,6 +23,9 @@ from .exceptions import (
     PromptServiceError,
 )
 from app.models.contract_state import AustralianState, ContractType
+
+if TYPE_CHECKING:
+    from .output_parser import BaseOutputParser, ParsingResult
 
 logger = logging.getLogger(__name__)
 
@@ -135,7 +138,7 @@ class PromptManager:
         **kwargs,
     ) -> str:
         """DEPRECATED: Render a prompt template with full validation and caching
-        
+
         This method is deprecated. Use render_composed() with appropriate compositions instead.
         Legacy method for backward compatibility only.
 
@@ -354,8 +357,11 @@ class PromptManager:
             "contract_analysis": lambda: ContextPresets.contract_analysis(
                 kwargs.get("australian_state", AustralianState.NSW),
                 kwargs.get("contract_type", ContractType.PURCHASE_AGREEMENT),
-                kwargs.get("user_type", "buyer"),
-                kwargs.get("experience", "novice"),
+                property_type=kwargs.get("property_type"),
+                purchase_method=kwargs.get("purchase_method"),
+                use_category=kwargs.get("use_category"),
+                user_type=kwargs.get("user_type", "buyer"),
+                experience=kwargs.get("experience", "novice"),
             ),
             "ocr_extraction": lambda: ContextPresets.ocr_extraction(
                 kwargs.get("document_type", "contract"),
@@ -370,6 +376,9 @@ class PromptManager:
             "compliance_check": lambda: ContextPresets.compliance_check(
                 kwargs.get("australian_state", AustralianState.NSW),
                 kwargs.get("contract_type", ContractType.PURCHASE_AGREEMENT),
+                property_type=kwargs.get("property_type"),
+                purchase_method=kwargs.get("purchase_method"),
+                use_category=kwargs.get("use_category"),
             ),
         }
 
@@ -467,17 +476,19 @@ class PromptManager:
                 if format_instructions:
                     user_prompt = f"{user_prompt}\n\n{format_instructions}"
             except Exception as e:
-                logger.warning(f"Failed to apply output parser format instructions: {e}")
+                logger.warning(
+                    f"Failed to apply output parser format instructions: {e}"
+                )
 
         return {
             "system_prompt": system_prompt,
             "user_prompt": user_prompt,
             "metadata": {
                 "composition": composition_name,
-                "fragments": getattr(composed, 'fragments', []),
+                "fragments": getattr(composed, "fragments", []),
                 "composed_at": composed.composed_at.isoformat(),
-                **composed.metadata
-            }
+                **composed.metadata,
+            },
         }
 
     def list_compositions(self) -> List[Dict[str, Any]]:
@@ -493,7 +504,6 @@ class PromptManager:
         return self.composer.validate_composition(composition_name)
 
     # Workflow Execution Methods
-
 
     # Service Integration Methods
 
@@ -824,6 +834,7 @@ def get_prompt_manager(config: PromptManagerConfig = None) -> PromptManager:
             # Default configuration
             from pathlib import Path
 
+            # Point to backend/app/prompts (three levels up to app/, then /prompts)
             prompts_dir = Path(__file__).parent.parent.parent / "prompts"
             config = PromptManagerConfig(
                 templates_dir=prompts_dir, config_dir=prompts_dir / "config"

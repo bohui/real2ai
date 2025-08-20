@@ -23,16 +23,32 @@ class PropertyType(str, Enum):
 
 
 class ContractType(str, Enum):
-    """Contract types for analysis"""
+    """Authoritative user-provided contract classification"""
 
     PURCHASE_AGREEMENT = "purchase_agreement"
     LEASE_AGREEMENT = "lease_agreement"
-    RENTAL_AGREEMENT = "rental_agreement"
-    COMMERCIAL_LEASE = "commercial_lease"
     OPTION_TO_PURCHASE = "option_to_purchase"
+    UNKNOWN = "unknown"
+
+
+class PurchaseMethod(str, Enum):
+    """Purchase method, only when contract_type = purchase_agreement"""
+
+    STANDARD = "standard"
     OFF_PLAN = "off_plan"
     AUCTION = "auction"
-    UNKNOWN = "unknown"
+    PRIVATE_TREATY = "private_treaty"
+    TENDER = "tender"
+    EXPRESSION_OF_INTEREST = "expression_of_interest"
+
+
+class UseCategory(str, Enum):
+    """Property use category, applied to purchase_agreement and lease_agreement"""
+
+    RESIDENTIAL = "residential"
+    COMMERCIAL = "commercial"
+    INDUSTRIAL = "industrial"
+    RETAIL = "retail"
 
 
 class DocumentType(str, Enum):

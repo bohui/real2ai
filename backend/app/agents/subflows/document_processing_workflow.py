@@ -71,7 +71,7 @@ class DocumentProcessingState(TypedDict):
     Error fields:
     - error: Error message if processing fails
     - error_details: Detailed error information
-    
+
     Progress fields:
     - notify_progress: Optional callback for per-page progress updates
     - contract_id: Optional contract ID for progress routing
@@ -103,10 +103,10 @@ class DocumentProcessingState(TypedDict):
     # Error handling
     error: Optional[str]
     error_details: Optional[ErrorDetails]
-    
+
     # Progress callback for per-page progress updates
     notify_progress: Optional[Callable[[str, int, str], Awaitable[None]]]
-    
+
     # Contract ID if nodes need it for progress routing
     contract_id: Optional[str]
 
@@ -164,6 +164,7 @@ class DocumentProcessingWorkflow:
             AlreadyProcessedCheckNode,
             MarkProcessingStartedNode,
             ExtractTextNode,
+            LayoutSummariseNode,
             SavePagesNode,
             SaveDiagramsNode,
             UpdateMetricsNode,
@@ -179,6 +180,7 @@ class DocumentProcessingWorkflow:
         self.extract_text_node = ExtractTextNode(
             use_llm=self.use_llm_document_processing
         )
+        self.layout_summarise_node = LayoutSummariseNode()
         self.save_pages_node = SavePagesNode()
         self.save_diagrams_node = SaveDiagramsNode()
         self.update_metrics_node = UpdateMetricsNode()
@@ -192,6 +194,7 @@ class DocumentProcessingWorkflow:
             "already_processed_check": self.already_processed_check_node,
             "mark_processing_started": self.mark_processing_started_node,
             "extract_text": self.extract_text_node,
+            "layout_summarise": self.layout_summarise_node,
             "save_pages": self.save_pages_node,
             "save_diagrams": self.save_diagrams_node,
             "update_metrics": self.update_metrics_node,
@@ -205,6 +208,7 @@ class DocumentProcessingWorkflow:
         workflow.add_node("already_processed_check", self.already_processed_check)
         workflow.add_node("mark_processing_started", self.mark_processing_started)
         workflow.add_node("extract_text", self.extract_text)
+        workflow.add_node("layout_summarise", self.layout_summarise)
         workflow.add_node("save_pages", self.save_pages)
         workflow.add_node("save_diagrams", self.save_diagrams)
         workflow.add_node("update_metrics", self.update_metrics)
@@ -242,7 +246,9 @@ class DocumentProcessingWorkflow:
         # Success pipeline
         workflow.add_edge("save_pages", "save_diagrams")
         workflow.add_edge("save_diagrams", "update_metrics")
-        workflow.add_edge("update_metrics", "mark_basic_complete")
+        # Run layout summarisation before marking basic complete
+        workflow.add_edge("update_metrics", "layout_summarise")
+        workflow.add_edge("layout_summarise", "mark_basic_complete")
         workflow.add_edge("mark_basic_complete", "build_summary")
 
         # Terminal edges
@@ -278,6 +284,13 @@ class DocumentProcessingWorkflow:
     ) -> DocumentProcessingState:
         """Extract text from document using appropriate method."""
         return await self.extract_text_node.execute(state)
+
+    @langsmith_trace(name="layout_summarise", run_type="chain")
+    async def layout_summarise(
+        self, state: DocumentProcessingState
+    ) -> DocumentProcessingState:
+        """Clean text and extract contract basics, upsert taxonomy to DB."""
+        return await self.layout_summarise_node.execute(state)
 
     @langsmith_trace(name="save_pages", run_type="tool")
     async def save_pages(
@@ -403,7 +416,7 @@ class DocumentProcessingWorkflow:
             # Wire progress callback to extract_text_node if provided
             if notify_progress:
                 self.extract_text_node.set_progress_callback(notify_progress)
-            
+
             # Execute workflow
             result_state = await self.workflow.ainvoke(initial_state)
 

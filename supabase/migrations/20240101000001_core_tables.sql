@@ -40,7 +40,7 @@ CREATE TABLE documents (
     diagram_count INTEGER DEFAULT 0,
     document_type VARCHAR(100),
     australian_state VARCHAR(10),
-    contract_type VARCHAR(100),
+    contract_type contract_type DEFAULT 'unknown',
     processing_errors JSONB,
     processing_notes TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -53,14 +53,85 @@ CREATE TABLE contracts (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     content_hash TEXT UNIQUE NOT NULL,
     metadata JSONB DEFAULT '{}'::jsonb,
-    contract_type contract_type NOT NULL DEFAULT 'purchase_agreement',
+    contract_type contract_type NOT NULL DEFAULT 'unknown',
     australian_state australian_state NOT NULL DEFAULT 'NSW',
+    purchase_method purchase_method,
+    use_category use_category,
+    ocr_confidence JSONB DEFAULT '{}'::jsonb,
     contract_terms JSONB DEFAULT '{}'::jsonb,
     raw_text TEXT,
     property_address TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- Validation function and constraints for contract taxonomy
+CREATE OR REPLACE FUNCTION validate_contract_taxonomy(
+    p_contract_type contract_type,
+    p_purchase_method purchase_method,
+    p_use_category use_category
+) RETURNS boolean AS $$
+BEGIN
+    -- Purchase agreements must have purchase_method; use_category optional
+    IF p_contract_type = 'purchase_agreement' THEN
+        IF p_purchase_method IS NULL THEN
+            RETURN FALSE;
+        END IF;
+        RETURN TRUE;
+    END IF;
+
+    -- Lease agreements must not have purchase_method; use_category optional
+    IF p_contract_type = 'lease_agreement' THEN
+        IF p_purchase_method IS NOT NULL THEN
+            RETURN FALSE;
+        END IF;
+        RETURN TRUE;
+    END IF;
+
+    -- Option to purchase must not have purchase_method or use_category
+    IF p_contract_type = 'option_to_purchase' THEN
+        IF p_purchase_method IS NOT NULL OR p_use_category IS NOT NULL THEN
+            RETURN FALSE;
+        END IF;
+        RETURN TRUE;
+    END IF;
+
+    -- Unknown allows any combination
+    IF p_contract_type = 'unknown' THEN
+        RETURN TRUE;
+    END IF;
+
+    RETURN FALSE;
+END;
+$$ LANGUAGE plpgsql;
+
+ALTER TABLE contracts 
+ADD CONSTRAINT contracts_purchase_method_dependency_check 
+CHECK (
+    (contract_type = 'purchase_agreement' AND purchase_method IS NOT NULL) OR
+    (contract_type != 'purchase_agreement' AND purchase_method IS NULL)
+);
+
+ALTER TABLE contracts 
+ADD CONSTRAINT contracts_use_category_dependency_check 
+CHECK (
+    (contract_type = 'option_to_purchase' AND use_category IS NULL) OR
+    (contract_type != 'option_to_purchase')
+);
+
+ALTER TABLE contracts 
+ADD CONSTRAINT contracts_taxonomy_validation_check 
+CHECK (validate_contract_taxonomy(contract_type, purchase_method, use_category));
+
+-- Indexes and comments for taxonomy fields
+CREATE INDEX idx_contracts_purchase_method ON contracts(purchase_method);
+CREATE INDEX idx_contracts_use_category ON contracts(use_category);
+CREATE INDEX idx_contracts_taxonomy ON contracts(contract_type, purchase_method, use_category);
+
+COMMENT ON COLUMN contracts.contract_type IS 'Authoritative user-provided contract classification';
+COMMENT ON COLUMN contracts.purchase_method IS 'OCR-inferred purchase method, only when contract_type = purchase_agreement';
+COMMENT ON COLUMN contracts.use_category IS 'OCR-inferred property use category. Applied to purchase_agreement and lease_agreement types. Null for option_to_purchase.';
+COMMENT ON COLUMN contracts.ocr_confidence IS 'Confidence scores for OCR-inferred fields';
 
 -- Create analyses table for tracking analysis operations
 -- This table stores analysis operations that can be shared across users

@@ -50,7 +50,9 @@ class ExtractTextNode(DocumentProcessingNodeBase):
         self.storage_service = None
         self.visual_artifact_service = None
         self.text_extraction_result = None
-        self._progress_callback: Optional[Callable[[str, int, str], Awaitable[None]]] = None
+        self._progress_callback: Optional[
+            Callable[[str, int, str], Awaitable[None]]
+        ] = None
         # Heuristics / thresholds
         self._min_text_len_for_ocr = 100
         self._ocr_zoom = 2.0
@@ -76,6 +78,9 @@ class ExtractTextNode(DocumentProcessingNodeBase):
             "zoning",
             "cadastral",
         ]
+        # Threshold for identifying header/footer regions as a percentage of page height
+        # Avoid magic numbers per project convention
+        self._header_footer_height_ratio = 0.10
 
     async def initialize(self):
         """Initialize artifacts repository and storage service"""
@@ -95,10 +100,12 @@ class ExtractTextNode(DocumentProcessingNodeBase):
             self.artifacts_repo = None
         # Storage service doesn't need cleanup
 
-    def set_progress_callback(self, callback: Optional[Callable[[str, int, str], Awaitable[None]]]) -> None:
+    def set_progress_callback(
+        self, callback: Optional[Callable[[str, int, str], Awaitable[None]]]
+    ) -> None:
         """
         Set explicit progress callback to avoid it being dropped by state reducers.
-        
+
         Args:
             callback: Progress callback function that takes (step, percent, description)
         """
@@ -1040,9 +1047,25 @@ class ExtractTextNode(DocumentProcessingNodeBase):
             total_pages = len(doc)
             for idx in range(total_pages):
                 page = doc.load_page(idx)
-                raw_text = page.get_text() or ""
-                method = "pymupdf"
-                text_to_use = raw_text
+                # Build text from spans, excluding header/footer, and capture font sizes
+                try:
+                    raw_text, decorated_text = (
+                        self._extract_page_text_with_fonts_excluding_headers_footers(
+                            page
+                        )
+                    )
+                    method = "pymupdf_spans"
+                    text_to_use = raw_text
+                    decorated_for_full = decorated_text
+                except Exception as span_err:
+                    # Fallback to simple text extraction if span processing fails
+                    self._log_warning(
+                        f"Span-based extraction failed on page {idx + 1}: {span_err}"
+                    )
+                    raw_text = page.get_text() or ""
+                    method = "pymupdf"
+                    text_to_use = raw_text
+                    decorated_for_full = text_to_use
 
                 # Heuristic flags
                 is_low_text = len(raw_text.strip()) < self._min_text_len_for_ocr
@@ -1310,6 +1333,8 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                     if ocr_text:
                         text_to_use = ocr_text
                         method = ocr_method
+                        # OCR text does not have span font sizes; use plain OCR text for full text output
+                        decorated_for_full = ocr_text
 
                 page_analysis = self._make_page_analysis(
                     text_to_use,
@@ -1328,7 +1353,9 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                 )
 
                 pages.append(page_extraction)
-                full_text_parts.append(f"\n--- Page {idx + 1} ---\n{text_to_use}")
+                full_text_parts.append(
+                    f"\n--- Page {idx + 1} ---\n{decorated_for_full}"
+                )
                 if method not in extraction_methods:
                     extraction_methods.append(method)
 
@@ -1550,6 +1577,75 @@ class ExtractTextNode(DocumentProcessingNodeBase):
             # Fallback to default rendering
             pix = page.get_pixmap()
             return pix.pil_tobytes(format="PNG")
+
+    def _extract_page_text_with_fonts_excluding_headers_footers(
+        self, page
+    ) -> Tuple[str, str]:
+        """
+        Extract plain text and span-decorated text (with font sizes) from a PyMuPDF page,
+        excluding header and footer regions determined by page-relative thresholds.
+
+        Returns:
+            (raw_text, decorated_text) where decorated_text formats each span as
+            "span_text[[[font_size]]]" and preserves line breaks.
+        """
+        try:
+            # Acquire detailed text dict with layout
+            text_page = page.get_textpage()
+            text_dict = page.get_text("dict", textpage=text_page) or {}
+        except Exception:
+            # Fallback to simple text if detailed dict fails
+            fallback = page.get_text() or ""
+            return fallback, fallback
+
+        page_height = float(getattr(page.rect, "height", 0.0) or 0.0)
+        if page_height <= 0:
+            fallback = page.get_text() or ""
+            return fallback, fallback
+
+        header_threshold = page_height * float(self._header_footer_height_ratio)
+        footer_threshold = page_height * (1.0 - float(self._header_footer_height_ratio))
+
+        raw_lines: List[str] = []
+        decorated_lines: List[str] = []
+
+        for block in text_dict.get("blocks") or []:
+            if block.get("type") != 0:
+                continue
+            bbox = block.get("bbox") or [0, 0, 0, 0]
+            try:
+                y_top = float(bbox[1])
+                y_bottom = float(bbox[3])
+            except Exception:
+                y_top = 0.0
+                y_bottom = 0.0
+
+            # Skip headers (top region) and footers (bottom region)
+            if y_top < header_threshold or y_bottom > footer_threshold:
+                continue
+
+            for line in block.get("lines") or []:
+                line_raw_parts: List[str] = []
+                line_decorated_parts: List[str] = []
+                for span in line.get("spans") or []:
+                    span_text = span.get("text") or ""
+                    size = span.get("size")
+                    try:
+                        size_value = float(size)
+                    except Exception:
+                        size_value = 0.0
+                    line_raw_parts.append(span_text)
+                    line_decorated_parts.append(f"{span_text}[[[{size_value:.1f}]]]")
+
+                if line_raw_parts:
+                    raw_lines.append(" ".join(s for s in line_raw_parts if s))
+                    decorated_lines.append(
+                        " ".join(s for s in line_decorated_parts if s)
+                    )
+
+        raw_text = "\n".join(raw_lines).strip()
+        decorated_text = "\n".join(decorated_lines).strip()
+        return raw_text, decorated_text
 
     def _has_diagram_keywords(self, text: str) -> bool:
         if not text:

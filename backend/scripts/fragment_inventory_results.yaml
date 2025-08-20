@@ -1,0 +1,1442 @@
+context_analysis:
+  current_keys:
+    category: !!set
+      analysis: null
+      commercial: null
+      contract_type_specific: null
+      guidance: null
+      high_value: null
+      lease: null
+      legal_framework: null
+      option: null
+      purchase: null
+      quality_requirements: null
+      risk_assessment: null
+      state_specific: null
+      user_experience: null
+    contract_type: !!set
+      PURCHASE_AGREEMENT: null
+    description: !!set
+      Advanced considerations for intermediate property buyers: null
+      Advanced financial modeling and analysis techniques: null
+      Analysis approach for expert users analyzing contracts: null
+      Analysis considerations for novice users analyzing contracts: null
+      Analysis focus for intermediate users analyzing contracts: null
+      Australian cooling-off period framework with state variations: null
+      Australian statutory warranties and consumer protections: null
+      Business considerations for commercial property transactions: null
+      Common financial risk indicators for property transactions: null
+      Common mistakes and pitfalls to avoid in property transactions: null
+      Comprehensive compliance and regulatory checklist: null
+      Comprehensive risk assessment matrix for property transactions: null
+      Concise summary of key contract points for quick review: null
+      Enhanced scrutiny requirements for high value transactions: null
+      Essential guidance for first-time property buyers: null
+      Exercise conditions and requirements for option agreements: null
+      Explanation of key legal and real estate terminology: null
+      Fast OCR processing instructions for time-sensitive analysis: null
+      Finance conditions and requirements for purchase agreements: null
+      Focused assessment based on specific concerns or requirements: null
+      High quality OCR processing instructions: null
+      Inspection rights and requirements for purchase agreements: null
+      Legal precedent references and case law considerations: null
+      Maintenance responsibilities and obligations for lease agreements: null
+      NSW Section 149 planning certificate requirements: null
+      NSW-specific cooling-off period provisions: null
+      NSW-specific legal terms for OCR extraction accuracy: null
+      NSW-specific risk indicators for property contracts: null
+      Only critical issues and red flags requiring immediate attention: null
+      Purchase agreement OCR extraction focus areas: null
+      Queensland Form 1 disclosure statement requirements: null
+      Queensland body corporate and community titles requirements: null
+      Queensland-specific risk indicators for property contracts: null
+      Rental obligations and responsibilities for lease agreements: null
+      Settlement requirements and procedures for purchase agreements: null
+      Specialist reports required for high value transactions: null
+      Standard quality OCR processing instructions: null
+      Technical analysis approaches for expert property investors: null
+      Termination rights and procedures for lease agreements: null
+      Time limitations and deadlines for option agreements: null
+      Understanding market variations and regional differences: null
+      Unfair contract terms protection under Australian Consumer Law: null
+      Victoria Section 32 vendor statement requirements: null
+      Victoria-specific cooling-off period provisions: null
+      Victoria-specific legal terms for OCR extraction accuracy: null
+      Victoria-specific risk indicators for property contracts: null
+      Zoning compliance requirements for commercial properties: null
+    name: !!set
+      advanced_considerations: null
+      business_considerations: null
+      common_pitfalls: null
+      compliance_checklist: null
+      critical_flags_only: null
+      detailed_risk_matrix: null
+      enhanced_scrutiny: null
+      exercise_conditions: null
+      expert_user_analysis: null
+      finance_conditions: null
+      financial_modeling: null
+      first_time_buyer: null
+      inspection_rights: null
+      intermediate_user_focus: null
+      key_points_summary: null
+      key_terminology: null
+      maintenance_responsibilities: null
+      market_variations: null
+      novice_user_considerations: null
+      precedent_references: null
+      rental_obligations: null
+      settlement_requirements: null
+      specialist_reports: null
+      targeted_assessment: null
+      technical_analysis: null
+      termination_rights: null
+      time_limitations: null
+      zoning_compliance: null
+    priority: !!set
+      '70': null
+      '75': null
+      '80': null
+      '85': null
+      '90': null
+    quality_level: !!set
+      fast: null
+      high: null
+      standard: null
+    state: !!set
+      NSW: null
+      QLD: null
+      VIC: null
+    tags: !!set
+      '[''analysis'', ''compliance'', ''comprehensive'', ''checklist'']': null
+      '[''analysis'', ''critical'', ''quick'', ''flags'']': null
+      '[''analysis'', ''expert'', ''user_experience'']': null
+      '[''analysis'', ''financial'', ''comprehensive'', ''modeling'']': null
+      '[''analysis'', ''intermediate'', ''user_experience'']': null
+      '[''analysis'', ''novice'', ''user_experience'']': null
+      '[''analysis'', ''risk'', ''comprehensive'', ''matrix'']': null
+      '[''analysis'', ''summary'', ''quick'', ''key_points'']': null
+      '[''analysis'', ''targeted'', ''focused'', ''assessment'']': null
+      '[''commercial'', ''business'', ''considerations'', ''requirements'']': null
+      '[''commercial'', ''zoning'', ''compliance'', ''requirements'']': null
+      '[''cooling-off'', ''consumer-protection'', ''legal-rights'']': null
+      '[''financial'', ''risk'', ''indicators'', ''market'']': null
+      '[''guidance'', ''advanced'', ''intermediate'', ''strategic'']': null
+      '[''guidance'', ''first_time_buyer'', ''novice'']': null
+      '[''guidance'', ''market'', ''intermediate'', ''regional'']': null
+      '[''guidance'', ''pitfalls'', ''novice'', ''warnings'']': null
+      '[''guidance'', ''precedent'', ''expert'', ''legal'']': null
+      '[''guidance'', ''technical'', ''expert'', ''analysis'']': null
+      '[''guidance'', ''terminology'', ''novice'', ''education'']': null
+      '[''high_value'', ''scrutiny'', ''enhanced'', ''requirements'']': null
+      '[''high_value'', ''specialist'', ''reports'', ''requirements'']': null
+      '[''lease'', ''maintenance'', ''responsibilities'', ''obligations'']': null
+      '[''lease'', ''rental'', ''obligations'', ''responsibilities'']': null
+      '[''lease'', ''termination'', ''rights'', ''procedures'']': null
+      '[''nsw'', ''cooling-off'', ''consumer-protection'']': null
+      '[''nsw'', ''ocr'', ''terminology'', ''legal-terms'']': null
+      '[''nsw'', ''planning'', ''certificates'', ''section-149'']': null
+      '[''nsw'', ''risk'', ''indicators'', ''assessment'']': null
+      '[''ocr'', ''fast-processing'', ''speed'']': null
+      '[''ocr'', ''high-quality'', ''processing'']': null
+      '[''ocr'', ''standard-quality'', ''processing'']': null
+      '[''option'', ''exercise'', ''conditions'', ''requirements'']': null
+      '[''option'', ''time'', ''limitations'', ''deadlines'']': null
+      '[''purchase'', ''finance'', ''conditions'', ''requirements'']': null
+      '[''purchase'', ''inspection'', ''rights'', ''requirements'']': null
+      '[''purchase'', ''ocr'', ''focus-areas'']': null
+      '[''purchase'', ''settlement'', ''requirements'', ''procedures'']': null
+      '[''qld'', ''body-corporate'', ''community-titles'', ''strata'']': null
+      '[''qld'', ''disclosure'', ''form-1'', ''property-law'']': null
+      '[''qld'', ''risk'', ''indicators'', ''assessment'']': null
+      '[''unfair-terms'', ''consumer-protection'', ''contract-law'']': null
+      '[''vic'', ''cooling-off'', ''consumer-protection'']': null
+      '[''vic'', ''ocr'', ''terminology'', ''legal-terms'']': null
+      '[''vic'', ''risk'', ''indicators'', ''assessment'']': null
+      '[''vic'', ''vendor-statement'', ''section-32'', ''disclosure'']': null
+      '[''warranties'', ''consumer-protection'', ''statutory-rights'']': null
+    type: !!set
+      consumer_protection: null
+      financial: null
+      fragment: null
+      legal_requirement: null
+      ocr_focus: null
+      ocr_terminology: null
+      processing_instructions: null
+      risk_assessment: null
+    version: !!set
+      1.0.0: null
+  key_usage_count:
+    category: 47
+    contract_type: 1
+    description: 47
+    name: 28
+    priority: 19
+    quality_level: 3
+    state: 11
+    tags: 47
+    type: 47
+    version: 28
+  minimal_context_keys:
+    analysis_depth: Analysis depth (comprehensive, quick, focused)
+    contract_type: Contract type (purchase, lease, option)
+    state: Jurisdiction (NSW, VIC, QLD, etc.)
+    user_experience: User level (novice, intermediate, expert)
+  normalization_opportunities:
+  - current_metadata:
+      category: state_specific
+      description: Victoria Section 32 vendor statement requirements
+      priority: 80
+      state: VIC
+      tags:
+      - vic
+      - vendor-statement
+      - section-32
+      - disclosure
+      type: legal_requirement
+    fragment: vic/vendor_statements.md
+    proposed_context:
+      analysis_depth: '*'
+      contract_type: '*'
+      state: VIC
+      user_experience: '*'
+  - current_metadata:
+      category: state_specific
+      description: Victoria-specific risk indicators for property contracts
+      priority: 80
+      state: VIC
+      tags:
+      - vic
+      - risk
+      - indicators
+      - assessment
+      type: risk_assessment
+    fragment: vic/risk_indicators.md
+    proposed_context:
+      analysis_depth: '*'
+      contract_type: '*'
+      state: VIC
+      user_experience: '*'
+  - current_metadata:
+      category: state_specific
+      description: Victoria-specific cooling-off period provisions
+      priority: 90
+      state: VIC
+      tags:
+      - vic
+      - cooling-off
+      - consumer-protection
+      type: consumer_protection
+    fragment: vic/cooling_off_period.md
+    proposed_context:
+      analysis_depth: '*'
+      contract_type: '*'
+      state: VIC
+      user_experience: '*'
+  - current_metadata:
+      category: state_specific
+      description: Victoria-specific legal terms for OCR extraction accuracy
+      priority: 80
+      state: VIC
+      tags:
+      - vic
+      - ocr
+      - terminology
+      - legal-terms
+      type: ocr_terminology
+    fragment: vic/ocr_terminology.md
+    proposed_context:
+      analysis_depth: '*'
+      contract_type: '*'
+      state: VIC
+      user_experience: '*'
+  - current_metadata:
+      category: analysis
+      description: Focused assessment based on specific concerns or requirements
+      name: targeted_assessment
+      tags:
+      - analysis
+      - targeted
+      - focused
+      - assessment
+      type: fragment
+      version: 1.0.0
+    fragment: analysis/targeted_assessment.md
+    proposed_context:
+      analysis_depth: focused
+      contract_type: '*'
+      state: '*'
+      user_experience: '*'
+  - current_metadata:
+      category: user_experience
+      description: Analysis considerations for novice users analyzing contracts
+      name: novice_user_considerations
+      tags:
+      - analysis
+      - novice
+      - user_experience
+      type: fragment
+      version: 1.0.0
+    fragment: analysis/novice_user_considerations.md
+    proposed_context:
+      analysis_depth: '*'
+      contract_type: '*'
+      state: '*'
+      user_experience: novice
+  - current_metadata:
+      category: analysis
+      description: Comprehensive risk assessment matrix for property transactions
+      name: detailed_risk_matrix
+      tags:
+      - analysis
+      - risk
+      - comprehensive
+      - matrix
+      type: fragment
+      version: 1.0.0
+    fragment: analysis/detailed_risk_matrix.md
+    proposed_context:
+      analysis_depth: comprehensive
+      contract_type: '*'
+      state: '*'
+      user_experience: '*'
+  - current_metadata:
+      category: user_experience
+      description: Analysis approach for expert users analyzing contracts
+      name: expert_user_analysis
+      tags:
+      - analysis
+      - expert
+      - user_experience
+      type: fragment
+      version: 1.0.0
+    fragment: analysis/expert_user_analysis.md
+    proposed_context:
+      analysis_depth: '*'
+      contract_type: '*'
+      state: '*'
+      user_experience: expert
+  - current_metadata:
+      category: analysis
+      description: Concise summary of key contract points for quick review
+      name: key_points_summary
+      tags:
+      - analysis
+      - summary
+      - quick
+      - key_points
+      type: fragment
+      version: 1.0.0
+    fragment: analysis/key_points_summary.md
+    proposed_context:
+      analysis_depth: quick
+      contract_type: '*'
+      state: '*'
+      user_experience: '*'
+  - current_metadata:
+      category: user_experience
+      description: Analysis focus for intermediate users analyzing contracts
+      name: intermediate_user_focus
+      tags:
+      - analysis
+      - intermediate
+      - user_experience
+      type: fragment
+      version: 1.0.0
+    fragment: analysis/intermediate_user_focus.md
+    proposed_context:
+      analysis_depth: '*'
+      contract_type: '*'
+      state: '*'
+      user_experience: intermediate
+folder_analysis:
+  current_folders:
+    analysis: &id001
+    - analysis/targeted_assessment.md
+    - analysis/critical_flags_only.md
+    - analysis/novice_user_considerations.md
+    - analysis/detailed_risk_matrix.md
+    - analysis/expert_user_analysis.md
+    - analysis/compliance_checklist.md
+    - analysis/key_points_summary.md
+    - analysis/intermediate_user_focus.md
+    - analysis/financial_modeling.md
+    commercial: &id002
+    - commercial/business_considerations.md
+    - commercial/zoning_compliance.md
+    common: &id003
+    - common/unfair_terms_protection.md
+    - common/cooling_off_framework.md
+    - common/statutory_warranties.md
+    - common/financial_risk_indicators.md
+    guidance: &id004
+    - guidance/first_time_buyer.md
+    - guidance/precedent_references.md
+    - guidance/market_variations.md
+    - guidance/key_terminology.md
+    - guidance/technical_analysis.md
+    - guidance/advanced_considerations.md
+    - guidance/common_pitfalls.md
+    high_value: &id005
+    - high_value/specialist_reports.md
+    - high_value/enhanced_scrutiny.md
+    lease: &id006
+    - lease/termination_rights.md
+    - lease/rental_obligations.md
+    - lease/maintenance_responsibilities.md
+    nsw: &id007
+    - nsw/risk_indicators.md
+    - nsw/planning_certificates.md
+    - nsw/cooling_off_period.md
+    - nsw/ocr_terminology.md
+    ocr: &id008
+    - ocr/high_quality_processing.md
+    - ocr/fast_processing.md
+    - ocr/standard_processing.md
+    option: &id009
+    - option/time_limitations.md
+    - option/exercise_conditions.md
+    purchase: &id010
+    - purchase/finance_conditions.md
+    - purchase/ocr_focus_areas.md
+    - purchase/inspection_rights.md
+    - purchase/settlement_requirements.md
+    qld: &id011
+    - qld/body_corporate.md
+    - qld/risk_indicators.md
+    - qld/disclosure_statements.md
+    vic: &id012
+    - vic/vendor_statements.md
+    - vic/risk_indicators.md
+    - vic/cooling_off_period.md
+    - vic/ocr_terminology.md
+  group_mapping:
+    analysis: analysis_depth
+    commercial: shared
+    common: consumer_protection
+    guidance: user_experience
+    high_value: shared
+    lease: contract_types
+    nsw: state_requirements
+    ocr: shared
+    option: contract_types
+    purchase: contract_types
+    qld: state_requirements
+    sa: state_requirements
+    vic: state_requirements
+    wa: state_requirements
+  proposed_groups:
+    analysis:
+      fragment_count: 9
+      fragments: *id001
+      proposed_group: analysis_depth
+    commercial:
+      fragment_count: 2
+      fragments: *id002
+      proposed_group: shared
+    common:
+      fragment_count: 4
+      fragments: *id003
+      proposed_group: consumer_protection
+    guidance:
+      fragment_count: 7
+      fragments: *id004
+      proposed_group: user_experience
+    high_value:
+      fragment_count: 2
+      fragments: *id005
+      proposed_group: shared
+    lease:
+      fragment_count: 3
+      fragments: *id006
+      proposed_group: contract_types
+    nsw:
+      fragment_count: 4
+      fragments: *id007
+      proposed_group: state_requirements
+    ocr:
+      fragment_count: 3
+      fragments: *id008
+      proposed_group: shared
+    option:
+      fragment_count: 2
+      fragments: *id009
+      proposed_group: contract_types
+    purchase:
+      fragment_count: 4
+      fragments: *id010
+      proposed_group: contract_types
+    qld:
+      fragment_count: 3
+      fragments: *id011
+      proposed_group: state_requirements
+    vic:
+      fragment_count: 4
+      fragments: *id012
+      proposed_group: state_requirements
+fragments:
+  categories:
+    analysis: 6
+    commercial: 2
+    contract_type_specific: 1
+    guidance: 7
+    high_value: 2
+    lease: 3
+    legal_framework: 3
+    option: 2
+    purchase: 3
+    quality_requirements: 3
+    risk_assessment: 1
+    state_specific: 11
+    user_experience: 3
+  fragments:
+  - content_length: 1676
+    file_path: vic/vendor_statements.md
+    folder: vic
+    has_frontmatter: true
+    metadata:
+      category: state_specific
+      description: Victoria Section 32 vendor statement requirements
+      priority: 80
+      state: VIC
+      tags:
+      - vic
+      - vendor-statement
+      - section-32
+      - disclosure
+      type: legal_requirement
+    name: vendor_statements.md
+  - content_length: 1312
+    file_path: vic/risk_indicators.md
+    folder: vic
+    has_frontmatter: true
+    metadata:
+      category: state_specific
+      description: Victoria-specific risk indicators for property contracts
+      priority: 80
+      state: VIC
+      tags:
+      - vic
+      - risk
+      - indicators
+      - assessment
+      type: risk_assessment
+    name: risk_indicators.md
+  - content_length: 1205
+    file_path: vic/cooling_off_period.md
+    folder: vic
+    has_frontmatter: true
+    metadata:
+      category: state_specific
+      description: Victoria-specific cooling-off period provisions
+      priority: 90
+      state: VIC
+      tags:
+      - vic
+      - cooling-off
+      - consumer-protection
+      type: consumer_protection
+    name: cooling_off_period.md
+  - content_length: 645
+    file_path: vic/ocr_terminology.md
+    folder: vic
+    has_frontmatter: true
+    metadata:
+      category: state_specific
+      description: Victoria-specific legal terms for OCR extraction accuracy
+      priority: 80
+      state: VIC
+      tags:
+      - vic
+      - ocr
+      - terminology
+      - legal-terms
+      type: ocr_terminology
+    name: ocr_terminology.md
+  - content_length: 563
+    file_path: analysis/targeted_assessment.md
+    folder: analysis
+    has_frontmatter: true
+    metadata:
+      category: analysis
+      description: Focused assessment based on specific concerns or requirements
+      name: targeted_assessment
+      tags:
+      - analysis
+      - targeted
+      - focused
+      - assessment
+      type: fragment
+      version: 1.0.0
+    name: targeted_assessment.md
+  - content_length: 543
+    file_path: analysis/critical_flags_only.md
+    folder: analysis
+    has_frontmatter: true
+    metadata:
+      category: analysis
+      description: Only critical issues and red flags requiring immediate attention
+      name: critical_flags_only
+      tags:
+      - analysis
+      - critical
+      - quick
+      - flags
+      type: fragment
+      version: 1.0.0
+    name: critical_flags_only.md
+  - content_length: 213
+    file_path: analysis/novice_user_considerations.md
+    folder: analysis
+    has_frontmatter: true
+    metadata:
+      category: user_experience
+      description: Analysis considerations for novice users analyzing contracts
+      name: novice_user_considerations
+      tags:
+      - analysis
+      - novice
+      - user_experience
+      type: fragment
+      version: 1.0.0
+    name: novice_user_considerations.md
+  - content_length: 648
+    file_path: analysis/detailed_risk_matrix.md
+    folder: analysis
+    has_frontmatter: true
+    metadata:
+      category: analysis
+      description: Comprehensive risk assessment matrix for property transactions
+      name: detailed_risk_matrix
+      tags:
+      - analysis
+      - risk
+      - comprehensive
+      - matrix
+      type: fragment
+      version: 1.0.0
+    name: detailed_risk_matrix.md
+  - content_length: 196
+    file_path: analysis/expert_user_analysis.md
+    folder: analysis
+    has_frontmatter: true
+    metadata:
+      category: user_experience
+      description: Analysis approach for expert users analyzing contracts
+      name: expert_user_analysis
+      tags:
+      - analysis
+      - expert
+      - user_experience
+      type: fragment
+      version: 1.0.0
+    name: expert_user_analysis.md
+  - content_length: 633
+    file_path: analysis/compliance_checklist.md
+    folder: analysis
+    has_frontmatter: true
+    metadata:
+      category: analysis
+      description: Comprehensive compliance and regulatory checklist
+      name: compliance_checklist
+      tags:
+      - analysis
+      - compliance
+      - comprehensive
+      - checklist
+      type: fragment
+      version: 1.0.0
+    name: compliance_checklist.md
+  - content_length: 532
+    file_path: analysis/key_points_summary.md
+    folder: analysis
+    has_frontmatter: true
+    metadata:
+      category: analysis
+      description: Concise summary of key contract points for quick review
+      name: key_points_summary
+      tags:
+      - analysis
+      - summary
+      - quick
+      - key_points
+      type: fragment
+      version: 1.0.0
+    name: key_points_summary.md
+  - content_length: 193
+    file_path: analysis/intermediate_user_focus.md
+    folder: analysis
+    has_frontmatter: true
+    metadata:
+      category: user_experience
+      description: Analysis focus for intermediate users analyzing contracts
+      name: intermediate_user_focus
+      tags:
+      - analysis
+      - intermediate
+      - user_experience
+      type: fragment
+      version: 1.0.0
+    name: intermediate_user_focus.md
+  - content_length: 577
+    file_path: analysis/financial_modeling.md
+    folder: analysis
+    has_frontmatter: true
+    metadata:
+      category: analysis
+      description: Advanced financial modeling and analysis techniques
+      name: financial_modeling
+      tags:
+      - analysis
+      - financial
+      - comprehensive
+      - modeling
+      type: fragment
+      version: 1.0.0
+    name: financial_modeling.md
+  - content_length: 413
+    file_path: guidance/first_time_buyer.md
+    folder: guidance
+    has_frontmatter: true
+    metadata:
+      category: guidance
+      description: Essential guidance for first-time property buyers
+      name: first_time_buyer
+      tags:
+      - guidance
+      - first_time_buyer
+      - novice
+      type: fragment
+      version: 1.0.0
+    name: first_time_buyer.md
+  - content_length: 698
+    file_path: guidance/precedent_references.md
+    folder: guidance
+    has_frontmatter: true
+    metadata:
+      category: guidance
+      description: Legal precedent references and case law considerations
+      name: precedent_references
+      tags:
+      - guidance
+      - precedent
+      - expert
+      - legal
+      type: fragment
+      version: 1.0.0
+    name: precedent_references.md
+  - content_length: 702
+    file_path: guidance/market_variations.md
+    folder: guidance
+    has_frontmatter: true
+    metadata:
+      category: guidance
+      description: Understanding market variations and regional differences
+      name: market_variations
+      tags:
+      - guidance
+      - market
+      - intermediate
+      - regional
+      type: fragment
+      version: 1.0.0
+    name: market_variations.md
+  - content_length: 599
+    file_path: guidance/key_terminology.md
+    folder: guidance
+    has_frontmatter: true
+    metadata:
+      category: guidance
+      description: Explanation of key legal and real estate terminology
+      name: key_terminology
+      tags:
+      - guidance
+      - terminology
+      - novice
+      - education
+      type: fragment
+      version: 1.0.0
+    name: key_terminology.md
+  - content_length: 654
+    file_path: guidance/technical_analysis.md
+    folder: guidance
+    has_frontmatter: true
+    metadata:
+      category: guidance
+      description: Technical analysis approaches for expert property investors
+      name: technical_analysis
+      tags:
+      - guidance
+      - technical
+      - expert
+      - analysis
+      type: fragment
+      version: 1.0.0
+    name: technical_analysis.md
+  - content_length: 657
+    file_path: guidance/advanced_considerations.md
+    folder: guidance
+    has_frontmatter: true
+    metadata:
+      category: guidance
+      description: Advanced considerations for intermediate property buyers
+      name: advanced_considerations
+      tags:
+      - guidance
+      - advanced
+      - intermediate
+      - strategic
+      type: fragment
+      version: 1.0.0
+    name: advanced_considerations.md
+  - content_length: 691
+    file_path: guidance/common_pitfalls.md
+    folder: guidance
+    has_frontmatter: true
+    metadata:
+      category: guidance
+      description: Common mistakes and pitfalls to avoid in property transactions
+      name: common_pitfalls
+      tags:
+      - guidance
+      - pitfalls
+      - novice
+      - warnings
+      type: fragment
+      version: 1.0.0
+    name: common_pitfalls.md
+  - content_length: 921
+    file_path: ocr/high_quality_processing.md
+    folder: ocr
+    has_frontmatter: true
+    metadata:
+      category: quality_requirements
+      description: High quality OCR processing instructions
+      priority: 70
+      quality_level: high
+      tags:
+      - ocr
+      - high-quality
+      - processing
+      type: processing_instructions
+    name: high_quality_processing.md
+  - content_length: 737
+    file_path: ocr/fast_processing.md
+    folder: ocr
+    has_frontmatter: true
+    metadata:
+      category: quality_requirements
+      description: Fast OCR processing instructions for time-sensitive analysis
+      priority: 70
+      quality_level: fast
+      tags:
+      - ocr
+      - fast-processing
+      - speed
+      type: processing_instructions
+    name: fast_processing.md
+  - content_length: 800
+    file_path: ocr/standard_processing.md
+    folder: ocr
+    has_frontmatter: true
+    metadata:
+      category: quality_requirements
+      description: Standard quality OCR processing instructions
+      priority: 70
+      quality_level: standard
+      tags:
+      - ocr
+      - standard-quality
+      - processing
+      type: processing_instructions
+    name: standard_processing.md
+  - content_length: 553
+    file_path: high_value/specialist_reports.md
+    folder: high_value
+    has_frontmatter: true
+    metadata:
+      category: high_value
+      description: Specialist reports required for high value transactions
+      name: specialist_reports
+      tags:
+      - high_value
+      - specialist
+      - reports
+      - requirements
+      type: fragment
+      version: 1.0.0
+    name: specialist_reports.md
+  - content_length: 570
+    file_path: high_value/enhanced_scrutiny.md
+    folder: high_value
+    has_frontmatter: true
+    metadata:
+      category: high_value
+      description: Enhanced scrutiny requirements for high value transactions
+      name: enhanced_scrutiny
+      tags:
+      - high_value
+      - scrutiny
+      - enhanced
+      - requirements
+      type: fragment
+      version: 1.0.0
+    name: enhanced_scrutiny.md
+  - content_length: 512
+    file_path: option/time_limitations.md
+    folder: option
+    has_frontmatter: true
+    metadata:
+      category: option
+      description: Time limitations and deadlines for option agreements
+      name: time_limitations
+      tags:
+      - option
+      - time
+      - limitations
+      - deadlines
+      type: fragment
+      version: 1.0.0
+    name: time_limitations.md
+  - content_length: 517
+    file_path: option/exercise_conditions.md
+    folder: option
+    has_frontmatter: true
+    metadata:
+      category: option
+      description: Exercise conditions and requirements for option agreements
+      name: exercise_conditions
+      tags:
+      - option
+      - exercise
+      - conditions
+      - requirements
+      type: fragment
+      version: 1.0.0
+    name: exercise_conditions.md
+  - content_length: 499
+    file_path: lease/termination_rights.md
+    folder: lease
+    has_frontmatter: true
+    metadata:
+      category: lease
+      description: Termination rights and procedures for lease agreements
+      name: termination_rights
+      tags:
+      - lease
+      - termination
+      - rights
+      - procedures
+      type: fragment
+      version: 1.0.0
+    name: termination_rights.md
+  - content_length: 473
+    file_path: lease/rental_obligations.md
+    folder: lease
+    has_frontmatter: true
+    metadata:
+      category: lease
+      description: Rental obligations and responsibilities for lease agreements
+      name: rental_obligations
+      tags:
+      - lease
+      - rental
+      - obligations
+      - responsibilities
+      type: fragment
+      version: 1.0.0
+    name: rental_obligations.md
+  - content_length: 571
+    file_path: lease/maintenance_responsibilities.md
+    folder: lease
+    has_frontmatter: true
+    metadata:
+      category: lease
+      description: Maintenance responsibilities and obligations for lease agreements
+      name: maintenance_responsibilities
+      tags:
+      - lease
+      - maintenance
+      - responsibilities
+      - obligations
+      type: fragment
+      version: 1.0.0
+    name: maintenance_responsibilities.md
+  - content_length: 557
+    file_path: commercial/business_considerations.md
+    folder: commercial
+    has_frontmatter: true
+    metadata:
+      category: commercial
+      description: Business considerations for commercial property transactions
+      name: business_considerations
+      tags:
+      - commercial
+      - business
+      - considerations
+      - requirements
+      type: fragment
+      version: 1.0.0
+    name: business_considerations.md
+  - content_length: 531
+    file_path: commercial/zoning_compliance.md
+    folder: commercial
+    has_frontmatter: true
+    metadata:
+      category: commercial
+      description: Zoning compliance requirements for commercial properties
+      name: zoning_compliance
+      tags:
+      - commercial
+      - zoning
+      - compliance
+      - requirements
+      type: fragment
+      version: 1.0.0
+    name: zoning_compliance.md
+  - content_length: 2410
+    file_path: common/unfair_terms_protection.md
+    folder: common
+    has_frontmatter: true
+    metadata:
+      category: legal_framework
+      description: Unfair contract terms protection under Australian Consumer Law
+      priority: 80
+      tags:
+      - unfair-terms
+      - consumer-protection
+      - contract-law
+      type: consumer_protection
+    name: unfair_terms_protection.md
+  - content_length: 1352
+    file_path: common/cooling_off_framework.md
+    folder: common
+    has_frontmatter: true
+    metadata:
+      category: legal_framework
+      description: Australian cooling-off period framework with state variations
+      priority: 90
+      tags:
+      - cooling-off
+      - consumer-protection
+      - legal-rights
+      type: consumer_protection
+    name: cooling_off_framework.md
+  - content_length: 2236
+    file_path: common/statutory_warranties.md
+    folder: common
+    has_frontmatter: true
+    metadata:
+      category: legal_framework
+      description: Australian statutory warranties and consumer protections
+      priority: 85
+      tags:
+      - warranties
+      - consumer-protection
+      - statutory-rights
+      type: consumer_protection
+    name: statutory_warranties.md
+  - content_length: 1850
+    file_path: common/financial_risk_indicators.md
+    folder: common
+    has_frontmatter: true
+    metadata:
+      category: risk_assessment
+      description: Common financial risk indicators for property transactions
+      priority: 85
+      tags:
+      - financial
+      - risk
+      - indicators
+      - market
+      type: financial
+    name: financial_risk_indicators.md
+  - content_length: 534
+    file_path: purchase/finance_conditions.md
+    folder: purchase
+    has_frontmatter: true
+    metadata:
+      category: purchase
+      description: Finance conditions and requirements for purchase agreements
+      name: finance_conditions
+      tags:
+      - purchase
+      - finance
+      - conditions
+      - requirements
+      type: fragment
+      version: 1.0.0
+    name: finance_conditions.md
+  - content_length: 710
+    file_path: purchase/ocr_focus_areas.md
+    folder: purchase
+    has_frontmatter: true
+    metadata:
+      category: contract_type_specific
+      contract_type: PURCHASE_AGREEMENT
+      description: Purchase agreement OCR extraction focus areas
+      priority: 75
+      tags:
+      - purchase
+      - ocr
+      - focus-areas
+      type: ocr_focus
+    name: ocr_focus_areas.md
+  - content_length: 524
+    file_path: purchase/inspection_rights.md
+    folder: purchase
+    has_frontmatter: true
+    metadata:
+      category: purchase
+      description: Inspection rights and requirements for purchase agreements
+      name: inspection_rights
+      tags:
+      - purchase
+      - inspection
+      - rights
+      - requirements
+      type: fragment
+      version: 1.0.0
+    name: inspection_rights.md
+  - content_length: 588
+    file_path: purchase/settlement_requirements.md
+    folder: purchase
+    has_frontmatter: true
+    metadata:
+      category: purchase
+      description: Settlement requirements and procedures for purchase agreements
+      name: settlement_requirements
+      tags:
+      - purchase
+      - settlement
+      - requirements
+      - procedures
+      type: fragment
+      version: 1.0.0
+    name: settlement_requirements.md
+  - content_length: 2052
+    file_path: qld/body_corporate.md
+    folder: qld
+    has_frontmatter: true
+    metadata:
+      category: state_specific
+      description: Queensland body corporate and community titles requirements
+      priority: 75
+      state: QLD
+      tags:
+      - qld
+      - body-corporate
+      - community-titles
+      - strata
+      type: legal_requirement
+    name: body_corporate.md
+  - content_length: 1382
+    file_path: qld/risk_indicators.md
+    folder: qld
+    has_frontmatter: true
+    metadata:
+      category: state_specific
+      description: Queensland-specific risk indicators for property contracts
+      priority: 80
+      state: QLD
+      tags:
+      - qld
+      - risk
+      - indicators
+      - assessment
+      type: risk_assessment
+    name: risk_indicators.md
+  - content_length: 1905
+    file_path: qld/disclosure_statements.md
+    folder: qld
+    has_frontmatter: true
+    metadata:
+      category: state_specific
+      description: Queensland Form 1 disclosure statement requirements
+      priority: 80
+      state: QLD
+      tags:
+      - qld
+      - disclosure
+      - form-1
+      - property-law
+      type: legal_requirement
+    name: disclosure_statements.md
+  - content_length: 1292
+    file_path: nsw/risk_indicators.md
+    folder: nsw
+    has_frontmatter: true
+    metadata:
+      category: state_specific
+      description: NSW-specific risk indicators for property contracts
+      priority: 80
+      state: NSW
+      tags:
+      - nsw
+      - risk
+      - indicators
+      - assessment
+      type: risk_assessment
+    name: risk_indicators.md
+  - content_length: 1290
+    file_path: nsw/planning_certificates.md
+    folder: nsw
+    has_frontmatter: true
+    metadata:
+      category: state_specific
+      description: NSW Section 149 planning certificate requirements
+      priority: 80
+      state: NSW
+      tags:
+      - nsw
+      - planning
+      - certificates
+      - section-149
+      type: legal_requirement
+    name: planning_certificates.md
+  - content_length: 1145
+    file_path: nsw/cooling_off_period.md
+    folder: nsw
+    has_frontmatter: true
+    metadata:
+      category: state_specific
+      description: NSW-specific cooling-off period provisions
+      priority: 90
+      state: NSW
+      tags:
+      - nsw
+      - cooling-off
+      - consumer-protection
+      type: consumer_protection
+    name: cooling_off_period.md
+  - content_length: 644
+    file_path: nsw/ocr_terminology.md
+    folder: nsw
+    has_frontmatter: true
+    metadata:
+      category: state_specific
+      description: NSW-specific legal terms for OCR extraction accuracy
+      priority: 80
+      state: NSW
+      tags:
+      - nsw
+      - ocr
+      - terminology
+      - legal-terms
+      type: ocr_terminology
+    name: ocr_terminology.md
+  priority_distribution:
+    '50': 28
+    '70': 3
+    '75': 2
+    '80': 9
+    '85': 2
+    '90': 3
+  states:
+    NSW: 4
+    QLD: 3
+    VIC: 4
+    unknown: 36
+  tags:
+    advanced: 1
+    analysis: 10
+    assessment: 4
+    body-corporate: 1
+    business: 1
+    certificates: 1
+    checklist: 1
+    commercial: 2
+    community-titles: 1
+    compliance: 2
+    comprehensive: 3
+    conditions: 2
+    considerations: 1
+    consumer-protection: 5
+    contract-law: 1
+    cooling-off: 3
+    critical: 1
+    deadlines: 1
+    disclosure: 2
+    education: 1
+    enhanced: 1
+    exercise: 1
+    expert: 3
+    fast-processing: 1
+    finance: 1
+    financial: 2
+    first_time_buyer: 1
+    flags: 1
+    focus-areas: 1
+    focused: 1
+    form-1: 1
+    guidance: 7
+    high-quality: 1
+    high_value: 2
+    indicators: 4
+    inspection: 1
+    intermediate: 3
+    key_points: 1
+    lease: 3
+    legal: 1
+    legal-rights: 1
+    legal-terms: 2
+    limitations: 1
+    maintenance: 1
+    market: 2
+    matrix: 1
+    modeling: 1
+    novice: 4
+    nsw: 4
+    obligations: 2
+    ocr: 6
+    option: 2
+    pitfalls: 1
+    planning: 1
+    precedent: 1
+    procedures: 2
+    processing: 2
+    property-law: 1
+    purchase: 4
+    qld: 3
+    quick: 2
+    regional: 1
+    rental: 1
+    reports: 1
+    requirements: 8
+    responsibilities: 2
+    rights: 2
+    risk: 5
+    scrutiny: 1
+    section-149: 1
+    section-32: 1
+    settlement: 1
+    specialist: 1
+    speed: 1
+    standard-quality: 1
+    statutory-rights: 1
+    strata: 1
+    strategic: 1
+    summary: 1
+    targeted: 1
+    technical: 1
+    termination: 1
+    terminology: 3
+    time: 1
+    unfair-terms: 1
+    user_experience: 3
+    vendor-statement: 1
+    vic: 4
+    warnings: 1
+    warranties: 1
+    zoning: 1
+  total_fragments: 47
+migration_recommendations:
+  folder_migrations:
+  - action: Move 4 fragments to state_requirements group
+    fragment_count: 4
+    from: fragments/vic/
+    to: fragments_new/state_requirements/
+  - action: Move 9 fragments to analysis_depth group
+    fragment_count: 9
+    from: fragments/analysis/
+    to: fragments_new/analysis_depth/
+  - action: Move 7 fragments to user_experience group
+    fragment_count: 7
+    from: fragments/guidance/
+    to: fragments_new/user_experience/
+  - action: Move 3 fragments to shared group
+    fragment_count: 3
+    from: fragments/ocr/
+    to: fragments_new/shared/
+  - action: Move 2 fragments to shared group
+    fragment_count: 2
+    from: fragments/high_value/
+    to: fragments_new/shared/
+  - action: Move 2 fragments to contract_types group
+    fragment_count: 2
+    from: fragments/option/
+    to: fragments_new/contract_types/
+  - action: Move 3 fragments to contract_types group
+    fragment_count: 3
+    from: fragments/lease/
+    to: fragments_new/contract_types/
+  - action: Move 2 fragments to shared group
+    fragment_count: 2
+    from: fragments/commercial/
+    to: fragments_new/shared/
+  - action: Move 4 fragments to consumer_protection group
+    fragment_count: 4
+    from: fragments/common/
+    to: fragments_new/consumer_protection/
+  - action: Move 4 fragments to contract_types group
+    fragment_count: 4
+    from: fragments/purchase/
+    to: fragments_new/contract_types/
+  - action: Move 3 fragments to state_requirements group
+    fragment_count: 3
+    from: fragments/qld/
+    to: fragments_new/state_requirements/
+  - action: Move 4 fragments to state_requirements group
+    fragment_count: 4
+    from: fragments/nsw/
+    to: fragments_new/state_requirements/
+  metadata_normalizations: []
+  priority_actions:
+  - 1. Create new folder structure with group directories
+  - 2. Migrate fragments with metadata normalization
+  - 3. Update base templates with new placeholder names
+  - 4. Remove orchestrator fragment mapping configurations
+  - 5. Test new system with realistic contexts
+  - 6. Deploy with fallback to old system
+  template_updates: []
+template_analysis:
+  old_to_new_mappings:
+    analysis_depth_fragments: analysis_depth
+    consumer_protection_fragments: consumer_protection
+    contract_type_fragments: contract_types
+    contract_type_specific_fragments: contract_types
+    experience_level_fragments: user_experience
+    experience_level_guidance_fragments: user_experience
+    financial_risk_fragments: risk_factors
+    quality_requirements_fragments: shared
+    state_compliance_fragments: state_requirements
+    state_legal_requirements_fragments: state_requirements
+    state_specific_analysis_fragments: state_requirements
+    state_specific_fragments: state_requirements
+    user_experience_fragments: user_experience
+  placeholder_mappings:
+    australian_state: australian_state
+    contract_type: contract_type
+    document_text: document_text
+    user_experience: user_experience
+  placeholders_found:
+  - document_text
+  - australian_state
+  - user_experience
+  - contract_type
+  templates:
+  - content_length: 4155
+    file_path: workflow/contract_risk_assessment.md
+    variables:
+    - australian_state
+    - contract_type
+    - australian_state
+    - australian_state
+    - user_experience
+  - content_length: 7410
+    file_path: validation/final_output_validation.md
+    variables:
+    - australian_state
+    - contract_type
+    - australian_state
+  - content_length: 4414
+    file_path: validation/document_quality_validation.md
+    variables:
+    - australian_state
+    - document_text
+  - content_length: 6520
+    file_path: validation/terms_completeness_validation.md
+    variables:
+    - australian_state
+    - contract_type
+    - australian_state

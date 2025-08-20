@@ -387,8 +387,10 @@ class BaseNode(ABC):
         if context:
             error_details["context"] = context
 
+        # Include a top-level 'error' field for tests and downstream consumers
+        enriched_details = {"error": error_message, **error_details}
         return update_state_step(
-            state, error_step_name, error=error_message, data=error_details
+            state, error_step_name, error=error_message, data=enriched_details
         )
 
     def update_state_step(

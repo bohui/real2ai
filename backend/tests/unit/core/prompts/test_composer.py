@@ -143,7 +143,7 @@ class TestPromptComposer:
 
     def test_system_prompt_priority_sorting(self, mock_config_dir, mock_prompts_dir):
         """Test that system prompts are sorted by priority correctly"""
-        composer = PromptComposer(mock_config_dir, mock_prompts_dir)
+        composer = PromptComposer(mock_prompts_dir, mock_config_dir)
 
         # Test the sorting logic
         rule = composer.composition_rules["test_composition"]
@@ -155,7 +155,7 @@ class TestPromptComposer:
 
     def test_validation_with_valid_composition(self, mock_config_dir, mock_prompts_dir):
         """Test that validation passes for valid composition"""
-        composer = PromptComposer(mock_config_dir, mock_prompts_dir)
+        composer = PromptComposer(mock_prompts_dir, mock_config_dir)
 
         validation_result = composer.validate_composition("test_composition")
 
@@ -165,7 +165,7 @@ class TestPromptComposer:
 
     def test_validation_with_missing_prompt(self, mock_config_dir, mock_prompts_dir):
         """Test that validation fails when prompts are missing from registry"""
-        composer = PromptComposer(mock_config_dir, mock_prompts_dir)
+        composer = PromptComposer(mock_prompts_dir, mock_config_dir)
 
         # Modify the registry to remove a prompt
         composer.prompt_registry["system_prompts"].pop("test_system")
@@ -178,12 +178,12 @@ class TestPromptComposer:
 
     def test_composition_metadata_creation(self, mock_config_dir, mock_prompts_dir):
         """Test that composition metadata is created correctly"""
-        composer = PromptComposer(mock_config_dir, mock_prompts_dir)
+        composer = PromptComposer(mock_prompts_dir, mock_config_dir)
 
         rule = composer.composition_rules["test_composition"]
         context = PromptContext(context_type=ContextType.ANALYSIS, variables={})
 
-        metadata = composer._create_composition_metadata(rule, context)
+        metadata = composer._create_composition_metadata(rule, context, {}, {})
 
         assert metadata["composition_rule"] == "test_composition"
         assert metadata["system_prompts"] == rule.system_prompts

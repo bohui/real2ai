@@ -7,7 +7,7 @@ import logging
 from typing import Dict, Any, Optional, List, Callable, Awaitable
 from datetime import datetime, timezone
 
-from app.agents.progress_tracking_workflow import ProgressTrackingWorkflow
+from app.agents.contract_workflow import ProgressTrackingWorkflow
 from app.core.config import (
     get_enhanced_workflow_config,
     validate_workflow_configuration,
@@ -1110,9 +1110,15 @@ async def ensure_contract(
     contracts_repo = ContractsRepository()
 
     try:
+        # If caller labels as purchase_agreement but no purchase_method yet, start as 'unknown'
+        # to satisfy DB taxonomy constraints; workflow will upgrade later once inferred.
+        initial_contract_type = (
+            "unknown" if contract_type == "purchase_agreement" else contract_type
+        )
+
         contract = await contracts_repo.upsert_contract_by_content_hash(
             content_hash=content_hash,
-            contract_type=contract_type,
+            contract_type=initial_contract_type,
             australian_state=australian_state,
         )
         logger.info(f"Repository: Upserted contract record: {contract.id}")

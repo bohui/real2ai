@@ -1,10 +1,22 @@
 ---
-type: "fragment"
-name: "precedent_references"
-version: "1.0.0"
-description: "Legal precedent references and case law considerations"
-category: "guidance"
-tags: ["guidance", "precedent", "expert", "legal"]
+category: guidance
+context:
+  state: '*'
+  contract_type: '*'
+  purchase_method: '*'
+  use_category: '*'
+  user_experience: '*'
+  analysis_depth: '*'
+priority: 70
+version: 1.0.0
+description: Legal precedent references and case law considerations
+tags:
+- guidance
+- precedent
+- expert
+- legal
+type: fragment
+name: precedent_references
 ---
 
 ### Legal Precedent References:

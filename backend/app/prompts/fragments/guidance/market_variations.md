@@ -1,10 +1,22 @@
 ---
-type: "fragment"
-name: "market_variations"
-version: "1.0.0"
-description: "Understanding market variations and regional differences"
-category: "guidance"
-tags: ["guidance", "market", "intermediate", "regional"]
+category: guidance
+context:
+  state: '*'
+  contract_type: '*'
+  purchase_method: '*'
+  use_category: '*'
+  user_experience: '*'
+  analysis_depth: '*'
+priority: 70
+version: 1.0.0
+description: Understanding market variations and regional differences
+tags:
+- guidance
+- market
+- intermediate
+- regional
+type: fragment
+name: market_variations
 ---
 
 ### Market Variations and Regional Differences:

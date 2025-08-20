@@ -1,10 +1,21 @@
 ---
-category: "quality_requirements"
-quality_level: "standard"
-type: "processing_instructions"
+category: quality_requirements
+context:
+  state: '*'
+  contract_type: '*'
+  purchase_method: '*'
+  use_category: '*'
+  user_experience: '*'
+  analysis_depth: '*'
 priority: 70
-description: "Standard quality OCR processing instructions"
-tags: ["ocr", "standard-quality", "processing"]
+version: 1.0.0
+description: Standard quality OCR processing instructions
+tags:
+- ocr
+- standard-quality
+- processing
+quality_level: standard
+type: processing_instructions
 ---
 
 ### Standard Processing Requirements:

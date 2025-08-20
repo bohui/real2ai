@@ -18,6 +18,8 @@ from app.schema.enums import (
     UserType,
     SubscriptionStatus,
     ContractType,
+    PurchaseMethod,
+    UseCategory,
     DocumentStatus,
     PropertyType,
     ValuationSource,
@@ -132,7 +134,16 @@ class Contract(TimestampedBaseModel):
     content_hash: str = Field(
         ..., description="SHA-256 hash of document content for caching"
     )
-    contract_type: ContractType = ContractType.PURCHASE_AGREEMENT
+    contract_type: ContractType = ContractType.UNKNOWN
+    purchase_method: Optional[PurchaseMethod] = Field(
+        None, description="OCR-inferred purchase method for purchase agreements"
+    )
+    use_category: Optional[UseCategory] = Field(
+        None, description="OCR-inferred property use category for purchase and lease agreements"
+    )
+    ocr_confidence: Dict[str, float] = Field(
+        default_factory=dict, description="Confidence scores for OCR-inferred fields"
+    )
     australian_state: AustralianState = AustralianState.NSW
     contract_terms: Dict[str, Any] = Field(default_factory=dict)
     raw_text: Optional[str] = None

@@ -225,6 +225,9 @@ class ContractTermsExtractionNode(BaseNode):
             #     diagnostic_info,
             # )
 
+            # Infer contract taxonomy from OCR text
+            await self._infer_contract_taxonomy(full_text, state)
+
             # Extract terms using configured method
 
             if use_llm and extraction_method == "llm_structured":
@@ -530,3 +533,112 @@ class ContractTermsExtractionNode(BaseNode):
                 e, context={"calculation_method": "extraction_confidence"}
             )
             return 0.5
+
+    async def _infer_contract_taxonomy(
+        self, full_text: str, state: RealEstateAgentState
+    ) -> None:
+        """
+        Infer contract taxonomy (purchase_method, use_category) from document text.
+
+        Implements the contract type taxonomy from contract-type-taxonomy-story.md:
+        - Uses OCR inference to populate purchase_method for purchase agreements
+        - Uses OCR inference to populate use_category for purchase and lease agreements
+        - Updates state with inferred taxonomy and confidence scores
+        """
+        try:
+            # Get the user-provided contract_type from state
+            user_contract_type = state.get("contract_type", "unknown")
+
+            # Import the inference function
+            from app.agents.tools.domain.contract_extraction import (
+                infer_contract_taxonomy,
+            )
+
+            # Run taxonomy inference
+            inference_result = infer_contract_taxonomy(full_text, user_contract_type)
+
+            # Extract results
+            contract_type = inference_result.get("contract_type", user_contract_type)
+            purchase_method = inference_result.get("purchase_method")
+            use_category = inference_result.get("use_category")
+            confidence_scores = inference_result.get("confidence_scores", {})
+
+            # Update state with inferred taxonomy
+            state["contract_type"] = contract_type
+            if purchase_method:
+                state["purchase_method"] = purchase_method
+            if use_category:
+                state["use_category"] = use_category
+
+            # Store OCR confidence scores
+            state["ocr_confidence"] = confidence_scores
+
+            # Log inference results
+            self._log_step_debug(
+                "Contract taxonomy inferred from OCR",
+                state,
+                {
+                    "original_contract_type": user_contract_type,
+                    "final_contract_type": contract_type,
+                    "purchase_method": purchase_method,
+                    "use_category": use_category,
+                    "confidence_scores": confidence_scores,
+                    "inference_evidence": inference_result.get(
+                        "inference_evidence", {}
+                    ),
+                },
+            )
+
+            # Create context for downstream analysis
+            from app.schema.contract_analysis import ContractAnalysisContext
+            from app.schema.enums import (
+                ContractType,
+                PurchaseMethod,
+                UseCategory,
+                AustralianState,
+            )
+
+            # Create analysis context following story specification
+            context = ContractAnalysisContext.create_context(
+                contract_type=ContractType(contract_type),
+                purchase_method=(
+                    PurchaseMethod(purchase_method) if purchase_method else None
+                ),
+                use_category=UseCategory(use_category) if use_category else None,
+                document_id=state.get("document_data", {}).get("document_id", ""),
+                australian_state=state.get("australian_state", AustralianState.NSW),
+                purchase_method_confidence=confidence_scores.get("purchase_method"),
+                use_category_confidence=confidence_scores.get("use_category"),
+            )
+
+            # Store context in state for downstream use
+            state["contract_analysis_context"] = context.model_dump()
+
+        except Exception as e:
+            # Log error but don't fail the entire extraction
+            self._log_exception(
+                e,
+                state,
+                {
+                    "operation": "contract_taxonomy_inference",
+                    "user_contract_type": state.get("contract_type", "unknown"),
+                },
+            )
+
+            # Set default context on error
+            state["ocr_confidence"] = {}
+            state["contract_analysis_context"] = {
+                "contract": {
+                    "contract_type": state.get("contract_type", "unknown"),
+                    "purchase_method": None,
+                    "use_category": None,
+                },
+                "document": {
+                    "id": state.get("document_data", {}).get("document_id", ""),
+                    "australian_state": str(state.get("australian_state", "NSW")),
+                },
+                "ocr": {
+                    "purchase_method_confidence": None,
+                    "use_category_confidence": None,
+                },
+            }

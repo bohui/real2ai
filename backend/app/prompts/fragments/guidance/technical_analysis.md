@@ -1,10 +1,22 @@
 ---
-type: "fragment"
-name: "technical_analysis"
-version: "1.0.0"
-description: "Technical analysis approaches for expert property investors"
-category: "guidance"
-tags: ["guidance", "technical", "expert", "analysis"]
+category: guidance
+context:
+  state: '*'
+  contract_type: '*'
+  purchase_method: '*'
+  use_category: '*'
+  user_experience: '*'
+  analysis_depth: '*'
+priority: 70
+version: 1.0.0
+description: Technical analysis approaches for expert property investors
+tags:
+- guidance
+- technical
+- expert
+- analysis
+type: fragment
+name: technical_analysis
 ---
 
 ### Technical Analysis Approaches:

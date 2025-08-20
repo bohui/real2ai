@@ -1,10 +1,22 @@
 ---
-type: "fragment"
-name: "common_pitfalls"
-version: "1.0.0"
-description: "Common mistakes and pitfalls to avoid in property transactions"
-category: "guidance"
-tags: ["guidance", "pitfalls", "novice", "warnings"]
+category: guidance
+context:
+  state: '*'
+  contract_type: '*'
+  purchase_method: '*'
+  use_category: '*'
+  user_experience: '*'
+  analysis_depth: '*'
+priority: 70
+version: 1.0.0
+description: Common mistakes and pitfalls to avoid in property transactions
+tags:
+- guidance
+- pitfalls
+- novice
+- warnings
+type: fragment
+name: common_pitfalls
 ---
 
 ### Common Pitfalls to Avoid:

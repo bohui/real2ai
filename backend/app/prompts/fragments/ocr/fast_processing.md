@@ -1,10 +1,21 @@
 ---
-category: "quality_requirements"
-quality_level: "fast"
-type: "processing_instructions"
+category: quality_requirements
+context:
+  state: '*'
+  contract_type: '*'
+  purchase_method: '*'
+  use_category: '*'
+  user_experience: '*'
+  analysis_depth: '*'
 priority: 70
-description: "Fast OCR processing instructions for time-sensitive analysis"
-tags: ["ocr", "fast-processing", "speed"]
+version: 1.0.0
+description: Fast OCR processing instructions for time-sensitive analysis
+tags:
+- ocr
+- fast-processing
+- speed
+quality_level: fast
+type: processing_instructions
 ---
 
 ### Fast Processing Requirements:

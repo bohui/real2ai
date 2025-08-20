@@ -115,16 +115,11 @@ class DocumentProcessingNode(BaseNode):
                     content_hash = document_data.get("content_hash")
                     # Extract australian_state properly handling enum type
                     australian_state = state.get("australian_state", "NSW")
-                    if hasattr(australian_state, "value"):
-                        australian_state = australian_state.value
-                    elif hasattr(australian_state, "name"):
-                        australian_state = australian_state.name
-                    else:
-                        australian_state = str(australian_state)
-                    
+                    australian_state = australian_state.value
+
                     result = await subflow.process_document(
-                        document_id=document_id, 
-                        use_llm=use_llm, 
+                        document_id=document_id,
+                        use_llm=use_llm,
                         content_hash=content_hash,
                         australian_state=australian_state,
                         contract_type=state.get("contract_type", "purchase_agreement"),

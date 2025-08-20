@@ -11,7 +11,7 @@ async def basic_composition_example():
     """Example of basic prompt composition"""
 
     # Configure the prompt manager
-    prompts_dir = Path(__file__).parent.parent.parent / "prompts"
+    prompts_dir = Path(__file__).parent.parent.parent.parent / "prompts"
     config = PromptManagerConfig(
         templates_dir=prompts_dir,
         config_dir=prompts_dir / "config",
@@ -55,8 +55,8 @@ async def state_specific_example():
     """Example of state-specific prompt composition"""
 
     config = PromptManagerConfig(
-        templates_dir=Path(__file__).parent.parent.parent / "prompts",
-        config_dir=Path(__file__).parent.parent.parent / "prompts" / "config",
+        templates_dir=Path(__file__).parent.parent.parent.parent / "prompts",
+        config_dir=Path(__file__).parent.parent.parent.parent / "prompts" / "config",
         enable_composition=True,
     )
 
@@ -92,8 +92,8 @@ async def validation_example():
     """Example of prompt validation"""
 
     config = PromptManagerConfig(
-        templates_dir=Path(__file__).parent.parent.parent / "prompts",
-        config_dir=Path(__file__).parent.parent.parent / "prompts" / "config",
+        templates_dir=Path(__file__).parent.parent.parent.parent / "prompts",
+        config_dir=Path(__file__).parent.parent.parent.parent / "prompts" / "config",
         enable_composition=True,
         validation_enabled=True,
     )
@@ -121,8 +121,8 @@ async def batch_rendering_example():
     """Example of batch prompt rendering"""
 
     config = PromptManagerConfig(
-        templates_dir=Path(__file__).parent.parent.parent / "prompts",
-        config_dir=Path(__file__).parent.parent.parent / "prompts" / "config",
+        templates_dir=Path(__file__).parent.parent.parent.parent / "prompts",
+        config_dir=Path(__file__).parent.parent.parent.parent / "prompts" / "config",
         enable_composition=True,
     )
 
@@ -202,8 +202,8 @@ async def metrics_and_monitoring_example():
     """Example of metrics and monitoring"""
 
     config = PromptManagerConfig(
-        templates_dir=Path(__file__).parent.parent.parent / "prompts",
-        config_dir=Path(__file__).parent.parent.parent / "prompts" / "config",
+        templates_dir=Path(__file__).parent.parent.parent.parent / "prompts",
+        config_dir=Path(__file__).parent.parent.parent.parent / "prompts" / "config",
         enable_composition=True,
         enable_metrics=True,
     )
@@ -254,7 +254,7 @@ def legacy_compatibility_example():
 
     # This shows how existing code continues to work
     config = PromptManagerConfig(
-        templates_dir=Path(__file__).parent.parent.parent / "prompts" / "user",
+        templates_dir=Path(__file__).parent.parent.parent.parent / "prompts" / "user",
         enable_composition=False,  # Disable composition for legacy mode
     )
 

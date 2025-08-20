@@ -1,10 +1,21 @@
 ---
-category: "quality_requirements"
-quality_level: "high"
-type: "processing_instructions"
+category: quality_requirements
+context:
+  state: '*'
+  contract_type: '*'
+  purchase_method: '*'
+  use_category: '*'
+  user_experience: '*'
+  analysis_depth: '*'
 priority: 70
-description: "High quality OCR processing instructions"
-tags: ["ocr", "high-quality", "processing"]
+version: 1.0.0
+description: High quality OCR processing instructions
+tags:
+- ocr
+- high-quality
+- processing
+quality_level: high
+type: processing_instructions
 ---
 
 ### High Quality Processing Requirements:
