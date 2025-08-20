@@ -27,6 +27,9 @@ from app.schema.document import (
     DiagramProcessingResult,
 )
 from app.core.langsmith_config import langsmith_trace
+from app.prompts.schema.contract_layout_summary_schema import (
+    ContractLayoutSummary,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -96,6 +99,7 @@ class DocumentProcessingState(TypedDict):
     local_tmp_path: Optional[str]
     text_extraction_result: Optional[TextExtractionResult]
     diagram_processing_result: Optional[DiagramProcessingResult]
+    layout_summarisation_result: Optional[ContractLayoutSummary]
 
     # Output
     processed_summary: Optional[ProcessedDocumentSummary]
@@ -408,6 +412,7 @@ class DocumentProcessingWorkflow:
                 file_type=None,
                 text_extraction_result=None,
                 diagram_processing_result=None,
+                layout_summarisation_result=None,
                 processed_summary=None,
                 error=None,
                 error_details=None,

@@ -192,15 +192,14 @@ class TestAlreadyProcessedCheckNode:
 
         node = AlreadyProcessedCheckNode()
 
-        with patch("app.services.document_service.DocumentService") as mock_service:
-            mock_service_instance = AsyncMock()
-            mock_service_instance.get_processed_document_summary.return_value = (
-                sample_summary
-            )
-            mock_service.return_value = mock_service_instance
-
-            # Act
-            result = await node.execute(sample_state)
+        with patch.object(
+            node, "get_user_client", return_value=AsyncMock()
+        ) as _mock_user_client:
+            with patch.object(
+                node, "_get_processed_document_summary", return_value=sample_summary
+            ) as _mock_get_summary:
+                # Act
+                result = await node.execute(sample_state)
 
             # Assert
             assert result["processed_summary"] == sample_summary
@@ -212,13 +211,14 @@ class TestAlreadyProcessedCheckNode:
         # Arrange
         node = AlreadyProcessedCheckNode()
 
-        with patch("app.services.document_service.DocumentService") as mock_service:
-            mock_service_instance = AsyncMock()
-            mock_service_instance.get_processed_document_summary.return_value = None
-            mock_service.return_value = mock_service_instance
-
-            # Act
-            result = await node.execute(sample_state)
+        with patch.object(
+            node, "get_user_client", return_value=AsyncMock()
+        ) as _mock_user_client:
+            with patch.object(
+                node, "_get_processed_document_summary", return_value=None
+            ) as _mock_get_summary:
+                # Act
+                result = await node.execute(sample_state)
 
             # Assert
             assert result["processed_summary"] is None
@@ -269,7 +269,8 @@ class TestBuildSummaryNode:
 
         # Assert
         assert (
-            result["error"] == "Cannot build summary without successful text extraction"
+            result["error"]
+            == "Cannot build summary without successful layout summarisation"
         )
         assert result["error_details"] is not None
 
@@ -290,7 +291,8 @@ class TestErrorHandlingNode:
 
         # Mock the DocumentsRepository used in ErrorHandlingNode
         mock_docs_repo = AsyncMock()
-        mock_docs_repo.update_processing_status_and_results = AsyncMock()
+        # Current implementation calls update_document_status
+        mock_docs_repo.update_document_status = AsyncMock()
 
         # Ensure mock_user_client.database is never called
         mock_user_client.database.update.side_effect = Exception(
@@ -312,10 +314,8 @@ class TestErrorHandlingNode:
                 assert result["error_details"] is not None
 
                 # Verify repository method was called correctly
-                mock_docs_repo.update_processing_status_and_results.assert_called_once()
-                call_args = (
-                    mock_docs_repo.update_processing_status_and_results.call_args
-                )
+                mock_docs_repo.update_document_status.assert_called_once()
+                call_args = mock_docs_repo.update_document_status.call_args
                 assert call_args[0][0] == UUID(
                     sample_state["document_id"]
                 )  # document_id as UUID

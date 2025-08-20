@@ -19,6 +19,8 @@ from app.schema.enums import (
 class ContractLayoutSummary(BaseModel):
     """Model for summarised contract layout and basic information."""
 
+    success: bool = True
+    error: Optional[str] = None
     # Cleaned and normalised raw text (headers/footers removed, spacing normalised)
     raw_text: str = Field(
         ...,

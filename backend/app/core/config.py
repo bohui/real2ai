@@ -355,8 +355,8 @@ class EnhancedWorkflowConfig:
             min_overall_confidence=float(
                 os.getenv("ENHANCED_WORKFLOW_MIN_OVERALL_CONFIDENCE", "0.7")
             ),
-            # Prompt manager paths
-            prompt_templates_dir=prompts_dir / "user",
+            # Prompt manager paths (use prompts root to allow system/ and user/)
+            prompt_templates_dir=prompts_dir,
             prompt_config_dir=prompts_dir / "config",
             enable_prompt_caching=os.getenv(
                 "ENHANCED_WORKFLOW_PROMPT_CACHING", "true"
@@ -418,7 +418,8 @@ class EnhancedWorkflowConfig:
             validation_step_timeout=settings.enhanced_workflow_validation_step_timeout,
             require_mandatory_terms=settings.enhanced_workflow_require_mandatory_terms,
             validate_state_compliance=settings.enhanced_workflow_validate_state_compliance,
-            prompt_templates_dir=prompts_dir / "user",
+            # Use prompts root to allow system/ and user/
+            prompt_templates_dir=prompts_dir,
             prompt_config_dir=prompts_dir / "config",
             enable_prompt_caching=settings.enhanced_workflow_prompt_caching,
             enable_hot_reload=settings.enhanced_workflow_hot_reload,
@@ -437,7 +438,8 @@ class EnhancedWorkflowConfig:
 
         if not self.prompt_templates_dir:
             base_dir = Path(__file__).parent.parent
-            self.prompt_templates_dir = base_dir / "prompts" / "user"
+            # Use prompts root to allow system/ and user/
+            self.prompt_templates_dir = base_dir / "prompts"
 
         if not self.prompt_config_dir:
             base_dir = Path(__file__).parent.parent

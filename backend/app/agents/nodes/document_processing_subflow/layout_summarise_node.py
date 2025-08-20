@@ -13,6 +13,8 @@ from datetime import datetime, timezone
 from app.agents.subflows.document_processing_workflow import DocumentProcessingState
 from .base_node import DocumentProcessingNodeBase
 
+MAX_CHUNK_CHARACTERS = 16354
+
 
 class LayoutSummariseNode(DocumentProcessingNodeBase):
     def __init__(self):
@@ -94,7 +96,6 @@ class LayoutSummariseNode(DocumentProcessingNodeBase):
             output_parser = create_parser(ContractLayoutSummary)
 
             # Split full_text into chunks by page delimiter if needed to avoid token limits
-            MAX_CHUNK_CHARACTERS = 32768
 
             def _split_into_page_blocks(text: str) -> list[str]:
                 pattern = re.compile(r"^--- Page \d+ ---\n", re.MULTILINE)
@@ -360,15 +361,16 @@ class LayoutSummariseNode(DocumentProcessingNodeBase):
 
             # Update state with cleaned text to be available for build_summary
             updated_state = state.copy()
-            try:
-                # Replace full_text with cleaned text for downstream usage
-                ter = updated_state.get("text_extraction_result")
-                if ter and hasattr(ter, "full_text"):
-                    ter.full_text = summary.raw_text
-                    updated_state["text_extraction_result"] = ter
-            except Exception:
-                # Best effort; ignore failures
-                pass
+            updated_state["layout_summarisation_result"] = summary
+            # try:
+            #     # Replace full_text with cleaned text for downstream usage
+            #     ter = updated_state.get("text_extraction_result")
+            #     if ter and hasattr(ter, "full_text"):
+            #         ter.full_text = summary.raw_text
+            #         updated_state["text_extraction_result"] = ter
+            # except Exception:
+            #     # Best effort; ignore failures
+            #     pass
 
             duration = (datetime.now(timezone.utc) - start_time).total_seconds()
             self._record_success(duration)

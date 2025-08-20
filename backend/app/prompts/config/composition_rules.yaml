@@ -36,15 +36,7 @@ compositions:
   layout_summarise_only:
     description: "Summarise layout and extract contract taxonomy/terms"
     version: "1.0.0"
-    system_prompts:
-      - name: "ocr_processor"
-        path: "system/ocr_processor.md"
-        priority: 100
-        required: true
-      - name: "australian_legal"
-        path: "system/conveyancer.md"
-        priority: 90
-        required: true
+    system_prompts: []
     user_prompts:
       - "layout_summarise"
 

@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 
 from app.agents.subflows.document_processing_workflow import DocumentProcessingState
 from app.schema.document import ProcessedDocumentSummary
+from app.prompts.schema.contract_layout_summary_schema import ContractLayoutSummary
 from .base_node import DocumentProcessingNodeBase
 
 
@@ -70,17 +71,25 @@ class BuildSummaryNode(DocumentProcessingNodeBase):
 
             # Build summary from fresh processing results
             text_extraction_result = state.get("text_extraction_result")
-            if not text_extraction_result or not text_extraction_result.success:
+            layout_summarisation_result: ContractLayoutSummary = state.get(
+                "layout_summarisation_result"
+            )
+            if (
+                not layout_summarisation_result
+                or not layout_summarisation_result.success
+            ):
                 return self._handle_error(
                     state,
-                    ValueError("No valid text extraction result"),
-                    "Cannot build summary without successful text extraction",
+                    ValueError("No valid layout summarisation result"),
+                    "Cannot build summary without successful layout summarisation",
                     {
                         "document_id": document_id,
-                        "has_extraction_result": bool(text_extraction_result),
-                        "extraction_success": (
-                            text_extraction_result.success
-                            if text_extraction_result
+                        "has_layout_summarisation_result": bool(
+                            layout_summarisation_result
+                        ),
+                        "layout_summarisation_success": (
+                            layout_summarisation_result.success
+                            if layout_summarisation_result
                             else False
                         ),
                     },
@@ -98,7 +107,7 @@ class BuildSummaryNode(DocumentProcessingNodeBase):
             # user_client = await self.get_user_client()
 
             # Extract text results
-            full_text = text_extraction_result.full_text or ""
+            full_text = layout_summarisation_result.raw_text or ""
             extraction_methods = text_extraction_result.extraction_methods or []
             primary_method = extraction_methods[0] if extraction_methods else "unknown"
 

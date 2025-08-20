@@ -551,11 +551,13 @@ class ContractTermsExtractionNode(BaseNode):
 
             # Import the inference function
             from app.agents.tools.domain.contract_extraction import (
-                infer_contract_taxonomy,
+                infer_contract_taxonomy_core,
             )
 
             # Run taxonomy inference
-            inference_result = infer_contract_taxonomy(full_text, user_contract_type)
+            inference_result = infer_contract_taxonomy_core(
+                full_text, user_contract_type
+            )
 
             # Extract results
             contract_type = inference_result.get("contract_type", user_contract_type)

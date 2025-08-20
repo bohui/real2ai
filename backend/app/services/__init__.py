@@ -87,7 +87,7 @@ try:
         GeminiService,
         OpenAIService,
         GeminiOCRService,
-        SemanticAnalysisService,
+        LLMService,
     )
 
     _AI_SERVICES_AVAILABLE = True
@@ -95,7 +95,7 @@ except ImportError as e:
     GeminiService = None
     OpenAIService = None
     GeminiOCRService = None
-    SemanticAnalysisService = None
+    LLMService = None
     _AI_SERVICES_AVAILABLE = False
     if not _is_script_context:
         logger.warning(f"AI services not available: {e}")
@@ -174,7 +174,7 @@ __all__ = [
     "GeminiService",
     "OpenAIService",
     "GeminiOCRService",
-    "SemanticAnalysisService",
+    "LLMService",
     # Property services
     "PropertyProfileService",
     "PropertyValuationService",
@@ -196,6 +196,7 @@ __all__ = [
     # Factory functions
     "get_gemini_service",
     "get_openai_service",
+    "get_llm_service",
     "get_document_service",
     "get_contract_analysis_service",
     "check_all_services_health",
@@ -247,6 +248,29 @@ async def get_openai_service(user_client=None):
 
     if cache_key not in _service_instances:
         service = OpenAIService(user_client=user_client)
+        await service.initialize()
+        _service_instances[cache_key] = service
+
+    return _service_instances[cache_key]
+
+
+async def get_llm_service(user_client=None):
+    """
+    Get initialized LLMService instance.
+
+    Args:
+        user_client: Optional user client for dependency injection
+
+    Returns:
+        LLMService instance
+    """
+    if not _AI_SERVICES_AVAILABLE or LLMService is None:
+        raise ImportError("LLMService is not available due to missing dependencies")
+
+    cache_key = f"llm_{id(user_client) if user_client else 'default'}"
+
+    if cache_key not in _service_instances:
+        service = LLMService(user_client=user_client)
         await service.initialize()
         _service_instances[cache_key] = service
 
