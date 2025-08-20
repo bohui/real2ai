@@ -181,8 +181,8 @@ class LayoutSummariseNode(DocumentProcessingNodeBase):
                 },
             )
 
-            # Render and call LLM for each chunk
-            from app.clients.factory import get_openai_client, get_gemini_client
+            # Render and call LLM for each chunk using unified LLMService
+            from app.services import get_llm_service
 
             summaries: list[ContractLayoutSummary] = []
             for idx, chunk_text in enumerate(chunks):
@@ -202,42 +202,25 @@ class LayoutSummariseNode(DocumentProcessingNodeBase):
                 )
                 system_prompt = composition.get("system_prompt", "")
                 rendered_prompt = composition.get("user_prompt", "")
+                model_name = composition.get("model") or composition.get("model_name")
 
-                response: Optional[str] = None
                 try:
-                    openai_client = await get_openai_client()
-                    response = await openai_client.generate_content(
-                        rendered_prompt, system_prompt=system_prompt
+                    llm_service = await get_llm_service()
+                    parsing_result = await llm_service.generate_content(
+                        prompt=rendered_prompt,
+                        system_message=system_prompt,
+                        model=model_name,
+                        output_parser=output_parser,
                     )
                 except Exception as e:
-                    self._log_error(
-                        f"Error generating content from OpenAI for layout summarise (chunk {idx + 1}/{len(chunks)}): {e}",
-                        exc_info=True,
-                    )
-                    response = None
-
-                if not response:
-                    try:
-                        gemini_client = await get_gemini_client()
-                        response = await gemini_client.generate_content(
-                            rendered_prompt, system_prompt=system_prompt
-                        )
-                    except Exception as e:
-                        self._log_error(
-                            f"Error generating content from Gemini for layout summarise (chunk {idx + 1}/{len(chunks)}): {e}",
-                            exc_info=True,
-                        )
-                        response = None
-
-                if not response:
                     return self._handle_error(
                         state,
-                        ValueError("No response from LLM"),
-                        "Failed to obtain layout summary from model",
+                        e,
+                        "Failed to obtain layout summary from LLMService",
                         {"document_id": document_id, "chunk_index": idx},
                     )
 
-                parsing_result = output_parser.parse_with_retry(response)
+                # Ensure parsing_result is of expected type and success
                 if not parsing_result.success or not parsing_result.parsed_data:
                     return self._handle_error(
                         state,
