@@ -13,6 +13,19 @@ class TestContractAnalysis:
     
     def test_start_contract_analysis_success(self, client: TestClient, mock_db_client, sample_document_data):
         """Test successful contract analysis start"""
+        from app.router.contracts import get_user_document_service
+        from app.main import app as fastapi_app
+        
+        # Create mock document service
+        mock_document_service = AsyncMock()
+        mock_document_service.get_user_client.return_value = mock_db_client
+        
+        # Mock the document service dependency
+        async def mock_get_user_document_service():
+            return mock_document_service
+        
+        fastapi_app.dependency_overrides[get_user_document_service] = mock_get_user_document_service
+        
         # Create separate mock chains for each table
         mock_documents_table = MagicMock()
         mock_contracts_table = MagicMock()
@@ -57,21 +70,26 @@ class TestContractAnalysis:
             }
         }
         
-        # Mock the background task to prevent actual execution
-        with patch('app.tasks.background_tasks.comprehensive_document_analysis', new_callable=AsyncMock) as mock_bg_task:
-            response = client.post("/api/contracts/analyze", json=request_data)
-        
-            assert response.status_code == 200
-            data = response.json()
-            assert data["contract_id"] == "test-contract-id"
-            assert data["analysis_id"] == "test-analysis-id"
-            assert data["status"] == "pending"
-            assert data["estimated_completion_minutes"] == 2
+        try:
+            # Mock the background task to prevent actual execution
+            with patch('app.tasks.background_tasks.comprehensive_document_analysis', new_callable=AsyncMock) as mock_bg_task:
+                response = client.post("/api/contracts/analyze", json=request_data)
+            
+                assert response.status_code == 200
+                data = response.json()
+                assert data["contract_id"] == "test-contract-id"
+                assert data["analysis_id"] == "test-analysis-id"
+                assert data["status"] == "pending"
+                assert data["estimated_completion_minutes"] == 2
+        finally:
+            # Clean up dependency override
+            fastapi_app.dependency_overrides.pop(get_user_document_service, None)
     
     def test_start_contract_analysis_no_credits(self, client: TestClient):
         """Test contract analysis with no credits remaining"""
         # Override the dependency to return a user with no credits
         from app.core.auth import get_current_user, User
+        from app.router.contracts import get_user_document_service
         from app.main import app as fastapi_app
         
         def no_credits_user():
@@ -85,7 +103,15 @@ class TestContractAnalysis:
                 preferences={}
             )
         
+        # Create mock document service
+        mock_document_service = AsyncMock()
+        
+        # Mock the document service dependency
+        async def mock_get_user_document_service():
+            return mock_document_service
+        
         fastapi_app.dependency_overrides[get_current_user] = no_credits_user
+        fastapi_app.dependency_overrides[get_user_document_service] = mock_get_user_document_service
         
         try:
             request_data = {
@@ -102,72 +128,106 @@ class TestContractAnalysis:
             assert "No credits remaining" in data["detail"]
         finally:
             # Clean up - this will be overridden again by the client fixture anyway
-            pass
+            fastapi_app.dependency_overrides.pop(get_user_document_service, None)
     
     def test_start_contract_analysis_document_not_found(self, client: TestClient, mock_db_client):
         """Test contract analysis with nonexistent document"""
-        # Mock empty document response
-        mock_db_client.table.return_value.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
-            data=[]
-        )
+        from app.router.contracts import get_user_document_service
+        from app.main import app as fastapi_app
         
-        request_data = {
-            "document_id": "nonexistent-doc-id",
-            "analysis_options": {}
-        }
+        # Create mock document service
+        mock_document_service = AsyncMock()
+        mock_document_service.get_user_client.return_value = mock_db_client
         
-        response = client.post("/api/contracts/analyze", json=request_data)
+        # Mock the document service dependency
+        async def mock_get_user_document_service():
+            return mock_document_service
         
-        assert response.status_code == 404
-        data = response.json()
-        assert data["detail"] == "Document not found"
+        fastapi_app.dependency_overrides[get_user_document_service] = mock_get_user_document_service
+        
+        try:
+            # Mock empty document response
+            mock_db_client.table.return_value.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
+                data=[]
+            )
+            
+            request_data = {
+                "document_id": "nonexistent-doc-id",
+                "analysis_options": {}
+            }
+            
+            response = client.post("/api/contracts/analyze", json=request_data)
+            
+            assert response.status_code == 404
+            data = response.json()
+            assert data["detail"] == "Document not found"
+        finally:
+            # Clean up dependency override
+            fastapi_app.dependency_overrides.pop(get_user_document_service, None)
     
     def test_start_contract_analysis_minimal_options(self, client: TestClient, mock_db_client, sample_document_data):
         """Test contract analysis with minimal options"""
-        # Create separate mock chains for each table
-        mock_documents_table = MagicMock()
-        mock_contracts_table = MagicMock()
-        mock_analyses_table = MagicMock()
+        from app.router.contracts import get_user_document_service
+        from app.main import app as fastapi_app
         
-        # Set up the return values for each table
-        def get_table(table_name):
-            if table_name == "documents":
-                return mock_documents_table
-            elif table_name == "contracts":
-                return mock_contracts_table
-            elif table_name == "analyses":
-                return mock_analyses_table
-            return MagicMock()
+        # Create mock document service
+        mock_document_service = AsyncMock()
+        mock_document_service.get_user_client.return_value = mock_db_client
         
-        mock_db_client.table.side_effect = get_table
+        # Mock the document service dependency
+        async def mock_get_user_document_service():
+            return mock_document_service
         
-        # Mock document fetch
-        mock_documents_table.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
-            data=[sample_document_data]
-        )
+        fastapi_app.dependency_overrides[get_user_document_service] = mock_get_user_document_service
         
-        # Mock contract creation
-        mock_contracts_table.insert.return_value.execute.return_value = MagicMock(
-            data=[{"id": "test-contract-id"}]
-        )
-        
-        # Mock analysis creation
-        mock_analyses_table.insert.return_value.execute.return_value = MagicMock(
-            data=[{"id": "test-analysis-id"}]
-        )
-        
-        request_data = {
-            "document_id": "test-doc-id"
-            # No analysis_options provided - should use defaults
-        }
-        
-        # Mock the background task to prevent actual execution
-        with patch('app.tasks.background_tasks.comprehensive_document_analysis', new_callable=AsyncMock) as mock_bg_task:
-            response = client.post("/api/contracts/analyze", json=request_data)
+        try:
+            # Create separate mock chains for each table
+            mock_documents_table = MagicMock()
+            mock_contracts_table = MagicMock()
+            mock_analyses_table = MagicMock()
             
-            assert response.status_code == 200
-            data = response.json()
-            assert data["status"] == "pending"
+            # Set up the return values for each table
+            def get_table(table_name):
+                if table_name == "documents":
+                    return mock_documents_table
+                elif table_name == "contracts":
+                    return mock_contracts_table
+                elif table_name == "analyses":
+                    return mock_analyses_table
+                return MagicMock()
+            
+            mock_db_client.table.side_effect = get_table
+            
+            # Mock document fetch
+            mock_documents_table.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
+                data=[sample_document_data]
+            )
+            
+            # Mock contract creation
+            mock_contracts_table.insert.return_value.execute.return_value = MagicMock(
+                data=[{"id": "test-contract-id"}]
+            )
+            
+            # Mock analysis creation
+            mock_analyses_table.insert.return_value.execute.return_value = MagicMock(
+                data=[{"id": "test-analysis-id"}]
+            )
+            
+            request_data = {
+                "document_id": "test-doc-id"
+                # No analysis_options provided - should use defaults
+            }
+            
+            # Mock the background task to prevent actual execution
+            with patch('app.tasks.background_tasks.comprehensive_document_analysis', new_callable=AsyncMock) as mock_bg_task:
+                response = client.post("/api/contracts/analyze", json=request_data)
+                
+                assert response.status_code == 200
+                data = response.json()
+                assert data["status"] == "pending"
+        finally:
+            # Clean up dependency override
+            fastapi_app.dependency_overrides.pop(get_user_document_service, None)
 
 
 @pytest.mark.api

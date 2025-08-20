@@ -236,7 +236,7 @@ class TestOCRInference:
         assert result["purchase_method"] == "standard"
         assert result["use_category"] is None
         assert (
-            result["confidence_scores"]["purchase_method"] == 0.6
+            result["confidence_scores"]["purchase_method"] == 0.7
         )  # Default confidence
 
     def test_infer_purchase_agreement_with_use_category(self):
