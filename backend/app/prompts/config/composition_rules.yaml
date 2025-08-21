@@ -36,10 +36,9 @@ compositions:
   layout_summarise_only:
     description: "Summarise layout and extract contract taxonomy/terms"
     version: "1.0.0"
-    model: "deepseek/deepseek-chat-v3-0324:free"
     system_prompts:
-      - name: "assistant_core"
-        path: "system/assistant_core.md"
+      - name: "document_core"
+        path: "system/document_core.md"
         priority: 100
         required: true
     user_prompts:

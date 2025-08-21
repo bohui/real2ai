@@ -2,11 +2,25 @@
 
 registry:
   system_prompts:
+    analysis_core:
+      path: "system/analysis_core.md"
+      category: "base"
+      priority: 100
+      dependencies: []
+      description: "Core AI assistant behavior and personality"
+      
+    document_core:
+      path: "system/document_core.md"
+      category: "base"
+      priority: 100
+      dependencies: []
+      description: "Document processing standards and operational framework"
+      
     assistant_core:
       path: "system/assistant_core.md"
       category: "base"
       priority: 100
-      dependencies: []
+      dependencies: ["analysis_core", "document_core"]
       description: "Core AI assistant behavior and personality"
       required_for: ["contract_analysis_complete", "ocr_extraction_specialized"]
       
