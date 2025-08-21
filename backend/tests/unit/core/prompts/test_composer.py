@@ -8,7 +8,8 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 from datetime import datetime
 
-from app.core.prompts.composer import PromptComposer, CompositionRule
+from app.core.prompts.composer import PromptComposer
+from app.core.prompts.config_manager import CompositionRule
 from app.core.prompts.context import PromptContext, ContextType
 from app.core.prompts.exceptions import PromptCompositionError, PromptNotFoundError
 
@@ -87,6 +88,7 @@ class TestPromptComposer:
         rule = CompositionRule(
             name="test",
             description="test",
+            version="1.0.0",
             system_prompts=[
                 {
                     "name": "system1",

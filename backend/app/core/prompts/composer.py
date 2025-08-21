@@ -11,23 +11,9 @@ from .template import PromptTemplate, TemplateMetadata
 from .context import PromptContext, ContextType
 from .fragment_manager import FragmentManager
 from .exceptions import PromptCompositionError, PromptNotFoundError
+from .config_manager import CompositionRule
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class CompositionRule:
-    """Rule for combining prompts"""
-
-    name: str
-    description: str
-    system_prompts: List[
-        Dict[str, Any]
-    ]  # List of dicts with name, path, priority, required
-    user_prompts: List[str]  # List of prompt names as strings
-    merge_strategy: str = "sequential"  # sequential, parallel, hierarchical
-    priority_order: List[str] = None
-    version: str = ""
 
 
 @dataclass
@@ -418,6 +404,7 @@ class PromptComposer:
         return {
             "composition_rule": rule.name,
             "composition_version": getattr(rule, "version", ""),
+            "model": rule.model,
             "system_prompts": rule.system_prompts,
             "user_prompts": rule.user_prompts,
             "system_prompt_versions": system_versions,
@@ -451,6 +438,7 @@ class PromptComposer:
                     merge_strategy=rule_data.get("merge_strategy", "sequential"),
                     priority_order=rule_data.get("priority_order"),
                     version=rule_data.get("version", ""),
+                    model=rule_data.get("model"),
                 )
 
             logger.info(f"Loaded {len(rules)} composition rules")
@@ -503,6 +491,8 @@ class PromptComposer:
                 "system_prompts": rule.system_prompts,
                 "user_prompts": rule.user_prompts,
                 "merge_strategy": rule.merge_strategy,
+                "model": rule.model,
+                "version": rule.version,
             }
             for rule in self.composition_rules.values()
         ]
@@ -530,6 +520,8 @@ class PromptComposer:
             "valid": len(issues) == 0,
             "issues": issues,
             "total_prompts": len(rule.system_prompts) + len(rule.user_prompts),
+            "model": rule.model,
+            "version": rule.version,
         }
 
     def clear_cache(self):
@@ -538,6 +530,22 @@ class PromptComposer:
         if self.fragment_manager:
             self.fragment_manager.clear_cache()
         logger.info("Template cache cleared")
+
+    def get_composition_model(self, composition_name: str) -> Optional[str]:
+        """Get the model specified for a composition
+
+        Args:
+            composition_name: Name of the composition
+
+        Returns:
+            Model name if specified, None otherwise
+        """
+        if composition_name not in self.composition_rules:
+            logger.warning(f"Unknown composition: {composition_name}")
+            return None
+
+        rule = self.composition_rules[composition_name]
+        return rule.model
 
     def reload_config(self):
         """Reload configuration files"""

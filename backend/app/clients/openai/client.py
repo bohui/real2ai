@@ -401,59 +401,62 @@ class OpenAIClient(BaseClient):
             return response.content
 
         except Exception as langchain_error:
+            # raise error to trigger retry
+            self.logger.warning(f"LangChain call failed, retrying: {langchain_error}")
+            raise langchain_error
             # Fallback to direct OpenAI client if LangChain fails
-            self.logger.warning(
-                f"LangChain call failed, falling back to direct OpenAI: {langchain_error}"
-            )
+            # self.logger.warning(
+            #     f"LangChain call failed, falling back to direct OpenAI: {langchain_error}"
+            # )
 
-            # Prepare parameters for direct OpenAI call
-            params = {
-                "model": kwargs.get("model", self.config.model_name),
-                "messages": messages,  # Use original messages format
-                "temperature": kwargs.get("temperature", self.config.temperature),
-                "max_tokens": kwargs.get("max_tokens", self.config.max_tokens),
-                "top_p": kwargs.get("top_p", self.config.top_p),
-                "frequency_penalty": kwargs.get(
-                    "frequency_penalty", self.config.frequency_penalty
-                ),
-                "presence_penalty": kwargs.get(
-                    "presence_penalty", self.config.presence_penalty
-                ),
-            }
+            # # Prepare parameters for direct OpenAI call
+            # params = {
+            #     "model": kwargs.get("model", self.config.model_name),
+            #     "messages": messages,  # Use original messages format
+            #     "temperature": kwargs.get("temperature", self.config.temperature),
+            #     "max_tokens": kwargs.get("max_tokens", self.config.max_tokens),
+            #     "top_p": kwargs.get("top_p", self.config.top_p),
+            #     "frequency_penalty": kwargs.get(
+            #         "frequency_penalty", self.config.frequency_penalty
+            #     ),
+            #     "presence_penalty": kwargs.get(
+            #         "presence_penalty", self.config.presence_penalty
+            #     ),
+            # }
 
-            # Remove None values
-            params = {k: v for k, v in params.items() if v is not None}
+            # # Remove None values
+            # params = {k: v for k, v in params.items() if v is not None}
 
-            # Execute via task queue for rate limiting (original approach)
-            queue = OpenAILLMQueueManager.get_queue(params.get("model"))
-            try:
-                response = await queue.run_in_executor(
-                    lambda: self.openai_client.chat.completions.create(**params)
-                )
+            # # Execute via task queue for rate limiting (original approach)
+            # queue = OpenAILLMQueueManager.get_queue(params.get("model"))
+            # try:
+            #     response = await queue.run_in_executor(
+            #         lambda: self.openai_client.chat.completions.create(**params)
+            #     )
 
-                if not response.choices or not response.choices[0].message.content:
-                    raise ClientError(
-                        "No content generated from OpenAI", client_name=self.client_name
-                    )
+            #     if not response.choices or not response.choices[0].message.content:
+            #         raise ClientError(
+            #             "No content generated from OpenAI", client_name=self.client_name
+            #         )
 
-                return response.choices[0].message.content
+            #     return response.choices[0].message.content
 
-            except (RateLimitError, APIError) as e:
-                if isinstance(e, RateLimitError):
-                    raise ClientRateLimitError(
-                        f"OpenAI rate limit exceeded: {str(e)}",
-                        client_name=self.client_name,
-                        original_error=e,
-                    )
-                elif "quota" in str(e).lower():
-                    raise ClientQuotaExceededError(
-                        f"OpenAI quota exceeded: {str(e)}",
-                        client_name=self.client_name,
-                        original_error=e,
-                    )
-                else:
-                    raise ClientError(
-                        f"OpenAI API error: {str(e)}",
-                        client_name=self.client_name,
-                        original_error=e,
-                    )
+            # except (RateLimitError, APIError) as e:
+            #     if isinstance(e, RateLimitError):
+            #         raise ClientRateLimitError(
+            #             f"OpenAI rate limit exceeded: {str(e)}",
+            #             client_name=self.client_name,
+            #             original_error=e,
+            #         )
+            #     elif "quota" in str(e).lower():
+            #         raise ClientQuotaExceededError(
+            #             f"OpenAI quota exceeded: {str(e)}",
+            #             client_name=self.client_name,
+            #             original_error=e,
+            #         )
+            #     else:
+            #         raise ClientError(
+            #             f"OpenAI API error: {str(e)}",
+            #             client_name=self.client_name,
+            #             original_error=e,
+            #         )

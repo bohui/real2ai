@@ -140,7 +140,8 @@ class LLMService(UserAwareService):
 
         return common
 
-    @langsmith_trace(name="llm_generate_content", run_type="llm")
+    # it is managed in client level
+    # @langsmith_trace(name="llm_generate_content", run_type="llm")
     async def generate_content(
         self,
         prompt: str,

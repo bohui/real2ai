@@ -60,7 +60,7 @@ def client(
 
     async def override_get_supabase_client():
         return mock_db_client
-    
+
     async def override_get_service_supabase_client():
         return mock_db_client
 
@@ -71,23 +71,27 @@ def client(
 
     fastapi_app.dependency_overrides[get_current_user] = override_get_current_user
     fastapi_app.dependency_overrides[get_supabase_client] = override_get_supabase_client
-    fastapi_app.dependency_overrides[
-        get_service_supabase_client
-    ] = override_get_service_supabase_client
+    fastapi_app.dependency_overrides[get_service_supabase_client] = (
+        override_get_service_supabase_client
+    )
     fastapi_app.dependency_overrides[get_settings] = override_get_settings
 
     # Mock global db_client used in main module and router modules
     import app.main
     from app.clients.factory import get_supabase_client as real_get_supabase_client
-    
+
     # Also mock AuthContext to bypass authentication
     from app.core.auth_context import AuthContext
-    
+
     async def mock_get_authenticated_client(require_auth=True):
         return mock_db_client
-    
+
     # Patch AuthContext.get_authenticated_client
-    with patch.object(AuthContext, "get_authenticated_client", side_effect=mock_get_authenticated_client):
+    with patch.object(
+        AuthContext,
+        "get_authenticated_client",
+        side_effect=mock_get_authenticated_client,
+    ):
         with patch.object(app.main, "db_client", mock_db_client):
             # Also patch the get_supabase_client function directly in all modules that import it
             with patch(
@@ -102,8 +106,13 @@ def client(
                     with patch(
                         "app.main.get_supabase_client", return_value=mock_db_client
                     ):
-                        test_client = TestClient(fastapi_app)
-                        yield test_client
+                        # Ensure cache_service uses the mocked service client
+                        with patch(
+                            "app.services.cache.cache_service.get_service_supabase_client",
+                            return_value=mock_db_client,
+                        ):
+                            test_client = TestClient(fastapi_app)
+                            yield test_client
 
     # Clean up overrides
     fastapi_app.dependency_overrides.clear()
@@ -366,7 +375,9 @@ def test_settings():
     settings = get_settings()
     settings.max_file_size = 5 * 1024 * 1024  # 5MB
     settings.allowed_file_types = "pdf,doc,docx"  # Set the actual property
-    settings.use_backend_tokens = False  # Disable backend tokens for consistent test behavior
+    settings.use_backend_tokens = (
+        False  # Disable backend tokens for consistent test behavior
+    )
     return settings
 
 

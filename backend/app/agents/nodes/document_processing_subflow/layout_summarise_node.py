@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 
 from app.agents.subflows.document_processing_workflow import DocumentProcessingState
 from .base_node import DocumentProcessingNodeBase
+from app.utils.font_layout_mapper import FontLayoutMapper
 
 MAX_CHUNK_CHARACTERS = 16354
 
@@ -19,6 +20,7 @@ MAX_CHUNK_CHARACTERS = 16354
 class LayoutSummariseNode(DocumentProcessingNodeBase):
     def __init__(self):
         super().__init__("layout_summarise")
+        self.font_mapper = FontLayoutMapper()
 
     async def execute(self, state: DocumentProcessingState) -> DocumentProcessingState:
         start_time = datetime.now(timezone.utc)
@@ -81,6 +83,30 @@ class LayoutSummariseNode(DocumentProcessingNodeBase):
                     ValueError("Empty full_text"),
                     "Full text is empty; cannot summarise layout",
                     {"document_id": document_id},
+                )
+
+            # STEP 1: Generate font to layout mapping from the full document
+            self._log_info(
+                "Generating font to layout mapping for document",
+                extra={"document_id": document_id},
+            )
+
+            font_to_layout_mapping = self.font_mapper.generate_font_layout_mapping(
+                full_text
+            )
+
+            if font_to_layout_mapping:
+                self._log_info(
+                    f"Generated font layout mapping with {len(font_to_layout_mapping)} font sizes",
+                    extra={
+                        "document_id": document_id,
+                        "font_mapping": font_to_layout_mapping,
+                    },
+                )
+            else:
+                self._log_warning(
+                    "No font layout mapping generated; proceeding without mapping",
+                    extra={"document_id": document_id},
                 )
 
             # Prepare prompt manager and output parser
@@ -184,8 +210,11 @@ class LayoutSummariseNode(DocumentProcessingNodeBase):
             # Render and call LLM for each chunk using unified LLMService
             from app.services import get_llm_service
 
+            llm_service = await get_llm_service()
+
             summaries: list[ContractLayoutSummary] = []
             for idx, chunk_text in enumerate(chunks):
+                # STEP 2: Use consistent font mapping across all chunks
                 context = {
                     "full_text": chunk_text,
                     "australian_state": australian_state,
@@ -193,6 +222,7 @@ class LayoutSummariseNode(DocumentProcessingNodeBase):
                     "contract_type_hint": contract_type_hint,
                     "purchase_method_hint": purchase_method_hint,
                     "use_category_hint": use_category_hint,
+                    "font_to_layout_mapping": font_to_layout_mapping,  # Consistent mapping across chunks
                 }
 
                 composition = await prompt_manager.render_composed(
@@ -202,10 +232,9 @@ class LayoutSummariseNode(DocumentProcessingNodeBase):
                 )
                 system_prompt = composition.get("system_prompt", "")
                 rendered_prompt = composition.get("user_prompt", "")
-                model_name = composition.get("model") or composition.get("model_name")
+                model_name = composition.get("metadata", {}).get("model")
 
                 try:
-                    llm_service = await get_llm_service()
                     parsing_result = await llm_service.generate_content(
                         prompt=rendered_prompt,
                         system_message=system_prompt,
@@ -291,6 +320,7 @@ class LayoutSummariseNode(DocumentProcessingNodeBase):
                 contract_terms=merged_contract_terms,
                 property_address=merged_property_address,
                 ocr_confidence=merged_ocr_confidence,
+                font_to_layout_mapping=font_to_layout_mapping,  # Include the generated mapping
             )
 
             # Upsert into contracts by content hash
@@ -363,6 +393,7 @@ class LayoutSummariseNode(DocumentProcessingNodeBase):
                     "document_id": document_id,
                     "duration_seconds": duration,
                     "updated_contract": bool(content_hash),
+                    "font_mapping_generated": bool(font_to_layout_mapping),
                 },
             )
 

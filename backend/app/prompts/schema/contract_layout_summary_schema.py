@@ -56,3 +56,7 @@ class ContractLayoutSummary(BaseModel):
         default_factory=dict,
         description="Confidence scores per extracted field (e.g., contract_type, purchase_method)",
     )
+    font_to_layout_mapping: Dict[str, str] = Field(
+        default_factory=dict,
+        description="Mapping of font sizes to layout elements (e.g., font_size: layout_element)",
+    )

@@ -9,7 +9,8 @@ from pathlib import Path
 from unittest.mock import Mock, AsyncMock, patch
 from datetime import datetime
 
-from app.core.prompts.composer import PromptComposer, CompositionRule
+from app.core.prompts.composer import PromptComposer
+from app.core.prompts.config_manager import CompositionRule
 from app.core.prompts.manager import PromptManager, PromptManagerConfig
 from app.core.prompts.loader import PromptLoader, LoaderConfig
 from app.core.prompts.config_manager import ConfigurationManager
