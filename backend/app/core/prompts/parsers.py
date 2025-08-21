@@ -325,7 +325,7 @@ class RetryingPydanticOutputParser(LCPydanticOutputParser):
 
         instructions = super().get_format_instructions()
         self._cached_instructions = instructions
-        return "\n\nFormat And Field Description Instructions:\n\n{instructions}"
+        return instructions
 
 
 class StreamingOutputParser(RetryingPydanticOutputParser):
