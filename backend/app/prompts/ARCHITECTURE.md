@@ -100,7 +100,7 @@ Pydantic-based structured output with automatic format instructions.
 **Key Components:**
 - `BaseOutputParser`: Abstract parser interface
 - `PydanticOutputParser`: Pydantic model parsing
-- `StateAwareParser`: Australian state-specific parsing
+Removed state-specific parser abstraction; select Pydantic models per state upstream
 - Format instructions automatically appended to user prompts
 
 ## Directory Structure

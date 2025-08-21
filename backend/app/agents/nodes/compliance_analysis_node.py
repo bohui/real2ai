@@ -172,10 +172,8 @@ class ComplianceAnalysisNode(BaseNode):
                 },
             )
 
-            # Get state-aware parser for compliance analysis
-            state_aware_parser = self.get_state_aware_parser(
-                "compliance_analysis", australian_state
-            )
+            # Get configured structured parser for compliance analysis
+            state_aware_parser = self.get_parser("compliance_analysis")
 
             # Use composition for compliance analysis
             composition_result = await self.prompt_manager.render_composed(
@@ -192,14 +190,10 @@ class ComplianceAnalysisNode(BaseNode):
 
             # Parse structured response if we got one
             if llm_response:
-                # Use state-aware parser for structured parsing
-                state_aware_parser = self.get_state_aware_parser(
-                    "compliance_analysis", australian_state
-                )
+                # Use parser for structured parsing
+                state_aware_parser = self.get_parser("compliance_analysis")
                 if state_aware_parser:
-                    parsing_result = state_aware_parser.parse_with_retry(
-                        llm_response, australian_state
-                    )
+                    parsing_result = state_aware_parser.parse_with_retry(llm_response)
                     if parsing_result.success and parsing_result.parsed_data:
                         # Convert Pydantic model to dict if needed
                         if hasattr(parsing_result.parsed_data, "dict"):

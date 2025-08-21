@@ -18,7 +18,10 @@ from app.clients.base.exceptions import (
     ClientQuotaExceededError,
     ClientRateLimitError,
 )
-from app.core.prompts.output_parser import BaseOutputParser, ParsingResult
+from app.core.prompts.parsers import (
+    RetryingPydanticOutputParser as BaseOutputParser,
+    ParsingResult,
+)
 
 
 logger = logging.getLogger(__name__)

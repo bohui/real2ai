@@ -11,7 +11,7 @@ from jinja2.exceptions import TemplateError, UndefinedError
 
 from .context import PromptContext
 from .exceptions import PromptTemplateError
-from .output_parser import BaseOutputParser, ParsingResult
+from .parsers import RetryingPydanticOutputParser as BaseOutputParser, ParsingResult
 
 logger = logging.getLogger(__name__)
 

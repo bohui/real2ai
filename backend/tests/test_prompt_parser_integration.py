@@ -12,7 +12,10 @@ from pydantic import BaseModel, Field
 from app.core.prompts.manager import PromptManager, PromptManagerConfig
 from app.core.prompts.template import PromptTemplate, TemplateMetadata
 from app.core.prompts.context import PromptContext, ContextType
-from app.core.prompts.output_parser import PydanticOutputParser, create_parser
+from app.core.prompts.parsers import (
+    RetryingPydanticOutputParser as PydanticOutputParser,
+    create_parser,
+)
 from app.core.prompts.service_mixin import PromptEnabledService
 
 

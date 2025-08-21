@@ -12,7 +12,9 @@ import pytest
 from pydantic import BaseModel, Field
 
 from app.services.ai.llm_service import LLMService
-from app.core.prompts.output_parser import PydanticOutputParser
+from app.core.prompts.parsers import (
+    RetryingPydanticOutputParser as PydanticOutputParser,
+)
 
 
 class _TestModel(BaseModel):

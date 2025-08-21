@@ -31,54 +31,44 @@ This analysis is being performed for {{ australian_state }}. The output parser w
 
 ## Components
 
-### 1. StateAwareParser
-The core class that selects appropriate output parsers based on Australian state context.
+### 1. State-specific models (no custom parser)
+Select the appropriate Pydantic model per state at call time and use a standard parser.
 
 ```python
-from app.core.prompts.state_aware_parser import StateAwareParser
+from app.core.prompts.parsers import create_parser
 
-# Create a state-aware parser
-parser = StateAwareParser(
-    base_model=ContractTermsOutput,
-    state_specific_models={
-        "NSW": NSWContractTermsOutput,
-        "VIC": VICContractTermsOutput,
-        "QLD": QLDContractTermsOutput
-    }
-)
+# Pick the model by state
+model_by_state = {
+    "NSW": NSWContractTermsOutput,
+    "VIC": VICContractTermsOutput,
+    "QLD": QLDContractTermsOutput,
+}
 
-# Parse with state context
-result = parser.parse_with_retry(response, state="NSW")
+model = model_by_state.get(australian_state, ContractTermsOutput)
+parser = create_parser(model, strict_mode=False, retry_on_failure=True)
+result = parser.parse_with_retry(response)
 ```
 
-### 2. StateAwareParserFactory
-Factory class providing pre-configured parsers for common use cases.
-
-```python
-from app.core.prompts.state_aware_parser import StateAwareParserFactory
-
-# Create parsers for different analysis types
-contract_parser = StateAwareParserFactory.create_contract_terms_parser()
-compliance_parser = StateAwareParserFactory.create_compliance_parser()
-risk_parser = StateAwareParserFactory.create_risk_parser()
-```
+### 2. Simple factory pattern (optional)
+You can still centralize model selection with a plain mapping or small helpers without custom parser classes.
 
 ### 3. Base Node Integration
-All workflow nodes now have access to state-aware parsing:
+Nodes should choose the state-specific Pydantic model upstream and pass a standard parser:
 
 ```python
 class MyNode(BaseNode):
     async def execute(self, state):
         australian_state = state.get("australian_state", "NSW")
         
-        # Get state-aware parser
-        parser = self.get_state_aware_parser("contract_terms", australian_state)
+        # Pick model by state and create standard parser
+        model = model_by_state.get(australian_state, ContractTermsOutput)
+        parser = create_parser(model, strict_mode=False, retry_on_failure=True)
         
         # Get format instructions for specific state
         format_instructions = self.get_format_instructions_for_state("contract_terms", australian_state)
         
-        # Parse with state context
-        result = parser.parse_with_retry(response, australian_state)
+        # Parse
+        result = parser.parse_with_retry(response)
 ```
 
 ## Supported States
@@ -108,17 +98,9 @@ class MyNode(BaseNode):
 
 ### Basic Usage
 ```python
-# Create parser
-parser = StateAwareParserFactory.create_contract_terms_parser()
-
-# Parse NSW response
-nsw_result = parser.parse_with_retry(nsw_response, "NSW")
-
-# Parse VIC response  
-vic_result = parser.parse_with_retry(vic_response, "VIC")
-
-# Get format instructions for specific state
-nsw_instructions = parser.get_format_instructions("NSW")
+model = model_by_state.get("NSW", ContractTermsOutput)
+parser = create_parser(model, strict_mode=False, retry_on_failure=True)
+nsw_result = parser.parse_with_retry(nsw_response)
 ```
 
 ### In Workflow Nodes
@@ -127,7 +109,8 @@ async def execute(self, state):
     australian_state = state.get("australian_state", "NSW")
     
     # Get state-aware parser
-    parser = self.get_state_aware_parser("contract_terms", australian_state)
+    model = model_by_state.get(australian_state, ContractTermsOutput)
+    parser = create_parser(model, strict_mode=False, retry_on_failure=True)
     
     # Render prompt with state-specific parser
     rendered_prompt = await self.prompt_manager.render(
@@ -137,7 +120,7 @@ async def execute(self, state):
     )
     
     # Parse response with state context
-    result = parser.parse_with_retry(llm_response, australian_state)
+    result = parser.parse_with_retry(llm_response)
 ```
 
 ## Benefits
@@ -186,26 +169,26 @@ The output parser will automatically include state-specific fields for {{ austra
 ```
 
 ### 2. Update Node Execution
-Use state-aware parsing in node execution methods:
+Pick state-specific models in node execution methods:
 
 ```python
 # Before
 output_parser=self.structured_parsers.get("contract_terms")
 
 # After
-state_aware_parser = self.get_state_aware_parser("contract_terms", australian_state)
-output_parser=state_aware_parser
+model = model_by_state.get(australian_state, ContractTermsOutput)
+output_parser = create_parser(model, strict_mode=False, retry_on_failure=True)
 ```
 
 ### 3. Update Parsing Logic
-Use state context in parsing calls:
+Parsing calls remain the same:
 
 ```python
 # Before
 parsing_result = parser.parse(response)
 
 # After
-parsing_result = parser.parse_with_retry(response, australian_state)
+parsing_result = parser.parse_with_retry(response)
 ```
 
 ## Adding New States
@@ -225,7 +208,7 @@ state_models = {
 ### 2. Update Factory Method
 ```python
 @staticmethod
-def create_contract_terms_parser() -> StateAwareParser:
+def create_contract_terms_parser():
     state_models = {
         # ... existing states ...
         "WA": type("WAContractTermsOutput", (ContractTermsOutput,), {
@@ -235,11 +218,8 @@ def create_contract_terms_parser() -> StateAwareParser:
         })
     }
     
-    return StateAwareParser(
-        ContractTermsOutput,
-        state_specific_models=state_models,
-        default_state="NSW"
-    )
+    # Return a simple mapping or a standard parser for a given default
+    return create_parser(NSWContractTermsOutput, strict_mode=False, retry_on_failure=True)
 ```
 
 ### 3. Add State-Specific Documentation
@@ -250,8 +230,8 @@ Update this document with the new state's requirements and fields.
 ### Unit Tests
 ```python
 def test_nsw_parser():
-    parser = StateAwareParserFactory.create_contract_terms_parser()
-    result = parser.parse_with_retry(nsw_response, "NSW")
+    parser = create_parser(NSWContractTermsOutput, strict_mode=False, retry_on_failure=True)
+    result = parser.parse_with_retry(nsw_response)
     
     assert result.success
     assert "section_149_certificate" in result.parsed_data.dict()

@@ -16,7 +16,63 @@ from datetime import datetime, timezone
 from app.services.contract_analysis_service import ContractAnalysisService
 from app.agents.nodes.diagram_analysis_node import DiagramAnalysisNode
 from app.core.prompts.context import ContextType
+from app.core.prompts.parsers import create_parser as real_create_parser
 from app.schema.enums import AustralianState
+
+
+@pytest.fixture(autouse=True)
+def _patch_progress_workflow(monkeypatch):
+    """Patch ProgressTrackingWorkflow and parser creation to avoid heavy init paths in tests."""
+
+    class _StubWorkflow:
+        def __init__(self, *args, **kwargs):
+            self._step_order = []
+
+        async def initialize(self):
+            return None
+
+    # Patch the symbol as used by the service module (import site) and definition site
+    monkeypatch.setattr(
+        "app.services.contract_analysis_service.ProgressTrackingWorkflow",
+        _StubWorkflow,
+        raising=True,
+    )
+    monkeypatch.setattr(
+        "app.agents.contract_workflow.ProgressTrackingWorkflow",
+        _StubWorkflow,
+        raising=True,
+    )
+
+    # Patch create_parser at the site used by ContractAnalysisWorkflow
+    class _DummyParser:
+        def __init__(self, *args, **kwargs):
+            self.pydantic_model = (
+                kwargs.get("pydantic_object")
+                if "pydantic_object" in kwargs
+                else (args[0] if args else None)
+            )
+            # allow arbitrary attributes
+            for k, v in kwargs.items():
+                setattr(self, k, v)
+
+        def parse(self, text):
+            return type(
+                "_PR",
+                (),
+                {
+                    "success": True,
+                    "parsed_data": None,
+                    "parsing_errors": [],
+                    "validation_errors": [],
+                },
+            )()
+
+    def _safe_create_parser(model, **kwargs):
+        return _DummyParser(model, **kwargs)
+
+    monkeypatch.setattr(
+        "app.agents.contract_workflow.create_parser", _safe_create_parser, raising=True
+    )
 
 
 class TestResumeFromCheckpointSkipsValidationNodes:
@@ -65,61 +121,44 @@ class TestResumeFromCheckpointSkipsValidationNodes:
         # Mock the workflow methods to track which ones are called
         called_methods = []
 
-        with patch.object(mock_service, "workflow") as mock_workflow:
-            # Create the progress tracking workflow
-            result = await mock_service._execute_with_progress_tracking(
-                mock_initial_state,
-                "test_session",
-                "test_contract",
-                resume_from_step="compile_report",
-            )
+        # Verify step order includes validation nodes and skip logic works
+        expected_steps = [
+            "validate_input",
+            "process_document",
+            "validate_document_quality",
+            "extract_terms",
+            "validate_terms_completeness",
+            "analyze_compliance",
+            "assess_risks",
+            "analyze_contract_diagrams",
+            "generate_recommendations",
+            "validate_final_output",
+            "compile_report",
+        ]
 
-            # The progress tracking workflow should be created with proper step order
-            workflow_class = mock_service._execute_with_progress_tracking.__code__
+        # Create a mock ProgressTrackingWorkflow to test skip logic
+        class TestProgressTrackingWorkflow:
+            def __init__(self):
+                self._step_order = expected_steps
+                self._resume_index = self._step_order.index("compile_report")
 
-            # Verify step order includes validation nodes
-            expected_steps = [
-                "validate_input",
-                "process_document",
-                "validate_document_quality",
-                "extract_terms",
-                "validate_terms_completeness",
-                "analyze_compliance",
-                "assess_risks",
-                "analyze_contract_diagrams",
-                "generate_recommendations",
-                "validate_final_output",
-                "compile_report",
-            ]
+            def _should_skip(self, step_name: str) -> bool:
+                try:
+                    idx = self._step_order.index(step_name)
+                except ValueError:
+                    return False
+                return idx < self._resume_index
 
-            # Test the skip logic directly
-            from app.services.contract_analysis_service import ContractAnalysisService
+        test_workflow = TestProgressTrackingWorkflow()
 
-            service = ContractAnalysisService()
+        # Verify all validation steps are skipped when resuming from compile_report
+        assert test_workflow._should_skip("validate_document_quality") is True
+        assert test_workflow._should_skip("validate_terms_completeness") is True
+        assert test_workflow._should_skip("analyze_contract_diagrams") is True
+        assert test_workflow._should_skip("validate_final_output") is True
 
-            # Create a mock ProgressTrackingWorkflow to test skip logic
-            class TestProgressTrackingWorkflow:
-                def __init__(self):
-                    self._step_order = expected_steps
-                    self._resume_index = self._step_order.index("compile_report")
-
-                def _should_skip(self, step_name: str) -> bool:
-                    try:
-                        idx = self._step_order.index(step_name)
-                    except ValueError:
-                        return False
-                    return idx < self._resume_index
-
-            test_workflow = TestProgressTrackingWorkflow()
-
-            # Verify all validation steps are skipped when resuming from compile_report
-            assert test_workflow._should_skip("validate_document_quality") == True
-            assert test_workflow._should_skip("validate_terms_completeness") == True
-            assert test_workflow._should_skip("analyze_contract_diagrams") == True
-            assert test_workflow._should_skip("validate_final_output") == True
-
-            # Verify compile_report is not skipped
-            assert test_workflow._should_skip("compile_report") == False
+        # Verify compile_report is not skipped
+        assert test_workflow._should_skip("compile_report") is False
 
     @pytest.mark.asyncio
     async def test_resume_from_middle_step_skips_only_earlier_steps(
@@ -189,14 +228,8 @@ class TestCheckpointTimingFixes:
                 self._step_order = ["validate_input", "process_document"]
                 self._resume_index = 0
                 self.progress_callback = AsyncMock()
-                self.parent_service = Mock()
                 self.session_id = "test"
                 self.contract_id = "test"
-
-                # Mock the service methods
-                self.parent_service._schedule_progress_update = Mock(
-                    side_effect=lambda *args: execution_order.append("progress_update")
-                )
 
             def _should_skip(self, step_name: str) -> bool:
                 return False
@@ -226,7 +259,6 @@ class TestCheckpointTimingFixes:
             "step_start",
             "step_execute",
             "step_complete",
-            "progress_update",
             "checkpoint_persist",
         ]
 
@@ -242,13 +274,8 @@ class TestCheckpointTimingFixes:
         class MockProgressTrackingWorkflow:
             def __init__(self):
                 self.progress_callback = AsyncMock()
-                self.parent_service = Mock()
                 self.session_id = "test"
                 self.contract_id = "test"
-
-                self.parent_service._schedule_progress_update = Mock(
-                    side_effect=lambda *args: execution_order.append("progress_update")
-                )
 
             def _should_skip(self, step_name: str) -> bool:
                 return False

@@ -302,6 +302,42 @@ async def get_current_user(
         )
 
 
+async def get_admin_user(
+    current_user: User = Depends(get_current_user),
+) -> User:
+    """Get current user and verify they have admin privileges."""
+    # Check if user has admin role - you can customize this logic
+    # Option 1: Check specific admin emails
+    admin_emails = [
+        "admin@real2ai.com",  # Add your admin emails here
+        "bohuihan@real2ai.com",
+        # Add more admin emails as needed
+    ]
+    
+    # Option 2: Check user_type (if you want to add admin as a user_type)
+    # if current_user.user_type != "admin":
+    #     raise HTTPException(
+    #         status_code=status.HTTP_403_FORBIDDEN,
+    #         detail="Admin access required"
+    #     )
+    
+    # Option 3: Check if user has admin organization
+    # if current_user.organization != "real2ai_admin":
+    #     raise HTTPException(
+    #         status_code=status.HTTP_403_FORBIDDEN,
+    #         detail="Admin access required"
+    #     )
+    
+    # For now, using Option 1: email-based admin check
+    if current_user.email not in admin_emails:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required. Please contact support if you need access."
+        )
+    
+    return current_user
+
+
 async def get_current_user_token(
     credentials: HTTPAuthorizationCredentials = Depends(security),
 ) -> str:

@@ -25,7 +25,7 @@ from .exceptions import (
 from app.models.contract_state import AustralianState, ContractType
 
 if TYPE_CHECKING:
-    from .output_parser import BaseOutputParser, ParsingResult
+    from .parsers import RetryingPydanticOutputParser as BaseOutputParser, ParsingResult
 
 logger = logging.getLogger(__name__)
 
@@ -317,7 +317,7 @@ class PromptManager:
             logger.error(
                 f"Failed to parse AI response for template {template_name}: {e}"
             )
-            from .output_parser import ParsingResult
+            from .parsers import ParsingResult
 
             return ParsingResult(
                 success=False,
@@ -474,7 +474,10 @@ class PromptManager:
             try:
                 format_instructions = output_parser.get_format_instructions()
                 if format_instructions:
-                    user_prompt = f"{user_prompt}\n\n{format_instructions}"
+                    user_prompt = (
+                        f"{user_prompt}\n\n"
+                        f"Format And Field Description Instructions:\n\n{format_instructions}"
+                    )
             except Exception as e:
                 logger.warning(
                     f"Failed to apply output parser format instructions: {e}"

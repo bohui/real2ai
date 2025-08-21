@@ -833,7 +833,7 @@ class TaskContextManager:
                     # Replace token in context with Supabase access token
                     task_context["user_token"] = exchanged
                     # Attempt to include refresh token when available
-                    mapping = BackendTokenService.get_mapping(user_token) or {}
+                    mapping = await BackendTokenService.get_mapping(user_token) or {}
                     if mapping.get("supabase_refresh_token"):
                         task_context["refresh_token"] = mapping[
                             "supabase_refresh_token"

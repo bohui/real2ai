@@ -89,6 +89,15 @@ class ApiService {
             return Promise.reject(error);
           }
 
+          // For backend tokens, we can't refresh them - user needs to log in again
+          if (this.isBackendToken()) {
+            this.clearTokens();
+            this.handleUnauthorized();
+            return Promise.reject(
+              new Error("Session expired. Please log in again."),
+            );
+          }
+
           if (this.isRefreshing) {
             // If already refreshing, queue the request
             return new Promise((resolve, reject) => {
@@ -124,7 +133,7 @@ class ApiService {
                 null,
               );
               this.clearTokens();
-              window.dispatchEvent(new CustomEvent("auth:unauthorized"));
+              this.handleUnauthorized();
               return Promise.reject(
                 new Error("Session expired. Please log in again."),
               );
@@ -132,12 +141,42 @@ class ApiService {
           } catch (refreshError) {
             this.processQueue(refreshError, null);
             this.clearTokens();
-            window.dispatchEvent(new CustomEvent("auth:unauthorized"));
+            this.handleUnauthorized();
             return Promise.reject(
               new Error("Session expired. Please log in again."),
             );
           } finally {
             this.isRefreshing = false;
+          }
+        }
+
+        // Handle 401 responses and network errors
+        if (error.response?.status === 401) {
+          console.log("🚨 401 response detected in interceptor:", {
+            url: error.config?.url,
+            method: error.config?.method,
+            status: error.response?.status,
+            message: (error.response?.data as any)?.detail || error.message,
+          });
+          this.handleUnauthorized();
+        } else if (
+          error.code === "ERR_NETWORK" || error.message === "Network Error"
+        ) {
+          // Handle network errors (including CORS issues) that might be 401-related
+          console.log("🚨 Network error detected:", {
+            url: error.config?.url,
+            method: error.config?.method,
+            code: error.code,
+            message: error.message,
+          });
+
+          // Check if this might be a 401 that got blocked by CORS
+          // If we have a token and get a network error, it's likely an auth issue
+          if (this.token) {
+            console.log(
+              "🚨 Network error with token present - likely auth issue, redirecting to login",
+            );
+            this.handleUnauthorized();
           }
         }
 
@@ -147,6 +186,9 @@ class ApiService {
 
     // Load tokens from localStorage
     this.loadTokens();
+
+    // Test that interceptors are working
+    console.log("🔧 API Service initialized with interceptors");
   }
 
   // Token management
@@ -183,8 +225,102 @@ class ApiService {
     }
   }
 
+  // Check if current token is a backend token
+  private isBackendToken(): boolean {
+    if (!this.token) return false;
+
+    try {
+      // Backend tokens are JWTs with a specific structure
+      // We can check if it has the expected claims
+      const payload = JSON.parse(atob(this.token.split(".")[1]));
+      const isBackend = payload.type === "api";
+
+      // Debug logging
+      console.log("Token type check:", {
+        tokenLength: this.token?.length,
+        payloadType: payload.type,
+        isBackend,
+        payload: payload,
+      });
+
+      return isBackend;
+    } catch (error) {
+      // If we can't decode the token, assume it's not a backend token
+      console.log("Failed to decode token:", error);
+      return false;
+    }
+  }
+
+  // Handle unauthorized access by redirecting to login
+  private handleUnauthorized(): void {
+    console.log("🚨 handleUnauthorized called - redirecting to login");
+
+    // Clear any existing auth state
+    this.clearTokens();
+
+    // Dispatch custom event for components to listen to
+    window.dispatchEvent(
+      new CustomEvent("auth:unauthorized", {
+        detail: { message: "Session expired. Please log in again." },
+      }),
+    );
+
+    // Force redirect to login page
+    if (window.location.pathname !== "/auth/login") {
+      console.log(
+        "🔄 Redirecting from",
+        window.location.pathname,
+        "to /auth/login",
+      );
+      window.location.href = "/auth/login";
+    } else {
+      console.log("📍 Already on login page, no redirect needed");
+    }
+  }
+
   clearToken(): void {
     this.clearTokens();
+  }
+
+  // Test method to verify 401 handling
+  test401Handling(): void {
+    console.log("🧪 Testing 401 handling...");
+    console.log(
+      "🧪 Current token:",
+      this.token ? `${this.token.substring(0, 20)}...` : "None",
+    );
+    console.log("🧪 Is backend token:", this.isBackendToken());
+
+    // Simulate a 401 response
+    const mockError = {
+      response: {
+        status: 401,
+        data: { detail: "Test 401 response" },
+      },
+      config: { url: "/test", method: "GET" },
+      message: "Test 401 error",
+    } as AxiosError;
+
+    console.log("🧪 Simulating 401 error...");
+    this.handleUnauthorized();
+  }
+
+  // Test method to verify interceptors are working
+  testInterceptors(): void {
+    console.log("🧪 Testing interceptors...");
+
+    // Make a test request that will fail
+    this.client.get("/non-existent-endpoint")
+      .then(() => {
+        console.log("❌ Unexpected success");
+      })
+      .catch((error) => {
+        console.log("🧪 Interceptor test result:", {
+          status: error.response?.status,
+          message: error.message,
+          isAxiosError: error.isAxiosError,
+        });
+      });
   }
 
   private loadTokens(): void {

@@ -331,7 +331,7 @@ class PromptEnabledService(ABC):
             logger.error(
                 f"Unexpected error parsing AI response for {self._service_name}: {e}"
             )
-            from .output_parser import ParsingResult
+            from .parsers import ParsingResult
 
             return ParsingResult(
                 success=False,
@@ -365,7 +365,7 @@ class PromptEnabledService(ABC):
         Returns:
             Rendered prompt string with format instructions
         """
-        from .output_parser import create_parser
+        from .parsers import create_parser
 
         # Create parser for the Pydantic model
         parser = create_parser(pydantic_model)

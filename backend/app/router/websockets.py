@@ -347,13 +347,29 @@ async def document_analysis_websocket(
                 logger.warning(
                     f"Failed to exchange backend token for Supabase token for WebSocket user: {user.id}"
                 )
+                # Fail fast to force re-auth and avoid invalid token reaching DB
+                await websocket.send_text(
+                    json.dumps(
+                        {
+                            "event_type": "authentication_error",
+                            "timestamp": datetime.now(UTC).isoformat(),
+                            "data": {
+                                "error": "Session mapping unavailable",
+                                "code": 4001,
+                                "message": "Please log in again to establish a new session.",
+                            },
+                        }
+                    )
+                )
+                await websocket.close(code=4001, reason="Authentication failed")
+                return
 
         # Store the actual token for authenticated operations
         # Also carry refresh token if the backend token store has one
         refresh_token: Optional[str] = None
         try:
             if BackendTokenService.is_backend_token(token):
-                mapping = BackendTokenService.get_mapping(token)
+                mapping = await BackendTokenService.get_mapping(token)
                 if mapping:
                     refresh_token = mapping.get("supabase_refresh_token")
         except Exception:
@@ -1320,14 +1336,14 @@ async def _dispatch_analysis_task(
 
 
 async def replay_last_progress_on_reconnect(
-    websocket: WebSocket, 
-    document_id: str, 
-    cache_status_result: Dict[str, Any], 
-    user_id: str
+    websocket: WebSocket,
+    document_id: str,
+    cache_status_result: Dict[str, Any],
+    user_id: str,
 ):
     """
     Replay the last persisted progress so the UI can redraw current state.
-    
+
     Per PRD requirements:
     - When a client (re)subscribes to the session channel, replay last persisted progress
     - Only replay if progress exists and analysis is in progress or recently completed
@@ -1337,16 +1353,20 @@ async def replay_last_progress_on_reconnect(
         content_hash = cache_status_result.get("content_hash")
         contract_id = cache_status_result.get("contract_id")
         cache_status = cache_status_result.get("cache_status")
-        
+
         if not content_hash:
-            logger.debug(f"No content_hash available for progress replay on document {document_id}")
+            logger.debug(
+                f"No content_hash available for progress replay on document {document_id}"
+            )
             return
-        
+
         # Skip progress replay for completed analyses (no need to redraw UI)
         if cache_status == CacheStatus.COMPLETE:
-            logger.debug(f"No progress replay needed for completed analysis on document {document_id}")
+            logger.debug(
+                f"No progress replay needed for completed analysis on document {document_id}"
+            )
             return
-        
+
         # Get the last persisted progress from analysis_progress table
         progress_repo = AnalysisProgressRepository()
         progress_data = await progress_repo.get_latest_progress(
@@ -1357,7 +1377,7 @@ async def replay_last_progress_on_reconnect(
                 "estimated_completion_minutes, updated_at, session_id"
             ),
         )
-        
+
         if progress_data and progress_data.get("progress_percent", 0) > 0:
             # Replay the last progress state for UI redraw
             replay_message = {
@@ -1366,51 +1386,57 @@ async def replay_last_progress_on_reconnect(
                 "data": {
                     "session_id": progress_data.get("session_id") or document_id,
                     "contract_id": contract_id or "unknown",
-                    "current_step": progress_data.get("current_step", "document_uploaded"),
+                    "current_step": progress_data.get(
+                        "current_step", "document_uploaded"
+                    ),
                     "progress_percent": progress_data.get("progress_percent", 0),
                     "step_description": progress_data.get("step_description", ""),
-                    "estimated_completion_minutes": progress_data.get("estimated_completion_minutes"),
+                    "estimated_completion_minutes": progress_data.get(
+                        "estimated_completion_minutes"
+                    ),
                     "is_replay": True,  # Flag to indicate this is a replay
-                }
+                },
             }
-            
+
             await websocket_manager.send_personal_message(
                 document_id, websocket, replay_message
             )
-            
+
             logger.info(
                 f"Replayed progress {progress_data.get('progress_percent', 0)}% "
                 f"at step '{progress_data.get('current_step', 'unknown')}' "
                 f"for document {document_id} on reconnect"
             )
-            
+
         elif cache_status == CacheStatus.IN_PROGRESS:
             # Analysis is in progress but no detailed progress found - emit 0% initialization
             initialization_message = {
-                "event_type": "analysis_progress", 
+                "event_type": "analysis_progress",
                 "timestamp": datetime.now(UTC).isoformat(),
                 "data": {
                     "session_id": document_id,
-                    "contract_id": contract_id or "unknown", 
+                    "contract_id": contract_id or "unknown",
                     "current_step": "document_uploaded",
                     "progress_percent": 0,
                     "step_description": "Analysis initialized",
                     "is_replay": True,
-                }
+                },
             }
-            
+
             await websocket_manager.send_personal_message(
-                document_id, websocket, initialization_message  
+                document_id, websocket, initialization_message
             )
-            
-            logger.info(f"Replayed 0% initialization for in-progress analysis on document {document_id}")
-            
+
+            logger.info(
+                f"Replayed 0% initialization for in-progress analysis on document {document_id}"
+            )
+
         else:
             logger.debug(
                 f"No progress replay needed for document {document_id} "
                 f"(cache_status: {cache_status}, has_progress: {bool(progress_data)})"
             )
-            
+
     except Exception as e:
         # Don't fail the connection if progress replay fails
         logger.warning(f"Failed to replay progress for document {document_id}: {e}")

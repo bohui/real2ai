@@ -2,7 +2,7 @@
 
 # Prompt Testing Matrix Script
 # This script allows you to test individual prompts with different models
-# using test_files/contract.pdf and test_files/contract.txt as input
+# using test_files/contract.pdf and test_files/contract.md (preferred) or contract.txt as input
 
 set -e  # Exit on any error
 
@@ -71,7 +71,8 @@ mkdir -p "$OUTPUT_DIR"
 
 # Test files
 PDF_FILE="$TEST_FILES_DIR/contract.pdf"
-TXT_FILE="$TEST_FILES_DIR/contract.txt"
+CONTRACT_MD="$TEST_FILES_DIR/contract.md"
+CONTRACT_TXT="$TEST_FILES_DIR/contract.txt"
 
 # Available models
 declare -a OPENAI_MODELS=(
@@ -137,8 +138,15 @@ EOF
         "analysis")
             # Safely embed contract text for analysis prompts if available
             local CONTRACT_TEXT_JSON
-            if [[ -f "$TXT_FILE" ]]; then
-                CONTRACT_TEXT_JSON=$(TXT_FILE="$TXT_FILE" "$PYTHON_BIN" - << 'PY'
+            # Prefer Markdown contract text, fallback to TXT
+            local CONTRACT_SOURCE=""
+            if [[ -f "$CONTRACT_MD" ]]; then
+                CONTRACT_SOURCE="$CONTRACT_MD"
+            elif [[ -f "$CONTRACT_TXT" ]]; then
+                CONTRACT_SOURCE="$CONTRACT_TXT"
+            fi
+            if [[ -n "$CONTRACT_SOURCE" && -f "$CONTRACT_SOURCE" ]]; then
+                CONTRACT_TEXT_JSON=$(TXT_FILE="$CONTRACT_SOURCE" "$PYTHON_BIN" - << 'PY'
 import json, os
 path = os.environ.get("TXT_FILE")
 try:
@@ -682,15 +690,22 @@ check_test_files() {
         echo -e "${RED}Error: PDF test file not found: $PDF_FILE${NC}"
         exit 1
     fi
-    
-    if [[ ! -f "$TXT_FILE" ]]; then
-        echo -e "${RED}Error: TXT test file not found: $TXT_FILE${NC}"
-        exit 1
+
+    if [[ ! -f "$CONTRACT_MD" && ! -f "$CONTRACT_TXT" ]]; then
+        echo -e "${YELLOW}⚠  No contract.md or contract.txt found in $TEST_FILES_DIR${NC}"
+        echo -e "${YELLOW}   Analysis prompts will fall back to sample text${NC}"
+    else
+        echo -e "${GREEN}✓ Contract text source found${NC}"
+        if [[ -f "$CONTRACT_MD" ]]; then
+            echo "  Contract (md): $CONTRACT_MD"
+        fi
+        if [[ -f "$CONTRACT_TXT" ]]; then
+            echo "  Contract (txt): $CONTRACT_TXT"
+        fi
     fi
-    
+
     echo -e "${GREEN}✓ Test files found${NC}"
     echo "  PDF: $PDF_FILE"
-    echo "  TXT: $TXT_FILE"
     echo ""
 }
 

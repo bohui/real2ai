@@ -15,6 +15,7 @@ import logging
 from app.core.config import get_settings
 from app.core.auth_context import AuthContext
 from app.services.backend_token_service import BackendTokenService
+from app.clients.factory import get_service_supabase_client
 
 logger = logging.getLogger(__name__)
 
@@ -512,10 +513,74 @@ async def _setup_user_session(
                                         "exp": exp,
                                         "current_time": now,
                                         "connection_id": id(connection),
-                                        "recommendation": "Token should have been refreshed before database access",
+                                        "recommendation": "Attempting to refresh using stored refresh token before database access",
                                     },
                                 )
-                                raise ValueError("Supabase token is expired")
+                                # Attempt to refresh using stored refresh token
+                                try:
+                                    refresh_token = AuthContext.get_refresh_token()
+                                    if refresh_token:
+                                        client = await get_service_supabase_client()
+                                        refresh_result = client.auth.refresh_session(
+                                            refresh_token
+                                        )
+                                        if (
+                                            refresh_result.session
+                                            and refresh_result.user
+                                        ):
+                                            new_access = (
+                                                refresh_result.session.access_token
+                                            )
+                                            new_refresh = (
+                                                refresh_result.session.refresh_token
+                                            )
+                                            # Update auth context and continue with refreshed token
+                                            AuthContext.set_auth_context(
+                                                token=new_access,
+                                                user_id=str(user_id),
+                                                user_email=AuthContext.get_user_email(),
+                                                metadata=AuthContext.get_auth_metadata(),
+                                                refresh_token=new_refresh,
+                                            )
+                                            user_token = new_access
+                                            logger.info(
+                                                "Successfully refreshed Supabase access token for expired session; continuing",
+                                                extra={
+                                                    "user_id": str(user_id),
+                                                    "connection_id": id(connection),
+                                                },
+                                            )
+                                        else:
+                                            logger.warning(
+                                                "Supabase refresh returned no session or user; cannot recover expired token",
+                                                extra={
+                                                    "user_id": str(user_id),
+                                                    "connection_id": id(connection),
+                                                },
+                                            )
+                                            raise ValueError(
+                                                "Supabase token is expired"
+                                            )
+                                    else:
+                                        logger.warning(
+                                            "No refresh token available in auth context; cannot recover expired Supabase token",
+                                            extra={
+                                                "user_id": str(user_id),
+                                                "connection_id": id(connection),
+                                            },
+                                        )
+                                        raise ValueError("Supabase token is expired")
+                                except Exception as refresh_error:
+                                    logger.error(
+                                        f"Error while attempting Supabase token refresh: {refresh_error}",
+                                        extra={
+                                            "user_id": str(user_id),
+                                            "connection_id": id(connection),
+                                        },
+                                        exc_info=True,
+                                    )
+                                    # Bubble up as invalid token so caller can handle/retry
+                                    raise ValueError("Supabase token is expired")
 
                             if time_to_expiry <= 600:  # 10 minutes or less
                                 logger.warning(

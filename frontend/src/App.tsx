@@ -77,6 +77,30 @@ const App: React.FC = () => {
     initializeAuth();
   }, []); // Remove initializeAuth from dependencies as it's stable
 
+  // Global error handler for authentication errors
+  React.useEffect(() => {
+    const handleUnauthorized = (event: CustomEvent) => {
+      logger.warn("Authentication error detected, redirecting to login", event.detail);
+      
+      // Clear auth state
+      useAuthStore.getState().logout();
+      
+      // Show notification if we're not already on login page
+      if (window.location.pathname !== "/auth/login") {
+        // You can add a toast notification here if you have a notification system
+        console.warn("Session expired. Please log in again.");
+      }
+    };
+
+    // Listen for authentication errors
+    window.addEventListener("auth:unauthorized", handleUnauthorized as EventListener);
+
+    // Cleanup
+    return () => {
+      window.removeEventListener("auth:unauthorized", handleUnauthorized as EventListener);
+    };
+  }, []);
+
   // Check onboarding status for authenticated users only
   React.useEffect(() => {
     const checkOnboardingStatus = async () => {

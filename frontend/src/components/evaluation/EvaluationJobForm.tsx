@@ -1,22 +1,22 @@
 /**
  * Evaluation Job Creation Form Component
- * 
+ *
  * Multi-step form for creating evaluation jobs with:
  * - Basic job configuration
  * - Prompt template selection
- * - Dataset selection  
+ * - Dataset selection
  * - Model configuration
  * - Metrics configuration
  */
 
-import React, { useState, useEffect } from 'react';
-import Button from '../ui/Button';
-import Input from '../ui/Input';
-import { Card } from '../ui/Card';
-import Alert from '../ui/Alert';
-import Loading from '../ui/Loading';
-import { useJobCreation } from '../../store/evaluationStore';
-import type { ModelConfig, MetricsConfig } from '../../services/evaluationApi';
+import React, { useState, useEffect } from "react";
+import Button from "../ui/Button";
+import Input from "../ui/Input";
+import { Card } from "../ui/Card";
+import Alert from "../ui/Alert";
+import Loading from "../ui/Loading";
+import { useJobCreation } from "../../store/evaluationStore";
+import type { ModelConfig, MetricsConfig } from "../../services/evaluationApi";
 
 interface EvaluationJobFormProps {
   onSuccess?: (jobId: string) => void;
@@ -50,22 +50,17 @@ const INITIAL_METRICS_CONFIG: MetricsConfig = {
 };
 
 const MODEL_PROVIDERS = [
-  { value: 'openai', label: 'OpenAI' },
-  { value: 'gemini', label: 'Google Gemini' },
+  { value: "openai", label: "OpenAI" },
+  { value: "gemini", label: "Google Gemini" },
 ];
 
-const OPENAI_MODELS = [
-  'gpt-4o',
-  'gpt-4o-mini',
-  'gpt-4-turbo',
-  'gpt-3.5-turbo',
-];
+const OPENAI_MODELS = ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo"];
 
 const GEMINI_MODELS = [
-  'gemini-pro',
-  'gemini-pro-vision',
-  'gemini-1.5-pro',
-  'gemini-1.5-flash',
+  "gemini-pro",
+  "gemini-pro-vision",
+  "gemini-1.5-pro",
+  "gemini-1.5-flash",
 ];
 
 export const EvaluationJobForm: React.FC<EvaluationJobFormProps> = ({
@@ -74,18 +69,18 @@ export const EvaluationJobForm: React.FC<EvaluationJobFormProps> = ({
 }) => {
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState<FormData>({
-    name: '',
-    description: '',
-    prompt_template_id: '',
-    dataset_id: '',
+    name: "",
+    description: "",
+    prompt_template_id: "",
+    dataset_id: "",
     model_configs: [],
     metrics_config: INITIAL_METRICS_CONFIG,
     priority: 5,
   });
-  
+
   const [newModelConfig, setNewModelConfig] = useState<ModelConfig>({
-    model_name: '',
-    provider: 'openai',
+    model_name: "",
+    provider: "openai",
     parameters: {
       temperature: 0.7,
       max_tokens: 1000,
@@ -97,44 +92,46 @@ export const EvaluationJobForm: React.FC<EvaluationJobFormProps> = ({
     testDatasets,
     loading,
     error,
-    actions,
+    createJob,
+    fetchPromptTemplates,
+    fetchTestDatasets,
   } = useJobCreation();
 
   useEffect(() => {
-    actions.fetchPromptTemplates();
-    actions.fetchTestDatasets();
-  }, [actions]);
+    fetchPromptTemplates();
+    fetchTestDatasets();
+  }, [fetchPromptTemplates, fetchTestDatasets]);
 
   const updateFormData = (field: keyof FormData, value: any) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
   const addModelConfig = () => {
     if (!newModelConfig.model_name || !newModelConfig.provider) {
       return;
     }
-    
-    setFormData(prev => ({
+
+    setFormData((prev) => ({
       ...prev,
       model_configs: [...prev.model_configs, { ...newModelConfig }],
     }));
-    
+
     setNewModelConfig({
-      model_name: '',
-      provider: 'openai',
+      model_name: "",
+      provider: "openai",
       parameters: { temperature: 0.7, max_tokens: 1000 },
     });
   };
 
   const removeModelConfig = (index: number) => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
       model_configs: prev.model_configs.filter((_, i) => i !== index),
     }));
   };
 
   const updateMetricsConfig = (field: keyof MetricsConfig, value: any) => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
       metrics_config: {
         ...prev.metrics_config,
@@ -144,7 +141,7 @@ export const EvaluationJobForm: React.FC<EvaluationJobFormProps> = ({
   };
 
   const updateMetricWeight = (metric: string, weight: number) => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
       metrics_config: {
         ...prev.metrics_config,
@@ -159,11 +156,11 @@ export const EvaluationJobForm: React.FC<EvaluationJobFormProps> = ({
   const canProceedToStep = (step: number): boolean => {
     switch (step) {
       case 1:
-        return formData.name.trim() !== '';
+        return formData.name.trim() !== "";
       case 2:
-        return formData.prompt_template_id !== '';
+        return formData.prompt_template_id !== "";
       case 3:
-        return formData.dataset_id !== '';
+        return formData.dataset_id !== "";
       case 4:
         return formData.model_configs.length > 0;
       default:
@@ -173,10 +170,10 @@ export const EvaluationJobForm: React.FC<EvaluationJobFormProps> = ({
 
   const handleSubmit = async () => {
     try {
-      const job = await actions.createJob(formData);
+      const job = await createJob(formData);
       onSuccess?.(job.id);
     } catch (error) {
-      console.error('Failed to create job:', error);
+      console.error("Failed to create job:", error);
     }
   };
 
@@ -188,7 +185,7 @@ export const EvaluationJobForm: React.FC<EvaluationJobFormProps> = ({
           <label className="block text-sm font-medium mb-2">Job Name *</label>
           <Input
             value={formData.name}
-            onChange={(e) => updateFormData('name', e.target.value)}
+            onChange={(e) => updateFormData("name", e.target.value)}
             placeholder="Enter evaluation job name"
             required
           />
@@ -199,18 +196,22 @@ export const EvaluationJobForm: React.FC<EvaluationJobFormProps> = ({
             className="w-full p-3 border border-gray-300 rounded-md resize-none"
             rows={3}
             value={formData.description}
-            onChange={(e) => updateFormData('description', e.target.value)}
+            onChange={(e) => updateFormData("description", e.target.value)}
             placeholder="Optional description for this evaluation"
           />
         </div>
         <div>
-          <label className="block text-sm font-medium mb-2">Priority (1-10)</label>
+          <label className="block text-sm font-medium mb-2">
+            Priority (1-10)
+          </label>
           <Input
             type="number"
             min={1}
             max={10}
             value={formData.priority}
-            onChange={(e) => updateFormData('priority', parseInt(e.target.value))}
+            onChange={(e) =>
+              updateFormData("priority", parseInt(e.target.value))
+            }
           />
         </div>
       </div>
@@ -224,7 +225,7 @@ export const EvaluationJobForm: React.FC<EvaluationJobFormProps> = ({
         <select
           className="w-full p-3 border border-gray-300 rounded-md"
           value={formData.prompt_template_id}
-          onChange={(e) => updateFormData('prompt_template_id', e.target.value)}
+          onChange={(e) => updateFormData("prompt_template_id", e.target.value)}
         >
           <option value="">Select a prompt template</option>
           {promptTemplates.map((template) => (
@@ -233,15 +234,19 @@ export const EvaluationJobForm: React.FC<EvaluationJobFormProps> = ({
             </option>
           ))}
         </select>
-        
+
         {formData.prompt_template_id && (
           <div className="p-4 bg-gray-50 rounded-md">
             {(() => {
-              const selected = promptTemplates.find(t => t.id === formData.prompt_template_id);
+              const selected = promptTemplates.find(
+                (t) => t.id === formData.prompt_template_id
+              );
               return selected ? (
                 <div>
                   <h4 className="font-medium">{selected.name}</h4>
-                  <p className="text-sm text-gray-600 mt-1">{selected.description}</p>
+                  <p className="text-sm text-gray-600 mt-1">
+                    {selected.description}
+                  </p>
                   <div className="mt-2">
                     <pre className="text-xs bg-white p-2 rounded border max-h-32 overflow-y-auto">
                       {selected.template_content}
@@ -263,7 +268,7 @@ export const EvaluationJobForm: React.FC<EvaluationJobFormProps> = ({
         <select
           className="w-full p-3 border border-gray-300 rounded-md"
           value={formData.dataset_id}
-          onChange={(e) => updateFormData('dataset_id', e.target.value)}
+          onChange={(e) => updateFormData("dataset_id", e.target.value)}
         >
           <option value="">Select a test dataset</option>
           {testDatasets.map((dataset) => (
@@ -272,19 +277,27 @@ export const EvaluationJobForm: React.FC<EvaluationJobFormProps> = ({
             </option>
           ))}
         </select>
-        
+
         {formData.dataset_id && (
           <div className="p-4 bg-gray-50 rounded-md">
             {(() => {
-              const selected = testDatasets.find(d => d.id === formData.dataset_id);
+              const selected = testDatasets.find(
+                (d) => d.id === formData.dataset_id
+              );
               return selected ? (
                 <div>
                   <h4 className="font-medium">{selected.name}</h4>
-                  <p className="text-sm text-gray-600 mt-1">{selected.description}</p>
+                  <p className="text-sm text-gray-600 mt-1">
+                    {selected.description}
+                  </p>
                   <div className="text-sm mt-2">
-                    <span className="text-blue-600 font-medium">{selected.size} test cases</span>
+                    <span className="text-blue-600 font-medium">
+                      {selected.size} test cases
+                    </span>
                     {selected.domain && (
-                      <span className="ml-4 text-gray-600">Domain: {selected.domain}</span>
+                      <span className="ml-4 text-gray-600">
+                        Domain: {selected.domain}
+                      </span>
                     )}
                   </div>
                 </div>
@@ -299,18 +312,24 @@ export const EvaluationJobForm: React.FC<EvaluationJobFormProps> = ({
   const renderModelConfiguration = () => (
     <Card className="p-6">
       <h3 className="text-lg font-semibold mb-4">Model Configuration</h3>
-      
+
       {/* Existing Models */}
       {formData.model_configs.length > 0 && (
         <div className="mb-6">
           <h4 className="font-medium mb-3">Selected Models</h4>
           <div className="space-y-2">
             {formData.model_configs.map((config, index) => (
-              <div key={index} className="flex items-center justify-between p-3 border rounded-md">
+              <div
+                key={index}
+                className="flex items-center justify-between p-3 border rounded-md"
+              >
                 <div>
-                  <span className="font-medium">{config.provider}/{config.model_name}</span>
+                  <span className="font-medium">
+                    {config.provider}/{config.model_name}
+                  </span>
                   <span className="text-sm text-gray-600 ml-2">
-                    temp: {config.parameters.temperature}, tokens: {config.parameters.max_tokens}
+                    temp: {config.parameters.temperature}, tokens:{" "}
+                    {config.parameters.max_tokens}
                   </span>
                 </div>
                 <Button
@@ -335,11 +354,11 @@ export const EvaluationJobForm: React.FC<EvaluationJobFormProps> = ({
             <select
               className="w-full p-3 border border-gray-300 rounded-md"
               value={newModelConfig.provider}
-              onChange={(e) => 
-                setNewModelConfig(prev => ({ 
-                  ...prev, 
-                  provider: e.target.value as 'openai' | 'gemini',
-                  model_name: '' // Reset model selection
+              onChange={(e) =>
+                setNewModelConfig((prev) => ({
+                  ...prev,
+                  provider: e.target.value as "openai" | "gemini",
+                  model_name: "", // Reset model selection
                 }))
               }
             >
@@ -355,12 +374,18 @@ export const EvaluationJobForm: React.FC<EvaluationJobFormProps> = ({
             <select
               className="w-full p-3 border border-gray-300 rounded-md"
               value={newModelConfig.model_name}
-              onChange={(e) => 
-                setNewModelConfig(prev => ({ ...prev, model_name: e.target.value }))
+              onChange={(e) =>
+                setNewModelConfig((prev) => ({
+                  ...prev,
+                  model_name: e.target.value,
+                }))
               }
             >
               <option value="">Select model</option>
-              {(newModelConfig.provider === 'openai' ? OPENAI_MODELS : GEMINI_MODELS).map((model) => (
+              {(newModelConfig.provider === "openai"
+                ? OPENAI_MODELS
+                : GEMINI_MODELS
+              ).map((model) => (
                 <option key={model} value={model}>
                   {model}
                 </option>
@@ -368,20 +393,25 @@ export const EvaluationJobForm: React.FC<EvaluationJobFormProps> = ({
             </select>
           </div>
         </div>
-        
+
         <div className="grid grid-cols-2 gap-4 mb-4">
           <div>
-            <label className="block text-sm font-medium mb-2">Temperature</label>
+            <label className="block text-sm font-medium mb-2">
+              Temperature
+            </label>
             <Input
               type="number"
               min={0}
               max={2}
               step={0.1}
               value={newModelConfig.parameters.temperature}
-              onChange={(e) => 
-                setNewModelConfig(prev => ({
+              onChange={(e) =>
+                setNewModelConfig((prev) => ({
                   ...prev,
-                  parameters: { ...prev.parameters, temperature: parseFloat(e.target.value) }
+                  parameters: {
+                    ...prev.parameters,
+                    temperature: parseFloat(e.target.value),
+                  },
                 }))
               }
             />
@@ -393,16 +423,19 @@ export const EvaluationJobForm: React.FC<EvaluationJobFormProps> = ({
               min={1}
               max={4000}
               value={newModelConfig.parameters.max_tokens}
-              onChange={(e) => 
-                setNewModelConfig(prev => ({
+              onChange={(e) =>
+                setNewModelConfig((prev) => ({
                   ...prev,
-                  parameters: { ...prev.parameters, max_tokens: parseInt(e.target.value) }
+                  parameters: {
+                    ...prev.parameters,
+                    max_tokens: parseInt(e.target.value),
+                  },
                 }))
               }
             />
           </div>
         </div>
-        
+
         <Button onClick={addModelConfig} disabled={!newModelConfig.model_name}>
           Add Model
         </Button>
@@ -413,25 +446,34 @@ export const EvaluationJobForm: React.FC<EvaluationJobFormProps> = ({
   const renderMetricsConfiguration = () => (
     <Card className="p-6">
       <h3 className="text-lg font-semibold mb-4">Metrics Configuration</h3>
-      
+
       <div className="space-y-6">
         {/* Metric Toggles */}
         <div>
           <h4 className="font-medium mb-3">Enabled Metrics</h4>
           <div className="grid grid-cols-2 gap-4">
             {Object.entries({
-              bleu_enabled: 'BLEU Score',
-              rouge_enabled: 'ROUGE Score',
-              semantic_similarity_enabled: 'Semantic Similarity',
-              faithfulness_enabled: 'Faithfulness',
-              relevance_enabled: 'Relevance',
-              coherence_enabled: 'Coherence',
+              bleu_enabled: "BLEU Score",
+              rouge_enabled: "ROUGE Score",
+              semantic_similarity_enabled: "Semantic Similarity",
+              faithfulness_enabled: "Faithfulness",
+              relevance_enabled: "Relevance",
+              coherence_enabled: "Coherence",
             }).map(([key, label]) => (
               <label key={key} className="flex items-center space-x-2">
                 <input
                   type="checkbox"
-                  checked={formData.metrics_config[key as keyof MetricsConfig] as boolean}
-                  onChange={(e) => updateMetricsConfig(key as keyof MetricsConfig, e.target.checked)}
+                  checked={
+                    formData.metrics_config[
+                      key as keyof MetricsConfig
+                    ] as boolean
+                  }
+                  onChange={(e) =>
+                    updateMetricsConfig(
+                      key as keyof MetricsConfig,
+                      e.target.checked
+                    )
+                  }
                   className="rounded"
                 />
                 <span className="text-sm">{label}</span>
@@ -444,24 +486,33 @@ export const EvaluationJobForm: React.FC<EvaluationJobFormProps> = ({
         <div>
           <h4 className="font-medium mb-3">Metric Weights</h4>
           <div className="space-y-3">
-            {Object.entries(formData.metrics_config.metric_weights).map(([metric, weight]) => (
-              <div key={metric} className="flex items-center space-x-4">
-                <span className="w-32 text-sm capitalize">{metric.replace('_', ' ')}</span>
-                <input
-                  type="range"
-                  min={0}
-                  max={1}
-                  step={0.1}
-                  value={weight}
-                  onChange={(e) => updateMetricWeight(metric, parseFloat(e.target.value))}
-                  className="flex-1"
-                />
-                <span className="w-12 text-sm">{weight.toFixed(1)}</span>
-              </div>
-            ))}
+            {Object.entries(formData.metrics_config.metric_weights).map(
+              ([metric, weight]) => (
+                <div key={metric} className="flex items-center space-x-4">
+                  <span className="w-32 text-sm capitalize">
+                    {metric.replace("_", " ")}
+                  </span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={1}
+                    step={0.1}
+                    value={weight}
+                    onChange={(e) =>
+                      updateMetricWeight(metric, parseFloat(e.target.value))
+                    }
+                    className="flex-1"
+                  />
+                  <span className="w-12 text-sm">{weight.toFixed(1)}</span>
+                </div>
+              )
+            )}
           </div>
           <div className="mt-2 text-xs text-gray-600">
-            Total weight: {Object.values(formData.metrics_config.metric_weights).reduce((a, b) => a + b, 0).toFixed(1)}
+            Total weight:{" "}
+            {Object.values(formData.metrics_config.metric_weights)
+              .reduce((a, b) => a + b, 0)
+              .toFixed(1)}
           </div>
         </div>
       </div>
@@ -469,11 +520,15 @@ export const EvaluationJobForm: React.FC<EvaluationJobFormProps> = ({
   );
 
   const STEPS = [
-    { number: 1, title: 'Basic Info', component: renderBasicInfo },
-    { number: 2, title: 'Prompt Template', component: renderPromptTemplateSelection },
-    { number: 3, title: 'Test Dataset', component: renderDatasetSelection },
-    { number: 4, title: 'Models', component: renderModelConfiguration },
-    { number: 5, title: 'Metrics', component: renderMetricsConfiguration },
+    { number: 1, title: "Basic Info", component: renderBasicInfo },
+    {
+      number: 2,
+      title: "Prompt Template",
+      component: renderPromptTemplateSelection,
+    },
+    { number: 3, title: "Test Dataset", component: renderDatasetSelection },
+    { number: 4, title: "Models", component: renderModelConfiguration },
+    { number: 5, title: "Metrics", component: renderMetricsConfiguration },
   ];
 
   return (
@@ -482,20 +537,31 @@ export const EvaluationJobForm: React.FC<EvaluationJobFormProps> = ({
       <div className="flex items-center justify-between mb-8">
         {STEPS.map((step, index) => (
           <div key={step.number} className="flex items-center">
-            <div className={`
+            <div
+              className={`
               w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium
-              ${currentStep >= step.number 
-                ? 'bg-blue-600 text-white' 
-                : 'bg-gray-200 text-gray-600'
+              ${
+                currentStep >= step.number
+                  ? "bg-blue-600 text-white"
+                  : "bg-gray-200 text-gray-600"
               }
-            `}>
+            `}
+            >
               {step.number}
             </div>
-            <span className={`ml-2 text-sm ${currentStep >= step.number ? 'text-blue-600' : 'text-gray-500'}`}>
+            <span
+              className={`ml-2 text-sm ${
+                currentStep >= step.number ? "text-blue-600" : "text-gray-500"
+              }`}
+            >
               {step.title}
             </span>
             {index < STEPS.length - 1 && (
-              <div className={`mx-4 h-0.5 w-16 ${currentStep > step.number ? 'bg-blue-600' : 'bg-gray-200'}`} />
+              <div
+                className={`mx-4 h-0.5 w-16 ${
+                  currentStep > step.number ? "bg-blue-600" : "bg-gray-200"
+                }`}
+              />
             )}
           </div>
         ))}
@@ -509,9 +575,7 @@ export const EvaluationJobForm: React.FC<EvaluationJobFormProps> = ({
       )}
 
       {/* Current Step Content */}
-      <div className="mb-8">
-        {STEPS[currentStep - 1].component()}
-      </div>
+      <div className="mb-8">{STEPS[currentStep - 1].component()}</div>
 
       {/* Navigation */}
       <div className="flex justify-between">
@@ -544,7 +608,7 @@ export const EvaluationJobForm: React.FC<EvaluationJobFormProps> = ({
               onClick={handleSubmit}
               disabled={loading || !canProceedToStep(currentStep)}
             >
-              {loading ? <Loading size="sm" /> : 'Create Evaluation Job'}
+              {loading ? <Loading size="sm" /> : "Create Evaluation Job"}
             </Button>
           )}
         </div>

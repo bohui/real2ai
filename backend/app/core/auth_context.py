@@ -184,7 +184,7 @@ class AuthContext:
                         # If we don't have a refresh token yet, try to pull from mapping
                         if not refresh_token:
                             mapping = (
-                                _BackendTokenService.get_mapping(cls.get_user_token())
+                                await _BackendTokenService.get_mapping(cls.get_user_token())
                                 or {}
                             )
                             refresh_token = mapping.get("supabase_refresh_token")

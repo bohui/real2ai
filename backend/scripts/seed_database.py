@@ -27,6 +27,7 @@ import os
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 from app.clients.factory import get_supabase_client
+from app.schema.enums.property import ContractType
 
 # Load environment variables
 load_dotenv(".env.local")
@@ -85,7 +86,9 @@ class DatabaseSeeder:
                     "firm_size": "",
                     "jurisdiction": "nsw",
                     "practice_area": "property",
-                    "primary_contract_types": [],
+                    "primary_contract_types": [
+                        ContractType.PURCHASE_AGREEMENT.value,
+                    ],
                 },
             },
             {
@@ -364,10 +367,10 @@ class DatabaseSeeder:
         logger.info("Seeding sample contracts...")
 
         contract_types = [
-            "purchase_agreement",
-            "off_plan",
-            "lease_agreement",
-            "purchase_agreement",
+            ContractType.PURCHASE_AGREEMENT.value,
+            ContractType.LEASE_AGREEMENT.value,
+            ContractType.OPTION_TO_PURCHASE.value,
+            ContractType.PURCHASE_AGREEMENT.value,
         ]
 
         conn = await self.get_db_connection()
@@ -541,10 +544,14 @@ class DatabaseSeeder:
                     "risk_assessment": analysis_data["risk_assessment"],
                     "compliance_check": analysis_data["compliance_check"],
                     "recommendations": analysis_data.get("recommendations", []),
-                    "overall_risk_score": analysis_data["executive_summary"]["overall_risk_score"],
-                    "confidence_level": analysis_data["executive_summary"]["confidence_level"]
+                    "overall_risk_score": analysis_data["executive_summary"][
+                        "overall_risk_score"
+                    ],
+                    "confidence_level": analysis_data["executive_summary"][
+                        "confidence_level"
+                    ],
                 }
-                
+
                 await conn.execute(
                     """
                     INSERT INTO analyses (
@@ -557,7 +564,7 @@ class DatabaseSeeder:
                     "1.0",
                     "completed",
                     json.dumps(result_data),
-                    datetime.now()
+                    datetime.now(),
                 )
 
                 logger.info(
@@ -791,7 +798,9 @@ class DatabaseSeeder:
                     "completed",
                     json.dumps(
                         {
-                            "contract_type": contract.get("contract_type", "unknown"),
+                            "contract_type": contract.get(
+                                "contract_type", ContractType.PURCHASE_AGREEMENT.value
+                            ),
                             "analysis_type": "full_analysis",
                             "processing_time": 15.7,
                         }

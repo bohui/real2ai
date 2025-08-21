@@ -93,8 +93,7 @@ class BaseNode(ABC):
         self.prompt_manager = workflow.prompt_manager
         self.structured_parsers = workflow.structured_parsers
 
-        # Add access to state-aware parsers if available
-        self.state_aware_parsers = getattr(workflow, "state_aware_parsers", {})
+        # Structured parsers configured at workflow level
 
         # Environment and logging configuration
         self._settings = get_settings()
@@ -123,21 +122,8 @@ class BaseNode(ABC):
             lambda s, k, d=None: (s.get(k) if isinstance(s, dict) else d) or d
         )
 
-    def get_state_aware_parser(self, parser_type: str, state: str) -> Any:
-        """
-        Get a state-aware parser for the specified type and state.
-
-        Args:
-            parser_type: Type of parser (e.g., 'contract_terms', 'compliance_analysis')
-            state: Australian state code
-
-        Returns:
-            State-aware parser instance or fallback to regular parser
-        """
-        if parser_type in self.state_aware_parsers:
-            return self.state_aware_parsers[parser_type]
-
-        # Fallback to regular structured parsers
+    def get_parser(self, parser_type: str) -> Any:
+        """Return the configured structured parser for a given type."""
         return self.structured_parsers.get(parser_type)
 
     @abstractmethod

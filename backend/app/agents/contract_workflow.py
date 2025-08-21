@@ -38,7 +38,7 @@ from app.core.prompts import (
     PromptManager,
     get_prompt_manager,
 )
-from app.core.prompts.output_parser import create_parser
+from app.core.prompts.parsers import create_parser
 
 # Configuration imports
 from app.core.config import get_settings
@@ -169,14 +169,8 @@ class ContractAnalysisWorkflow:
             RecommendationsOutput, strict_mode=False
         )
 
-        # Initialize state-aware parsers for different Australian states
-        from app.core.prompts.state_aware_parser import StateAwareParserFactory
-
-        self.state_aware_parsers = {
-            "contract_terms": StateAwareParserFactory.create_contract_terms_parser(),
-            "compliance_analysis": StateAwareParserFactory.create_compliance_parser(),
-            "risk_analysis": StateAwareParserFactory.create_risk_parser(),
-        }
+        # Remove state-aware parsers. Use single parsers or choose model upstream.
+        self.state_aware_parsers = {}
 
         # Keep legacy structured_parsers for backward compatibility
         self.structured_parsers = {

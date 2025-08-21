@@ -85,6 +85,27 @@ export const useAuthStore = create<AuthState>()(
         });
       },
 
+      // Force logout when session expires
+      forceLogout: (message?: string) => {
+        apiService.clearTokens();
+        set({
+          user: null,
+          isAuthenticated: false,
+          isLoading: false,
+          error: message || "Session expired. Please log in again.",
+        });
+
+        // Reset onboarding state on logout
+        import("@/store/uiStore").then(({ useUIStore }) => {
+          useUIStore.getState().resetOnboardingState();
+        });
+
+        // Redirect to login page
+        if (window.location.pathname !== "/auth/login") {
+          window.location.href = "/auth/login";
+        }
+      },
+
       clearError: () => {
         set({ error: null });
       },

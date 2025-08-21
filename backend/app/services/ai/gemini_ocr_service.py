@@ -13,7 +13,7 @@ from app.core.config import get_settings
 from app.core.prompts.service_mixin import PromptEnabledService
 from app.core.langsmith_config import langsmith_trace, get_langsmith_config
 from langsmith.run_helpers import trace
-from app.core.prompts.output_parser import create_parser, ParsingResult
+from app.core.prompts.parsers import create_parser, ParsingResult
 from app.services.base.user_aware_service import UserAwareService
 from app.models.contract_state import ProcessingStatus, AustralianState, ContractType
 from app.prompts.schema.image_semantics_schema import ImageSemantics, ImageType

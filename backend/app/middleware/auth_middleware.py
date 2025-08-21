@@ -10,7 +10,7 @@ from typing import Optional, Tuple
 import jwt
 from jwt.exceptions import InvalidTokenError
 
-from fastapi import Request, Response
+from fastapi import Request, Response, HTTPException, status
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.types import ASGIApp
 
@@ -56,37 +56,85 @@ class AuthContextMiddleware(BaseHTTPMiddleware):
 
         # Debug: Log token presence without exposing content
         if token:
-            logger.info(f"Processing token for user: {user_id} (token length: {len(token)})")
-            is_backend_token = BackendTokenService.is_backend_token(token)
-            logger.info(f"Token type check - is_backend_token: {is_backend_token}")
-        
+            logger.info(
+                f"Processing token for user: {user_id} (token length: {len(token)})"
+            )
+            try:
+                is_backend_token = BackendTokenService.is_backend_token(token)
+                logger.info(f"Token type check - is_backend_token: {is_backend_token}")
+            except Exception as e:
+                logger.warning(f"Error checking token type: {e}")
+                # Continue processing - let downstream handle invalid tokens
+        else:
+            logger.debug("No token found in request")
+
         # If backend-issued token, check for near expiry and coordinate refresh
         if token and BackendTokenService.is_backend_token(token):
             logger.info(f"Backend token detected for user: {user_id}")
-            
-            # Check if backend token is near expiry (10 minutes threshold)
-            if BackendTokenService.is_near_expiry(token, threshold_minutes=10):
-                logger.info(f"Backend token near expiry for user: {user_id}, attempting coordinated refresh")
-                
-                # Attempt to refresh both tokens in coordination
-                refreshed_token = await BackendTokenService.refresh_coordinated_tokens(token)
-                if refreshed_token:
-                    logger.info(f"Successfully refreshed coordinated tokens for user: {user_id}")
-                    # Use the new backend token for this request
-                    token = refreshed_token
-                    # Mark that we need to send the new token to frontend
-                    new_token_header = refreshed_token
+
+            try:
+                # Check if backend token is near expiry (10 minutes threshold)
+                if BackendTokenService.is_near_expiry(token, threshold_minutes=10):
+                    logger.info(
+                        f"Backend token near expiry for user: {user_id}, attempting coordinated refresh"
+                    )
+
+                    # Attempt to refresh both tokens in coordination
+                    refreshed_token = (
+                        await BackendTokenService.refresh_coordinated_tokens(token)
+                    )
+                    if refreshed_token:
+                        logger.info(
+                            f"Successfully refreshed coordinated tokens for user: {user_id}"
+                        )
+                        # Use the new backend token for this request
+                        token = refreshed_token
+                        # Mark that we need to send the new token to frontend
+                        new_token_header = refreshed_token
+                    else:
+                        logger.warning(
+                            f"Failed to refresh coordinated tokens for user: {user_id}"
+                        )
+            except Exception as e:
+                logger.error(f"Error during token refresh for user {user_id}: {e}")
+                # Continue with original token - don't fail the request
+
+            try:
+                # Exchange backend token for Supabase access token for RLS
+                exchanged = await BackendTokenService.ensure_supabase_access_token(
+                    token
+                )
+                if exchanged:
+                    # Replace token with Supabase access token so DB ops are RLS-authenticated
+                    logger.info(
+                        f"Successfully exchanged backend token for Supabase token"
+                    )
+                    token = exchanged
                 else:
-                    logger.warning(f"Failed to refresh coordinated tokens for user: {user_id}")
-            
-            # Exchange backend token for Supabase access token for RLS
-            exchanged = await BackendTokenService.ensure_supabase_access_token(token)
-            if exchanged:
-                # Replace token with Supabase access token so DB ops are RLS-authenticated
-                logger.info(f"Successfully exchanged backend token for Supabase token")
-                token = exchanged
-            else:
-                logger.warning(f"Failed to exchange backend token for Supabase token for user: {user_id}")
+                    logger.warning(
+                        f"Failed to exchange backend token for Supabase token for user: {user_id}"
+                    )
+                    # Mapping may be lost after backend restart; fail fast with 401 to force re-auth
+                    # Return proper HTTP response instead of raising exception to avoid 500 errors
+                    from fastapi.responses import JSONResponse
+
+                    return JSONResponse(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        content={
+                            "detail": "Session mapping unavailable. Please log in again."
+                        },
+                    )
+            except Exception as e:
+                logger.error(f"Error during token exchange for user {user_id}: {e}")
+                # Return 401 instead of letting the error propagate and cause 500
+                from fastapi.responses import JSONResponse
+
+                return JSONResponse(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    content={
+                        "detail": "Authentication service error. Please log in again."
+                    },
+                )
         else:
             if token:
                 logger.info(f"Using Supabase token directly (not a backend token)")
@@ -108,10 +156,10 @@ class AuthContextMiddleware(BaseHTTPMiddleware):
         try:
             # Process the request
             response = await call_next(request)
-            
+
             # Token refresh handling moved to separate endpoint for security
             # Avoid sending tokens in response headers
-            
+
             return response
         finally:
             # Always clear auth context after request

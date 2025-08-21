@@ -51,6 +51,7 @@ from app.router.websockets import router as websockets_router
 from app.router.property_profile import router as property_profile_router
 from app.router.property_intelligence import router as property_intelligence_router
 from app.router.cache import router as cache_router
+from app.router.evaluation import router as evaluation_router
 from app.middleware.auth_middleware import setup_auth_middleware
 from app.clients.factory import get_supabase_client
 
@@ -292,6 +293,7 @@ app.include_router(websockets_router)
 app.include_router(property_profile_router)
 app.include_router(property_intelligence_router)
 app.include_router(cache_router)
+app.include_router(evaluation_router)
 
 
 # Import background tasks

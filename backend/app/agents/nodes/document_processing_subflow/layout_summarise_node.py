@@ -113,7 +113,7 @@ class LayoutSummariseNode(DocumentProcessingNodeBase):
 
             # Prepare prompt manager and output parser
             from app.core.prompts.manager import get_prompt_manager
-            from app.core.prompts.output_parser import create_parser
+            from app.core.prompts.parsers import create_parser
             from app.prompts.schema.contract_layout_summary_schema import (
                 ContractLayoutSummary,
             )

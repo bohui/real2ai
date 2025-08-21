@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException, Depends, Header
 from typing import Optional
 import logging
 
-from app.core.auth import User, get_current_user_token
+from app.core.auth import User, get_current_user_token, generate_ws_token
 from app.clients.factory import get_service_supabase_client
 from app.schema.auth import (
     UserRegistrationRequest,
@@ -101,22 +101,29 @@ async def login_user(
 
             settings = get_settings()
             if settings.use_backend_tokens:
-                backend_token = BackendTokenService.issue_backend_token(
+                backend_token = await BackendTokenService.issue_backend_token(
                     user_id=auth_result.user.id,
                     email=auth_result.user.email,
                     supabase_access_token=auth_result.session.access_token,
                     supabase_refresh_token=auth_result.session.refresh_token,
-                    ttl_seconds=settings.jwt_expiration_hours * 3600,
+                )
+                ws_token = generate_ws_token(
+                    user_id=auth_result.user.id, expires_in_seconds=300
                 )
                 return {
                     "access_token": backend_token,
                     "token_type": "backend",
+                    "ws_token": ws_token,
                     "user_profile": user_profile,
                 }
             else:
+                ws_token = generate_ws_token(
+                    user_id=auth_result.user.id, expires_in_seconds=300
+                )
                 return {
                     "access_token": auth_result.session.access_token,
                     "refresh_token": auth_result.session.refresh_token,
+                    "ws_token": ws_token,
                     "user_profile": user_profile,
                 }
         else:

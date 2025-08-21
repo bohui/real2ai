@@ -1,7 +1,7 @@
 """
 Backend token service
 
-Dev-friendly in-memory implementation for issuing and exchanging backend API tokens
+Redis-backed implementation for issuing and exchanging backend API tokens
 for Supabase user tokens. Avoids exposing Supabase access tokens to the client.
 """
 
@@ -9,14 +9,16 @@ from __future__ import annotations
 
 import logging
 import time
+import json
+from datetime import datetime
 from typing import Dict, Optional, Tuple, Any
 
 import jwt
+import redis.asyncio as redis
 
 from app.core.config import get_settings
 from app.clients.factory import get_service_supabase_client
 import base64
-import json
 
 
 logger = logging.getLogger(__name__)
@@ -25,10 +27,101 @@ logger = logging.getLogger(__name__)
 class BackendTokenService:
     """
     Issues backend JWTs and maps them to Supabase user sessions (access/refresh tokens).
-    In dev, an in-memory map is sufficient. For prod, replace with Redis or DB store.
+    Uses Redis for persistent token storage across backend restarts.
     """
 
-    _token_store: Dict[str, Dict[str, Any]] = {}
+    _redis_client: Optional[redis.Redis] = None
+    _redis_prefix = "backend_token:"
+
+    @classmethod
+    async def _get_redis_client(cls) -> redis.Redis:
+        """Get or create Redis client."""
+        if cls._redis_client is None:
+            settings = get_settings()
+            cls._redis_client = redis.from_url(
+                settings.redis_url, encoding="utf-8", decode_responses=True
+            )
+            # Test connection
+            try:
+                await cls._redis_client.ping()
+                logger.debug("Redis connection established for token service")
+            except Exception as e:
+                logger.error(f"Failed to connect to Redis: {e}")
+                raise
+        return cls._redis_client
+
+    @classmethod
+    async def _store_token_data(
+        cls, backend_token: str, token_data: Dict[str, Any]
+    ) -> bool:
+        """Store token data in Redis with appropriate TTL."""
+        try:
+            client = await cls._get_redis_client()
+            key = f"{cls._redis_prefix}{backend_token}"
+
+            # Store as JSON string
+            json_data = json.dumps(token_data)
+
+            # Set TTL based on backend token expiry
+            ttl_seconds = token_data.get("backend_exp", 0) - int(time.time())
+            if ttl_seconds > 0:
+                await client.setex(key, ttl_seconds, json_data)
+                logger.debug(f"Stored token data in Redis with TTL {ttl_seconds}s")
+                return True
+            else:
+                logger.warning("Token already expired, not storing in Redis")
+                return False
+
+        except Exception as e:
+            logger.error(f"Failed to store token data in Redis: {e}")
+            return False
+
+    @classmethod
+    async def _get_token_data(cls, backend_token: str) -> Optional[Dict[str, Any]]:
+        """Retrieve token data from Redis."""
+        try:
+            client = await cls._get_redis_client()
+            key = f"{cls._redis_prefix}{backend_token}"
+
+            json_data = await client.get(key)
+            if json_data:
+                token_data = json.loads(json_data)
+                logger.debug(
+                    f"Retrieved token data from Redis for token: {backend_token[:10]}..."
+                )
+                return token_data
+            else:
+                logger.debug(
+                    f"No token data found in Redis for token: {backend_token[:10]}..."
+                )
+                return None
+
+        except Exception as e:
+            logger.error(f"Failed to retrieve token data from Redis: {e}")
+            return None
+
+    @classmethod
+    async def _delete_token_data(cls, backend_token: str) -> bool:
+        """Delete token data from Redis."""
+        try:
+            client = await cls._get_redis_client()
+            key = f"{cls._redis_prefix}{backend_token}"
+
+            result = await client.delete(key)
+            if result:
+                logger.debug(
+                    f"Deleted token data from Redis for token: {backend_token[:10]}..."
+                )
+                return True
+            else:
+                logger.debug(
+                    f"No token data found to delete in Redis for token: {backend_token[:10]}..."
+                )
+                return False
+
+        except Exception as e:
+            logger.error(f"Failed to delete token data from Redis: {e}")
+            return False
 
     @staticmethod
     def _get_secret_and_alg() -> Tuple[str, str]:
@@ -42,26 +135,26 @@ class BackendTokenService:
         """Extract expiry timestamp from Supabase access token."""
         try:
             # JWT has 3 parts: header.payload.signature
-            parts = supabase_access_token.split('.')
+            parts = supabase_access_token.split(".")
             if len(parts) != 3:
                 return None
-            
+
             # Decode payload (add padding if needed)
             payload_b64 = parts[1]
             padding = 4 - len(payload_b64) % 4
             if padding != 4:
-                payload_b64 += '=' * padding
-                
+                payload_b64 += "=" * padding
+
             payload_bytes = base64.urlsafe_b64decode(payload_b64)
-            payload = json.loads(payload_bytes.decode('utf-8'))
-            
-            return payload.get('exp')
+            payload = json.loads(payload_bytes.decode("utf-8"))
+
+            return payload.get("exp")
         except Exception as e:
             logger.debug(f"Failed to extract Supabase token expiry: {e}")
             return None
 
     @classmethod
-    def issue_backend_token(
+    async def issue_backend_token(
         cls,
         user_id: str,
         email: str,
@@ -71,7 +164,7 @@ class BackendTokenService:
         coordinate_expiry: bool = True,
     ) -> str:
         """Create backend API token coordinated with Supabase token expiry.
-        
+
         Args:
             user_id: User ID
             email: User email
@@ -83,10 +176,10 @@ class BackendTokenService:
         settings = get_settings()
         secret, alg = cls._get_secret_and_alg()
         now = int(time.time())
-        
+
         # Extract Supabase token expiry for coordination
         supa_exp = cls._extract_supabase_expiry(supabase_access_token)
-        
+
         # Determine backend token expiry
         if ttl_seconds is not None:
             # Use explicit TTL if provided
@@ -106,7 +199,7 @@ class BackendTokenService:
         else:
             # Fall back to configured default
             backend_exp = now + (settings.jwt_expiration_hours * 3600)
-        
+
         payload = {
             "sub": user_id,
             "email": email,
@@ -117,7 +210,8 @@ class BackendTokenService:
         }
         backend_token = jwt.encode(payload, secret, algorithm=alg)
 
-        cls._token_store[backend_token] = {
+        # Store token mapping in Redis
+        token_data = {
             "user_id": user_id,
             "email": email,
             "supabase_access_token": supabase_access_token,
@@ -126,6 +220,12 @@ class BackendTokenService:
             "backend_exp": backend_exp,
             "issued_at": now,
         }
+
+        try:
+            await cls._store_token_data(backend_token, token_data)
+        except Exception as e:
+            logger.error(f"Failed to store token mapping in Redis: {e}")
+            # Continue with token issuance even if storage fails
 
         # Log token coordination details
         if supa_exp:
@@ -140,7 +240,7 @@ class BackendTokenService:
                 f"Issued backend token for user_id={user_id}: "
                 f"expires in {backend_exp - now}s (no Supabase expiry coordination)"
             )
-        
+
         return backend_token
 
     @classmethod
@@ -171,13 +271,10 @@ class BackendTokenService:
         Return a valid Supabase access token for the backend token.
         Refresh via Supabase refresh token if the access token is expired and a refresh exists.
         """
-        logger.info(f"Looking up backend token in store (total entries: {len(cls._token_store)})")
-        entry = cls._token_store.get(backend_token)
+        logger.info("Looking up backend token in Redis store")
+        entry = await cls._get_token_data(backend_token)
         if not entry:
-            logger.warning(f"Backend token not found in store. Available tokens: {len(cls._token_store)}")
-            # Debug: Show first few characters of available tokens
-            for i, stored_token in enumerate(list(cls._token_store.keys())[:3]):
-                logger.warning(f"Stored token {i+1}: {stored_token[:50]}...")
+            logger.warning(f"Backend token not found in Redis store")
             return None
 
         access = entry.get("supabase_access_token")
@@ -211,12 +308,22 @@ class BackendTokenService:
                 except Exception:
                     pass
 
-                entry["supabase_access_token"] = new_access
-                entry["supabase_refresh_token"] = new_refresh
-                entry["supabase_exp"] = new_exp
-                logger.info(
-                    "Refreshed Supabase access token via backend token exchange"
-                )
+                # Update token data in Redis
+                updated_entry = entry.copy()
+                updated_entry["supabase_access_token"] = new_access
+                updated_entry["supabase_refresh_token"] = new_refresh
+                updated_entry["supabase_exp"] = new_exp
+
+                try:
+                    await cls._store_token_data(backend_token, updated_entry)
+                    logger.info(
+                        "Refreshed Supabase access token via backend token exchange"
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"Failed to update token data in Redis after refresh: {e}"
+                    )
+
                 return new_access
 
         except Exception as e:
@@ -232,62 +339,60 @@ class BackendTokenService:
             exp = claims.get("exp")
             if not exp:
                 return False
-            
+
             now = int(time.time())
             time_to_expiry = exp - now
             threshold_seconds = threshold_minutes * 60
-            
+
             return time_to_expiry <= threshold_seconds
         except Exception:
             return False
 
     @classmethod
-    async def refresh_coordinated_tokens(
-        cls, backend_token: str
-    ) -> Optional[str]:
+    async def refresh_coordinated_tokens(cls, backend_token: str) -> Optional[str]:
         """Refresh both Supabase and backend tokens in coordination."""
-        entry = cls._token_store.get(backend_token)
+        entry = await cls._get_token_data(backend_token)
         if not entry:
             logger.warning("Backend token not found for coordinated refresh")
             return None
-        
+
         refresh_token = entry.get("supabase_refresh_token")
         if not refresh_token:
             logger.warning("No refresh token available for coordinated refresh")
             return None
-        
+
         try:
             # Refresh Supabase token first
             client = await get_service_supabase_client()
             result = client.auth.refresh_session(refresh_token)
-            
+
             if result.session and result.user:
                 # Issue new coordinated backend token
-                new_backend_token = cls.issue_backend_token(
+                new_backend_token = await cls.issue_backend_token(
                     user_id=result.user.id,
                     email=result.user.email,
                     supabase_access_token=result.session.access_token,
                     supabase_refresh_token=result.session.refresh_token,
                     coordinate_expiry=True,
                 )
-                
-                # Clean up old token from store
-                del cls._token_store[backend_token]
-                
+
+                # Clean up old token from Redis
+                await cls._delete_token_data(backend_token)
+
                 logger.info("Successfully refreshed coordinated tokens")
                 return new_backend_token
-                
+
         except Exception as e:
             logger.error(f"Failed to refresh coordinated tokens: {e}")
-        
+
         return None
 
     @classmethod
-    def reissue_backend_token(
+    async def reissue_backend_token(
         cls, backend_token: str, ttl_seconds: Optional[int] = None
     ) -> Optional[str]:
         """Reissue a fresh backend token using the stored mapping for the given backend token."""
-        entry = cls._token_store.get(backend_token)
+        entry = await cls._get_token_data(backend_token)
         if not entry:
             return None
         user_id = entry.get("user_id")
@@ -296,7 +401,7 @@ class BackendTokenService:
         refresh = entry.get("supabase_refresh_token")
         if not user_id or not email or not access:
             return None
-        return cls.issue_backend_token(
+        return await cls.issue_backend_token(
             user_id=user_id,
             email=email,
             supabase_access_token=access,
@@ -306,6 +411,71 @@ class BackendTokenService:
         )
 
     @classmethod
-    def get_mapping(cls, backend_token: str) -> Optional[Dict[str, Any]]:
+    async def get_mapping(cls, backend_token: str) -> Optional[Dict[str, Any]]:
         """Return stored mapping for diagnostics or downstream use."""
-        return cls._token_store.get(backend_token)
+        return await cls._get_token_data(backend_token)
+
+    @classmethod
+    async def get_store_stats(cls) -> dict:
+        """Get statistics about the token store."""
+        try:
+            client = await cls._get_redis_client()
+
+            # Get all keys with our prefix
+            pattern = f"{cls._redis_prefix}*"
+            keys = await client.keys(pattern)
+
+            total_count = len(keys)
+
+            # Count expired tokens (those with TTL <= 0)
+            expired_count = 0
+            for key in keys:
+                ttl = await client.ttl(key)
+                if ttl <= 0:
+                    expired_count += 1
+
+            stats = {
+                "total_tokens": total_count,
+                "expired_tokens": expired_count,
+                "active_tokens": total_count - expired_count,
+                "storage_type": "redis",
+            }
+
+            logger.debug(f"Token store stats: {stats}")
+            return stats
+
+        except Exception as e:
+            logger.error(f"Error getting store stats: {e}")
+            return {
+                "total_tokens": 0,
+                "expired_tokens": 0,
+                "active_tokens": 0,
+                "storage_type": "redis",
+                "error": str(e),
+            }
+
+    @classmethod
+    async def cleanup_expired_tokens(cls) -> int:
+        """Clean up expired tokens from the store."""
+        try:
+            client = await cls._get_redis_client()
+
+            # Get all keys with our prefix
+            pattern = f"{cls._redis_prefix}*"
+            keys = await client.keys(pattern)
+
+            deleted_count = 0
+            for key in keys:
+                ttl = await client.ttl(key)
+                if ttl <= 0:
+                    await client.delete(key)
+                    deleted_count += 1
+
+            if deleted_count > 0:
+                logger.info(f"Cleaned up {deleted_count} expired tokens from Redis")
+
+            return deleted_count
+
+        except Exception as e:
+            logger.error(f"Error cleaning up expired tokens: {e}")
+            return 0

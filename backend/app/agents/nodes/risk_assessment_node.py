@@ -194,10 +194,8 @@ class RiskAssessmentNode(BaseNode):
                 },
             )
 
-            # Get state-aware parser for risk analysis
-            state_aware_parser = self.get_state_aware_parser(
-                "risk_analysis", australian_state_value
-            )
+            # Get configured structured parser for risk analysis
+            state_aware_parser = self.get_parser("risk_analysis")
 
             # Use composition for risk assessment
             composition_result = await self.prompt_manager.render_composed(
@@ -214,14 +212,10 @@ class RiskAssessmentNode(BaseNode):
 
             # Parse structured response if we got one
             if response:
-                # Use state-aware parser for structured parsing
-                state_aware_parser = self.get_state_aware_parser(
-                    "risk_analysis", australian_state_value
-                )
+                # Use parser for structured parsing
+                state_aware_parser = self.get_parser("risk_analysis")
                 if state_aware_parser:
-                    parsing_result = state_aware_parser.parse_with_retry(
-                        response, australian_state_value
-                    )
+                    parsing_result = state_aware_parser.parse_with_retry(response)
                     if parsing_result.success and parsing_result.parsed_data:
                         # Convert Pydantic model to dict if needed
                         if hasattr(parsing_result.parsed_data, "dict"):

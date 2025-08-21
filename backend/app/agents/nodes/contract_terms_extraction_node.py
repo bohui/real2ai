@@ -355,10 +355,8 @@ class ContractTermsExtractionNode(BaseNode):
                 },
             )
 
-            # Get state-aware parser for the specific Australian state
-            state_aware_parser = self.get_state_aware_parser(
-                "contract_terms", australian_state_value
-            )
+            # Get configured structured parser
+            state_aware_parser = self.get_parser("contract_terms")
 
             # Use composition for structure analysis
             composition_result = await self.prompt_manager.render_composed(
@@ -382,13 +380,11 @@ class ContractTermsExtractionNode(BaseNode):
 
                     # Parse structured response if we got one
                     if response:
-                        # Use state-aware parser for structured parsing
-                        state_aware_parser = self.get_state_aware_parser(
-                            "contract_terms", australian_state_value
-                        )
+                        # Use parser for structured parsing
+                        state_aware_parser = self.get_parser("contract_terms")
                         if state_aware_parser:
                             parsing_result = state_aware_parser.parse_with_retry(
-                                response, australian_state_value
+                                response
                             )
                             if parsing_result.success and parsing_result.parsed_data:
                                 # Convert Pydantic model to dict if needed
