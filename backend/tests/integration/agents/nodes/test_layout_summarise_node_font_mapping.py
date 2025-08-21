@@ -9,7 +9,7 @@ import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
 from datetime import datetime, timezone
 
-from app.agents.nodes.document_processing_subflow.layout_summarise_node import (
+from backend.app.agents.nodes.document_processing_subflow.layout_summarise_node_too_slow import (
     LayoutSummariseNode,
 )
 from app.agents.subflows.document_processing_workflow import DocumentProcessingState
@@ -128,8 +128,8 @@ Additional terms and conditions...[[[12.0]]]""",
         result_state = await node.execute(sample_state)
 
         # Verify font mapping was generated
-        assert result_state.get("layout_summarisation_result") is not None
-        summary = result_state.get("layout_summarisation_result")
+        assert result_state.get("layout_format_result") is not None
+        summary = result_state.get("layout_format_result")
 
         # Mapping is not part of the summary anymore
         assert not hasattr(summary, "font_to_layout_mapping")
@@ -236,8 +236,8 @@ The property address is..."""
         result_state = await node.execute(sample_state)
 
         # Verify the node handles the case gracefully
-        assert result_state.get("layout_summarisation_result") is not None
-        summary = result_state.get("layout_summarisation_result")
+        assert result_state.get("layout_format_result") is not None
+        summary = result_state.get("layout_format_result")
 
         # Summary no longer contains mapping
         assert not hasattr(summary, "font_to_layout_mapping")
@@ -324,7 +324,7 @@ The property address is..."""
         result_state = await node.execute(sample_state)
 
         # Verify the final summary does not include font mapping
-        summary = result_state.get("layout_summarisation_result")
+        summary = result_state.get("layout_format_result")
         assert summary is not None
         assert not hasattr(summary, "font_to_layout_mapping")
 
@@ -370,8 +370,8 @@ The property address is..."""
             result_state = await node.execute(sample_state)
 
             # Verify the node continues processing
-            assert result_state.get("layout_summarisation_result") is not None
-            summary = result_state.get("layout_summarisation_result")
+            assert result_state.get("layout_format_result") is not None
+            summary = result_state.get("layout_format_result")
 
             # Summary no longer contains mapping even on failure
             assert not hasattr(summary, "font_to_layout_mapping")
@@ -421,8 +421,8 @@ The property address is...[[[12.5]]]"""
         result_state = await node.execute(sample_state)
 
         # Verify the node handles floating point font sizes
-        assert result_state.get("layout_summarisation_result") is not None
-        summary = result_state.get("layout_summarisation_result")
+        assert result_state.get("layout_format_result") is not None
+        summary = result_state.get("layout_format_result")
 
         # Mapping not present in summary; ensure processing completed
         assert not hasattr(summary, "font_to_layout_mapping")

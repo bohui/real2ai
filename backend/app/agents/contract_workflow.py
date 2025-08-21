@@ -1091,7 +1091,9 @@ class ProgressTrackingWorkflow(ContractAnalysisWorkflow):
         "document_uploaded",  # 5% (emitted by service before workflow starts)
         "validate_input",  # 7%
         "process_document",  # 7-30%
-        "layout_summarise",  # 30-50%
+        "save_pages",  # 30-40%
+        "save_diagrams",  # 40-43%
+        "layout_format_cleanup",  # 43-48%
         "validate_document_quality",  # 52%
         "extract_terms",  # 59%
         "validate_terms_completeness",  # 60%
@@ -1132,7 +1134,7 @@ class ProgressTrackingWorkflow(ContractAnalysisWorkflow):
             return False
         return step_idx < self._get_resume_index(state)
 
-    async def _persist_progress(
+    async def _notify_status(
         self, state: Dict[str, Any], step: str, percent: int, desc: str
     ) -> None:
         # Best-effort async persistence callback from state
@@ -1166,7 +1168,7 @@ class ProgressTrackingWorkflow(ContractAnalysisWorkflow):
             pass
         result = super().validate_input(state)
         self._ws_progress(state, "validate_input", 7, "Initialize analysis")
-        await self._persist_progress(state, "validate_input", 7, "Initialize analysis")
+        await self._notify_status(state, "validate_input", 7, "Initialize analysis")
         return result
 
     async def process_document(self, state):
@@ -1174,7 +1176,7 @@ class ProgressTrackingWorkflow(ContractAnalysisWorkflow):
             return state
         self._ws_progress(state, "document_processing", 7, "Extract text & diagrams")
         result = super().process_document(state)
-        await self._persist_progress(
+        await self._notify_status(
             state, "document_processing", 30, "Extract text & diagrams"
         )
         return result
@@ -1188,7 +1190,7 @@ class ProgressTrackingWorkflow(ContractAnalysisWorkflow):
             52,
             "Validating document quality and readability",
         )
-        await self._persist_progress(
+        await self._notify_status(
             state,
             "validate_document_quality",
             52,
@@ -1205,7 +1207,7 @@ class ProgressTrackingWorkflow(ContractAnalysisWorkflow):
             59,
             "Extracting key contract terms using Australian tools",
         )
-        await self._persist_progress(
+        await self._notify_status(
             state,
             "extract_terms",
             59,
@@ -1222,7 +1224,7 @@ class ProgressTrackingWorkflow(ContractAnalysisWorkflow):
             68,
             "Analyzing compliance with Australian property laws",
         )
-        await self._persist_progress(
+        await self._notify_status(
             state,
             "analyze_compliance",
             68,
@@ -1236,7 +1238,7 @@ class ProgressTrackingWorkflow(ContractAnalysisWorkflow):
         self._ws_progress(
             state, "assess_risks", 75, "Assessing contract risks and potential issues"
         )
-        await self._persist_progress(
+        await self._notify_status(
             state, "assess_risks", 75, "Assessing contract risks and potential issues"
         )
         return super().assess_contract_risks(state)
@@ -1250,7 +1252,7 @@ class ProgressTrackingWorkflow(ContractAnalysisWorkflow):
             85,
             "Generating actionable recommendations",
         )
-        await self._persist_progress(
+        await self._notify_status(
             state,
             "generate_recommendations",
             85,
@@ -1269,7 +1271,7 @@ class ProgressTrackingWorkflow(ContractAnalysisWorkflow):
                 65,
                 "Analyzing contract diagrams and visual elements",
             )
-            await self._persist_progress(
+            await self._notify_status(
                 state,
                 "analyze_contract_diagrams",
                 65,
@@ -1288,7 +1290,7 @@ class ProgressTrackingWorkflow(ContractAnalysisWorkflow):
                 95,
                 "Performing final validation of analysis results",
             )
-            await self._persist_progress(
+            await self._notify_status(
                 state,
                 "validate_final_output",
                 95,

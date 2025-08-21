@@ -30,12 +30,13 @@ class SavePagesNode(DocumentProcessingNodeBase):
     - No state changes (database operation only)
     """
 
-    def __init__(self):
+    def __init__(self, progress_range: tuple[int, int] = (28, 36)):
         super().__init__("save_pages")
         self.user_docs_repo = None
         self.artifacts_repo = None
         # Use artifacts bucket for storing page artifacts
         self.storage_service = ArtifactStorageService(bucket_name="artifacts")
+        self.progress_range = progress_range
 
     async def initialize(self, user_id):
         """Initialize repositories with user context"""
@@ -161,8 +162,16 @@ class SavePagesNode(DocumentProcessingNodeBase):
             # Upsert document pages with artifact references
             pages_saved = 0
             document_uuid = uuid.UUID(document_id)
+            total_pages = len(pages)
 
-            for page in pages:
+            for idx, page in enumerate(pages):
+                # Emit incremental progress for each page
+                await self.emit_page_progress(
+                    current_page=idx + 1,
+                    total_pages=total_pages,
+                    description="Saving page",
+                    progress_range=self.progress_range,
+                )
                 artifact_page_id = artifact_map.get(page.page_number)
                 if not artifact_page_id:
                     # Fallback: create and store page artifact on-the-fly so it is still saved under documents prefix

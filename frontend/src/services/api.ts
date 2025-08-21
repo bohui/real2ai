@@ -159,6 +159,16 @@ class ApiService {
             message: (error.response?.data as any)?.detail || error.message,
           });
           this.handleUnauthorized();
+        } else if (error.response?.status === 403) {
+          // Handle 403 responses - often indicate expired/invalid tokens
+          console.log("🚨 403 response detected in interceptor:", {
+            url: error.config?.url,
+            method: error.config?.method,
+            status: error.response?.status,
+            message: (error.response?.data as any)?.detail || error.message,
+          });
+          // Treat 403 as auth issue and redirect to login
+          this.handleUnauthorized();
         } else if (
           error.code === "ERR_NETWORK" || error.message === "Network Error"
         ) {

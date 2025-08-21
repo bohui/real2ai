@@ -25,7 +25,7 @@ if [[ -x "$SCRIPT_DIR/venv/bin/python" ]]; then
     PYTHON_BIN="$SCRIPT_DIR/venv/bin/python"
 fi
 
-# Load environment variables from .env.local if it exists
+    # Load environment variables from .env.local if it exists
 load_environment() {
     local env_file="$SCRIPT_DIR/.env.local"
     if [[ -f "$env_file" ]]; then
@@ -53,10 +53,18 @@ load_environment() {
             echo -e "${YELLOW}⚠  Supabase URL not found${NC}"
         fi
         
+        # Check LangSmith configuration
+        if [[ -n "$LANGSMITH_API_KEY" ]]; then
+            echo "  LangSmith API Key: ${LANGSMITH_API_KEY:0:10}..."
+        else
+            echo -e "${YELLOW}⚠  LangSmith API Key not found - tracing will be disabled${NC}"
+        fi
+        
         echo ""
     else
         echo -e "${YELLOW}⚠  .env.local file not found at $env_file${NC}"
-        echo -e "${YELLOW}  Make sure to set required environment variables manually${NC}"
+        echo -e "${YELLOW}  Copy env.local.example to .env.local and fill in your values${NC}"
+        echo -e "${YELLOW}  Or set required environment variables manually${NC}"
         echo ""
     fi
 
@@ -344,9 +352,10 @@ async def test_prompt():
             selected_model = "$model_name"
             output_path = ''
             # Disable tracing/instrumentation to avoid hanging if not configured
-            os.environ.setdefault("LANGSMITH_TRACING", "0")
-            os.environ.setdefault("LANGSMITH_API_KEY", "")
-            os.environ.setdefault("OPENAI_INIT_CONNECTION_TEST", "false")
+            os.environ["LANGSMITH_TRACING"] = "0"
+            os.environ["LANGSMITH_API_KEY"] = ""
+            os.environ["LANGSMITH_ENDPOINT"] = ""
+            os.environ["OPENAI_INIT_CONNECTION_TEST"] = "false"
 
             # Credential preflight
             def missing(env):

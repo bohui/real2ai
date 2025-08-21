@@ -11,7 +11,7 @@ from uuid import UUID
 from typing import Optional
 import jwt
 from pydantic import BaseModel
-from fastapi import HTTPException, status, Depends
+from fastapi import HTTPException, status, Depends, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from app.clients.factory import get_supabase_client
@@ -58,7 +58,25 @@ def is_jwt_expired_error(error: Exception) -> bool:
 
 
 # Security scheme for JWT tokens
-security = HTTPBearer()
+class CustomHTTPBearer(HTTPBearer):
+    """Custom HTTPBearer that returns 401 instead of 403 for authentication issues."""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    async def __call__(self, request: Request) -> HTTPAuthorizationCredentials:
+        try:
+            return await super().__call__(request)
+        except HTTPException as e:
+            # Convert 403 to 401 for authentication issues
+            if e.status_code == 403:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated"
+                )
+            raise
+
+
+security = CustomHTTPBearer()
 
 
 class User(BaseModel):
@@ -313,28 +331,28 @@ async def get_admin_user(
         "bohuihan@real2ai.com",
         # Add more admin emails as needed
     ]
-    
+
     # Option 2: Check user_type (if you want to add admin as a user_type)
     # if current_user.user_type != "admin":
     #     raise HTTPException(
     #         status_code=status.HTTP_403_FORBIDDEN,
     #         detail="Admin access required"
     #     )
-    
+
     # Option 3: Check if user has admin organization
     # if current_user.organization != "real2ai_admin":
     #     raise HTTPException(
     #         status_code=status.HTTP_403_FORBIDDEN,
     #         detail="Admin access required"
     #     )
-    
+
     # For now, using Option 1: email-based admin check
     if current_user.email not in admin_emails:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin access required. Please contact support if you need access."
+            detail="Admin access required. Please contact support if you need access.",
         )
-    
+
     return current_user
 
 
@@ -347,7 +365,7 @@ async def get_current_user_token(
 
 async def get_optional_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(
-        HTTPBearer(auto_error=False)
+        CustomHTTPBearer(auto_error=False)
     ),
 ) -> Optional[User]:
     """Get current user if authenticated, otherwise None"""

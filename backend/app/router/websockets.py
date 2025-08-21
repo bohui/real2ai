@@ -1374,7 +1374,7 @@ async def replay_last_progress_on_reconnect(
             user_id,
             columns=(
                 "current_step, progress_percent, step_description, status, "
-                "estimated_completion_minutes, updated_at, session_id"
+                "estimated_completion_minutes, updated_at"
             ),
         )
 

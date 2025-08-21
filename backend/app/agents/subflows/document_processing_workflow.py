@@ -27,9 +27,8 @@ from app.schema.document import (
     DiagramProcessingResult,
 )
 from app.core.langsmith_config import langsmith_trace
-from app.prompts.schema.contract_layout_summary_schema import (
-    ContractLayoutSummary,
-)
+
+# ContractLayoutSummary no longer needed - using LayoutFormatCleanupNode instead
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +98,9 @@ class DocumentProcessingState(TypedDict):
     local_tmp_path: Optional[str]
     text_extraction_result: Optional[TextExtractionResult]
     diagram_processing_result: Optional[DiagramProcessingResult]
-    layout_summarisation_result: Optional[ContractLayoutSummary]
+    layout_format_result: Optional[
+        Any
+    ]  # LayoutFormatResult from LayoutFormatCleanupNode
 
     # Output
     processed_summary: Optional[ProcessedDocumentSummary]
@@ -132,6 +133,20 @@ class DocumentProcessingWorkflow:
     The workflow is user-aware and maintains authentication context throughout.
     All database operations respect Row Level Security (RLS) policies.
     """
+
+    # Progress ranges for each step (defined centrally to avoid magic numbers)
+    PROGRESS_RANGES = {
+        "fetch_document_record": (0, 5),
+        "already_processed_check": (5, 7),
+        "mark_processing_started": (7, 8),
+        "extract_text": (7, 34),
+        # "save_pages": (28, 36),
+        "save_diagrams": (34, 40),
+        "update_metrics": (40, 41),
+        "layout_format_cleanup": (41, 48),
+        "mark_basic_complete": (48, 49),
+        "build_summary": (49, 50),
+    }
 
     def __init__(
         self,
@@ -168,7 +183,7 @@ class DocumentProcessingWorkflow:
             AlreadyProcessedCheckNode,
             MarkProcessingStartedNode,
             ExtractTextNode,
-            LayoutSummariseNode,
+            LayoutFormatCleanupNode,
             SavePagesNode,
             SaveDiagramsNode,
             UpdateMetricsNode,
@@ -182,11 +197,18 @@ class DocumentProcessingWorkflow:
         self.already_processed_check_node = AlreadyProcessedCheckNode()
         self.mark_processing_started_node = MarkProcessingStartedNode()
         self.extract_text_node = ExtractTextNode(
-            use_llm=self.use_llm_document_processing
+            use_llm=self.use_llm_document_processing,
+            progress_range=self.PROGRESS_RANGES["extract_text"],
         )
-        self.layout_summarise_node = LayoutSummariseNode()
-        self.save_pages_node = SavePagesNode()
-        self.save_diagrams_node = SaveDiagramsNode()
+        self.layout_format_cleanup_node = LayoutFormatCleanupNode(
+            progress_range=self.PROGRESS_RANGES["layout_format_cleanup"]
+        )
+        # self.save_pages_node = SavePagesNode(
+        #     progress_range=self.PROGRESS_RANGES["save_pages"]
+        # )
+        self.save_diagrams_node = SaveDiagramsNode(
+            progress_range=self.PROGRESS_RANGES["save_diagrams"]
+        )
         self.update_metrics_node = UpdateMetricsNode()
         self.mark_basic_complete_node = MarkBasicCompleteNode()
         self.build_summary_node = BuildSummaryNode()
@@ -198,8 +220,8 @@ class DocumentProcessingWorkflow:
             "already_processed_check": self.already_processed_check_node,
             "mark_processing_started": self.mark_processing_started_node,
             "extract_text": self.extract_text_node,
-            "layout_summarise": self.layout_summarise_node,
-            "save_pages": self.save_pages_node,
+            "layout_format_cleanup": self.layout_format_cleanup_node,
+            # "save_pages": self.save_pages_node,
             "save_diagrams": self.save_diagrams_node,
             "update_metrics": self.update_metrics_node,
             "mark_basic_complete": self.mark_basic_complete_node,
@@ -212,8 +234,8 @@ class DocumentProcessingWorkflow:
         workflow.add_node("already_processed_check", self.already_processed_check)
         workflow.add_node("mark_processing_started", self.mark_processing_started)
         workflow.add_node("extract_text", self.extract_text)
-        workflow.add_node("layout_summarise", self.layout_summarise)
-        workflow.add_node("save_pages", self.save_pages)
+        workflow.add_node("layout_format_cleanup", self.layout_format_cleanup)
+        # workflow.add_node("save_pages", self.save_pages)
         workflow.add_node("save_diagrams", self.save_diagrams)
         workflow.add_node("update_metrics", self.update_metrics)
         workflow.add_node("mark_basic_complete", self.mark_basic_complete)
@@ -244,15 +266,15 @@ class DocumentProcessingWorkflow:
         workflow.add_conditional_edges(
             "extract_text",
             self.check_extraction_success,
-            {"success": "save_pages", "error": "error_handling"},
+            {"success": "save_diagrams", "error": "error_handling"},
         )
 
         # Success pipeline
-        workflow.add_edge("save_pages", "save_diagrams")
+        # workflow.add_edge("save_pages", "save_diagrams")
         workflow.add_edge("save_diagrams", "update_metrics")
-        # Run layout summarisation before marking basic complete
-        workflow.add_edge("update_metrics", "layout_summarise")
-        workflow.add_edge("layout_summarise", "mark_basic_complete")
+        # Run layout format cleanup before marking basic complete
+        workflow.add_edge("update_metrics", "layout_format_cleanup")
+        workflow.add_edge("layout_format_cleanup", "mark_basic_complete")
         workflow.add_edge("mark_basic_complete", "build_summary")
 
         # Terminal edges
@@ -261,27 +283,62 @@ class DocumentProcessingWorkflow:
 
         return workflow.compile()
 
+    async def _notify_status(self, state, step: str, percent: int, desc: str) -> None:
+        """Notify progress status - similar to contract workflow pattern."""
+        # Best-effort async persistence callback from state
+        notify = (state or {}).get("notify_progress")
+        if notify:
+            try:
+                await notify(step, percent, desc)
+            except Exception as persist_error:
+                logger.debug(
+                    f"[ProgressTracking] Persist callback failed: {persist_error}"
+                )
+
     # Node execution methods
     @langsmith_trace(name="fetch_document_record", run_type="tool")
     async def fetch_document_record(
         self, state: DocumentProcessingState
     ) -> DocumentProcessingState:
         """Fetch document metadata from database."""
-        return await self.fetch_document_node.execute(state)
+        result = await self.fetch_document_node.execute(state)
+        # Notify progress completion for non-incremental step
+        await self._notify_status(
+            state,
+            "fetch_document_record",
+            self.PROGRESS_RANGES["fetch_document_record"][1],
+            "Document record fetched",
+        )
+        return result
 
     @langsmith_trace(name="already_processed_check", run_type="tool")
     async def already_processed_check(
         self, state: DocumentProcessingState
     ) -> DocumentProcessingState:
         """Check if document is already processed."""
-        return await self.already_processed_check_node.execute(state)
+        result = await self.already_processed_check_node.execute(state)
+        # Notify progress completion for non-incremental step
+        await self._notify_status(
+            state,
+            "already_processed_check",
+            self.PROGRESS_RANGES["already_processed_check"][1],
+            "Already processed check complete",
+        )
+        return result
 
     @langsmith_trace(name="mark_processing_started", run_type="tool")
     async def mark_processing_started(
         self, state: DocumentProcessingState
     ) -> DocumentProcessingState:
         """Mark processing as started in database."""
-        return await self.mark_processing_started_node.execute(state)
+        result = await self.mark_processing_started_node.execute(state)
+        await self._notify_status(
+            state,
+            "mark_processing_started",
+            self.PROGRESS_RANGES["mark_processing_started"][1],
+            "Processing started",
+        )
+        return result
 
     async def extract_text(
         self, state: DocumentProcessingState
@@ -289,19 +346,19 @@ class DocumentProcessingWorkflow:
         """Extract text from document using appropriate method."""
         return await self.extract_text_node.execute(state)
 
-    # @langsmith_trace(name="layout_summarise", run_type="chain")
-    async def layout_summarise(
+    # @langsmith_trace(name="layout_format_cleanup", run_type="tool")
+    async def layout_format_cleanup(
         self, state: DocumentProcessingState
     ) -> DocumentProcessingState:
-        """Clean text and extract contract basics, upsert taxonomy to DB."""
-        return await self.layout_summarise_node.execute(state)
+        """Clean and format text layout without LLM processing."""
+        return await self.layout_format_cleanup_node.execute(state)
 
     # @langsmith_trace(name="save_pages", run_type="tool")
-    async def save_pages(
-        self, state: DocumentProcessingState
-    ) -> DocumentProcessingState:
-        """Save page-level analysis results to database."""
-        return await self.save_pages_node.execute(state)
+    # async def save_pages(
+    #     self, state: DocumentProcessingState
+    # ) -> DocumentProcessingState:
+    #     """Save page-level analysis results to database."""
+    #     return await self.save_pages_node.execute(state)
 
     # @langsmith_trace(name="save_diagrams", run_type="tool")
     async def save_diagrams(
@@ -315,21 +372,44 @@ class DocumentProcessingWorkflow:
         self, state: DocumentProcessingState
     ) -> DocumentProcessingState:
         """Update document with aggregated metrics."""
-        return await self.update_metrics_node.execute(state)
+        result = await self.update_metrics_node.execute(state)
+        await self._notify_status(
+            state,
+            "update_metrics",
+            self.PROGRESS_RANGES["update_metrics"][1],
+            "Metrics update complete",
+        )
+        return result
 
     # @langsmith_trace(name="mark_basic_complete", run_type="tool")
     async def mark_basic_complete(
         self, state: DocumentProcessingState
     ) -> DocumentProcessingState:
         """Mark document processing as complete."""
-        return await self.mark_basic_complete_node.execute(state)
+        result = await self.mark_basic_complete_node.execute(state)
+        # Notify progress completion for non-incremental step
+        await self._notify_status(
+            state,
+            "mark_basic_complete",
+            self.PROGRESS_RANGES["mark_basic_complete"][1],
+            "Basic processing complete",
+        )
+        return result
 
     # @langsmith_trace(name="build_summary", run_type="chain")
     async def build_summary(
         self, state: DocumentProcessingState
     ) -> DocumentProcessingState:
         """Build final processing summary result."""
-        return await self.build_summary_node.execute(state)
+        result = await self.build_summary_node.execute(state)
+        # Notify progress completion for non-incremental step
+        await self._notify_status(
+            state,
+            "build_summary",
+            self.PROGRESS_RANGES["build_summary"][1],
+            "Summary build complete",
+        )
+        return result
 
     # @langsmith_trace(name="error_handling", run_type="tool")
     async def error_handling(
@@ -412,7 +492,7 @@ class DocumentProcessingWorkflow:
                 file_type=None,
                 text_extraction_result=None,
                 diagram_processing_result=None,
-                layout_summarisation_result=None,
+                layout_format_result=None,
                 processed_summary=None,
                 error=None,
                 error_details=None,
@@ -421,6 +501,8 @@ class DocumentProcessingWorkflow:
             # Wire progress callback to extract_text_node if provided
             if notify_progress:
                 self.extract_text_node.set_progress_callback(notify_progress)
+                # self.save_pages_node.set_progress_callback(notify_progress)
+                self.save_diagrams_node.set_progress_callback(notify_progress)
 
             # Execute workflow
             result_state = await self.workflow.ainvoke(initial_state)

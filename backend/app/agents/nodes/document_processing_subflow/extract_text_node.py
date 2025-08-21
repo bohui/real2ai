@@ -42,9 +42,10 @@ class ExtractTextNode(DocumentProcessingNodeBase):
     - text_extraction_result: Complete TextExtractionResult with pages and analysis
     """
 
-    def __init__(self, use_llm: bool = True):
+    def __init__(self, use_llm: bool = True, progress_range: tuple[int, int] = (7, 30)):
         super().__init__("extract_text")
         self.use_llm = use_llm
+        self.progress_range = progress_range
         self.storage_bucket = "documents"
         self.artifacts_repo = None
         self.storage_service = None
@@ -99,17 +100,6 @@ class ExtractTextNode(DocumentProcessingNodeBase):
         if self.artifacts_repo:
             self.artifacts_repo = None
         # Storage service doesn't need cleanup
-
-    def set_progress_callback(
-        self, callback: Optional[Callable[[str, int, str], Awaitable[None]]]
-    ) -> None:
-        """
-        Set explicit progress callback to avoid it being dropped by state reducers.
-
-        Args:
-            callback: Progress callback function that takes (step, percent, description)
-        """
-        self._progress_callback = callback
 
     async def execute(self, state: DocumentProcessingState) -> DocumentProcessingState:
         """
@@ -1359,21 +1349,13 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                 if method not in extraction_methods:
                     extraction_methods.append(method)
 
-                # Emit incremental page progress mapped to 7-30%
-                if notify_cb:
-                    try:
-                        mapped = 7 + int(((idx + 1) / max(1, total_pages)) * 23)
-                        mapped = max(8, min(30, mapped))
-                        # Always notify; monotonic guard is enforced centrally in persist_progress
-                        await notify_cb(
-                            "document_processing",
-                            mapped,
-                            f"Extract text & diagrams (page {idx + 1}/{total_pages})",
-                        )
-                        last_sent_percent = max(last_sent_percent, mapped)
-                    except Exception:
-                        # Best-effort; do not break processing
-                        pass
+                # Emit incremental page progress using base node method
+                await self.emit_page_progress(
+                    current_page=idx + 1,
+                    total_pages=total_pages,
+                    description="Extract text & diagrams",
+                    progress_range=self.progress_range,
+                )
 
             doc.close()
 

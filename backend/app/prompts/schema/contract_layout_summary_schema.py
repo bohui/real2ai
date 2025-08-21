@@ -58,3 +58,20 @@ class ContractLayoutSummary(BaseModel):
         default_factory=dict,
         description="Confidence scores per extracted field (e.g., contract_type, purchase_method)",
     )
+
+
+class LayoutFormatResult(BaseModel):
+    success: bool = True
+    error: Optional[str] = None
+    raw_text: str = Field(
+        ...,
+        description="Cleaned full text with headers/footers removed and normalised formatting",
+    )
+    formatted_text: str = Field(
+        ...,
+        description="Formatted text with layout elements mapped to original text",
+    )
+    font_to_layout_mapping: Dict[str, str] = Field(
+        default_factory=dict,
+        description="Mapping from font sizes (as strings) to layout element types (e.g., '10.0' -> 'body_text', '12.0' -> 'section_heading')",
+    )

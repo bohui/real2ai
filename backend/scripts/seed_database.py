@@ -4,6 +4,13 @@ Database Seeding Script for Real2.AI
 Populates the database with sample data for development and testing
 """
 
+# Load environment variables FIRST, before any other imports
+from pathlib import Path
+from dotenv import load_dotenv
+
+root_dir = Path(__file__).parent.parent.parent
+load_dotenv(root_dir / ".env.local")
+
 import os
 import sys
 import json
@@ -13,24 +20,16 @@ import argparse
 import hashlib
 from datetime import datetime, timedelta
 from typing import List, Dict, Any
-from pathlib import Path
 
 import asyncpg
 from supabase import create_client, Client
-from dotenv import load_dotenv
 import uuid
 
 # Add the app directory to the path so we can import from it
-import sys
-import os
-
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 from app.clients.factory import get_supabase_client
 from app.schema.enums.property import ContractType
-
-# Load environment variables
-load_dotenv(".env.local")
 
 # Configure logging
 logging.basicConfig(

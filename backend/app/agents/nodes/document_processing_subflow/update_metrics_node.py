@@ -169,7 +169,7 @@ class UpdateMetricsNode(DocumentProcessingNodeBase):
 
             # Get artifact_text_id from state if available
             artifact_text_id = state.get("artifact_text_id")
-            
+
             update_data = {
                 # full_text is NOT saved here - it's stored in artifacts_full_text via ExtractTextNode
                 "total_pages": total_pages,
@@ -186,13 +186,16 @@ class UpdateMetricsNode(DocumentProcessingNodeBase):
                     "diagram_processing": diagram_processing_serializable,
                 },
             }
-            
+
             # Add artifact_text_id if available to link document to its text artifact
             if artifact_text_id:
                 update_data["artifact_text_id"] = artifact_text_id
                 self._log_info(
                     f"Linking document {document_id} to text artifact {artifact_text_id}",
-                    extra={"document_id": document_id, "artifact_text_id": str(artifact_text_id)}
+                    extra={
+                        "document_id": document_id,
+                        "artifact_text_id": str(artifact_text_id),
+                    },
                 )
 
             # Update document record using repository
@@ -226,6 +229,8 @@ class UpdateMetricsNode(DocumentProcessingNodeBase):
 
             duration = (datetime.now(timezone.utc) - start_time).total_seconds()
             self._record_success(duration)
+
+            # Progress is handled by workflow level
 
             self._log_info(
                 f"Successfully updated metrics for document {document_id}",

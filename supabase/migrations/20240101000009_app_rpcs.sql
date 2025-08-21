@@ -300,40 +300,41 @@ GRANT EXECUTE ON FUNCTION public.generate_contract_performance_report() TO servi
 -- Evaluation analytics (placeholders)
 CREATE OR REPLACE FUNCTION public.get_model_comparison_for_user(
   user_id UUID,
-  dataset_filter TEXT DEFAULT NULL,
-  date_from_filter TEXT DEFAULT NULL,
-  date_to_filter TEXT DEFAULT NULL
+  dataset_filter UUID DEFAULT NULL,
+  date_from_filter TIMESTAMPTZ DEFAULT NULL,
+  date_to_filter TIMESTAMPTZ DEFAULT NULL
 )
 RETURNS TABLE(
-  model_name TEXT,
-  total_evaluations INTEGER,
-  avg_overall_score FLOAT,
-  avg_response_time FLOAT,
-  total_tokens INTEGER,
+  model_name VARCHAR(255),
+  total_evaluations BIGINT,
+  avg_overall_score DECIMAL(5,4),
+  avg_response_time_ms DECIMAL(10,2),
+  avg_token_usage DECIMAL(10,2),
+  last_evaluation TIMESTAMPTZ
+)
+LANGUAGE sql
+STABLE
+AS $$
+  SELECT NULL::varchar, 0::bigint, 0.0::decimal, 0.0::decimal, 0.0::decimal, NULL::timestamptz
+  WHERE FALSE;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.get_model_comparison_for_user(UUID, UUID, TIMESTAMPTZ, TIMESTAMPTZ) TO authenticated;
+
+CREATE OR REPLACE FUNCTION public.get_user_evaluation_stats(user_id UUID)
+RETURNS TABLE(
+  total_prompts BIGINT,
+  total_datasets BIGINT,
+  total_jobs BIGINT,
+  total_evaluations BIGINT,
+  avg_overall_score DECIMAL(5,4),
   first_evaluation TIMESTAMPTZ,
   last_evaluation TIMESTAMPTZ
 )
 LANGUAGE sql
 STABLE
 AS $$
-  SELECT NULL::text, 0::int, 0.0::float, 0.0::float, 0::int, NULL::timestamptz, NULL::timestamptz
-  WHERE FALSE;
-$$;
-
-GRANT EXECUTE ON FUNCTION public.get_model_comparison_for_user(UUID, TEXT, TEXT, TEXT) TO authenticated;
-
-CREATE OR REPLACE FUNCTION public.get_user_evaluation_stats(user_id UUID)
-RETURNS TABLE(
-  total_prompts INTEGER,
-  total_datasets INTEGER,
-  total_jobs INTEGER,
-  total_evaluations INTEGER,
-  avg_overall_score FLOAT
-)
-LANGUAGE sql
-STABLE
-AS $$
-  SELECT 0::int, 0::int, 0::int, 0::int, 0.0::float;
+  SELECT 0::bigint, 0::bigint, 0::bigint, 0::bigint, 0.0::decimal, NULL::timestamptz, NULL::timestamptz;
 $$;
 
 GRANT EXECUTE ON FUNCTION public.get_user_evaluation_stats(UUID) TO authenticated;

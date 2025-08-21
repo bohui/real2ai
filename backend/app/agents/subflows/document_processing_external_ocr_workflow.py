@@ -128,11 +128,11 @@ class DocumentProcessingExternalOCRWorkflow:
         }
 
         # Add nodes to workflow
-        workflow.add_node("ingest_ocr_outputs", self.ingest_ocr_outputs)
-        workflow.add_node("save_markdown", self.save_markdown)
-        workflow.add_node("save_jpg", self.save_jpg)
-        workflow.add_node("save_json", self.save_json)
-        workflow.add_node("extract_diagrams", self.extract_diagrams)
+        workflow.add_node("ingest_ocr_outputs", self.ingest_ocr_outputs_node)
+        workflow.add_node("save_markdown", self.save_markdown_node)
+        workflow.add_node("save_jpg", self.save_jpg_node)
+        workflow.add_node("save_json", self.save_json_node)
+        workflow.add_node("extract_diagrams", self.extract_diagrams_node)
         workflow.add_node("error_handling", self.error_handling)
         workflow.add_node("build_summary", self.build_summary)
 

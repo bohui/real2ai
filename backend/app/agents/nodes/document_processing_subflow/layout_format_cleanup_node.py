@@ -1,0 +1,404 @@
+"""
+LayoutFormatCleanupNode - Clean and format text layout without LLM processing
+
+This node takes the text extraction result, generates font-to-layout mapping,
+and cleans up the text format to produce a properly formatted markdown output.
+It does NOT extract contract information like purchase_method, use_category,
+contract_terms, or property_address - only focuses on layout formatting.
+"""
+
+from typing import Dict, Any, Optional
+import re
+from datetime import datetime, timezone
+
+from app.agents.subflows.document_processing_workflow import DocumentProcessingState
+from app.prompts.schema.contract_layout_summary_schema import LayoutFormatResult
+from .base_node import DocumentProcessingNodeBase
+from app.utils.font_layout_mapper import FontLayoutMapper
+
+
+class LayoutFormatCleanupNode(DocumentProcessingNodeBase):
+    def __init__(self, progress_range: tuple[int, int] = (43, 48)):
+        super().__init__("layout_format_cleanup")
+        self.font_mapper = FontLayoutMapper()
+        self.progress_range = progress_range
+
+    async def execute(self, state: DocumentProcessingState) -> DocumentProcessingState:
+        start_time = datetime.now(timezone.utc)
+        self._record_execution()
+
+        try:
+            document_id = state.get("document_id")
+            text_extraction_result = state.get("text_extraction_result")
+
+            if not document_id:
+                return self._handle_error(
+                    state,
+                    ValueError("Missing document_id"),
+                    "Document ID is required",
+                    {"operation": "layout_format_cleanup"},
+                )
+
+            if not text_extraction_result or not text_extraction_result.success:
+                return self._handle_error(
+                    state,
+                    ValueError("No valid text extraction result"),
+                    "Text extraction result is missing or unsuccessful",
+                    {
+                        "document_id": document_id,
+                        "has_extraction_result": bool(text_extraction_result),
+                        "extraction_success": (
+                            text_extraction_result.success
+                            if text_extraction_result
+                            else False
+                        ),
+                    },
+                )
+
+            full_text = text_extraction_result.full_text or ""
+            if not full_text:
+                return self._handle_error(
+                    state,
+                    ValueError("Empty full_text"),
+                    "Full text is empty; cannot clean layout format",
+                    {"document_id": document_id},
+                )
+
+            # STEP 1: Generate font to layout mapping from the full document
+            self._log_info(
+                "Generating font to layout mapping for document",
+                extra={"document_id": document_id},
+            )
+
+            font_to_layout_mapping = self.font_mapper.generate_font_layout_mapping(
+                full_text
+            )
+
+            if font_to_layout_mapping:
+                self._log_info(
+                    f"Generated font layout mapping with {len(font_to_layout_mapping)} font sizes",
+                    extra={
+                        "document_id": document_id,
+                        "font_mapping": font_to_layout_mapping,
+                    },
+                )
+            else:
+                self._log_warning(
+                    "No font layout mapping generated; proceeding without mapping",
+                    extra={"document_id": document_id},
+                )
+
+            # STEP 2: Clean and format the text using the font mapping
+            self._log_info(
+                "Cleaning and formatting text layout",
+                extra={"document_id": document_id},
+            )
+
+            formatted_text = await self._format_text_with_layout_mapping(
+                full_text, font_to_layout_mapping
+            )
+
+            # STEP 3: Create a simple result object with formatted text
+
+            # Add debug logging to help identify validation issues
+            self._log_info(
+                f"Creating LayoutFormatResult with font mapping: {font_to_layout_mapping}",
+                extra={
+                    "document_id": document_id,
+                    "font_mapping_type": type(font_to_layout_mapping).__name__,
+                    "font_mapping_keys": (
+                        list(font_to_layout_mapping.keys())
+                        if font_to_layout_mapping
+                        else []
+                    ),
+                    "font_mapping_values": (
+                        list(font_to_layout_mapping.values())
+                        if font_to_layout_mapping
+                        else []
+                    ),
+                },
+            )
+
+            # Additional detailed logging for debugging
+            if font_to_layout_mapping:
+                for key, value in font_to_layout_mapping.items():
+                    self._log_info(
+                        f"Font mapping entry: key='{key}' (type: {type(key).__name__}), value='{value}' (type: {type(value).__name__})",
+                        extra={"document_id": document_id},
+                    )
+
+            layout_result = LayoutFormatResult(
+                raw_text=full_text,
+                formatted_text=formatted_text,
+                font_to_layout_mapping=font_to_layout_mapping,
+            )
+
+            # Update state with formatted text
+            updated_state = state.copy()
+            updated_state["layout_format_result"] = layout_result
+
+            duration = (datetime.now(timezone.utc) - start_time).total_seconds()
+            self._record_success(duration)
+
+            # Progress is handled by workflow level
+
+            self._log_info(
+                f"Layout format cleanup complete for document {document_id}",
+                extra={
+                    "document_id": document_id,
+                    "duration_seconds": duration,
+                    "font_mapping_generated": bool(font_to_layout_mapping),
+                    "original_text_length": len(full_text),
+                    "formatted_text_length": len(formatted_text),
+                },
+            )
+
+            return updated_state
+
+        except Exception as e:
+            return self._handle_error(
+                state,
+                e,
+                f"Failed to clean layout format: {str(e)}",
+                {
+                    "document_id": state.get("document_id"),
+                    "operation": "layout_format_cleanup",
+                },
+            )
+
+    async def _format_text_with_layout_mapping(
+        self, text: str, font_mapping: Dict[str, str]
+    ) -> str:
+        """
+        Format text using font-to-layout mapping to create clean markdown.
+
+        Args:
+            text: Raw OCR text with font markers
+            font_mapping: Dictionary mapping font sizes to layout elements
+
+        Returns:
+            Formatted markdown text
+        """
+        # Split by page delimiters (handle both with and without trailing newline)
+        page_delimiter_pattern = re.compile(r"^--- Page [^-\n]* ---\n?", re.MULTILINE)
+        pages = page_delimiter_pattern.split(text)
+
+        formatted_pages = []
+        total_pages = len([p for p in pages if p.strip()])
+        processed_pages = 0
+
+        for page in pages:
+            if not page.strip():
+                continue
+
+            if font_mapping:
+                # Use font mapping for formatting
+                formatted_page = self._format_page_with_mapping(page, font_mapping)
+            else:
+                # No font mapping, just clean the text
+                formatted_page = self._format_page_without_mapping(page)
+
+            if formatted_page:
+                formatted_pages.append(formatted_page)
+
+            processed_pages += 1
+
+            # Emit incremental progress for each page processed
+            if hasattr(self, "progress_callback") and self.progress_callback:
+                try:
+                    await self.emit_page_progress(
+                        current_page=processed_pages,
+                        total_pages=total_pages,
+                        description="Formatting page layout",
+                        progress_range=self.progress_range,
+                    )
+                except Exception as e:
+                    # Don't fail processing if progress emission fails
+                    self._log_warning(f"Failed to emit page progress: {e}")
+
+        return "\n\n".join(formatted_pages)
+
+    def _format_page_without_mapping(self, page_text: str) -> str:
+        """
+        Format a single page without font mapping - just clean the text.
+
+        Args:
+            page_text: Text content of a single page
+
+        Returns:
+            Cleaned page text
+        """
+        lines = page_text.strip().split("\n")
+        formatted_lines = []
+
+        for line in lines:
+            if not line.strip():
+                continue
+
+            # Remove font markers and clean the line
+            font_pattern = re.compile(r"\[\[\[[^\]]*\]\]\]")
+            clean_text = font_pattern.sub("", line).strip()
+
+            if clean_text:
+                formatted_lines.append(clean_text)
+
+        # If no content after cleaning, return empty string
+        if not formatted_lines:
+            return ""
+
+        # Join with double newlines to match expected format
+        return "\n\n".join(formatted_lines)
+
+    def _format_page_with_mapping(
+        self, page_text: str, font_mapping: Dict[str, str]
+    ) -> str:
+        """
+        Format a single page using font mapping.
+
+        Args:
+            page_text: Text content of a single page
+            font_mapping: Dictionary mapping font sizes to layout elements
+
+        Returns:
+            Formatted page text
+        """
+        lines = page_text.strip().split("\n")
+        formatted_lines = []
+
+        for line in lines:
+            if not line.strip():
+                continue
+
+                # Look for font size markers (including invalid ones)
+            font_pattern = re.compile(r"\[\[\[([^\]]*)\]\]\]")
+            match = font_pattern.search(line)
+
+            if match:
+                font_size = match.group(1)
+                # Remove the font marker for clean text
+                clean_text = font_pattern.sub("", line).strip()
+
+                if clean_text:
+                    # Check if font_size is numeric and exists in mapping
+                    try:
+                        float(font_size)
+                        layout_element = font_mapping.get(font_size, "body_text")
+                    except ValueError:
+                        # Invalid font size, treat as body text
+                        layout_element = "body_text"
+
+                    formatted_line = self._apply_layout_formatting(
+                        clean_text, layout_element
+                    )
+                    formatted_lines.append(formatted_line)
+            else:
+                # No font marker, treat as regular text
+                if line.strip():
+                    formatted_lines.append(line.strip())
+
+        # Join with double newlines to match expected format
+        return "\n\n".join(formatted_lines)
+
+    def _apply_layout_formatting(self, text: str, layout_element: str) -> str:
+        """
+        Apply markdown formatting based on layout element type.
+
+        Args:
+            text: Clean text without font markers
+            layout_element: Type of layout element (main_title, section_heading, etc.)
+
+        Returns:
+            Formatted markdown text
+        """
+        if not text:
+            return ""
+
+        if layout_element == "main_title":
+            return f"# {text}"
+        elif layout_element == "section_heading":
+            return f"## {text}"
+        elif layout_element == "subsection_heading":
+            return f"### {text}"
+        elif layout_element == "emphasis_text":
+            return f"**{text}**"
+        elif layout_element == "body_text":
+            return text
+        elif layout_element == "other":
+            return text
+        else:
+            # Default to body text for unknown layout elements
+            return text
+
+    def _remove_font_markers(self, text: str) -> str:
+        """
+        Remove font markers from text when no mapping is available.
+
+        Args:
+            text: Raw OCR text with font markers
+
+        Returns:
+            Clean text without font markers
+        """
+        font_pattern = re.compile(r"\[\[\[[^\]]*\]\]\]")
+        # Remove font markers and page delimiters for clean output
+        cleaned_text = font_pattern.sub("", text)
+        page_delimiter_pattern = re.compile(r"^--- Page [^-\n]* ---\n", re.MULTILINE)
+        cleaned_text = page_delimiter_pattern.sub("", cleaned_text)
+        return cleaned_text
+
+    def _record_execution(self):
+        """Record that this node has been executed."""
+        self._metrics["executions"] += 1
+
+    def _record_success(self, duration: float):
+        """Record successful execution with duration."""
+        self._metrics["successes"] += 1
+        self._metrics["total_duration"] += duration
+        self._metrics["average_duration"] = (
+            self._metrics["total_duration"] / self._metrics["successes"]
+        )
+
+    def _log_info(self, message: str, extra: Optional[Dict[str, Any]] = None):
+        """Log info message with optional extra context."""
+        if extra:
+            self.logger.info(f"{message} - {extra}")
+        else:
+            self.logger.info(message)
+
+    def _log_warning(self, message: str, extra: Optional[Dict[str, Any]] = None):
+        """Log warning message with optional extra context."""
+        if extra:
+            self.logger.warning(f"{message} - {extra}")
+        else:
+            self.logger.warning(message)
+
+    def _log_debug(self, message: str, extra: Optional[Dict[str, Any]] = None):
+        """Log debug message with optional extra context."""
+        if extra:
+            self.logger.debug(f"{message} - {extra}")
+        else:
+            self.logger.debug(message)
+
+    def _handle_error(
+        self,
+        state: DocumentProcessingState,
+        error: Exception,
+        error_message: str,
+        error_context: Dict[str, Any],
+    ) -> DocumentProcessingState:
+        """Handle errors during execution."""
+        self._metrics["failures"] += 1
+        self.logger.error(
+            f"Error in {self.node_name}: {error_message}",
+            extra={"error": str(error), "context": error_context},
+        )
+
+        # Return state with error information
+        error_state = state.copy()
+        error_state["error"] = {
+            "node": self.node_name,
+            "message": error_message,
+            "context": error_context,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        return error_state

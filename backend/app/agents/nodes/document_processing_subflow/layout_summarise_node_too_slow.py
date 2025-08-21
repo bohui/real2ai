@@ -357,7 +357,7 @@ class LayoutSummariseNode(DocumentProcessingNodeBase):
 
             # Update state with cleaned text to be available for build_summary
             updated_state = state.copy()
-            updated_state["layout_summarisation_result"] = summary
+            updated_state["layout_format_result"] = summary
             # try:
             #     # Replace full_text with cleaned text for downstream usage
             #     ter = updated_state.get("text_extraction_result")

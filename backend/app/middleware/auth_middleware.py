@@ -152,6 +152,11 @@ class AuthContextMiddleware(BaseHTTPMiddleware):
                 },
             )
             logger.debug(f"Auth context set for user: {user_id or 'unknown'}")
+        else:
+            logger.warning(
+                f"No token available for request to {request.url.path} from {request.client.host if request.client else 'unknown'}"
+            )
+            logger.debug(f"Request headers: {dict(request.headers)}")
 
         try:
             # Process the request

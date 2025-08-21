@@ -28,10 +28,11 @@ class SaveDiagramsNode(DocumentProcessingNodeBase):
     - No state changes (database operation only)
     """
 
-    def __init__(self):
+    def __init__(self, progress_range: tuple[int, int] = (36, 40)):
         super().__init__("save_diagrams")
         self.user_docs_repo = None
         self.artifacts_repo = None
+        self.progress_range = progress_range
 
     async def initialize(self, user_id):
         """Initialize repositories with user context"""
@@ -208,7 +209,16 @@ class SaveDiagramsNode(DocumentProcessingNodeBase):
 
             # Convert page numbers to DiagramPageSummary objects
             diagram_page_summaries = []
-            for page_num in sorted(diagram_pages):
+            total_diagram_pages = len(diagram_pages)
+
+            for idx, page_num in enumerate(sorted(diagram_pages)):
+                # Emit incremental progress for each diagram page
+                await self.emit_page_progress(
+                    current_page=idx + 1,
+                    total_pages=total_diagram_pages,
+                    description="Saving diagram page",
+                    progress_range=self.progress_range,
+                )
                 # Find diagrams for this page to get the primary type and confidence
                 page_diagrams = [
                     d
