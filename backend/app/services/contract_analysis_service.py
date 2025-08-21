@@ -314,14 +314,7 @@ class ContractAnalysisService:
                         WebSocketEvents.analysis_started(contract_id, estimated_time=3),
                     )
 
-                # PRD: Emit 0% immediately when session/analysis initializes
-                self._schedule_progress_update(
-                    session_id,
-                    contract_id,
-                    "initialized",
-                    0,
-                    "Analysis initialized",
-                )
+                # Initial progress will be emitted by the task-level progress callback
 
             # Initialize prompt manager if needed
             if self.prompt_manager:
@@ -336,14 +329,7 @@ class ContractAnalysisService:
 
             # Execute analysis with optional progress tracking
             if use_websocket_progress:
-                # PRD: Emit 5% just as workflow starts
-                self._schedule_progress_update(
-                    session_id,
-                    contract_id,
-                    "document_uploaded",
-                    5,
-                    "Upload document",
-                )
+                # Initial progress will be emitted by the task-level progress callback
 
                 # Provide a persist-only notify callback; WS will also be emitted inside the workflow
                 if progress_callback:
@@ -775,89 +761,7 @@ class ContractAnalysisService:
         except Exception as e:
             logger.error(f"Failed to send progress update: {str(e)}")
 
-    def _schedule_progress_update(
-        self,
-        session_id: str,
-        contract_id: str,
-        step: str,
-        progress_percent: int,
-        description: str,
-    ) -> None:
-        """Schedule a progress update regardless of event loop availability.
-
-        - If an asyncio event loop is running, schedule the coroutine normally.
-        - If no loop is running (e.g., inside a Celery worker sync context),
-          publish via Redis synchronously so the FastAPI process can fan out to WS.
-        """
-        # Monotonic guard: skip if not increasing
-        try:
-            last = None
-            manual_restart = False
-            if contract_id in self.active_analyses:
-                last = self.active_analyses[contract_id].get("progress")
-                manual_restart = bool(
-                    self.active_analyses[contract_id].get("manual_restart")
-                )
-            # Enforce monotonicity unless this session is marked as a manual restart
-            if (
-                not manual_restart
-                and last is not None
-                and progress_percent <= int(last)
-            ):
-                return
-        except Exception:
-            pass
-
-        # Update local tracking immediately
-        try:
-            if contract_id in self.active_analyses:
-                self.active_analyses[contract_id]["progress"] = progress_percent
-                self.active_analyses[contract_id]["current_step"] = step
-        except Exception:
-            pass
-
-        # Publish via Redis to the contract/session channel for UI consumption
-        try:
-            from app.services.communication.redis_pubsub import publish_progress_sync
-            from datetime import datetime
-
-            message = {
-                "event_type": "analysis_progress",
-                "timestamp": datetime.now().isoformat(),
-                "data": {
-                    "contract_id": contract_id,  # Use actual contract UUID
-                    "current_step": step,
-                    "progress_percent": progress_percent,
-                    "step_description": description,
-                },
-            }
-
-            # Primary channel: session_id for UI WebSocket subscription
-            if session_id:
-                publish_progress_sync(session_id, message)
-
-            # Secondary channel: contract_id for contract-specific subscriptions
-            if contract_id and contract_id != session_id:
-                publish_progress_sync(contract_id, message)
-        except Exception as redis_error:
-            logger.warning(
-                f"Progress update Redis publish failed for {contract_id}: {redis_error}"
-            )
-
-        # Additionally attempt direct WS delivery on the session_id (best-effort)
-        try:
-            loop = asyncio.get_running_loop()
-            loop.create_task(
-                self._send_progress_update(
-                    session_id, contract_id, step, progress_percent, description
-                )
-            )
-        except Exception as e:
-            # Ignore; Redis path is authoritative for fan-out
-            logger.debug(
-                f"Skipping direct WS schedule for {contract_id}: {e}",
-                exc_info=False,
-            )
+    # Removed _schedule_progress_update; progress emission is centralized in the task callback
 
     async def get_analysis_status(self, contract_id: str) -> Optional[AnalysisStatus]:
         """Get current analysis status"""

@@ -1154,16 +1154,8 @@ class ProgressTrackingWorkflow(ContractAnalysisWorkflow):
     def _ws_progress(
         self, state: Dict[str, Any], step: str, percent: int, desc: str
     ) -> None:
-        # Schedule WebSocket update via parent service (non-blocking)
-        try:
-            session_id = (state or {}).get("session_id")
-            contract_id = (state or {}).get("contract_id") or session_id
-            if session_id and contract_id:
-                self.parent_service._schedule_progress_update(
-                    session_id, contract_id, step, percent, desc
-                )
-        except Exception:
-            pass
+        # Removed: WebSocket progress is centralized via task-level progress callback
+        return None
 
     # ---------- Step Overrides with Progress ----------
     async def validate_input(self, state):

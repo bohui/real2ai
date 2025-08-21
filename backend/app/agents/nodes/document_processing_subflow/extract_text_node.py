@@ -1364,13 +1364,13 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                     try:
                         mapped = 7 + int(((idx + 1) / max(1, total_pages)) * 23)
                         mapped = max(8, min(30, mapped))
-                        if mapped > last_sent_percent:
-                            await notify_cb(
-                                "document_processing",
-                                mapped,
-                                f"Extract text & diagrams (page {idx + 1}/{total_pages})",
-                            )
-                            last_sent_percent = mapped
+                        # Always notify; monotonic guard is enforced centrally in persist_progress
+                        await notify_cb(
+                            "document_processing",
+                            mapped,
+                            f"Extract text & diagrams (page {idx + 1}/{total_pages})",
+                        )
+                        last_sent_percent = max(last_sent_percent, mapped)
                     except Exception:
                         # Best-effort; do not break processing
                         pass

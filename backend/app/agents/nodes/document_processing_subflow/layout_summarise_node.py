@@ -503,20 +503,22 @@ class LayoutSummariseNode(DocumentProcessingNodeBase):
                 )
                 chunk_progress = max(30, min(50, chunk_progress))
 
-                if chunk_progress > current_last_sent_percent:
-                    await self.progress_callback(
-                        "layout_summarise",
-                        chunk_progress,
-                        f"Layout analysis (chunk {chunk_index + 1}/{total_chunks})",
-                    )
-                    current_last_sent_percent = chunk_progress
-                    self._log_debug(
-                        f"Emitted chunk progress: {chunk_progress}% for chunk {chunk_index + 1}/{total_chunks}",
-                        extra={
-                            "document_id": document_id,
-                            "chunk_index": chunk_index,
-                        },
-                    )
+                # Always notify; monotonic guard is enforced centrally in persist_progress
+                await self.progress_callback(
+                    "layout_summarise",
+                    chunk_progress,
+                    f"Layout analysis (chunk {chunk_index + 1}/{total_chunks})",
+                )
+                current_last_sent_percent = max(
+                    current_last_sent_percent, chunk_progress
+                )
+                self._log_debug(
+                    f"Emitted chunk progress: {chunk_progress}% for chunk {chunk_index + 1}/{total_chunks}",
+                    extra={
+                        "document_id": document_id,
+                        "chunk_index": chunk_index,
+                    },
+                )
             except Exception as e:
                 # Best-effort; do not break processing
                 self._log_warning(f"Failed to emit chunk progress: {e}")

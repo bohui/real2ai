@@ -140,27 +140,6 @@ class BaseNode(ABC):
         # Fallback to regular structured parsers
         return self.structured_parsers.get(parser_type)
 
-    def get_format_instructions_for_state(self, parser_type: str, state: str) -> str:
-        """
-        Get format instructions for a specific parser type and state.
-
-        Args:
-            parser_type: Type of parser
-            state: Australian state code
-
-        Returns:
-            Format instructions string
-        """
-        parser = self.get_state_aware_parser(parser_type, state)
-        if hasattr(parser, "get_format_instructions"):
-            return parser.get_format_instructions(state)
-
-        # Fallback for regular parsers
-        if hasattr(parser, "get_format_instructions"):
-            return parser.get_format_instructions()
-
-        return ""
-
     @abstractmethod
     async def execute(self, state: RealEstateAgentState) -> RealEstateAgentState:
         """

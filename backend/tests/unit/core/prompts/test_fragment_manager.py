@@ -243,5 +243,65 @@ class TestComposeWithFolderFragments(TestFragmentManager):
         assert "Amount: $1,234.56" in result
 
 
+class TestDictFragmentHandling:
+    """Ensure compose_with_folder_fragments handles dict fragments from matcher"""
+
+    def test_compose_with_folder_fragments_handles_dicts(self):
+        import tempfile
+        import shutil
+        from pathlib import Path
+        from app.core.prompts.fragment_manager import FragmentManager
+
+        temp_dir = tempfile.mkdtemp()
+        try:
+            fragments_dir = Path(temp_dir)
+
+            # Create a nested fragment path under fragments_dir
+            nested_dir = fragments_dir / "alpha" / "beta"
+            nested_dir.mkdir(parents=True)
+            fragment_path = nested_dir / "frag.md"
+            fragment_path.write_text(
+                "---\ncontext: {}\n---\nDICT CONTENT", encoding="utf-8"
+            )
+
+            fragment_manager = FragmentManager(fragments_dir)
+
+            # Monkeypatch matcher to return dict fragments (as runtime does)
+            original_matcher = fragment_manager.context_matcher
+            try:
+
+                class DummyMatcher:
+                    def filter_fragments(self, fragment_dicts, runtime_context):
+                        return [
+                            {
+                                "name": "alpha/beta/frag.md",
+                                "metadata": {"context": {}},
+                                "content": "DICT CONTENT",
+                                "priority": 50,
+                                "path": str(fragment_path),
+                            }
+                        ]
+
+                fragment_manager.context_matcher = DummyMatcher()
+
+                from app.core.prompts import ContextType
+
+                context = PromptContext(context_type=ContextType.USER, variables={})
+
+                base_template = "Top: {{ alpha }}\nNested: {{ alpha_beta }}\n"
+
+                result = fragment_manager.compose_with_folder_fragments(
+                    base_template, context
+                )
+
+                # Should render content for both top-level group ('alpha') and nested key ('alpha_beta')
+                assert "Top: DICT CONTENT" in result
+                assert "Nested: DICT CONTENT" in result
+            finally:
+                fragment_manager.context_matcher = original_matcher
+        finally:
+            shutil.rmtree(temp_dir)
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

@@ -9,7 +9,7 @@ import time
 import logging
 from typing import Dict, Any, List, Optional
 from uuid import UUID
-from datetime import datetime, timezone
+import datetime as dt
 
 from app.core.celery import celery_app
 from app.core.task_context import user_aware_task, task_manager
@@ -33,6 +33,7 @@ from app.services.repositories.analysis_progress_repository import (
     AnalysisProgressRepository,
 )
 from app.services.repositories.documents_repository import DocumentsRepository
+from app.services.backend_token_service import BackendTokenService
 
 logger = logging.getLogger(__name__)
 
@@ -166,7 +167,7 @@ async def update_analysis_progress(
             "progress_percent": progress_percent,
             "step_description": step_description,
             # Pass a datetime object for DB insertion (asyncpg expects datetime, not string)
-            "step_started_at": datetime.now(timezone.utc),
+            "step_started_at": dt.datetime.now(dt.timezone.utc),
             "estimated_completion_minutes": estimated_completion_minutes,
             "status": status,
             "error_message": error_message,
@@ -260,7 +261,7 @@ async def comprehensive_document_analysis(
     Returns:
         Analysis results dictionary
     """
-    task_start = datetime.now(timezone.utc)
+    task_start = dt.datetime.now(dt.timezone.utc)
     logger.info(
         f"Starting comprehensive document analysis",
         extra={
@@ -277,8 +278,6 @@ async def comprehensive_document_analysis(
 
     # Proactive token refresh check at task start
     try:
-        from app.services.backend_token_service import BackendTokenService
-        from app.core.auth_context import AuthContext
 
         current_token = AuthContext.get_user_token()
         if current_token and BackendTokenService.is_backend_token(current_token):
@@ -490,6 +489,23 @@ async def comprehensive_document_analysis(
                 step_description="Queued for AI contract analysis...",
                 estimated_completion_minutes=3,
             )
+            # Emit initial WS/Redis notification for 5%
+            try:
+                message = {
+                    "event_type": "analysis_progress",
+                    "timestamp": dt.datetime.now().isoformat(),
+                    "data": {
+                        "contract_id": contract_id,
+                        "current_step": "queued",
+                        "progress_percent": 5,
+                        "step_description": "Queued for AI contract analysis...",
+                    },
+                }
+                publish_progress_sync(content_hash, message)
+                if contract_id and contract_id != content_hash:
+                    publish_progress_sync(contract_id, message)
+            except Exception:
+                pass
             logger.info("New analysis: starting from queued at 5%")
 
             # Keep the task context fresh for long-running operations
@@ -505,10 +521,28 @@ async def comprehensive_document_analysis(
                 user_id,
                 content_hash,
                 progress_percent=7,
-                current_step="contract_analysis", 
+                current_step="contract_analysis",
                 step_description="Starting AI contract analysis...",
                 estimated_completion_minutes=1,
             )
+            # Emit initial WS/Redis notification for 7%
+            try:
+
+                message = {
+                    "event_type": "analysis_progress",
+                    "timestamp": dt.datetime.now().isoformat(),
+                    "data": {
+                        "contract_id": contract_id,
+                        "current_step": "contract_analysis",
+                        "progress_percent": 7,
+                        "step_description": "Starting AI contract analysis...",
+                    },
+                }
+                publish_progress_sync(content_hash, message)
+                if contract_id and contract_id != content_hash:
+                    publish_progress_sync(contract_id, message)
+            except Exception:
+                pass
 
             # Prepare minimal document_data for ContractAnalysisService
             # Validation requires either content or file_path; provide file_path to avoid pre-processing duplication
@@ -534,16 +568,47 @@ async def comprehensive_document_analysis(
 
             contract_service = ContractAnalysisService(
                 websocket_manager=websocket_manager,
-                enable_websocket_progress=True,  # Let service handle progress updates
+                enable_websocket_progress=False,  # Progress will be emitted from persist_progress callback
             )
 
             # Execute contract analysis using the service layer
             logger.info(f"Starting contract analysis with document data")
 
             async def persist_progress(step: str, percent: int, description: str):
-                # Persist to Supabase, update recovery registry, create checkpoint, then refresh task TTL
+                # Persist to Supabase, then emit WS/Redis notification with monotonic guard.
+                # Also update recovery registry, create checkpoint, and refresh task TTL.
                 try:
-                    # 1) Persist user-facing progress (DB + WS/Redis)
+                    # Monotonic gating using latest persisted progress
+                    try:
+                        progress_repo = AnalysisProgressRepository()
+                        latest = await progress_repo.get_latest_progress(
+                            content_hash,
+                            user_id,
+                            columns="progress_percent,current_step",
+                        )
+                        last_percent = (
+                            int(latest.get("progress_percent", 0)) if latest else 0
+                        )
+                    except Exception as _lp_err:
+                        last_percent = 0
+                        logger.debug(
+                            f"Monotonic lookup failed, defaulting last_percent=0: {_lp_err}"
+                        )
+
+                    if percent <= last_percent:
+                        # this shouldn't happen
+                        logger.warning(
+                            "Skipping non-increasing progress update",
+                            extra={
+                                "content_hash": content_hash,
+                                "requested_percent": percent,
+                                "last_percent": last_percent,
+                                "step": step,
+                            },
+                        )
+                        return
+
+                    # 1) Persist user-facing progress (DB only; this function intentionally avoids duplicate WS in update_analysis_progress)
                     await update_analysis_progress(
                         user_id,
                         content_hash,
@@ -552,6 +617,30 @@ async def comprehensive_document_analysis(
                         step_description=description,
                         estimated_completion_minutes=None,
                     )
+
+                    # 1b) Emit WS/Redis notification here as the single source of truth for real-time UI updates
+                    try:
+
+                        message = {
+                            "event_type": "analysis_progress",
+                            "timestamp": dt.datetime.now().isoformat(),
+                            "data": {
+                                "contract_id": contract_id,  # actual contract UUID expected by UI
+                                "current_step": step,
+                                "progress_percent": percent,
+                                "step_description": description,
+                            },
+                        }
+
+                        # Primary channel: session_id (we use content_hash as session/session-like id)
+                        publish_progress_sync(content_hash, message)
+                        # Secondary channel: contract_id for contract-specific subscriptions
+                        if contract_id and contract_id != content_hash:
+                            publish_progress_sync(contract_id, message)
+                    except Exception as _ws_err:
+                        logger.warning(
+                            f"Progress WS/Redis publish failed for {content_hash}: {_ws_err}"
+                        )
 
                     # 2) Update recovery registry progress (idempotent)
                     try:
@@ -669,7 +758,7 @@ async def comprehensive_document_analysis(
                     analysis_id,
                     status="completed",
                     result=analysis_result,
-                    completed_at=datetime.now(timezone.utc),
+                    completed_at=dt.datetime.now(dt.timezone.utc),
                 )
             else:
                 # Mark as failed if no meaningful results
@@ -680,7 +769,7 @@ async def comprehensive_document_analysis(
                     error_details={
                         "error_message": "Analysis produced no meaningful results - document processing may have failed"
                     },
-                    completed_at=datetime.now(timezone.utc),
+                    completed_at=dt.datetime.now(dt.timezone.utc),
                 )
                 raise ValueError(
                     "Analysis produced no meaningful results - document processing failed"
@@ -831,7 +920,7 @@ async def comprehensive_document_analysis(
                     ),
                     "context": context_info,
                 },
-                completed_at=datetime.now(timezone.utc),
+                completed_at=dt.datetime.now(dt.timezone.utc),
             )
         except Exception as update_error:
             logger.error(
