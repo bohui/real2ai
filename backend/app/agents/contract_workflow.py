@@ -723,70 +723,60 @@ class ContractAnalysisWorkflow:
             self.document_quality_validation_node.execute(state)
         )
 
-    @langsmith_trace(name="extract_contract_terms", run_type="chain")
     def extract_contract_terms(
         self, state: RealEstateAgentState
     ) -> RealEstateAgentState:
         """Execute contract terms extraction node."""
         return self._run_async_node(self.contract_terms_extraction_node.execute(state))
 
-    @langsmith_trace(name="validate_terms_completeness", run_type="tool")
     def validate_terms_completeness_step(
         self, state: RealEstateAgentState
     ) -> RealEstateAgentState:
         """Execute terms validation node."""
         return self._run_async_node(self.terms_validation_node.execute(state))
 
-    @langsmith_trace(name="analyze_australian_compliance", run_type="chain")
     def analyze_australian_compliance(
         self, state: RealEstateAgentState
     ) -> RealEstateAgentState:
         """Execute compliance analysis node."""
         return self._run_async_node(self.compliance_analysis_node.execute(state))
 
-    @langsmith_trace(name="analyze_contract_diagrams", run_type="chain")
     def analyze_contract_diagrams(
         self, state: RealEstateAgentState
     ) -> RealEstateAgentState:
         """Execute diagram analysis node."""
         return self._run_async_node(self.diagram_analysis_node.execute(state))
 
-    @langsmith_trace(name="assess_contract_risks", run_type="chain")
     def assess_contract_risks(
         self, state: RealEstateAgentState
     ) -> RealEstateAgentState:
         """Execute risk assessment node."""
         return self._run_async_node(self.risk_assessment_node.execute(state))
 
-    @langsmith_trace(name="generate_recommendations", run_type="chain")
     def generate_recommendations(
         self, state: RealEstateAgentState
     ) -> RealEstateAgentState:
         """Execute recommendations generation node."""
         return self._run_async_node(self.recommendations_generation_node.execute(state))
 
-    @langsmith_trace(name="validate_final_output", run_type="tool")
     def validate_final_output_step(
         self, state: RealEstateAgentState
     ) -> RealEstateAgentState:
         """Execute final validation node."""
         return self._run_async_node(self.final_validation_node.execute(state))
 
-    @langsmith_trace(name="compile_analysis_report", run_type="chain")
     def compile_analysis_report(
         self, state: RealEstateAgentState
     ) -> RealEstateAgentState:
         """Execute report compilation node."""
         return self._run_async_node(self.report_compilation_node.execute(state))
 
-    @langsmith_trace(name="handle_processing_error", run_type="tool")
     def handle_processing_error(
         self, state: RealEstateAgentState
     ) -> RealEstateAgentState:
         """Execute error handling node."""
         return self._run_async_node(self.error_handling_node.execute(state))
 
-    @langsmith_trace(name="retry_failed_step", run_type="tool")
     def retry_failed_step(self, state: RealEstateAgentState) -> RealEstateAgentState:
         """Execute retry processing node."""
         return self._run_async_node(self.retry_processing_node.execute(state))
@@ -1107,8 +1097,9 @@ class ProgressTrackingWorkflow(ContractAnalysisWorkflow):
         "document_uploaded",  # 5% (emitted by service before workflow starts)
         "validate_input",  # 7%
         "process_document",  # 7-30%
-        "validate_document_quality",  # 34%
-        "extract_terms",  # 42%
+        "layout_summarise",  # 40%
+        "validate_document_quality",  # 42%
+        "extract_terms",  # 45%
         "validate_terms_completeness",  # 50%
         "analyze_compliance",  # 57%
         "assess_risks",  # 71%

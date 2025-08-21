@@ -13,8 +13,10 @@ from datetime import datetime, timezone
 from app.agents.subflows.document_processing_workflow import DocumentProcessingState
 from .base_node import DocumentProcessingNodeBase
 from app.utils.font_layout_mapper import FontLayoutMapper
+from app.core.langsmith_config import langsmith_trace
 
-MAX_CHUNK_CHARACTERS = 16354
+
+MAX_CHUNK_CHARACTERS = 12288
 
 
 class LayoutSummariseNode(DocumentProcessingNodeBase):
@@ -213,56 +215,38 @@ class LayoutSummariseNode(DocumentProcessingNodeBase):
             llm_service = await get_llm_service()
 
             summaries: list[ContractLayoutSummary] = []
+            total_chunks = len(chunks)
+            # start from 30%
+            last_sent_percent = 30
+
             for idx, chunk_text in enumerate(chunks):
-                # STEP 2: Use consistent font mapping across all chunks
-                context = {
-                    "full_text": chunk_text,
-                    "australian_state": australian_state,
-                    "document_type": state.get("document_type"),
-                    "contract_type_hint": contract_type_hint,
-                    "purchase_method_hint": purchase_method_hint,
-                    "use_category_hint": use_category_hint,
-                    "font_to_layout_mapping": font_to_layout_mapping,  # Consistent mapping across chunks
-                }
-
-                composition = await prompt_manager.render_composed(
-                    composition_name="layout_summarise_only",
-                    context=context,
+                # Process each chunk with individual tracing
+                chunk_result = await self._process_chunk(
+                    chunk_text=chunk_text,
+                    chunk_index=idx,
+                    total_chunks=total_chunks,
+                    llm_service=llm_service,
+                    prompt_manager=prompt_manager,
                     output_parser=output_parser,
+                    australian_state=australian_state,
+                    contract_type_hint=contract_type_hint,
+                    purchase_method_hint=purchase_method_hint,
+                    use_category_hint=use_category_hint,
+                    font_to_layout_mapping=font_to_layout_mapping,
+                    document_id=document_id,
+                    last_sent_percent=last_sent_percent,
                 )
-                system_prompt = composition.get("system_prompt", "")
-                rendered_prompt = composition.get("user_prompt", "")
-                model_name = composition.get("metadata", {}).get("model")
 
-                try:
-                    parsing_result = await llm_service.generate_content(
-                        prompt=rendered_prompt,
-                        system_message=system_prompt,
-                        model=model_name,
-                        output_parser=output_parser,
-                    )
-                except Exception as e:
+                if chunk_result.get("error"):
                     return self._handle_error(
                         state,
-                        e,
-                        "Failed to obtain layout summary from LLMService",
-                        {"document_id": document_id, "chunk_index": idx},
+                        chunk_result["error"],
+                        chunk_result["error_message"],
+                        chunk_result["error_context"],
                     )
 
-                # Ensure parsing_result is of expected type and success
-                if not parsing_result.success or not parsing_result.parsed_data:
-                    return self._handle_error(
-                        state,
-                        ValueError("Parsing failed"),
-                        "Failed to parse layout summary output",
-                        {
-                            "document_id": document_id,
-                            "chunk_index": idx,
-                            "parsing_errors": parsing_result.parsing_errors,
-                        },
-                    )
-
-                summaries.append(parsing_result.parsed_data)
+                summaries.append(chunk_result["summary"])
+                last_sent_percent = chunk_result["last_sent_percent"]
 
             # Merge chunked summaries
             def _first_non_empty(values: list[Any]) -> Any:
@@ -387,6 +371,26 @@ class LayoutSummariseNode(DocumentProcessingNodeBase):
 
             duration = (datetime.now(timezone.utc) - start_time).total_seconds()
             self._record_success(duration)
+
+            # Emit final 40% progress for layout_summarise step after successful completion
+            # This ensures the step shows as complete even if no chunks were processed
+            if hasattr(self, "progress_callback") and self.progress_callback:
+                try:
+                    await self.progress_callback(
+                        "layout_summarise",
+                        40,
+                        "Layout analysis complete",
+                    )
+                    self._log_debug(
+                        "Emitted final 40% progress for layout_summarise after successful completion",
+                        extra={"document_id": document_id},
+                    )
+                except Exception as e:
+                    # Don't fail processing if progress emission fails
+                    self._log_warning(
+                        f"Failed to emit final layout_summarise progress: {e}"
+                    )
+
             self._log_info(
                 f"Layout summarisation complete for document {document_id}",
                 extra={
@@ -409,3 +413,119 @@ class LayoutSummariseNode(DocumentProcessingNodeBase):
                     "operation": "layout_summarise",
                 },
             )
+
+    @langsmith_trace(name="layout_summarise_chunk", run_type="tool")
+    async def _process_chunk(
+        self,
+        chunk_text: str,
+        chunk_index: int,
+        total_chunks: int,
+        llm_service,
+        prompt_manager,
+        output_parser,
+        australian_state: str,
+        contract_type_hint: str,
+        purchase_method_hint: str,
+        use_category_hint: str,
+        font_to_layout_mapping: dict,
+        document_id: str,
+        last_sent_percent: int,
+    ) -> dict:
+        """
+        Process a single chunk with LangSmith tracing.
+
+        Returns:
+            dict with keys: summary, last_sent_percent, error (if any), error_message, error_context
+        """
+
+        # Initialize last_sent_percent to ensure it's always defined
+        current_last_sent_percent = last_sent_percent
+
+        # STEP 2: Use consistent font mapping across all chunks
+        context = {
+            "full_text": chunk_text,
+            "australian_state": australian_state,
+            "document_type": "contract",  # Default value
+            "contract_type_hint": contract_type_hint,
+            "purchase_method_hint": purchase_method_hint,
+            "use_category_hint": use_category_hint,
+            "font_to_layout_mapping": font_to_layout_mapping,  # Consistent mapping across chunks
+        }
+
+        composition = await prompt_manager.render_composed(
+            composition_name="layout_summarise_only",
+            context=context,
+            output_parser=output_parser,
+        )
+        system_prompt = composition.get("system_prompt", "")
+        rendered_prompt = composition.get("user_prompt", "")
+        model_name = composition.get("metadata", {}).get("model")
+
+        try:
+            parsing_result = await llm_service.generate_content(
+                prompt=rendered_prompt,
+                system_message=system_prompt,
+                model=model_name,
+                output_parser=output_parser,
+            )
+        except Exception as e:
+            return {
+                "error": e,
+                "error_message": "Failed to obtain layout summary from LLMService",
+                "error_context": {
+                    "document_id": document_id,
+                    "chunk_index": chunk_index,
+                },
+                "summary": None,
+                "last_sent_percent": current_last_sent_percent,
+            }
+
+        # Ensure parsing_result is of expected type and success
+        if not parsing_result.success or not parsing_result.parsed_data:
+            return {
+                "error": ValueError("Parsing failed"),
+                "error_message": "Failed to parse layout summary output",
+                "error_context": {
+                    "document_id": document_id,
+                    "chunk_index": chunk_index,
+                    "parsing_errors": parsing_result.parsing_errors,
+                },
+                "summary": None,
+                "last_sent_percent": current_last_sent_percent,
+            }
+
+        # Emit progress for each chunk processed
+        if hasattr(self, "progress_callback") and self.progress_callback:
+            try:
+                # Map chunk progress from 30% to 40% (layout_summarise step range)
+                # Each chunk contributes proportionally to the step progress
+                chunk_progress = 30 + int(
+                    ((chunk_index + 1) / max(1, total_chunks)) * 10
+                )
+                chunk_progress = max(30, min(40, chunk_progress))
+
+                if chunk_progress > current_last_sent_percent:
+                    await self.progress_callback(
+                        "layout_summarise",
+                        chunk_progress,
+                        f"Layout analysis (chunk {chunk_index + 1}/{total_chunks})",
+                    )
+                    current_last_sent_percent = chunk_progress
+                    self._log_debug(
+                        f"Emitted chunk progress: {chunk_progress}% for chunk {chunk_index + 1}/{total_chunks}",
+                        extra={
+                            "document_id": document_id,
+                            "chunk_index": chunk_index,
+                        },
+                    )
+            except Exception as e:
+                # Best-effort; do not break processing
+                self._log_warning(f"Failed to emit chunk progress: {e}")
+
+        return {
+            "summary": parsing_result.parsed_data,
+            "last_sent_percent": current_last_sent_percent,
+            "error": None,
+            "error_message": None,
+            "error_context": None,
+        }

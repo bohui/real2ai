@@ -289,49 +289,49 @@ class DocumentProcessingWorkflow:
         """Extract text from document using appropriate method."""
         return await self.extract_text_node.execute(state)
 
-    @langsmith_trace(name="layout_summarise", run_type="chain")
+    # @langsmith_trace(name="layout_summarise", run_type="chain")
     async def layout_summarise(
         self, state: DocumentProcessingState
     ) -> DocumentProcessingState:
         """Clean text and extract contract basics, upsert taxonomy to DB."""
         return await self.layout_summarise_node.execute(state)
 
-    @langsmith_trace(name="save_pages", run_type="tool")
+    # @langsmith_trace(name="save_pages", run_type="tool")
     async def save_pages(
         self, state: DocumentProcessingState
     ) -> DocumentProcessingState:
         """Save page-level analysis results to database."""
         return await self.save_pages_node.execute(state)
 
-    @langsmith_trace(name="save_diagrams", run_type="tool")
+    # @langsmith_trace(name="save_diagrams", run_type="tool")
     async def save_diagrams(
         self, state: DocumentProcessingState
     ) -> DocumentProcessingState:
         """Save diagram detection results to database."""
         return await self.save_diagrams_node.execute(state)
 
-    @langsmith_trace(name="update_metrics", run_type="tool")
+    # @langsmith_trace(name="update_metrics", run_type="tool")
     async def update_metrics(
         self, state: DocumentProcessingState
     ) -> DocumentProcessingState:
         """Update document with aggregated metrics."""
         return await self.update_metrics_node.execute(state)
 
-    @langsmith_trace(name="mark_basic_complete", run_type="tool")
+    # @langsmith_trace(name="mark_basic_complete", run_type="tool")
     async def mark_basic_complete(
         self, state: DocumentProcessingState
     ) -> DocumentProcessingState:
         """Mark document processing as complete."""
         return await self.mark_basic_complete_node.execute(state)
 
-    @langsmith_trace(name="build_summary", run_type="chain")
+    # @langsmith_trace(name="build_summary", run_type="chain")
     async def build_summary(
         self, state: DocumentProcessingState
     ) -> DocumentProcessingState:
         """Build final processing summary result."""
         return await self.build_summary_node.execute(state)
 
-    @langsmith_trace(name="error_handling", run_type="tool")
+    # @langsmith_trace(name="error_handling", run_type="tool")
     async def error_handling(
         self, state: DocumentProcessingState
     ) -> DocumentProcessingState:

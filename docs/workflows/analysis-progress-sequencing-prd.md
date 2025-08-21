@@ -13,8 +13,9 @@ Make progress steps consistent across backend and frontend, with clear early sig
 - 5% `document_uploaded`: Emit when upload completes and on resume/retry before any other step.
 - 7% `validate_input`: After resolving retry vs initial call and loading init parameters.
 - 7–30% `document_processing`: Incremental updates during OCR and diagram extraction based on total pages; round to integer; cap at 30% when subworkflow finishes.
-- 34% `validate_document_quality` (conditional via flag).
-- 42% `extract_terms`.
+- 40% `layout_summarise`: After successful layout analysis and contract information extraction.
+- 42% `validate_document_quality` (conditional via flag).
+- 45% `extract_terms`.
 - 50% `validate_terms_completeness`.
 - 57% `analyze_compliance`.
 - 71% `assess_risks`.

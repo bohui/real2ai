@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_MAX_OUTPUT_TOKENS: int = 65535
 DEFAULT_TEMPERATURE: float = 0.1
 DEFAULT_TOP_P: float = 1.0
-DEFAULT_PARSE_GENERATION_MAX_ATTEMPTS: int = 2
+DEFAULT_PARSE_GENERATION_MAX_ATTEMPTS: int = 3
 
 
 class LLMService(UserAwareService):

@@ -8,8 +8,11 @@ Implement deterministic, monotonic analysis progress updates aligned to the PRD,
 - 5% immediately after contract analysis workflow starts: `document_uploaded` ("Upload document"). UI: Upload document becomes green; "Initialize analysis" becomes current (blue).
 - 7% after validate input completes: `validate_input` ("Initialize analysis"). UI: Initialize analysis green; "Extract text & diagrams" becomes current (blue).
 - 8%–30% incremental per-page updates while extracting text/diagrams: `document_processing` ("Extract text & diagrams"). Each page completion advances percent by about 23/total_pages (rounded), strictly increasing, capped at 30%.
-- 30% at extract-text node completion. UI: Extract text green; "Identifying Terms" current (blue).
-- Subsequent fixed steps per PRD: 34% validate_document_quality (flag-gated), 42% extract_terms, 50% validate_terms_completeness, 57% analyze_compliance, 71% assess_risks, 85% generate_recommendations, 98% compile_report, 100% analysis_complete.
+- 30% at extract-text node completion. UI: Extract text green; "Layout analysis" becomes current (blue).
+- 40% after layout summarisation completes: `layout_summarise` ("Layout analysis"). UI: Layout analysis green; "Document quality validation" current (blue).
+- 42% after document quality validation: `validate_document_quality` ("Document quality validation"). UI: Document quality validation green; "Identifying Terms" current (blue).
+- 45% after terms extraction: `extract_terms` ("Identifying Terms"). UI: Terms extraction green; "Terms validation" current (blue).
+- Subsequent fixed steps per PRD: 50% validate_terms_completeness, 57% analyze_compliance, 71% assess_risks, 85% generate_recommendations, 98% compile_report, 100% analysis_complete.
 
 ### Channel and Identifiers
 - Use the contract/session channel exclusively for UI-facing progress (`event_type: analysis_progress`).
@@ -36,6 +39,12 @@ Implement deterministic, monotonic analysis progress updates aligned to the PRD,
     - Compute `next_percent = 7 + round((pages_processed / total_pages) * 23)`; clamp `[8..30]`.
     - Only emit if strictly greater than last emitted percent.
   - On node completion, ensure a final 30% emit (idempotent via monotonic guard).
+
+### Layout Summarisation Progress (40%)
+- In `backend/app/agents/nodes/document_processing_subflow/layout_summarise_node.py`:
+  - Emit 40% progress after successful completion of layout analysis
+  - This provides granular progress tracking and ensures progress is only updated on success
+  - Progress is emitted via the progress_callback when the node completes successfully
 
 ### Workflow Integration
 - In `ContractAnalysisService`:
