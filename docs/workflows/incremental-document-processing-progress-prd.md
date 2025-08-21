@@ -9,10 +9,10 @@ Implement deterministic, monotonic analysis progress updates aligned to the PRD,
 - 7% after validate input completes: `validate_input` ("Initialize analysis"). UI: Initialize analysis green; "Extract text & diagrams" becomes current (blue).
 - 8%–30% incremental per-page updates while extracting text/diagrams: `document_processing` ("Extract text & diagrams"). Each page completion advances percent by about 23/total_pages (rounded), strictly increasing, capped at 30%.
 - 30% at extract-text node completion. UI: Extract text green; "Layout analysis" becomes current (blue).
-- 40% after layout summarisation completes: `layout_summarise` ("Layout analysis"). UI: Layout analysis green; "Document quality validation" current (blue).
-- 42% after document quality validation: `validate_document_quality` ("Document quality validation"). UI: Document quality validation green; "Identifying Terms" current (blue).
-- 45% after terms extraction: `extract_terms` ("Identifying Terms"). UI: Terms extraction green; "Terms validation" current (blue).
-- Subsequent fixed steps per PRD: 50% validate_terms_completeness, 57% analyze_compliance, 71% assess_risks, 85% generate_recommendations, 98% compile_report, 100% analysis_complete.
+- 30–50% during layout summarisation: `layout_summarise` ("Layout analysis"). UI: Progress advances within this range; on completion should reach 50%.
+- 52% after document quality validation: `validate_document_quality` ("Document quality validation"). UI: Document quality validation green; "Identifying Terms" current (blue).
+- 59% after terms extraction: `extract_terms` ("Identifying Terms"). UI: Terms extraction green; "Terms validation" current (blue).
+- Subsequent fixed steps per PRD: 60% validate_terms_completeness, 68% analyze_compliance, 75% assess_risks, 85% generate_recommendations, 98% compile_report, 100% analysis_complete.
 
 ### Channel and Identifiers
 - Use the contract/session channel exclusively for UI-facing progress (`event_type: analysis_progress`).
@@ -23,12 +23,12 @@ Implement deterministic, monotonic analysis progress updates aligned to the PRD,
 - Default behavior (auto/system restart, resume): enforce monotonic progress; skip emits when `new_percent <= last_percent`.
 - Manual restart (explicit API): `user_preferences.force_restart: true`.
   - Optional `user_preferences.restart_from_step: <step_key>` allows baseline replay from any chosen prior step.
-  - Baseline mapping (step → percent) used for replay: `{"document_uploaded":5,"validate_input":7,"document_processing":7,"validate_document_quality":34,"extract_terms":42,"validate_terms_completeness":50,"analyze_compliance":57,"assess_risks":71,"generate_recommendations":85,"compile_report":98,"analysis_complete":100}`.
+  - Baseline mapping (step → percent) used for replay: `{"document_uploaded":5,"validate_input":7,"document_processing":7,"layout_summarise":50,"validate_document_quality":52,"extract_terms":59,"validate_terms_completeness":60,"analyze_compliance":68,"assess_risks":75,"generate_recommendations":85,"compile_report":98,"analysis_complete":100}`.
   - If omitted/unknown, treat baseline as from the beginning (-1), allowing full replay (0/5/7...).
 
 ### Monotonic Guard and Persistence
 - Before persisting/broadcasting: load last persisted or in-memory progress; apply the rules above.
-- Persist via repository only (e.g., `AnalysisProgressRepository.upsert_progress`) to comply with repository pattern [[memory:5914464]].
+- Persist via repository only (e.g., `AnalysisProgressRepository.upsert_progress`) to comply with repository pattern.
 - Always broadcast the accepted update on the session topic after persistence.
 
 ### Document Processing Increments (7% → 30%)
@@ -40,9 +40,9 @@ Implement deterministic, monotonic analysis progress updates aligned to the PRD,
     - Only emit if strictly greater than last emitted percent.
   - On node completion, ensure a final 30% emit (idempotent via monotonic guard).
 
-### Layout Summarisation Progress (40%)
+### Layout Summarisation Progress (30–50%)
 - In `backend/app/agents/nodes/document_processing_subflow/layout_summarise_node.py`:
-  - Emit 40% progress after successful completion of layout analysis
+  - Emit chunked progress within 30–50% range; ensure final 50% after successful completion of layout analysis
   - This provides granular progress tracking and ensures progress is only updated on success
   - Progress is emitted via the progress_callback when the node completes successfully
 
@@ -73,9 +73,9 @@ Implement deterministic, monotonic analysis progress updates aligned to the PRD,
   - Manual restart baseline: verify replay from provided `restart_from_step`.
   - Per-page mapping correctness for N pages (last page == 30%).
   - Exact emissions at 5%, 7%, 30%, and all fixed downstream steps.
-  - Flag gating for 34%.
+  - Flag gating for 52%.
 - Integration:
-  - Full run: 0% → 5% → 7% → page stream (8–30%) → 30% → 42% → … → 100%.
+  - Full run: 0% → 5% → 7% → page stream (8–30%) → 30–50% → 52% → 59% → 60% → 68% → 75% → 85% → 98% → 100%.
   - Retry/resume mid-processing: no regressions (no backward updates), replay on reconnect.
 
 ### Acceptance Criteria

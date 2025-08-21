@@ -92,7 +92,7 @@ Use font_to_layout_mapping to convert font sizes to Markdown:
 - Cleaning with markers:
   - Remove all `[[[...]]]` markers from the cleaned text output.
   - Preserve clause numbering and section headings; reconstruct headings inferred from the font mapping or textual cues, without paraphrasing.
-  - Normalise whitespace, new lines and lists, but do not reorder content across pages.
+  - Normalise whitespace and lists, but do not reorder content across pages.
 - Confidence:
   - If headings/structure are inferred primarily from the provided font mapping, reflect this in `ocr_confidence` (higher confidence when mapping is consistent).
   - Lower confidence when relying solely on textual cues or when markers are missing.

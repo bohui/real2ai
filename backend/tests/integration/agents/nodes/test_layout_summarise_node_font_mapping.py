@@ -31,7 +31,7 @@ class TestLayoutSummariseNodeFontMapping:
         return DocumentProcessingState(
             document_id="test-doc-123",
             australian_state=AustralianState.NSW,
-            contract_type=ContractType.purchase_agreement,
+            contract_type=ContractType.PURCHASE_AGREEMENT,
             content_hash="test-hash-123",
             text_extraction_result=MagicMock(
                 success=True,
@@ -75,14 +75,13 @@ Additional terms and conditions...[[[12.0]]]""",
             success=True,
             parsed_data=MagicMock(
                 raw_text="Cleaned text content",
-                contract_type=ContractType.purchase_agreement,
+                contract_type=ContractType.PURCHASE_AGREEMENT,
                 purchase_method=None,
                 use_category=None,
                 australian_state=AustralianState.NSW,
                 contract_terms={},
                 property_address=None,
                 ocr_confidence={"contract_type": 0.9},
-                font_to_layout_mapping={},
             ),
         )
         return mock_service
@@ -132,26 +131,8 @@ Additional terms and conditions...[[[12.0]]]""",
         assert result_state.get("layout_summarisation_result") is not None
         summary = result_state.get("layout_summarisation_result")
 
-        # Check that font_to_layout_mapping is included in the summary
-        assert hasattr(summary, "font_to_layout_mapping")
-        assert isinstance(summary.font_to_layout_mapping, dict)
-
-        # Verify the mapping contains expected font sizes
-        font_mapping = summary.font_to_layout_mapping
-        assert len(font_mapping) > 0
-
-        # Check that common font sizes are mapped
-        assert "24.0" in font_mapping  # Main title
-        assert "18.0" in font_mapping  # Section headings
-        assert "16.0" in font_mapping  # Subsection headings
-        assert "12.0" in font_mapping  # Body text
-
-        # Verify layout element types are appropriate
-        layout_elements = set(font_mapping.values())
-        assert "main_title" in layout_elements
-        assert "section_heading" in layout_elements
-        assert "subsection_heading" in layout_elements
-        assert "body_text" in layout_elements
+        # Mapping is not part of the summary anymore
+        assert not hasattr(summary, "font_to_layout_mapping")
 
     @patch(
         "app.agents.nodes.document_processing_subflow.layout_summarise_node.get_prompt_manager"
@@ -203,19 +184,12 @@ Additional terms and conditions...[[[12.0]]]""",
         # Verify that multiple chunks were processed
         assert len(chunk_contexts) > 1
 
-        # Verify that font_to_layout_mapping is consistent across all chunks
+        # Verify font_to_layout_mapping is passed per chunk and is consistent
         first_chunk_mapping = chunk_contexts[0].get("font_to_layout_mapping")
-        assert first_chunk_mapping is not None
-
+        assert isinstance(first_chunk_mapping, dict)
+        assert len(first_chunk_mapping) > 0
         for i, context in enumerate(chunk_contexts):
-            chunk_mapping = context.get("font_to_layout_mapping")
-            assert (
-                chunk_mapping == first_chunk_mapping
-            ), f"Chunk {i} has different font mapping"
-
-            # Verify the mapping contains the expected structure
-            assert isinstance(chunk_mapping, dict)
-            assert len(chunk_mapping) > 0
+            assert context.get("font_to_layout_mapping") == first_chunk_mapping
 
     @patch(
         "app.agents.nodes.document_processing_subflow.layout_summarise_node.get_prompt_manager"
@@ -265,9 +239,8 @@ The property address is..."""
         assert result_state.get("layout_summarisation_result") is not None
         summary = result_state.get("layout_summarisation_result")
 
-        # Font mapping should be empty when no markers are present
-        assert hasattr(summary, "font_to_layout_mapping")
-        assert summary.font_to_layout_mapping == {}
+        # Summary no longer contains mapping
+        assert not hasattr(summary, "font_to_layout_mapping")
 
     @patch(
         "app.agents.nodes.document_processing_subflow.layout_summarise_node.get_prompt_manager"
@@ -350,30 +323,10 @@ The property address is..."""
         # Execute the node
         result_state = await node.execute(sample_state)
 
-        # Verify the final summary includes font mapping
+        # Verify the final summary does not include font mapping
         summary = result_state.get("layout_summarisation_result")
         assert summary is not None
-
-        # Check that font_to_layout_mapping is properly set
-        assert hasattr(summary, "font_to_layout_mapping")
-        assert isinstance(summary.font_to_layout_mapping, dict)
-
-        # Verify the mapping is not empty (should contain the generated mapping)
-        assert len(summary.font_to_layout_mapping) > 0
-
-        # Check that the mapping contains reasonable values
-        font_mapping = summary.font_to_layout_mapping
-        for font_size, layout_element in font_mapping.items():
-            assert isinstance(font_size, str)
-            assert isinstance(layout_element, str)
-            assert layout_element in [
-                "main_title",
-                "section_heading",
-                "subsection_heading",
-                "body_text",
-                "emphasis_text",
-                "other",
-            ]
+        assert not hasattr(summary, "font_to_layout_mapping")
 
     @patch(
         "app.agents.nodes.document_processing_subflow.layout_summarise_node.get_prompt_manager"
@@ -420,9 +373,8 @@ The property address is..."""
             assert result_state.get("layout_summarisation_result") is not None
             summary = result_state.get("layout_summarisation_result")
 
-            # Font mapping should be empty when generation fails
-            assert hasattr(summary, "font_to_layout_mapping")
-            assert summary.font_to_layout_mapping == {}
+            # Summary no longer contains mapping even on failure
+            assert not hasattr(summary, "font_to_layout_mapping")
 
     @patch(
         "app.agents.nodes.document_processing_subflow.layout_summarise_node.get_prompt_manager"
@@ -472,12 +424,5 @@ The property address is...[[[12.5]]]"""
         assert result_state.get("layout_summarisation_result") is not None
         summary = result_state.get("layout_summarisation_result")
 
-        # Check that floating point font sizes are handled
-        assert hasattr(summary, "font_to_layout_mapping")
-        font_mapping = summary.font_to_layout_mapping
-
-        # Should contain the floating point font sizes
-        assert "24.5" in font_mapping
-        assert "18.75" in font_mapping
-        assert "16.25" in font_mapping
-        assert "12.5" in font_mapping
+        # Mapping not present in summary; ensure processing completed
+        assert not hasattr(summary, "font_to_layout_mapping")

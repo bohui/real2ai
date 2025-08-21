@@ -33,6 +33,9 @@ const normalizeStepKey = (step: string): string => {
     // Backend variants mapped to nearest UI step
     case "process_document":
       return "document_processing";
+    case "layout_summarise":
+      // Treat layout summarisation as part of document processing in the UI
+      return "document_processing";
     case "extract_terms_failed":
       return "extract_terms";
     case "validate_final_output":

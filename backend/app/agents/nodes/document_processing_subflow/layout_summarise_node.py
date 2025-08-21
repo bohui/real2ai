@@ -293,7 +293,7 @@ class LayoutSummariseNode(DocumentProcessingNodeBase):
             if merged_contract_type is None:
                 from app.schema.enums import ContractType as _ContractType
 
-                merged_contract_type = _ContractType.unknown
+                merged_contract_type = _ContractType.UNKNOWN
 
             summary = ContractLayoutSummary(
                 raw_text=merged_raw_text,
@@ -304,7 +304,6 @@ class LayoutSummariseNode(DocumentProcessingNodeBase):
                 contract_terms=merged_contract_terms,
                 property_address=merged_property_address,
                 ocr_confidence=merged_ocr_confidence,
-                font_to_layout_mapping=font_to_layout_mapping,  # Include the generated mapping
             )
 
             # Upsert into contracts by content hash
@@ -372,17 +371,17 @@ class LayoutSummariseNode(DocumentProcessingNodeBase):
             duration = (datetime.now(timezone.utc) - start_time).total_seconds()
             self._record_success(duration)
 
-            # Emit final 40% progress for layout_summarise step after successful completion
+            # Emit final 50% progress for layout_summarise step after successful completion
             # This ensures the step shows as complete even if no chunks were processed
             if hasattr(self, "progress_callback") and self.progress_callback:
                 try:
                     await self.progress_callback(
                         "layout_summarise",
-                        40,
+                        50,
                         "Layout analysis complete",
                     )
                     self._log_debug(
-                        "Emitted final 40% progress for layout_summarise after successful completion",
+                        "Emitted final 50% progress for layout_summarise after successful completion",
                         extra={"document_id": document_id},
                     )
                 except Exception as e:
@@ -497,12 +496,12 @@ class LayoutSummariseNode(DocumentProcessingNodeBase):
         # Emit progress for each chunk processed
         if hasattr(self, "progress_callback") and self.progress_callback:
             try:
-                # Map chunk progress from 30% to 40% (layout_summarise step range)
+                # Map chunk progress from 30% to 50% (layout_summarise step range)
                 # Each chunk contributes proportionally to the step progress
                 chunk_progress = 30 + int(
-                    ((chunk_index + 1) / max(1, total_chunks)) * 10
+                    ((chunk_index + 1) / max(1, total_chunks)) * 20
                 )
-                chunk_progress = max(30, min(40, chunk_progress))
+                chunk_progress = max(30, min(50, chunk_progress))
 
                 if chunk_progress > current_last_sent_percent:
                     await self.progress_callback(

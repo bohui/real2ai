@@ -1097,12 +1097,12 @@ class ProgressTrackingWorkflow(ContractAnalysisWorkflow):
         "document_uploaded",  # 5% (emitted by service before workflow starts)
         "validate_input",  # 7%
         "process_document",  # 7-30%
-        "layout_summarise",  # 40%
-        "validate_document_quality",  # 42%
-        "extract_terms",  # 45%
-        "validate_terms_completeness",  # 50%
-        "analyze_compliance",  # 57%
-        "assess_risks",  # 71%
+        "layout_summarise",  # 30-50%
+        "validate_document_quality",  # 52%
+        "extract_terms",  # 59%
+        "validate_terms_completeness",  # 60%
+        "analyze_compliance",  # 68%
+        "assess_risks",  # 75%
         "generate_recommendations",  # 85%
         "compile_report",  # 98%
         "analysis_complete",  # 100%
@@ -1199,13 +1199,13 @@ class ProgressTrackingWorkflow(ContractAnalysisWorkflow):
         self._ws_progress(
             state,
             "validate_document_quality",
-            34,
+            52,
             "Validating document quality and readability",
         )
         await self._persist_progress(
             state,
             "validate_document_quality",
-            34,
+            52,
             "Validating document quality and readability",
         )
         return super().validate_document_quality_step(state)
@@ -1216,13 +1216,13 @@ class ProgressTrackingWorkflow(ContractAnalysisWorkflow):
         self._ws_progress(
             state,
             "extract_terms",
-            42,
+            59,
             "Extracting key contract terms using Australian tools",
         )
         await self._persist_progress(
             state,
             "extract_terms",
-            42,
+            59,
             "Extracting key contract terms using Australian tools",
         )
         return super().extract_contract_terms(state)
@@ -1233,13 +1233,13 @@ class ProgressTrackingWorkflow(ContractAnalysisWorkflow):
         self._ws_progress(
             state,
             "analyze_compliance",
-            57,
+            68,
             "Analyzing compliance with Australian property laws",
         )
         await self._persist_progress(
             state,
             "analyze_compliance",
-            57,
+            68,
             "Analyzing compliance with Australian property laws",
         )
         return super().analyze_australian_compliance(state)
@@ -1248,10 +1248,10 @@ class ProgressTrackingWorkflow(ContractAnalysisWorkflow):
         if self._should_skip("assess_risks", state):
             return state
         self._ws_progress(
-            state, "assess_risks", 71, "Assessing contract risks and potential issues"
+            state, "assess_risks", 75, "Assessing contract risks and potential issues"
         )
         await self._persist_progress(
-            state, "assess_risks", 71, "Assessing contract risks and potential issues"
+            state, "assess_risks", 75, "Assessing contract risks and potential issues"
         )
         return super().assess_contract_risks(state)
 

@@ -135,6 +135,26 @@ create_test_context() {
 EOF
             ;;
         "analysis")
+            # Safely embed contract text for analysis prompts if available
+            local CONTRACT_TEXT_JSON
+            if [[ -f "$TXT_FILE" ]]; then
+                CONTRACT_TEXT_JSON=$(TXT_FILE="$TXT_FILE" "$PYTHON_BIN" - << 'PY'
+import json, os
+path = os.environ.get("TXT_FILE")
+try:
+    with open(path, "r", encoding="utf-8") as f:
+        content = f.read()
+    # Trim excessively long test inputs to keep outputs manageable
+    if len(content) > 50000:
+        content = content[:50000]
+    print(json.dumps(content))
+except Exception:
+    print(json.dumps("Sample contract text for testing."))
+PY
+                )
+            else
+                CONTRACT_TEXT_JSON="\"Sample contract text for testing.\""
+            fi
             cat > "$context_file" << EOF
 {
     "image_type": "diagram",
@@ -146,7 +166,16 @@ EOF
     "analysis_focus": "comprehensive",
     "risk_categories": ["boundary", "easement", "infrastructure"],
     "filename": "contract.pdf",
-    "file_type": "pdf"
+    "file_type": "pdf",
+    "australian_state": "NSW",
+    "analysis_type": "comprehensive",
+    "contract_text": $CONTRACT_TEXT_JSON,
+    "transaction_value": null,
+    "state_requirements": "Placeholder summary of NSW-specific legal requirements for residential property contracts.",
+    "consumer_protection": "Placeholder consumer protection framework overview (cooling-off, misleading conduct, statutory warranties).",
+    "contract_types": "Placeholder guidance for common contract types (purchase agreement, lease, option).",
+    "user_experience": "novice",
+    "analysis_depth": "comprehensive"
 }
 EOF
             ;;
@@ -511,6 +540,11 @@ test_specific() {
     
     echo -e "${YELLOW}Testing Specific: $prompt_name with $model_name${NC}"
     
+    # Normalize prompt name: allow callers to pass file paths like ".../name.md"
+    if [[ "$prompt_name" == *.md ]]; then
+        prompt_name="${prompt_name%.md}"
+    fi
+
     # Determine test type
     local test_type="template"
     if [[ " ${COMPOSITIONS[@]} " =~ " ${prompt_name} " ]]; then
@@ -519,7 +553,8 @@ test_specific() {
     
     # Determine context type
     local context_type="ocr"
-    if [[ " ${ANALYSIS_PROMPTS[@]} " =~ " ${prompt_name} " ]]; then
+    # If explicitly in analysis list, or path indicates an analysis template, use analysis context
+    if [[ " ${ANALYSIS_PROMPTS[@]} " =~ " ${prompt_name} " || "$prompt_name" == */analysis/* ]]; then
         context_type="analysis"
     elif [[ " ${COMPOSITIONS[@]} " =~ " ${prompt_name} " ]]; then
         context_type="composition"

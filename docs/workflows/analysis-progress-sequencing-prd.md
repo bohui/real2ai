@@ -13,12 +13,12 @@ Make progress steps consistent across backend and frontend, with clear early sig
 - 5% `document_uploaded`: Emit when upload completes and on resume/retry before any other step.
 - 7% `validate_input`: After resolving retry vs initial call and loading init parameters.
 - 7–30% `document_processing`: Incremental updates during OCR and diagram extraction based on total pages; round to integer; cap at 30% when subworkflow finishes.
-- 40% `layout_summarise`: After successful layout analysis and contract information extraction.
-- 42% `validate_document_quality` (conditional via flag).
-- 45% `extract_terms`.
-- 50% `validate_terms_completeness`.
-- 57% `analyze_compliance`.
-- 71% `assess_risks`.
+- 30–50% `layout_summarise`: After successful layout analysis and contract information extraction.
+- 52% `validate_document_quality` (conditional via flag).
+- 59% `extract_terms`.
+- 60% `validate_terms_completeness`.
+- 68% `analyze_compliance`.
+- 75% `assess_risks`.
 - 85% `generate_recommendations`.
 - 98% `compile_report`.
 - 100% `analysis_complete`.
@@ -28,7 +28,7 @@ Make progress steps consistent across backend and frontend, with clear early sig
 - `ContractAnalysisService._execute_with_progress_tracking`:
   - Add explicit 7% emission within `validate_input`.
   - Adjust existing emissions to the percentages above.
-  - Gate `validate_document_quality` 34% emission behind a config flag.
+  - Gate `validate_document_quality` 52% emission behind a config flag.
   - Ensure 100% only when workflow actually finishes successfully.
 - Document processing subflow (OCR + diagrams):
   - Pass total page count from `DocumentService`/document metadata.
@@ -56,7 +56,7 @@ Make progress steps consistent across backend and frontend, with clear early sig
   - Auto/system restarts MUST NOT set `force_restart` and remain strictly monotonic.
 
 Baseline mapping for manual restart:
-`{"document_uploaded":5,"validate_input":7,"document_processing":7,"validate_document_quality":34,"extract_terms":42,"validate_terms_completeness":50,"analyze_compliance":57,"assess_risks":71,"generate_recommendations":85,"compile_report":98,"analysis_complete":100}`
+`{"document_uploaded":5,"validate_input":7,"document_processing":7,"layout_summarise":50,"validate_document_quality":52,"extract_terms":59,"validate_terms_completeness":60,"analyze_compliance":68,"assess_risks":75,"generate_recommendations":85,"compile_report":98,"analysis_complete":100}`
 
 ### Frontend
 - Update `AnalysisProgress` steps to include (and render conditionally as needed):
@@ -72,10 +72,10 @@ Baseline mapping for manual restart:
   - `compile_report`
 - Source `progress_percent` and `step_description` exclusively from contract/session stream; ensure monotonic percent.
 - If UI connects mid-run: show last persisted progress; continue live updates.
-- If `validate_document_quality` is skipped, jump from ≤30% to 42%.
+- If `validate_document_quality` is skipped, jump from ≤50% to 59%.
 
 ### Config/Flags
-- `ENABLE_DOCUMENT_QUALITY_VALIDATION` (default: true) gates 34% step.
+- `ENABLE_DOCUMENT_QUALITY_VALIDATION` (default: true) gates 52% step.
 - `ENABLE_PER_PAGE_PROGRESS` (default: true) enables page-based 7–30% updates on session channel.
 
 ### Testing/Acceptance

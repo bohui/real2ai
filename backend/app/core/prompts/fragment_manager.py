@@ -200,7 +200,8 @@ class FragmentManager:
             for key in {top_level, full_dir_key}:
                 if key not in fragment_groups:
                     fragment_groups[key] = []
-                fragment_groups[key].append(fragment.content)
+                # matching_fragments contains dicts (from context matcher), not Fragment objects
+                fragment_groups[key].append(fragment["content"])
 
         # Prepare fragment variables for template rendering
         fragment_vars = {}

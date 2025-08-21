@@ -56,7 +56,7 @@ class Settings(BaseSettings):
     # JWT Settings
     jwt_secret_key: Optional[str] = None
     jwt_algorithm: str = "HS256"
-    jwt_expiration_hours: int = 1  # Changed from 24 to 1 hour to match Supabase
+    jwt_expiration_hours: int = 4  # Changed from 24 to 1 hour to match Supabase
 
     # Token Coordination Settings
     backend_token_ttl_buffer_minutes: int = (

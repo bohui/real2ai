@@ -29,6 +29,8 @@ DEFAULT_MAX_OUTPUT_TOKENS: int = 65535
 DEFAULT_TEMPERATURE: float = 0.1
 DEFAULT_TOP_P: float = 1.0
 DEFAULT_PARSE_GENERATION_MAX_ATTEMPTS: int = 3
+# Max characters of raw model output to include in warning logs when parsing fails
+PARSE_ERROR_OUTPUT_PREVIEW_CHARS: int = 256
 
 
 class LLMService(UserAwareService):
@@ -217,8 +219,23 @@ class LLMService(UserAwareService):
                     return parsing_result
 
                 last_result = parsing_result
+                # Collect rich diagnostics for easier troubleshooting
+                validation_errors = (
+                    getattr(parsing_result, "validation_errors", []) or []
+                )
+                parsing_errors = getattr(parsing_result, "parsing_errors", []) or []
+                raw_preview = (response or "")[:PARSE_ERROR_OUTPUT_PREVIEW_CHARS]
+                model_name = model or getattr(
+                    getattr(client, "config", None), "model_name", None
+                )
+
                 logger.warning(
-                    f"Parsing failed on attempt {attempt}/{attempts}. "
+                    f"Parsing failed on attempt {attempt}/{attempts} "
+                    f"(client={client_key}, model={model_name}). "
+                    f"errors(validation={len(validation_errors)}, parsing={len(parsing_errors)}), "
+                    f"confidence={parsing_result.confidence_score:.2f}, "
+                    f"raw_len={len(response) if response is not None else 0}, "
+                    f"raw_preview='{raw_preview.replace('\n', ' ')}' "
                     f"Will{' not' if attempt == attempts else ''} retry generation."
                 )
 

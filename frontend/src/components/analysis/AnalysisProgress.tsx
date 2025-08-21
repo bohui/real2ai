@@ -188,10 +188,10 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({ className }) => {
   // Filter steps based on configuration and current progress
   const visibleSteps = steps.filter((step) => {
     // Always show validate_document_quality step unless we know it's disabled
-    // If we skipped from <=30% to 42%, then the step was disabled
+    // If we skipped from <=50% to 59%, then the step was disabled
     if (step.key === "validate_document_quality") {
-      if (analysisProgress && progress > 30 && progress >= 42) {
-        // If we jumped from document_processing (30%) to extract_terms (42%), skip this step
+      if (analysisProgress && progress > 50 && progress >= 59) {
+        // If we jumped from layout_summarise (<=50%) to extract_terms (59%), skip this step
         if (analysisProgress.current_step === "extract_terms") {
           return false;
         }

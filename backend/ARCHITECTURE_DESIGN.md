@@ -244,11 +244,12 @@ workflow_progress = {
     "document_uploaded": 5,             # Document uploaded successfully
     "validate_input": 7,                # Initialize analysis  
     "document_processing": "7-30",      # Extract text & diagrams (incremental per page)
-    "validate_document_quality": 34,    # Validate document quality (conditional)
-    "extract_terms": 42,                # Extract contract terms
-    "validate_terms_completeness": 50,  # Validate terms completeness
-    "analyze_compliance": 57,           # Analyze compliance  
-    "assess_risks": 71,                 # Assess risks
+    "layout_summarise": "30-50",       # Layout analysis (chunked range)
+    "validate_document_quality": 52,    # Validate document quality (conditional)
+    "extract_terms": 59,                # Extract contract terms
+    "validate_terms_completeness": 60,  # Validate terms completeness
+    "analyze_compliance": 68,           # Analyze compliance  
+    "assess_risks": 75,                 # Assess risks
     "generate_recommendations": 85,     # Generate recommendations
     "compile_report": 98,               # Compile report
     "analysis_complete": 100            # Analysis complete
@@ -256,7 +257,7 @@ workflow_progress = {
 ```
 
 **Configuration Flags**:
-- `ENABLE_DOCUMENT_QUALITY_VALIDATION`: Controls step 4 (34%)
+- `ENABLE_DOCUMENT_QUALITY_VALIDATION`: Controls validation step (52%)
 - `ENABLE_PER_PAGE_PROGRESS`: Enables incremental 7-30% progress during document processing
 
 **Idempotent Progress Tracking**: Progress percentages only increase, ensuring reliable progress indication even with retries or duplicate updates.
