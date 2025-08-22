@@ -293,9 +293,9 @@ class ContractEntityExtraction(BaseModel):
     legal_references: List[LegalReference] = Field(
         default_factory=list, description="Legal references"
     )
-    conditions: List[ContractCondition] = Field(
-        default_factory=list, description="Contract conditions"
-    )
+    # conditions: List[ContractCondition] = Field(
+    #     default_factory=list, description="Contract conditions"
+    # )
 
     # Property details
     property_details: Optional[PropertyDetails] = Field(

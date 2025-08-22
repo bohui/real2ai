@@ -228,6 +228,92 @@ class ContractTermsExtractionNode(BaseNode):
             # Infer contract taxonomy from OCR text
             # await self._infer_contract_taxonomy(full_text, state)
 
+            # Derive legal requirements from taxonomy BEFORE LLM to feed prompt context
+            try:
+
+                def _to_value(v: Any) -> Optional[str]:
+                    try:
+                        return (
+                            (v.value if hasattr(v, "value") else str(v))
+                            if v is not None
+                            else None
+                        )
+                    except Exception:
+                        return None
+
+                entities_result = state.get("entities_extraction_result") or {}
+                metadata = entities_result.get("metadata") or {}
+
+                contract_type_val = state.get("contract_type") or metadata.get(
+                    "contract_type"
+                )
+                purchase_method_val = state.get("purchase_method") or metadata.get(
+                    "purchase_method"
+                )
+                use_category_val = state.get("use_category") or metadata.get(
+                    "use_category"
+                )
+                property_condition_val = state.get(
+                    "property_condition"
+                ) or metadata.get("property_condition")
+
+                contract_type_str = _to_value(contract_type_val)
+                purchase_method_str = _to_value(purchase_method_val)
+                use_category_str = _to_value(use_category_val)
+                property_condition_str = _to_value(property_condition_val)
+
+                if all(
+                    [
+                        contract_type_str,
+                        purchase_method_str,
+                        use_category_str,
+                        property_condition_str,
+                    ]
+                ):
+                    from app.agents.tools.domain.legal_requirements import (
+                        derive_legal_requirements,
+                    )
+
+                    requirements = derive_legal_requirements.invoke(
+                        {
+                            "contract_type": contract_type_str,
+                            "purchase_method": purchase_method_str,
+                            "use_category": use_category_str,
+                            "property_condition": property_condition_str,
+                        }
+                    )
+
+                    if isinstance(requirements, dict):
+                        state["legal_requirements"] = requirements
+                        self._log_step_debug(
+                            "Derived legal requirements from taxonomy",
+                            state,
+                            {
+                                "contract_type": contract_type_str,
+                                "purchase_method": purchase_method_str,
+                                "use_category": use_category_str,
+                                "property_condition": property_condition_str,
+                                "requirements_keys": list(requirements.keys()),
+                            },
+                        )
+                else:
+                    self._log_step_debug(
+                        "Skipping legal requirements derivation due to incomplete taxonomy",
+                        state,
+                        {
+                            "contract_type": contract_type_str,
+                            "purchase_method": purchase_method_str,
+                            "use_category": use_category_str,
+                            "property_condition": property_condition_str,
+                        },
+                    )
+            except Exception as req_err:
+                self._log_exception(
+                    req_err,
+                    state,
+                    {"operation": "derive_legal_requirements"},
+                )
+
             # Extract terms using configured method
 
             if use_llm and extraction_method == "llm_structured":
@@ -284,6 +370,8 @@ class ContractTermsExtractionNode(BaseNode):
                 "contract_extraction"
             ] = confidence_score
 
+            # (requirements derivation moved earlier to feed prompt context)
+
             extraction_data = {
                 "contract_terms": contract_terms,
                 "extraction_method": extraction_source,
@@ -334,17 +422,37 @@ class ContractTermsExtractionNode(BaseNode):
                 or "intermediate"
             )
 
+            # Include derived legal requirements and taxonomy hints in context
+            legal_requirements_flags = state.get("legal_requirements", {})
+            purchase_method_hint = state.get("purchase_method")
+            use_category_hint = state.get("use_category")
+            property_condition_hint = state.get("property_condition")
+
             context = PromptContext(
                 context_type=ContextType.EXTRACTION,
                 variables={
                     # Template-required variables
                     "contract_text": text,  # Template expects 'contract_text', not 'extracted_text'
                     "state": state_value,
+                    "australian_state": state_value,
                     "analysis_type": "contract_terms_extraction",  # Required by template
                     # Additional context variables
                     "document_metadata": document_metadata,
                     "extraction_type": "contract_terms",
                     "contract_type": contract_type_value,
+                    # Taxonomy hints
+                    "contract_type_hint": contract_type_value,
+                    "purchase_method_hint": getattr(
+                        purchase_method_hint, "value", purchase_method_hint
+                    ),
+                    "use_category_hint": getattr(
+                        use_category_hint, "value", use_category_hint
+                    ),
+                    "property_condition_hint": getattr(
+                        property_condition_hint, "value", property_condition_hint
+                    ),
+                    # Derived requirements
+                    "legal_requirements": legal_requirements_flags,
                     "user_type": user_type_value,
                     "user_experience": user_experience_value,
                     "extraction_timestamp": datetime.now(UTC).isoformat(),

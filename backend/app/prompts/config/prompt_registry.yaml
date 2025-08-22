@@ -63,11 +63,19 @@ registry:
 
   user_prompts:
     contract_analysis_base:
-      path: "user/analysis/contract_analysis_base.md"
+      path: "user/analysis/contract_analysis_full.md"
       category: "analysis"
       system_requirements: ["legal_specialist", "australian_legal"]
       description: "Fragment-based comprehensive contract analysis instructions"
       estimated_tokens: 8000
+
+    contract_term_extraction:
+      path: "user/analysis/contract_term_extraction.md"
+      category: "analysis"
+      system_requirements: ["legal_specialist", "australian_legal"]
+      description: "Contract term extraction and basic analysis"
+      estimated_tokens: 8000
+      
     contract_term_extraction:
       path: "user/analysis/contract_term_extraction.md"
       category: "analysis"

@@ -19,5 +19,6 @@ from .enums.errors import *
 from .enums.context import *
 from .enums.notifications import *
 from .enums.alerts import *
+from .enums.compliance import *
 
 # No duplicate enum definitions needed - all enums are imported from their organized modules

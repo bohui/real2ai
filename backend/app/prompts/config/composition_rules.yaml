@@ -60,7 +60,7 @@ compositions:
     user_prompts:
       - "contract_analysis_base"
 
-  contract_basic_analysis:
+  contract_term_extraction:
     description: "Basic combined structure analysis using contract term extraction prompt"
     version: "1.0.0"
     system_prompts:
@@ -73,7 +73,7 @@ compositions:
         priority: 90
         required: true
     user_prompts:
-      - "contract_analysis_base"
+      - "contract_term_extraction"
 
   contract_entities_extraction:
     description: "Extract entities from contracts using the entities extraction prompt"

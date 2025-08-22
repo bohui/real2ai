@@ -1,7 +1,7 @@
 ---
 type: "user"
 category: "instructions"
-name: "contract_analysis_base"
+name: "contract_entities_extraction"
 version: "2.0.0"
 description: "Base contract analysis template that works with fragments"
 fragment_orchestration: "contract_analysis"
