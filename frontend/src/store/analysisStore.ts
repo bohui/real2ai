@@ -972,7 +972,7 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
     console.log(`Disconnecting WebSocket for document ${currentDocumentId}`);
 
     if (wsService) {
-      wsService.disconnect();
+      wsService.disconnect("store.disconnectWebSocket");
     }
 
     // Also remove from connection manager

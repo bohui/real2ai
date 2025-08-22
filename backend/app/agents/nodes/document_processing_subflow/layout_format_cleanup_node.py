@@ -18,6 +18,7 @@ from app.utils.font_layout_mapper import FontLayoutMapper
 from app.utils.storage_utils import ArtifactStorageService
 from app.services.repositories.artifacts_repository import ArtifactsRepository
 from app.utils.content_utils import compute_content_hmac, compute_params_fingerprint
+from app.services.repositories.contracts_repository import ContractsRepository
 
 
 class LayoutFormatCleanupNode(DocumentProcessingNodeBase):
@@ -143,6 +144,35 @@ class LayoutFormatCleanupNode(DocumentProcessingNodeBase):
                 params,
             )
 
+            # Update contract raw_text with formatted text
+            try:
+                content_hash = state.get("content_hash")
+                if not content_hash:
+                    metadata = state.get("_document_metadata") or {}
+                    content_hash = state.get("content_hmac") or metadata.get(
+                        "content_hash"
+                    )
+
+                if content_hash:
+                    contracts_repo = ContractsRepository()
+                    await contracts_repo.upsert_contract_by_content_hash(
+                        content_hash=content_hash,
+                        contract_type=str(state.get("contract_type") or "unknown"),
+                        raw_text=formatted_text,
+                        updated_by=self.node_name,
+                    )
+                else:
+                    self._log_warning(
+                        "Missing content_hash; skipping raw_text upsert",
+                        extra={"document_id": document_id},
+                    )
+            except Exception as upsert_err:
+                # Non-fatal: continue processing even if upsert fails
+                self._log_warning(
+                    f"Failed to upsert formatted raw_text: {upsert_err}",
+                    extra={"document_id": document_id},
+                )
+
             # STEP 4: Create layout format result
             # Add debug logging to help identify validation issues
             self._log_info(
@@ -225,42 +255,122 @@ class LayoutFormatCleanupNode(DocumentProcessingNodeBase):
         Returns:
             Formatted markdown text
         """
-        # Split by page delimiters (handle both with and without trailing newline)
-        page_delimiter_pattern = re.compile(r"^--- Page [^-\n]* ---\n?", re.MULTILINE)
-        pages = page_delimiter_pattern.split(text)
+        # Split by page delimiters (capture the delimiter so we can preserve it)
+        # Examples of delimiters: "--- Page 1 ---", "--- Page 3 of 12 ---"
+        page_delimiter_pattern = re.compile(r"^(--- Page [^-\n]* ---)\n?", re.MULTILINE)
+        parts = page_delimiter_pattern.split(text)
 
-        formatted_pages = []
-        total_pages = len([p for p in pages if p.strip()])
+        formatted_pages: List[str] = []
+        page_bodies: List[str] = []
+
+        if len(parts) == 1:
+            # No explicit page delimiters; treat entire text as a single page
+            if parts[0].strip():
+                page_bodies.append(parts[0])
+        else:
+            # parts structure: [preamble, header1, body1, header2, body2, ...]
+            preamble = parts[0]
+            if preamble.strip():
+                page_bodies.append(preamble)
+
+            # Iterate over header/body pairs
+            for i in range(1, len(parts), 2):
+                header = parts[i]
+                body = parts[i + 1] if i + 1 < len(parts) else ""
+
+                # Format body first using mapping or simple cleanup
+                if font_mapping:
+                    formatted_body = self._format_page_with_mapping(body, font_mapping)
+                else:
+                    formatted_body = self._format_page_without_mapping(body)
+
+                # Build markdown comment for the page header and prepend it
+                header_text_match = re.match(r"---\s*(.*?)\s*---", header.strip())
+                header_text = (
+                    header_text_match.group(1) if header_text_match else header.strip()
+                )
+                header_comment = f"<!-- {header_text} -->"
+
+                if formatted_body:
+                    formatted_pages.append(
+                        "\n\n".join([header_comment, formatted_body])
+                    )
+                else:
+                    # Preserve page boundary even if no body content
+                    formatted_pages.append(header_comment)
+
+                page_bodies.append(body)
+
+        # Compute total pages based on non-empty bodies (align with previous behavior)
+        total_pages = len([p for p in page_bodies if p.strip()])
         processed_pages = 0
 
-        for page in pages:
-            if not page.strip():
-                continue
-
-            if font_mapping:
-                # Use font mapping for formatting
-                formatted_page = self._format_page_with_mapping(page, font_mapping)
-            else:
-                # No font mapping, just clean the text
-                formatted_page = self._format_page_without_mapping(page)
-
-            if formatted_page:
-                formatted_pages.append(formatted_page)
-
-            processed_pages += 1
-
-            # Emit incremental progress for each page processed
-            if hasattr(self, "progress_callback") and self.progress_callback:
-                try:
-                    await self.emit_page_progress(
-                        current_page=processed_pages,
-                        total_pages=total_pages,
-                        description="Formatting page layout",
-                        progress_range=self.progress_range,
+        # Process preamble (if any) as the first page without a header comment
+        if len(parts) > 1:
+            preamble = parts[0]
+            if preamble.strip():
+                if font_mapping:
+                    formatted_preamble = self._format_page_with_mapping(
+                        preamble, font_mapping
                     )
-                except Exception as e:
-                    # Don't fail processing if progress emission fails
-                    self._log_warning(f"Failed to emit page progress: {e}")
+                else:
+                    formatted_preamble = self._format_page_without_mapping(preamble)
+
+                if formatted_preamble:
+                    formatted_pages.insert(0, formatted_preamble)
+
+                processed_pages += 1
+
+                if hasattr(self, "progress_callback") and self.progress_callback:
+                    try:
+                        await self.emit_page_progress(
+                            current_page=processed_pages,
+                            total_pages=total_pages,
+                            description="Formatting page layout",
+                            progress_range=self.progress_range,
+                        )
+                    except Exception as e:
+                        self._log_warning(f"Failed to emit page progress: {e}")
+        else:
+            # Single page (no delimiters) path
+            if page_bodies:
+                processed_pages = 1
+                if hasattr(self, "progress_callback") and self.progress_callback:
+                    try:
+                        await self.emit_page_progress(
+                            current_page=processed_pages,
+                            total_pages=total_pages or 1,
+                            description="Formatting page layout",
+                            progress_range=self.progress_range,
+                        )
+                    except Exception as e:
+                        self._log_warning(f"Failed to emit page progress: {e}")
+
+            # When no delimiters, ensure formatted_pages contains the formatted body
+            if not formatted_pages and page_bodies:
+                body = page_bodies[0]
+                if font_mapping:
+                    formatted_only = self._format_page_with_mapping(body, font_mapping)
+                else:
+                    formatted_only = self._format_page_without_mapping(body)
+                if formatted_only:
+                    formatted_pages.append(formatted_only)
+
+        # For documents with explicit pages, we already emitted progress for preamble; now emit for each header/body pair
+        if len(parts) > 1 and total_pages > (1 if parts[0].strip() else 0):
+            remaining_pages = total_pages - processed_pages
+            for _ in range(remaining_pages):
+                processed_pages += 1
+                if hasattr(self, "progress_callback") and self.progress_callback:
+                    try:
+                        await self.emit_page_progress(
+                            current_page=processed_pages,
+                            total_pages=total_pages,
+                            description="Formatting page layout",
+                            progress_range=self.progress_range,
+                        )
+                    except Exception as e:
+                        self._log_warning(f"Failed to emit page progress: {e}")
 
         return "\n\n".join(formatted_pages)
 

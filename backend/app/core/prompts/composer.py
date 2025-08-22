@@ -162,7 +162,27 @@ class PromptComposer:
                 if variables:
                     system_context.variables.update(variables)
 
-                rendered = template.render(system_context, **kwargs)
+                # Determine if this template opts into folder-driven fragment composition
+                orchestration_id = None
+                if hasattr(template.metadata, "tags") and template.metadata.tags:
+                    for tag in template.metadata.tags:
+                        if tag.startswith("fragment_orchestration:"):
+                            orchestration_id = tag.split(":", 1)[1]
+                            break
+
+                if not orchestration_id:
+                    orchestration_id = getattr(
+                        template, "_fragment_orchestration", None
+                    )
+
+                if orchestration_id:
+                    rendered = self.fragment_manager.compose_with_folder_fragments(
+                        base_template=template.content,
+                        context=system_context,
+                    )
+                else:
+                    rendered = template.render(system_context, **kwargs)
+
                 system_parts.append(rendered)
 
             except Exception as e:

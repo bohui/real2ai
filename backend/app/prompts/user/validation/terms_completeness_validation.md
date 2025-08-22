@@ -1,15 +1,25 @@
 ---
+type: "user"
+category: "validation"
 name: "terms_completeness_validation"
-version: "2.0"
-description: "Completeness validation of extracted contract terms for reliable contract analysis"
-required_variables: ["contract_terms", "australian_state", "contract_type"]
-optional_variables: ["user_experience", "expects_structured_output", "format_instructions"]
-model_compatibility: ["gemini-2.5-flash", "gpt-4", "claude-3-5-sonnet"]
-max_tokens: 5000
+version: "2.0.0"
+description: "Validate completeness of contract terms and conditions extraction"
+fragment_orchestration: "terms_validation"
+required_variables:
+  - "extracted_terms"
+  - "australian_state"
+  - "contract_type"
+  - "validation_scope"
+optional_variables:
+  - "user_experience"
+  - "completeness_criteria"
+  - "missing_terms_focus"
+  - "output_format"
+model_compatibility: ["gemini-2.5-flash", "gpt-4"]
+max_tokens: 8000
 temperature_range: [0.1, 0.3]
-tags: ["validation", "completeness", "contract_terms", "australian", "legal"]
-
-
+output_parser: TermsCompletenessValidationOutput
+tags: ["validation", "terms", "completeness", "contract", "australian"]
 ---
 
 # Contract Terms Completeness Validation

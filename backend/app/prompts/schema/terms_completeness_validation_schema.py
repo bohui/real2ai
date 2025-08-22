@@ -1,4 +1,4 @@
-from app.models.workflow_outputs import (
+from app.prompts.schema.workflow_outputs import (
     ContractTermsValidationOutput as TermsCompletenessValidationOutput,
 )
 

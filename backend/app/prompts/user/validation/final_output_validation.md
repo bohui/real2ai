@@ -1,15 +1,25 @@
 ---
+type: "user"
+category: "validation"
 name: "final_output_validation"
-version: "2.0"
-description: "Final validation of complete contract analysis output for quality assurance"
-required_variables: ["risk_assessment", "compliance_check", "recommendations", "australian_state", "contract_type"]
-optional_variables: ["analysis_type", "user_experience", "expects_structured_output", "format_instructions"]
-model_compatibility: ["gemini-2.5-flash", "gpt-4", "claude-3-5-sonnet"]
-max_tokens: 5000
+version: "2.0.0"
+description: "Final validation of contract analysis outputs for completeness and accuracy"
+fragment_orchestration: "output_validation"
+required_variables:
+  - "analysis_output"
+  - "australian_state"
+  - "contract_type"
+  - "validation_scope"
+optional_variables:
+  - "user_experience"
+  - "quality_standards"
+  - "output_format"
+  - "validation_criteria"
+model_compatibility: ["gemini-2.5-flash", "gpt-4"]
+max_tokens: 8000
 temperature_range: [0.1, 0.3]
-tags: ["validation", "quality_assurance", "final_output", "contract", "analysis"]
-
-
+output_parser: FinalOutputValidationOutput
+tags: ["validation", "final", "output", "contract", "australian"]
 ---
 
 # Final Contract Analysis Output Validation

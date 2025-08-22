@@ -7,9 +7,8 @@ optional_variables: ["document_type", "extraction_method", "document_metadata", 
 model_compatibility: ["gemini-2.5-flash", "gpt-4", "claude-3-5-sonnet"]
 max_tokens: 4000
 temperature_range: [0.1, 0.3]
+output_parser: DocumentQualityValidationOutput
 tags: ["validation", "document_quality", "ocr", "text_analysis", "contract"]
-
-
 ---
 
 # Document Quality Validation

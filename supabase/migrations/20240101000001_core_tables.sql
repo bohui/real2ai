@@ -52,15 +52,16 @@ ALTER TABLE documents ADD COLUMN IF NOT EXISTS artifact_text_id UUID;
 CREATE TABLE contracts (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     content_hash TEXT UNIQUE NOT NULL,
-    metadata JSONB DEFAULT '{}'::jsonb,
     contract_type contract_type NOT NULL DEFAULT 'unknown',
-    australian_state australian_state NOT NULL DEFAULT 'NSW',
+    state australian_state NOT NULL DEFAULT 'NSW',
     purchase_method purchase_method,
     use_category use_category,
     ocr_confidence JSONB DEFAULT '{}'::jsonb,
     contract_terms JSONB DEFAULT '{}'::jsonb,
+    extracted_entity JSONB DEFAULT '{}'::jsonb,
     raw_text TEXT,
     property_address TEXT,
+    updated_by TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -562,7 +563,7 @@ CREATE INDEX idx_documents_created_at ON documents(created_at DESC);
 CREATE INDEX idx_documents_user_status ON documents(user_id, processing_status);
 
 CREATE INDEX idx_contracts_content_hash ON contracts(content_hash);
-CREATE INDEX idx_contracts_type_state ON contracts(contract_type, australian_state);
+CREATE INDEX idx_contracts_type_state ON contracts(contract_type, state);
 
 -- Create indexes for better performance on analyses table
 CREATE INDEX idx_analyses_content_hash ON analyses(content_hash);

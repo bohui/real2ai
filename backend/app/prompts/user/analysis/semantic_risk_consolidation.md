@@ -1,20 +1,25 @@
 ---
 type: "user"
-category: "analysis"
+category: "instructions"
 name: "semantic_risk_consolidation"
-version: "1.0.0"
-description: "Consolidate risks across multiple semantic analyses of property diagrams"
+version: "2.0.0"
+description: "Consolidate semantic analysis and risk assessment for Australian property contracts"
+fragment_orchestration: "risk_consolidation"
 required_variables:
-  - "semantic_analyses"
-  - "contract_context"
+  - "semantic_analysis"
+  - "risk_assessment"
   - "australian_state"
+  - "contract_type"
 optional_variables:
-  - "property_address"
-  - "total_diagrams"
+  - "user_experience"
+  - "consolidation_focus"
+  - "risk_prioritization"
+  - "output_format"
 model_compatibility: ["gemini-2.5-flash", "gpt-4"]
-max_tokens: 15000
-temperature_range: [0.1, 0.3]
-tags: ["semantic", "risk", "consolidation", "multi-diagram"]
+max_tokens: 10000
+temperature_range: [0.1, 0.4]
+output_parser: SemanticRiskConsolidationOutput
+tags: ["semantic", "risk", "consolidation", "contract", "australian"]
 ---
 
 # Semantic Risk Consolidation Instructions

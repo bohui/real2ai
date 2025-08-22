@@ -17,7 +17,7 @@ from pathlib import Path
 
 # LangChain OutputParser integration
 from app.core.prompts.parsers import create_parser, ParsingResult
-from app.models.workflow_outputs import (
+from app.prompts.schema.workflow_outputs import (
     RiskAnalysisOutput,
     RecommendationsOutput,
     ContractTermsOutput,

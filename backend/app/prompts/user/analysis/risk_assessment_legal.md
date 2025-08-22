@@ -21,6 +21,7 @@ model_compatibility:
   - "gpt-4"
 max_tokens: 15000
 temperature_range: [0.2, 0.5]
+output_parser: LegalRiskAssessmentOutput
 tags:
   - "legal_risk"
   - "financial_risk"

@@ -345,7 +345,7 @@ class LayoutSummariseNode(DocumentProcessingNodeBase):
                         else getattr(summary, "use_category", None)
                     ),
                     ocr_confidence=summary.ocr_confidence,
-                    australian_state=(
+                    state=(
                         str(summary.australian_state.value)
                         if getattr(summary, "australian_state", None)
                         and hasattr(summary.australian_state, "value")
@@ -353,6 +353,8 @@ class LayoutSummariseNode(DocumentProcessingNodeBase):
                         or australian_state
                     ),
                     contract_terms=summary.contract_terms,
+                    property_address=(getattr(summary, "property_address", None)),
+                    updated_by=self.node_name,
                 )
 
             # Update state with cleaned text to be available for build_summary

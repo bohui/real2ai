@@ -1,12 +1,12 @@
 ---
 type: "user"
 category: "instructions"
-name: "risk_assessment_property_physical"
-version: "3.0.0"
-description: "Specialized property physical and environmental risk assessment for Australian real estate"
+name: "risk_assessment_property"
+version: "2.0.0"
+description: "Property-specific risk assessment for Australian real estate contracts"
 fragment_orchestration: "risk_assessment_property"
 required_variables:
-  - "property_data"
+  - "contract_data"
   - "property_type"
   - "australian_state"
   - "user_type"
@@ -15,18 +15,18 @@ optional_variables:
   - "focus_areas"
   - "risk_tolerance"
   - "investment_purpose"
-  - "property_condition"
+  - "financing_type"
 model_compatibility:
   - "gemini-2.5-flash"
   - "gpt-4"
 max_tokens: 12000
 temperature_range: [0.2, 0.5]
+output_parser: PropertyRiskAssessmentOutput
 tags:
   - "property_risk"
-  - "location_analysis"
-  - "infrastructure_assessment"
-  - "environmental_risk"
-  - "physical_property"
+  - "real_estate"
+  - "contract_analysis"
+  - "australian_property_law"
 ---
 
 # Property Physical & Environmental Risk Assessment Instructions

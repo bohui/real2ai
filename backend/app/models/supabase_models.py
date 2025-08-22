@@ -139,15 +139,23 @@ class Contract(TimestampedBaseModel):
         None, description="OCR-inferred purchase method for purchase agreements"
     )
     use_category: Optional[UseCategory] = Field(
-        None, description="OCR-inferred property use category for purchase and lease agreements"
+        None,
+        description="OCR-inferred property use category for purchase and lease agreements",
     )
     ocr_confidence: Dict[str, float] = Field(
         default_factory=dict, description="Confidence scores for OCR-inferred fields"
     )
-    australian_state: AustralianState = AustralianState.NSW
+    state: AustralianState = AustralianState.NSW
     contract_terms: Dict[str, Any] = Field(default_factory=dict)
+    extracted_entity: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Complete ContractEntityExtraction payload (for reference)",
+    )
     raw_text: Optional[str] = None
     property_address: Optional[str] = None
+    updated_by: Optional[str] = Field(
+        None, description="Workflow node that made the last update"
+    )
 
 
 class Analysis(TimestampedBaseModel):
@@ -634,7 +642,7 @@ class AnalysisProgressDetailed(BaseModel):
 
     # From contracts
     contract_type: ContractType
-    australian_state: AustralianState
+    state: AustralianState
 
     # From documents
     original_filename: str

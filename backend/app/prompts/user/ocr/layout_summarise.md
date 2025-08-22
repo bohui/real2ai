@@ -2,20 +2,20 @@
 type: "user"
 name: "layout_summarise"
 version: "1.0.0"
-description: "Clean up Markdown full text (with font references) and extract basic contract taxonomy and terms; input must be complete without any truncation"
+description: "Summarize document layout and structure for Australian contracts"
 required_variables:
-  - "full_text"
   - "australian_state"
-optional_variables:
+  - "contract_type"
   - "document_type"
-  - "contract_type_hint"
-  - "purchase_method_hint"
-  - "use_category_hint"
-  - "font_to_layout_mapping"
+optional_variables:
+  - "quality_requirements"
+  - "user_type"
+  - "complexity"
 model_compatibility: ["gemini-2.5-flash", "gpt-4"]
-max_tokens: 3000
+max_tokens: 4000
 temperature_range: [0.0, 0.2]
-tags: ["ocr", "cleanup", "classification", "taxonomy"]
+output_parser: LayoutSummaryOutput
+tags: ["ocr", "layout", "summary", "australian", "contracts"]
 ---
 
 # Contract Layout Summarisation and Taxonomy Extraction

@@ -15,15 +15,16 @@ from datetime import datetime, UTC
 from app.models.contract_state import RealEstateAgentState
 from app.schema.enums import ProcessingStatus
 from app.core.async_utils import AsyncContextManager, ensure_async_pool_initialization
-from app.models.workflow_outputs import (
+from app.prompts.schema.workflow_outputs import (
     RiskAnalysisOutput,
     RecommendationsOutput,
+    ContractTermsOutput,
+    ContractTermsValidationOutput,
+    ComplianceAnalysisOutput,
     DocumentQualityMetrics,
     WorkflowValidationOutput,
-    ContractTermsValidationOutput,
-    ContractTermsOutput,
-    ComplianceAnalysisOutput,
 )
+from app.prompts.schema.entity_extraction_schema import ContractEntityExtraction
 
 # Client imports
 from app.clients import get_openai_client, get_gemini_client
@@ -64,6 +65,7 @@ from app.agents.nodes import (
     # Risk Assessment
     RiskAssessmentNode,
     RecommendationsGenerationNode,
+    EntitiesExtractionNode,
     # Validation
     FinalValidationNode,
     # Utilities
@@ -195,6 +197,9 @@ class ContractAnalysisWorkflow:
             "workflow_validation": create_parser(
                 WorkflowValidationOutput, strict_mode=False, retry_on_failure=True
             ),
+            "entities_extraction": create_parser(
+                ContractEntityExtraction, strict_mode=False, retry_on_failure=True
+            ),
         }
 
         # Performance metrics
@@ -244,6 +249,7 @@ class ContractAnalysisWorkflow:
         self.document_quality_validation_node = DocumentQualityValidationNode(self)
 
         # Contract Analysis Nodes
+        self.entities_extraction_node = EntitiesExtractionNode(self)
         self.contract_terms_extraction_node = ContractTermsExtractionNode(self)
         self.terms_validation_node = TermsValidationNode(self)
 
@@ -269,6 +275,7 @@ class ContractAnalysisWorkflow:
             "input_validation": self.input_validation_node,
             "document_processing": self.document_processing_node,
             "document_quality_validation": self.document_quality_validation_node,
+            "entities_extraction": self.entities_extraction_node,
             "contract_terms_extraction": self.contract_terms_extraction_node,
             "terms_validation": self.terms_validation_node,
             "compliance_analysis": self.compliance_analysis_node,
@@ -342,6 +349,7 @@ class ContractAnalysisWorkflow:
         # Add all node execution methods to the workflow
         workflow.add_node("validate_input", self.validate_input)
         workflow.add_node("process_document", self.process_document)
+        workflow.add_node("extract_entities", self.extract_entities)
         workflow.add_node("extract_terms", self.extract_contract_terms)
         workflow.add_node("analyze_compliance", self.analyze_australian_compliance)
         workflow.add_node("analyze_contract_diagrams", self.analyze_contract_diagrams)
@@ -374,27 +382,24 @@ class ContractAnalysisWorkflow:
             "process_document",
             self.check_processing_success,
             {
-                "success": (
-                    "validate_document_quality"
-                    if self.enable_validation
-                    else "extract_terms"
-                ),
+                "success": "extract_entities",
                 "retry": "retry_processing",
                 "error": "handle_error",
             },
         )
 
-        if self.enable_validation:
-            workflow.add_conditional_edges(
-                "validate_document_quality",
-                self.check_document_quality,
-                {
-                    "quality_passed": "extract_terms",
-                    "retry": "retry_processing",
-                    "error": "handle_error",
-                },
-            )
+        # After entities extraction, go to terms extraction
+        workflow.add_conditional_edges(
+            "extract_entities",
+            self.check_entities_extraction_success,
+            {
+                "success": "extract_terms",
+                "retry": "retry_processing",
+                "error": "handle_error",
+            },
+        )
 
+        # After terms extraction, check quality and proceed
         workflow.add_conditional_edges(
             "extract_terms",
             self.check_extraction_quality,
@@ -489,6 +494,7 @@ class ContractAnalysisWorkflow:
             {
                 "restart_workflow": "validate_input",
                 "retry_document_processing": "process_document",
+                "retry_entities_extraction": "extract_entities",
                 "retry_extraction": "extract_terms",
                 "retry_compliance": "analyze_compliance",
                 "retry_diagrams": "analyze_contract_diagrams",
@@ -499,7 +505,7 @@ class ContractAnalysisWorkflow:
                     if self.enable_validation
                     else "compile_report"
                 ),
-                "continue_workflow": "extract_terms",  # Default fallback
+                "continue_workflow": "extract_entities",  # Default fallback
             },
         )
 
@@ -704,6 +710,18 @@ class ContractAnalysisWorkflow:
         """Execute input validation node."""
         return self._run_async_node(self.input_validation_node.execute(state))
 
+    async def extract_entities(
+        self, state: RealEstateAgentState
+    ) -> RealEstateAgentState:
+        """Extract entities from the contract using the entities extraction node."""
+        try:
+            return await self.entities_extraction_node.execute(state)
+        except Exception as e:
+            logger.error(f"Entities extraction failed: {e}")
+            return self.error_handling_node._handle_node_error(
+                state, e, "Entities extraction failed"
+            )
+
     def process_document(self, state: RealEstateAgentState) -> RealEstateAgentState:
         """Execute document processing node."""
         return self._run_async_node(self.document_processing_node.execute(state))
@@ -812,6 +830,21 @@ class ContractAnalysisWorkflow:
         elif state.get("retry_attempts", 0) < 2:
             return "retry"
         else:
+            return "error"
+
+    def check_entities_extraction_success(self, state: RealEstateAgentState) -> str:
+        """Check if entities extraction was successful."""
+        try:
+            # Check if entities extraction completed successfully
+            if state.get("entities_extraction_result"):
+                return "success"
+            elif state.get("entities_extraction_skipped"):
+                # If skipped, still continue to next step
+                return "success"
+            else:
+                return "retry"
+        except Exception as e:
+            logger.error(f"Error checking entities extraction success: {e}")
             return "error"
 
     def check_extraction_quality(self, state: RealEstateAgentState) -> str:

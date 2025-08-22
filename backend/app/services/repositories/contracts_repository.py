@@ -33,12 +33,16 @@ class ContractsRepository:
         self,
         content_hash: str,
         contract_type: str,
+        *,
         purchase_method: Optional[str] = None,
         use_category: Optional[str] = None,
         ocr_confidence: Optional[Dict[str, float]] = None,
-        australian_state: Optional[str] = None,
+        state: Optional[str] = None,
         contract_terms: Optional[Dict[str, Any]] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        extracted_entity: Optional[Dict[str, Any]] = None,
+        raw_text: Optional[str] = None,
+        property_address: Optional[str] = None,
+        updated_by: str,
     ) -> Contract:
         """
         Upsert contract by content hash.
@@ -84,13 +88,17 @@ class ContractsRepository:
                 """
                 INSERT INTO contracts (
                     content_hash, contract_type, purchase_method, use_category,
-                    ocr_confidence, australian_state, contract_terms, metadata
+                    ocr_confidence, state, contract_terms, extracted_entity,
+                    raw_text, property_address, updated_by
                 ) VALUES (
                     $1, $2, $3, $4,
                     COALESCE($5::jsonb, '{}'::jsonb),
                     $6,
                     COALESCE($7::jsonb, '{}'::jsonb),
-                    COALESCE($8::jsonb, '{}'::jsonb)
+                    COALESCE($8::jsonb, '{}'::jsonb),
+                    $9,
+                    $10,
+                    $11
                 )
                 ON CONFLICT (content_hash) DO UPDATE SET
                     -- Prefer incoming non-null values while keeping existing when incoming is null
@@ -98,25 +106,34 @@ class ContractsRepository:
                     purchase_method = COALESCE(EXCLUDED.purchase_method, contracts.purchase_method),
                     use_category = COALESCE(EXCLUDED.use_category, contracts.use_category),
                     ocr_confidence = COALESCE(EXCLUDED.ocr_confidence, contracts.ocr_confidence),
-                    australian_state = COALESCE(EXCLUDED.australian_state, contracts.australian_state),
+                    state = COALESCE(EXCLUDED.state, contracts.state),
                     contract_terms = COALESCE(EXCLUDED.contract_terms, contracts.contract_terms),
-                    metadata = COALESCE(EXCLUDED.metadata, contracts.metadata),
+                    extracted_entity = COALESCE(EXCLUDED.extracted_entity, contracts.extracted_entity),
+                    raw_text = COALESCE(EXCLUDED.raw_text, contracts.raw_text),
+                    property_address = COALESCE(EXCLUDED.property_address, contracts.property_address),
+                    updated_by = COALESCE(EXCLUDED.updated_by, contracts.updated_by),
                     updated_at = now()
                 RETURNING id, content_hash, contract_type, purchase_method, use_category,
                          COALESCE(ocr_confidence, '{}'::jsonb) as ocr_confidence,
-                         australian_state,
+                         state,
                          COALESCE(contract_terms, '{}'::jsonb) as contract_terms,
+                         COALESCE(extracted_entity, '{}'::jsonb) as extracted_entity,
                          raw_text,
-                         property_address, created_at, updated_at
+                         property_address,
+                         updated_by,
+                         created_at, updated_at
                 """,
                 content_hash,
                 adjusted_contract_type,
                 adjusted_purchase_method,
                 adjusted_use_category,
                 json.dumps(ocr_confidence) if ocr_confidence is not None else None,
-                australian_state,
+                state,
                 json.dumps(contract_terms) if contract_terms is not None else None,
-                json.dumps(metadata) if metadata is not None else None,
+                json.dumps(extracted_entity) if extracted_entity is not None else None,
+                raw_text,
+                property_address,
+                updated_by,
             )
 
             # Normalize JSON fields in case the driver returns strings instead of dicts
@@ -140,10 +157,12 @@ class ContractsRepository:
                 purchase_method=row.get("purchase_method"),
                 use_category=row.get("use_category"),
                 ocr_confidence=_normalize_json(row.get("ocr_confidence")),
-                australian_state=row["australian_state"],
+                state=row["state"],
                 contract_terms=_normalize_json(row.get("contract_terms")),
+                extracted_entity=_normalize_json(row.get("extracted_entity")),
                 raw_text=row.get("raw_text"),
                 property_address=row.get("property_address"),
+                updated_by=row.get("updated_by"),
                 created_at=row["created_at"],
                 updated_at=row["updated_at"],
             )
@@ -194,10 +213,11 @@ class ContractsRepository:
                     """
                     SELECT id, content_hash, contract_type, purchase_method, use_category,
                            COALESCE(ocr_confidence, '{}'::jsonb) as ocr_confidence,
-                           australian_state,
+                           state,
                            COALESCE(contract_terms, '{}'::jsonb) as contract_terms,
+                           COALESCE(extracted_entity, '{}'::jsonb) as extracted_entity,
                            raw_text, 
-                           property_address, created_at, updated_at
+                           property_address, updated_by, created_at, updated_at
                     FROM contracts
                     WHERE content_hash = $1
                     """,
@@ -209,10 +229,11 @@ class ContractsRepository:
                     """
                 SELECT id, content_hash, contract_type, purchase_method, use_category,
                        COALESCE(ocr_confidence, '{}'::jsonb) as ocr_confidence,
-                       australian_state,
+                       state,
                        COALESCE(contract_terms, '{}'::jsonb) as contract_terms,
+                       COALESCE(extracted_entity, '{}'::jsonb) as extracted_entity,
                        raw_text, 
-                       property_address, created_at, updated_at
+                       property_address, updated_by, created_at, updated_at
                 FROM contracts
                 WHERE content_hash = $1
                 """,
@@ -242,10 +263,12 @@ class ContractsRepository:
                 purchase_method=row.get("purchase_method"),
                 use_category=row.get("use_category"),
                 ocr_confidence=_normalize_json(row.get("ocr_confidence")),
-                australian_state=row["australian_state"],
+                state=row["state"],
                 contract_terms=_normalize_json(row.get("contract_terms")),
+                extracted_entity=_normalize_json(row.get("extracted_entity")),
                 raw_text=row.get("raw_text"),
                 property_address=row.get("property_address"),
+                updated_by=row.get("updated_by"),
                 created_at=row["created_at"],
                 updated_at=row["updated_at"],
             )
@@ -283,8 +306,8 @@ class ContractsRepository:
             row = await conn.fetchrow(
                 """
                 SELECT id, content_hash, contract_type, purchase_method, use_category,
-                       ocr_confidence, australian_state, contract_terms, raw_text,
-                       property_address, created_at, updated_at
+                       ocr_confidence, state, contract_terms, extracted_entity, raw_text,
+                       property_address, updated_by, created_at, updated_at
                 FROM contracts
                 WHERE id = $1
                 """,
@@ -301,10 +324,12 @@ class ContractsRepository:
                 purchase_method=row.get("purchase_method"),
                 use_category=row.get("use_category"),
                 ocr_confidence=row.get("ocr_confidence", {}),
-                australian_state=row["australian_state"],
+                state=row["state"],
                 contract_terms=row.get("contract_terms", {}),
+                extracted_entity=row.get("extracted_entity", {}),
                 raw_text=row.get("raw_text"),
                 property_address=row.get("property_address"),
+                updated_by=row.get("updated_by"),
                 created_at=row["created_at"],
                 updated_at=row["updated_at"],
             )
@@ -353,8 +378,10 @@ class ContractsRepository:
                 """
                 SELECT id, content_hash, contract_type, purchase_method, use_category,
                        COALESCE(ocr_confidence, '{}'::jsonb) as ocr_confidence,
-                       australian_state, COALESCE(contract_terms, '{}'::jsonb) as contract_terms, raw_text,
-                       property_address, created_at, updated_at
+                       state, COALESCE(contract_terms, '{}'::jsonb) as contract_terms,
+                       COALESCE(extracted_entity, '{}'::jsonb) as extracted_entity,
+                       raw_text,
+                       property_address, updated_by, created_at, updated_at
                 FROM contracts
                 WHERE contract_type = $1
                 ORDER BY created_at DESC
@@ -386,10 +413,12 @@ class ContractsRepository:
                     purchase_method=row.get("purchase_method"),
                     use_category=row.get("use_category"),
                     ocr_confidence=_normalize_json(row.get("ocr_confidence")),
-                    australian_state=row["australian_state"],
+                    state=row["state"],
                     contract_terms=_normalize_json(row.get("contract_terms")),
+                    extracted_entity=_normalize_json(row.get("extracted_entity")),
                     raw_text=row.get("raw_text"),
                     property_address=row.get("property_address"),
+                    updated_by=row.get("updated_by"),
                     created_at=row["created_at"],
                     updated_at=row["updated_at"],
                 )
@@ -397,7 +426,7 @@ class ContractsRepository:
             ]
 
     async def list_contracts_by_state(
-        self, australian_state: str, limit: int = 50, offset: int = 0
+        self, state: str, limit: int = 50, offset: int = 0
     ) -> List[Contract]:
         """
         List contracts by Australian state.
@@ -415,14 +444,16 @@ class ContractsRepository:
                 """
                 SELECT id, content_hash, contract_type, purchase_method, use_category,
                        COALESCE(ocr_confidence, '{}'::jsonb) as ocr_confidence,
-                       australian_state, COALESCE(contract_terms, '{}'::jsonb) as contract_terms, raw_text,
-                       property_address, created_at, updated_at
+                       state, COALESCE(contract_terms, '{}'::jsonb) as contract_terms,
+                       COALESCE(extracted_entity, '{}'::jsonb) as extracted_entity,
+                       raw_text,
+                       property_address, updated_by, created_at, updated_at
                 FROM contracts
-                WHERE australian_state = $1
+                WHERE state = $1
                 ORDER BY created_at DESC
                 LIMIT $2 OFFSET $3
                 """,
-                australian_state,
+                state,
                 limit,
                 offset,
             )
@@ -448,10 +479,12 @@ class ContractsRepository:
                     purchase_method=row.get("purchase_method"),
                     use_category=row.get("use_category"),
                     ocr_confidence=_normalize_json(row.get("ocr_confidence")),
-                    australian_state=row["australian_state"],
+                    state=row["state"],
                     contract_terms=_normalize_json(row.get("contract_terms")),
+                    extracted_entity=_normalize_json(row.get("extracted_entity")),
                     raw_text=row.get("raw_text"),
                     property_address=row.get("property_address"),
+                    updated_by=row.get("updated_by"),
                     created_at=row["created_at"],
                     updated_at=row["updated_at"],
                 )
@@ -526,8 +559,8 @@ class ContractsRepository:
 
         query = f"""
             SELECT id, content_hash, contract_type, purchase_method, use_category,
-                   ocr_confidence, australian_state, contract_terms, raw_text,
-                   property_address, created_at, updated_at
+                   ocr_confidence, state, contract_terms, extracted_entity, raw_text,
+                   property_address, updated_by, created_at, updated_at
             FROM contracts
             {where_clause}
             ORDER BY created_at DESC
@@ -545,10 +578,12 @@ class ContractsRepository:
                     purchase_method=row.get("purchase_method"),
                     use_category=row.get("use_category"),
                     ocr_confidence=row.get("ocr_confidence", {}),
-                    australian_state=row["australian_state"],
+                    state=row["state"],
                     contract_terms=row.get("contract_terms", {}),
+                    extracted_entity=row.get("extracted_entity", {}),
                     raw_text=row.get("raw_text"),
                     property_address=row.get("property_address"),
+                    updated_by=row.get("updated_by"),
                     created_at=row["created_at"],
                     updated_at=row["updated_at"],
                 )
@@ -597,10 +632,10 @@ class ContractsRepository:
 
             state_rows = await conn.fetch(
                 """
-                SELECT australian_state, COUNT(*) as count
+                SELECT state, COUNT(*) as count
                 FROM contracts
-                WHERE australian_state IS NOT NULL
-                GROUP BY australian_state
+                WHERE state IS NOT NULL
+                GROUP BY state
                 ORDER BY count DESC
                 """
             )
@@ -614,7 +649,5 @@ class ContractsRepository:
                 "by_use_category": {
                     row["use_category"]: row["count"] for row in use_category_rows
                 },
-                "by_state": {
-                    row["australian_state"]: row["count"] for row in state_rows
-                },
+                "by_state": {row["state"]: row["count"] for row in state_rows},
             }

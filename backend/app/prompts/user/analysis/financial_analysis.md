@@ -1,15 +1,25 @@
 ---
+type: "user"
+category: "instructions"
 name: "financial_analysis"
-version: "2.0"
-description: "Comprehensive financial analysis of Australian property contracts with state-specific considerations"
-required_variables: ["contract_terms", "australian_state", "contract_type"]
-optional_variables: ["user_type", "user_financial_profile", "expects_structured_output", "format_instructions"]
-model_compatibility: ["gemini-2.5-flash", "gpt-4", "claude-3-5-sonnet"]
-max_tokens: 6000
-temperature_range: [0.1, 0.3]
-tags: ["analysis", "financial", "contract", "australian", "property"]
-
-
+version: "2.0.0"
+description: "Financial analysis of Australian property contracts"
+fragment_orchestration: "financial_analysis"
+required_variables:
+  - "contract_text"
+  - "australian_state"
+  - "contract_type"
+  - "financial_focus"
+optional_variables:
+  - "user_experience"
+  - "investment_purpose"
+  - "financing_type"
+  - "tax_considerations"
+model_compatibility: ["gemini-2.5-flash", "gpt-4"]
+max_tokens: 10000
+temperature_range: [0.1, 0.4]
+output_parser: FinancialAnalysisOutput
+tags: ["financial", "analysis", "contract", "australian", "property"]
 ---
 
 # Australian Property Contract Financial Analysis

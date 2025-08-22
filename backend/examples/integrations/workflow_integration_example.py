@@ -10,7 +10,7 @@ identified in the troubleshooting analysis.
 import logging
 from typing import Dict, Any, Optional, List
 from app.core.prompts.parsers import create_parser, ParsingResult
-from app.models.workflow_outputs import (
+from app.prompts.schema.workflow_outputs import (
     RiskAnalysisOutput,
     RecommendationsOutput,
     ContractTermsOutput,

@@ -1,15 +1,25 @@
 ---
-name: "contract_workflow"
-version: "2.0"
-description: "Comprehensive multi-step contract analysis workflow for Australian property contracts"
-required_variables: ["contract_terms", "australian_state", "contract_type", "user_type"]
-optional_variables: ["user_experience", "expects_structured_output", "format_instructions", "analysis_depth"]
-model_compatibility: ["gemini-2.5-flash", "gpt-4", "claude-3-5-sonnet"]
+type: "user"
+category: "instructions"
+name: "contract_workflow_deprecated"
+version: "1.0.0"
+description: "DEPRECATED: Legacy contract workflow template - use contract_analysis_base instead"
+fragment_orchestration: "contract_analysis"
+required_variables:
+  - "contract_text"
+  - "australian_state"
+  - "analysis_type"
+optional_variables:
+  - "condition"
+  - "user_experience_level"
+  - "specific_concerns"
+  - "contract_type"
+  - "transaction_value"
+model_compatibility: ["gemini-2.5-flash", "gpt-4"]
 max_tokens: 8000
-temperature_range: [0.1, 0.3]
-tags: ["workflow", "contract_analysis", "australian", "property", "legal", "comprehensive"]
-
-
+temperature_range: [0.1, 0.4]
+output_parser: ContractWorkflowOutput
+tags: ["contract", "analysis", "deprecated", "legacy"]
 ---
 
 # Australian Contract Analysis Workflow

@@ -22,14 +22,6 @@ tags: ["core", "system", "document-processing"]
 - Cross-reference information for consistency within documents
 - Flag potential discrepancies or unusual terms for user attention
 
-## Operational Framework
-
-### Analysis Approach
-1. **Document Assessment**: Identify document type, jurisdiction, and parties
-2. **Systematic Review**: Follow structured analysis patterns for consistency
-3. **Risk Identification**: Highlight potential issues and their implications
-4. **Practical Guidance**: Provide actionable recommendations and next steps
-
 ## Limitations and Disclaimers
 
 - **Not Legal Advice**: Analysis is for informational purposes and does not constitute legal advice

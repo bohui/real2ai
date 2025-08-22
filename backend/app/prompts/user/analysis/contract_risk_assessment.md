@@ -1,15 +1,25 @@
 ---
+type: "user"
+category: "instructions"
 name: "contract_risk_assessment"
-version: "2.0"
-description: "Comprehensive risk assessment of Australian property contracts with state-specific legal considerations"
-required_variables: ["contract_terms", "compliance_check", "australian_state", "contract_type"]
-optional_variables: ["user_experience", "expects_structured_output", "format_instructions"]
-model_compatibility: ["gemini-2.5-flash", "gpt-4", "claude-3-5-sonnet"]
-max_tokens: 5000
-temperature_range: [0.1, 0.3]
-tags: ["workflow", "risk_assessment", "contract", "australian", "legal"]
-
-
+version: "2.0.0"
+description: "Comprehensive risk assessment for Australian property contracts"
+fragment_orchestration: "risk_assessment"
+required_variables:
+  - "contract_text"
+  - "australian_state"
+  - "contract_type"
+  - "user_type"
+optional_variables:
+  - "risk_focus"
+  - "user_experience"
+  - "investment_purpose"
+  - "financing_type"
+model_compatibility: ["gemini-2.5-flash", "gpt-4"]
+max_tokens: 10000
+temperature_range: [0.2, 0.5]
+output_parser: ContractRiskAssessmentOutput
+tags: ["contract", "risk", "assessment", "australian", "property"]
 ---
 
 # Australian Contract Risk Assessment

@@ -316,6 +316,7 @@ class ContractTermsExtractionNode(BaseNode):
         """Extract contract terms using LLM with structured prompts."""
         try:
             from app.core.prompts import PromptContext, ContextType
+            from app.services import get_llm_service
 
             # Get document metadata for context
             document_metadata = state.get("document_metadata", {})
@@ -355,76 +356,66 @@ class ContractTermsExtractionNode(BaseNode):
             )
 
             # Get configured structured parser
-            state_aware_parser = self.get_parser("contract_terms")
+            contract_terms_parser = self.get_parser("contract_terms")
 
-            # Use composition for structure analysis
+            # Compose prompts
             composition_result = await self.prompt_manager.render_composed(
                 composition_name="structure_analysis_only",
                 context=context,
-                output_parser=state_aware_parser,
+                output_parser=contract_terms_parser,
             )
             rendered_prompt = composition_result["user_prompt"]
             system_prompt = composition_result.get("system_prompt", "")
+            model_name = composition_result.get("metadata", {}).get("model")
 
-            # Generate response with retries
+            # Use unified LLMService for generation and parsing (same logic as layout summarise)
+            llm_service = await get_llm_service()
             max_retries = self.extraction_config.get("max_retries", 2)
 
-            for attempt in range(max_retries + 1):
-                try:
-                    response = await self._generate_content_with_fallback(
-                        rendered_prompt,
-                        use_gemini_fallback=True,
-                        system_prompt=system_prompt,
-                    )
+            if contract_terms_parser is not None:
+                parsing_result = await llm_service.generate_content(
+                    prompt=rendered_prompt,
+                    system_message=system_prompt,
+                    model=model_name,
+                    output_parser=contract_terms_parser,
+                    parse_generation_max_attempts=max_retries,
+                )
 
-                    # Parse structured response if we got one
-                    if response:
-                        # Use parser for structured parsing
-                        state_aware_parser = self.get_parser("contract_terms")
-                        if state_aware_parser:
-                            parsing_result = state_aware_parser.parse_with_retry(
-                                response
-                            )
-                            if parsing_result.success and parsing_result.parsed_data:
-                                # Convert Pydantic model to dict if needed
-                                if hasattr(parsing_result.parsed_data, "dict"):
-                                    return parsing_result.parsed_data.dict()
-                                return parsing_result.parsed_data
+                if (
+                    getattr(parsing_result, "success", False)
+                    and getattr(parsing_result, "parsed_data", None) is not None
+                ):
+                    parsed = parsing_result.parsed_data
+                    # Normalize to dict for downstream consumers
+                    if hasattr(parsed, "model_dump"):
+                        return parsed.model_dump()
+                    if hasattr(parsed, "dict"):
+                        return parsed.dict()
+                    return parsed
 
-                        # Fallback to JSON parsing with braces recovery
-                        contract_terms = self._safe_json_parse(response)
-                        if contract_terms:
-                            return contract_terms
+                # If parsing fails after retries, bubble up to allow rule-based fallback
+                raise ValueError("Failed to parse contract terms from LLM output")
 
-                        # Attempt to extract JSON substring if the model returned extra text
-                        import re
+            # If no structured parser is configured, call LLM and attempt JSON parsing
+            response = await llm_service.generate_content(
+                prompt=rendered_prompt,
+                system_message=system_prompt,
+                model=model_name,
+            )
 
-                        json_snippets = re.findall(r"\{[\s\S]*\}", response)
-                        for snippet in json_snippets:
-                            parsed = self._safe_json_parse(snippet)
-                            if parsed:
-                                return parsed
+            if isinstance(response, str) and response:
+                contract_terms = self._safe_json_parse(response)
+                if contract_terms:
+                    return contract_terms
 
-                    if attempt < max_retries:
-                        self._log_step_debug(
-                            f"LLM extraction attempt {attempt + 1} failed, retrying",
-                            state,
-                        )
-                        continue
-                    else:
-                        raise Exception(
-                            "Failed to parse LLM response after all retries"
-                        )
+                import re
 
-                except Exception as parse_error:
-                    if attempt < max_retries:
-                        self._log_step_debug(
-                            f"Parse error on attempt {attempt + 1}: {parse_error}",
-                            state,
-                        )
-                        continue
-                    else:
-                        raise parse_error
+                for snippet in re.findall(r"\{[\s\S]*\}", response):
+                    parsed = self._safe_json_parse(snippet)
+                    if parsed:
+                        return parsed
+
+            raise ValueError("LLM returned no parsable contract terms")
 
         except Exception as e:
             self._log_exception(e, state, {"extraction_method": "llm"})

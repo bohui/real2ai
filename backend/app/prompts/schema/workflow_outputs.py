@@ -7,7 +7,14 @@ from pydantic import BaseModel, Field, validator
 from enum import Enum
 from datetime import datetime
 
-from .contract_state import RiskLevel, AustralianState
+from ...models.contract_state import RiskLevel, AustralianState
+from app.schema.enums.property import (
+    ContractType,
+    PurchaseMethod,
+    UseCategory,
+    PropertyCondition,
+    TransactionComplexity,
+)
 
 
 class RiskSeverity(str, Enum):
@@ -320,14 +327,100 @@ class ContractTermsOutput(BaseModel):
     extraction_notes: List[str] = Field(
         default=[], description="Notes about the extraction process"
     )
-    australian_state: str = Field(
+    state: str = Field(
         default="NSW", description="Australian state for extraction context"
     )
 
-    @validator("australian_state", pre=True)
+    @validator("state", pre=True)
     def set_default_extraction_state(cls, v):
-        """Ensure australian_state is never None or empty"""
+        """Ensure state is never None or empty"""
         return v or "NSW"
+
+
+class FullStructureAnalysisOutput(BaseModel):
+    """Combined output for rough basic structure analysis.
+
+    Aggregates key results to quickly understand contract structure and risks.
+    """
+
+    recommendations: Optional[RecommendationsOutput] = Field(
+        default=None, description="Recommendations summary"
+    )
+    risk: Optional[RiskAnalysisOutput] = Field(
+        default=None, description="Risk assessment summary"
+    )
+    compliance: Optional[ComplianceAnalysisOutput] = Field(
+        default=None, description="Compliance analysis summary"
+    )
+    contract_terms: Optional[ContractTermsOutput] = Field(
+        default=None, description="Extracted contract terms (rough pass)"
+    )
+    contract_type: Optional[ContractType] = Field(
+        default=None, description="Detected contract type"
+    )
+    purchase_method: Optional[PurchaseMethod] = Field(
+        default=None, description="Detected purchase method (if applicable)"
+    )
+    use_category: Optional[UseCategory] = Field(
+        default=None, description="Detected use category"
+    )
+    property_condition: Optional[PropertyCondition] = Field(
+        default=None, description="Detected property condition/building work status"
+    )
+    transaction_complexity: Optional[TransactionComplexity] = Field(
+        default=None, description="Detected transaction complexity level"
+    )
+    overall_confidence: Optional[float] = Field(
+        default=None, ge=0, le=1, description="Overall confidence for this analysis"
+    )
+    sources: Optional[Dict[str, str]] = Field(
+        default=None, description="Text excerpts from contract supporting each decision"
+    )
+
+    @validator("contract_type", pre=True)
+    def validate_contract_type(cls, v):
+        if isinstance(v, str):
+            try:
+                return ContractType(v.lower())
+            except Exception:
+                return None
+        return v
+
+    @validator("purchase_method", pre=True)
+    def validate_purchase_method(cls, v):
+        if isinstance(v, str):
+            try:
+                return PurchaseMethod(v.lower())
+            except Exception:
+                return None
+        return v
+
+    @validator("use_category", pre=True)
+    def validate_use_category(cls, v):
+        if isinstance(v, str):
+            try:
+                return UseCategory(v.lower())
+            except Exception:
+                return None
+        return v
+
+    @validator("property_condition", pre=True)
+    def validate_property_condition(cls, v):
+        if isinstance(v, str):
+            try:
+                return PropertyCondition(v.lower())
+            except Exception:
+                return None
+        return v
+
+    @validator("transaction_complexity", pre=True)
+    def validate_transaction_complexity(cls, v):
+        if isinstance(v, str):
+            try:
+                return TransactionComplexity(v.lower())
+            except Exception:
+                return None
+        return v
 
 
 # Export all models for easy import
@@ -345,4 +438,5 @@ __all__ = [
     "WorkflowValidationOutput",
     "ContractTermsValidationOutput",
     "ContractTermsOutput",
+    "FullStructureAnalysisOutput",
 ]

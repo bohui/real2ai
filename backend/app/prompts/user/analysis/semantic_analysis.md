@@ -1,22 +1,25 @@
 ---
 type: "user"
-category: "analysis"
+category: "instructions"
 name: "semantic_analysis"
-version: "1.0.0"
-description: "Semantic analysis of property diagrams and images"
+version: "2.0.0"
+description: "Semantic analysis of Australian property contract terms and clauses"
+fragment_orchestration: "semantic_analysis"
 required_variables:
-  - "image_type"
-  - "analysis_focus"
+  - "contract_text"
   - "australian_state"
-  - "contract_context"
+  - "contract_type"
+  - "analysis_focus"
 optional_variables:
-  - "risk_categories"
-  - "user_type"
-  - "user_experience_level"
-model_compatibility: ["gemini-2.5-flash", "gpt-4-vision"]
-max_tokens: 10000
-temperature_range: [0.1, 0.3]
-tags: ["semantic", "analysis", "property", "diagrams", "images"]
+  - "user_experience"
+  - "specific_clauses"
+  - "legal_context"
+  - "comparison_basis"
+model_compatibility: ["gemini-2.5-flash", "gpt-4"]
+max_tokens: 8000
+temperature_range: [0.1, 0.4]
+output_parser: SemanticAnalysisOutput
+tags: ["semantic", "analysis", "contract", "australian", "property"]
 ---
 
 # Semantic Analysis Instructions

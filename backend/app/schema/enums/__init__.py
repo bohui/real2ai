@@ -18,6 +18,8 @@ from .property import (
     ProcessingStatus,
     PurchaseMethod,
     UseCategory,
+    PropertyCondition,
+    TransactionComplexity,
 )
 
 # Valuation & Market Enums
@@ -97,6 +99,8 @@ __all__ = [
     "ProcessingStatus",
     "PurchaseMethod",
     "UseCategory",
+    "PropertyCondition",
+    "TransactionComplexity",
     # Valuation & Market
     "ValuationSource",
     "ValuationType",

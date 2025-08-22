@@ -60,6 +60,32 @@ compositions:
     user_prompts:
       - "contract_analysis_base"
 
+  contract_basic_analysis:
+    description: "Basic combined structure analysis using contract term extraction prompt"
+    version: "1.0.0"
+    system_prompts:
+      - name: "legal_specialist"
+        path: "system/realestate_lawyer.md"
+        priority: 100
+        required: true
+      - name: "australian_legal"
+        path: "system/conveyancer.md"
+        priority: 90
+        required: true
+    user_prompts:
+      - "contract_analysis_base"
+
+  contract_entities_extraction:
+    description: "Extract entities from contracts using the entities extraction prompt"
+    version: "1.0.0"
+    system_prompts:
+      - name: "entity_extraction_core"
+        path: "system/entity_extraction_core.md"
+        priority: 110
+        required: true
+    user_prompts:
+      - "contract_entities_extraction"
+
   compliance_check_only:
     description: "Check legal compliance requirements"
     version: "1.0.0"

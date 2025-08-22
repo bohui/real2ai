@@ -699,7 +699,7 @@ class ExtractTextNode(DocumentProcessingNodeBase):
             # Upload full text to storage and get URI + SHA256
             full_text_uri, full_text_sha256 = (
                 await self.storage_service.upload_text_blob(
-                    result.full_text or "", content_hmac
+                    result.full_text or "", content_hmac, "raw_extracted_text"
                 )
             )
 

@@ -1,28 +1,21 @@
 ---
 type: "user"
-category: "instructions"
 name: "ocr_extraction_base"
-version: "2.1.0"
-description: "Fragment-based OCR extraction for Australian contract documents"
-fragment_orchestration: "ocr_extraction"
+version: "1.0.0"
+description: "Base OCR extraction template for Australian contracts"
 required_variables:
-  - "document_type"
   - "australian_state"
-  - "quality_requirements"
+  - "document_type"
 optional_variables:
   - "contract_type"
-  - "user_context"
-  - "enhancement_level"
-model_compatibility:
-  - "gemini-2.5-flash"
-  - "gpt-4"
-max_tokens: 8000
-temperature_range: [0.0, 0.3]
-tags:
-  - "ocr"
-  - "contract"
-  - "fragment-based"
-  - "extraction"
+  - "extraction_focus"
+  - "quality_requirements"
+  - "user_type"
+model_compatibility: ["gemini-2.5-flash", "gpt-4"]
+max_tokens: 4000
+temperature_range: [0.0, 0.2]
+output_parser: OCRExtractionBaseOutput
+tags: ["ocr", "extraction", "base", "australian", "contracts"]
 ---
 
 # OCR Extraction Instructions

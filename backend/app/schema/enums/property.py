@@ -51,6 +51,30 @@ class UseCategory(str, Enum):
     RETAIL = "retail"
 
 
+class PropertyCondition(str, Enum):
+    """Property condition/building work status affecting legal requirements"""
+
+    NEW_CONSTRUCTION = "new_construction"  # Under construction/just completed
+    OFF_THE_PLAN = "off_the_plan"  # Not yet built
+    RECENT_BUILDING_WORK = "recent_building_work"  # Major work within 6-7 years
+    EXISTING_STANDARD = "existing_standard"  # Standard existing property
+    RENOVATED_HISTORIC = "renovated_historic"  # Historic property with recent work
+    AS_IS_CONDITION = "as_is_condition"  # Sold in current condition
+    UNKNOWN_CONDITION = "unknown_condition"  # Cannot determine from contract
+
+
+class TransactionComplexity(str, Enum):
+    """Transaction complexity affecting compliance requirements"""
+
+    STANDARD_RESIDENTIAL = "standard_residential"  # Standard home sale
+    NEW_DEVELOPMENT = "new_development"  # New construction/off-plan
+    COMMERCIAL_COMPLEX = "commercial_complex"  # Commercial/industrial
+    STRATA_COMPLEX = "strata_complex"  # Strata/body corporate involved
+    RURAL_SPECIALIZED = "rural_specialized"  # Rural/agricultural property
+    HERITAGE_RESTRICTED = "heritage_restricted"  # Heritage/conservation area
+    UNKNOWN_COMPLEXITY = "unknown_complexity"  # Cannot determine
+
+
 class DocumentType(str, Enum):
     """Document types"""
 

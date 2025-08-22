@@ -1,25 +1,24 @@
 ---
 type: "user"
-name: "contract_structure_analysis"
-version: "1.0.0"
-description: "Analyze and extract structured information from Australian real estate contracts"
-fragment_orchestration: "contract_analysis"
+category: "instructions"
+name: "contract_structure"
+version: "2.0.0"
+description: "Analyze structure and organization of Australian property contracts"
+fragment_orchestration: "structure_analysis"
 required_variables:
-  - "extracted_text"
+  - "contract_text"
   - "australian_state"
   - "contract_type"
-  - "user_type"
-  - "user_experience_level"
 optional_variables:
-  - "complexity"
-  - "analysis_depth"
-  - "focus_areas"
-  - "expects_structured_output"
-  - "format_instructions"
+  - "structure_focus"
+  - "user_experience"
+  - "comparison_basis"
+  - "format_preferences"
 model_compatibility: ["gemini-2.5-flash", "gpt-4"]
-max_tokens: 15000
+max_tokens: 6000
 temperature_range: [0.1, 0.3]
-tags: ["analysis", "contract", "structure", "australian", "legal"]
+output_parser: ContractStructureOutput
+tags: ["contract", "structure", "analysis", "australian", "property"]
 ---
 
 # Contract Structure Analysis - {{ australian_state }} {{ contract_type }}

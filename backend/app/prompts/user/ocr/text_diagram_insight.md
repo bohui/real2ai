@@ -1,8 +1,8 @@
 ---
 type: "user"
-name: "ocr_text_diagram_insight"
+name: "text_diagram_insight"
 version: "1.0.0"
-description: "Extract text and detect diagram types from image/PDF"
+description: "Extract insights from text-based diagrams in Australian contracts"
 required_variables:
   - "filename"
   - "file_type"
@@ -11,8 +11,13 @@ optional_variables:
   - "australian_state"
   - "contract_type"
   - "document_type"
+  - "diagram_type"
+  - "user_experience"
 model_compatibility: ["gemini-2.5-flash", "gpt-4"]
-tags: ["ocr", "diagram", "structured"]
+max_tokens: 3000
+temperature_range: [0.1, 0.3]
+output_parser: TextDiagramInsightOutput
+tags: ["diagram", "insight", "text", "australian", "contracts"]
 ---
 
 ## System Role

@@ -1,21 +1,25 @@
 ---
 type: "user"
+category: "instructions"
 name: "image_semantics"
-version: "1.0.0"
-description: "Extract semantic meaning from property diagrams and images for Australian contracts"
+version: "2.0.0"
+description: "Semantic analysis of property diagrams and images in contracts"
+fragment_orchestration: "image_analysis"
 required_variables:
+  - "image_data"
   - "australian_state"
   - "contract_type"
-  - "image_type"
-optional_variables:
-  - "property_type"
   - "analysis_focus"
-  - "risk_categories"
-  - "user_type"
+optional_variables:
+  - "user_experience"
+  - "specific_elements"
+  - "comparison_basis"
+  - "output_format"
 model_compatibility: ["gemini-2.5-flash", "gpt-4-vision"]
-max_tokens: 8000
-temperature_range: [0.0, 0.3]
-tags: ["image_analysis", "semantics", "property", "risk_assessment", "australian"]
+max_tokens: 12000
+temperature_range: [0.1, 0.4]
+output_parser: ImageSemanticsOutput
+tags: ["image", "semantics", "analysis", "property", "diagrams"]
 ---
 
 # Image Semantic Analysis - {{ australian_state }} Property {{ image_type }}

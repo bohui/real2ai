@@ -1026,7 +1026,8 @@ async def ensure_contract(
         contract = await contracts_repo.upsert_contract_by_content_hash(
             content_hash=content_hash,
             contract_type=initial_contract_type,
-            australian_state=australian_state,
+            state=australian_state,
+            updated_by="ensure_contract",
         )
         logger.info(f"Repository: Upserted contract record: {contract.id}")
         return str(contract.id)

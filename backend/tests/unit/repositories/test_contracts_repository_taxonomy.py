@@ -72,7 +72,8 @@ class TestContractTaxonomyRepository:
                 contract_type="purchase_agreement",
                 purchase_method="auction",
                 ocr_confidence={"purchase_method": 0.92},
-                australian_state="NSW",
+                state="NSW",
+                updated_by="unit_test",
             )
 
             # Verify the query was called with correct parameters
@@ -131,7 +132,8 @@ class TestContractTaxonomyRepository:
             result = await contracts_repo.upsert_contract_by_content_hash(
                 content_hash=content_hash,
                 contract_type="unknown",
-                australian_state="NSW",
+                state="NSW",
+                updated_by="unit_test",
             )
 
             assert isinstance(result, Contract)
@@ -171,7 +173,8 @@ class TestContractTaxonomyRepository:
             result = await contracts_repo.upsert_contract_by_content_hash(
                 content_hash=content_hash,
                 contract_type="unknown",
-                australian_state="NSW",
+                state="NSW",
+                updated_by="unit_test",
             )
 
             assert isinstance(result, Contract)
@@ -211,7 +214,8 @@ class TestContractTaxonomyRepository:
             result = await contracts_repo.upsert_contract_by_content_hash(
                 content_hash=content_hash,
                 contract_type="purchase_agreement",
-                australian_state="NSW",
+                state="NSW",
+                updated_by="unit_test",
             )
 
             # Verify SQL was called and contract_type param was downgraded to 'unknown'
@@ -257,7 +261,8 @@ class TestContractTaxonomyRepository:
                 contract_type="lease_agreement",
                 use_category="commercial",
                 ocr_confidence={"use_category": 0.85},
-                australian_state="VIC",
+                state="VIC",
+                updated_by="unit_test",
             )
 
             # Verify the returned contract

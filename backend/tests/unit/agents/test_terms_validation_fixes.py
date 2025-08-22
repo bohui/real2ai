@@ -9,7 +9,7 @@ from unittest.mock import Mock, AsyncMock, patch
 from datetime import datetime, UTC
 
 from app.agents.nodes.terms_validation_node import TermsValidationNode
-from app.models.workflow_outputs import ContractTermsValidationOutput
+from app.prompts.schema.workflow_outputs import ContractTermsValidationOutput
 from app.models.contract_state import RealEstateAgentState
 
 
@@ -43,7 +43,7 @@ class TestTermsValidationNodeFixes:
                 "deposit_amount": "25000",
                 "property_address": "123 Test St, Test Suburb, NSW 2000",
                 "vendor_details": "Test Vendor",
-                "purchaser_details": "Test Purchaser"
+                "purchaser_details": "Test Purchaser",
             },
             "confidence_scores": {},
             "current_step": [],
@@ -61,7 +61,7 @@ class TestTermsValidationNodeFixes:
             "final_recommendations": [],
             "property_data": None,
             "market_analysis": None,
-            "financial_analysis": None
+            "financial_analysis": None,
         }
 
     @pytest.fixture
@@ -78,18 +78,24 @@ class TestTermsValidationNodeFixes:
         return result
 
     @pytest.mark.asyncio
-    async def test_handle_pydantic_model_with_validation_confidence(self, terms_validation_node, sample_state, mock_validation_result):
+    async def test_handle_pydantic_model_with_validation_confidence(
+        self, terms_validation_node, sample_state, mock_validation_result
+    ):
         """Test that the node correctly handles Pydantic models with validation_confidence attribute."""
         # Mock the validation method to return our mock result
-        with patch.object(terms_validation_node, '_validate_terms_completeness_with_llm', return_value=mock_validation_result):
+        with patch.object(
+            terms_validation_node,
+            "_validate_terms_completeness_with_llm",
+            return_value=mock_validation_result,
+        ):
             # Mock the base node methods
             terms_validation_node._log_step_debug = Mock()
             terms_validation_node._handle_node_error = Mock()
             terms_validation_node.update_state_step = Mock()
-            
+
             # Execute the node
             result = await terms_validation_node.execute(sample_state)
-            
+
             # Verify that validation_confidence was extracted correctly
             assert sample_state["confidence_scores"]["terms_validation"] == 0.85
             assert sample_state["terms_validation_result"] == mock_validation_result
@@ -108,15 +114,24 @@ class TestTermsValidationNodeFixes:
         return result
 
     @pytest.mark.asyncio
-    async def test_handle_pydantic_model_with_overall_confidence(self, terms_validation_node, sample_state, mock_validation_result_overall_confidence):
+    async def test_handle_pydantic_model_with_overall_confidence(
+        self,
+        terms_validation_node,
+        sample_state,
+        mock_validation_result_overall_confidence,
+    ):
         """Test that the node correctly handles Pydantic models with overall_confidence attribute."""
-        with patch.object(terms_validation_node, '_validate_terms_completeness_with_llm', return_value=mock_validation_result_overall_confidence):
+        with patch.object(
+            terms_validation_node,
+            "_validate_terms_completeness_with_llm",
+            return_value=mock_validation_result_overall_confidence,
+        ):
             terms_validation_node._log_step_debug = Mock()
             terms_validation_node._handle_node_error = Mock()
             terms_validation_node.update_state_step = Mock()
-            
+
             result = await terms_validation_node.execute(sample_state)
-            
+
             # Verify that overall_confidence was extracted correctly
             assert sample_state["confidence_scores"]["terms_validation"] == 0.75
 
@@ -131,20 +146,29 @@ class TestTermsValidationNodeFixes:
             "incomplete_terms": [],
             "state_specific_requirements": {},
             "recommendations": ["All terms are complete"],
-            "australian_state": "NSW"
+            "australian_state": "NSW",
         }
         return result
 
     @pytest.mark.asyncio
-    async def test_handle_pydantic_model_with_model_dump(self, terms_validation_node, sample_state, mock_validation_result_with_model_dump):
+    async def test_handle_pydantic_model_with_model_dump(
+        self,
+        terms_validation_node,
+        sample_state,
+        mock_validation_result_with_model_dump,
+    ):
         """Test that the node correctly handles Pydantic models with model_dump method."""
-        with patch.object(terms_validation_node, '_validate_terms_completeness_with_llm', return_value=mock_validation_result_with_model_dump):
+        with patch.object(
+            terms_validation_node,
+            "_validate_terms_completeness_with_llm",
+            return_value=mock_validation_result_with_model_dump,
+        ):
             terms_validation_node._log_step_debug = Mock()
             terms_validation_node._handle_node_error = Mock()
             terms_validation_node.update_state_step = Mock()
-            
+
             result = await terms_validation_node.execute(sample_state)
-            
+
             # Verify that validation_confidence was extracted via model_dump
             assert sample_state["confidence_scores"]["terms_validation"] == 0.92
 
@@ -158,19 +182,25 @@ class TestTermsValidationNodeFixes:
             "incomplete_terms": [],
             "state_specific_requirements": {},
             "recommendations": ["All terms are complete"],
-            "australian_state": "NSW"
+            "australian_state": "NSW",
         }
 
     @pytest.mark.asyncio
-    async def test_handle_dict_validation_result(self, terms_validation_node, sample_state, dict_validation_result):
+    async def test_handle_dict_validation_result(
+        self, terms_validation_node, sample_state, dict_validation_result
+    ):
         """Test that the node correctly handles dictionary validation results."""
-        with patch.object(terms_validation_node, '_validate_terms_completeness_with_llm', return_value=dict_validation_result):
+        with patch.object(
+            terms_validation_node,
+            "_validate_terms_completeness_with_llm",
+            return_value=dict_validation_result,
+        ):
             terms_validation_node._log_step_debug = Mock()
             terms_validation_node._handle_node_error = Mock()
             terms_validation_node.update_state_step = Mock()
-            
+
             result = await terms_validation_node.execute(sample_state)
-            
+
             # Verify that validation_confidence was extracted from dict
             assert sample_state["confidence_scores"]["terms_validation"] == 0.68
 
@@ -191,62 +221,86 @@ class TestTermsValidationNodeFixes:
         return result
 
     @pytest.mark.asyncio
-    async def test_handle_pydantic_model_no_confidence_fallback(self, terms_validation_node, sample_state, mock_validation_result_no_confidence):
+    async def test_handle_pydantic_model_no_confidence_fallback(
+        self, terms_validation_node, sample_state, mock_validation_result_no_confidence
+    ):
         """Test that the node falls back to default confidence when no confidence attributes exist."""
-        with patch.object(terms_validation_node, '_validate_terms_completeness_with_llm', return_value=mock_validation_result_no_confidence):
+        with patch.object(
+            terms_validation_node,
+            "_validate_terms_completeness_with_llm",
+            return_value=mock_validation_result_no_confidence,
+        ):
             terms_validation_node._log_step_debug = Mock()
             terms_validation_node._handle_node_error = Mock()
             terms_validation_node.update_state_step = Mock()
-            
+
             result = await terms_validation_node.execute(sample_state)
-            
+
             # Verify that default confidence was used
             assert sample_state["confidence_scores"]["terms_validation"] == 0.5
 
     @pytest.mark.asyncio
-    async def test_handle_none_validation_result(self, terms_validation_node, sample_state):
+    async def test_handle_none_validation_result(
+        self, terms_validation_node, sample_state
+    ):
         """Test that the node handles None validation results gracefully."""
-        with patch.object(terms_validation_node, '_validate_terms_completeness_with_llm', return_value=None):
+        with patch.object(
+            terms_validation_node,
+            "_validate_terms_completeness_with_llm",
+            return_value=None,
+        ):
             terms_validation_node._log_step_debug = Mock()
             terms_validation_node._handle_node_error = Mock()
             terms_validation_node.update_state_step = Mock()
-            
+
             result = await terms_validation_node.execute(sample_state)
-            
+
             # Verify that default confidence was used
             assert sample_state["confidence_scores"]["terms_validation"] == 0.5
 
     @pytest.mark.asyncio
-    async def test_validation_threshold_logic(self, terms_validation_node, sample_state, mock_validation_result):
+    async def test_validation_threshold_logic(
+        self, terms_validation_node, sample_state, mock_validation_result
+    ):
         """Test that validation threshold logic works correctly with Pydantic models."""
         # Set confidence below threshold
         mock_validation_result.validation_confidence = 0.45
-        
-        with patch.object(terms_validation_node, '_validate_terms_completeness_with_llm', return_value=mock_validation_result):
+
+        with patch.object(
+            terms_validation_node,
+            "_validate_terms_completeness_with_llm",
+            return_value=mock_validation_result,
+        ):
             terms_validation_node._log_step_debug = Mock()
             terms_validation_node._handle_node_error = Mock()
             terms_validation_node.update_state_step = Mock()
-            
+
             result = await terms_validation_node.execute(sample_state)
-            
+
             # Verify that validation failed due to low confidence
             assert sample_state["confidence_scores"]["terms_validation"] == 0.45
             # The node should call update_state_step with validation_failed
             # This is tested through the mock
 
     @pytest.mark.asyncio
-    async def test_validation_passed_logic(self, terms_validation_node, sample_state, mock_validation_result):
+    async def test_validation_passed_logic(
+        self, terms_validation_node, sample_state, mock_validation_result
+    ):
         """Test that validation passed logic works correctly with Pydantic models."""
         # Set confidence above threshold
         mock_validation_result.validation_confidence = 0.85
-        
-        with patch.object(terms_validation_node, '_validate_terms_completeness_with_llm', return_value=mock_validation_result):
+
+        with patch.object(
+            terms_validation_node,
+            "_validate_terms_completeness_with_llm",
+            return_value=mock_validation_result,
+        ):
             terms_validation_node._log_step_debug = Mock()
             terms_validation_node._handle_node_error = Mock()
             terms_validation_node.update_state_step = Mock()
-            
+
             result = await terms_validation_node.execute(sample_state)
-            
+
             # Verify that validation passed due to high confidence
             assert sample_state["confidence_scores"]["terms_validation"] == 0.85
             # The node should call update_state_step with validation_passed

@@ -2,17 +2,20 @@
 type: "user"
 name: "general_document_extraction"
 version: "1.0.0"
-description: "General OCR extraction for any document type"
-required_variables: []
-optional_variables:
+description: "General document extraction for various Australian contract types"
+required_variables:
+  - "australian_state"
   - "document_type"
-  - "page_number"
-  - "is_multi_page"
+optional_variables:
+  - "contract_type"
+  - "extraction_focus"
   - "quality_requirements"
+  - "user_type"
 model_compatibility: ["gemini-2.5-flash", "gpt-4"]
-max_tokens: 2000
-temperature_range: [0.0, 0.1]
-tags: ["ocr", "extraction", "general"]
+max_tokens: 6000
+temperature_range: [0.0, 0.2]
+output_parser: GeneralDocumentExtractionOutput
+tags: ["document", "extraction", "general", "australian", "contracts"]
 ---
 
 # General Document OCR Extraction

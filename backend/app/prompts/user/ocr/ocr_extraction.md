@@ -14,6 +14,7 @@ optional_variables:
 model_compatibility: ["gemini-2.5-flash", "gpt-4"]
 max_tokens: 4000
 temperature_range: [0.0, 0.2]
+output_parser: OCRExtractionOutput
 tags: ["ocr", "extraction", "australian", "contracts"]
 ---
 

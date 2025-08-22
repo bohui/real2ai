@@ -1,15 +1,25 @@
 ---
+type: "user"
+category: "instructions"
 name: "contract_recommendations"
-version: "2.0"
-description: "Actionable recommendations based on comprehensive contract analysis for Australian property buyers"
-required_variables: ["risk_assessment", "compliance_check", "contract_terms", "australian_state", "user_type"]
-optional_variables: ["user_experience", "contract_type", "expects_structured_output", "format_instructions"]
-model_compatibility: ["gemini-2.5-flash", "gpt-4", "claude-3-5-sonnet"]
-max_tokens: 5000
-temperature_range: [0.1, 0.3]
-tags: ["workflow", "recommendations", "contract", "australian", "property"]
-
-
+version: "2.0.0"
+description: "Generate actionable recommendations for Australian property contracts"
+fragment_orchestration: "recommendations"
+required_variables:
+  - "contract_analysis"
+  - "australian_state"
+  - "contract_type"
+  - "user_type"
+optional_variables:
+  - "user_experience"
+  - "investment_purpose"
+  - "risk_tolerance"
+  - "timeline_constraints"
+model_compatibility: ["gemini-2.5-flash", "gpt-4"]
+max_tokens: 8000
+temperature_range: [0.2, 0.5]
+output_parser: ContractRecommendationsOutput
+tags: ["contract", "recommendations", "australian", "property", "actionable"]
 ---
 
 # Australian Contract Recommendations

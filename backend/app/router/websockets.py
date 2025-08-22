@@ -52,7 +52,6 @@ async def check_document_cache_status(document_id: str, user_id: str) -> Dict[st
     - error_message: Error details (if FAILED)
     - retry_available: Whether retry is possible
     """
-
     try:
         # Get document with user context (RLS enforced)
         docs_repo = DocumentsRepository()
@@ -291,6 +290,7 @@ async def document_analysis_websocket(
     """
 
     user = None
+    connected_at = datetime.now(UTC)
 
     try:
         # STEP 1: ALWAYS accept the WebSocket connection first (ASGI requirement)
@@ -581,7 +581,19 @@ async def document_analysis_websocket(
         )
 
     except WebSocketDisconnect:
-        logger.info(f"WebSocket disconnected for document {document_id}")
+        disconnected_at = datetime.now(UTC)
+        try:
+            duration = (disconnected_at - connected_at).total_seconds()
+        except Exception:
+            duration = None
+        if duration is not None:
+            logger.info(
+                f"WebSocket disconnected for document {document_id} after {duration:.2f}s"
+            )
+        else:
+            logger.info(
+                f"WebSocket disconnected for document {document_id} (duration unavailable)"
+            )
     except Exception as e:
         # Create error context for WebSocket errors
         context = create_error_context(

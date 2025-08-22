@@ -855,6 +855,12 @@ export class WebSocketService {
   private isConnected = false;
   private contractId: string;
   private messageQueue: unknown[] = [];
+  private connectedAt: number | null = null;
+  private closedAt: number | null = null;
+  private lastMessageAt: number | null = null;
+  private lastHeartbeatSentAt: number | null = null;
+  private lastHeartbeatAckAt: number | null = null;
+  private manualCloseOrigin: string | null = null;
 
   constructor(documentId: string) {
     logger.websocket("Creating WebSocket service for document", { documentId });
@@ -926,6 +932,8 @@ export class WebSocketService {
         logger.websocket(`Starting WebSocket connection`, {
           contractId: this.contractId,
         });
+        // Reset manual close origin when initiating a fresh connection
+        this.manualCloseOrigin = null;
 
         // Close existing connection if any
         if (this.ws) {
@@ -958,6 +966,11 @@ export class WebSocketService {
           this.reconnectAttempts = 0;
           this.isConnecting = false;
           this.isConnected = true;
+          this.connectedAt = Date.now();
+          this.closedAt = null;
+          this.lastMessageAt = null;
+          this.lastHeartbeatSentAt = null;
+          this.lastHeartbeatAckAt = null;
 
           // Start heartbeat
           this.startHeartbeat();
@@ -977,6 +990,7 @@ export class WebSocketService {
         };
 
         this.ws.onmessage = (event) => {
+          this.lastMessageAt = Date.now();
           logger.websocket(`WebSocket message received`, {
             contractId: this.contractId,
             data: event.data,
@@ -984,6 +998,15 @@ export class WebSocketService {
           try {
             const message = JSON.parse(event.data);
             logger.websocket(`Parsed WebSocket message`, { message });
+            if (message?.event_type === "heartbeat") {
+              this.lastHeartbeatAckAt = Date.now();
+              logger.websocket("Heartbeat acknowledged", {
+                contractId: this.contractId,
+                sinceLastSendMs: this.lastHeartbeatSentAt
+                  ? Date.now() - this.lastHeartbeatSentAt
+                  : null,
+              });
+            }
 
             // Emit custom event for the store to handle
             const customEvent = new CustomEvent("analysis:update", {
@@ -1009,11 +1032,26 @@ export class WebSocketService {
         };
 
         this.ws.onclose = (event) => {
+          this.closedAt = Date.now();
+          const durationMs = this.connectedAt
+            ? this.closedAt - this.connectedAt
+            : null;
+          const heartbeatLagMs =
+            this.lastHeartbeatSentAt && this.lastHeartbeatAckAt
+              ? this.lastHeartbeatAckAt - this.lastHeartbeatSentAt
+              : null;
           logger.websocket(`WebSocket closed`, {
             contractId: this.contractId,
             code: event.code,
             reason: event.reason,
             wasClean: event.wasClean,
+            durationMs,
+            lastMessageAt: this.lastMessageAt,
+            lastHeartbeatSentAt: this.lastHeartbeatSentAt,
+            lastHeartbeatAckAt: this.lastHeartbeatAckAt,
+            heartbeatLagMs,
+            manualCloseOrigin: this.manualCloseOrigin,
+            reconnectAttempts: this.reconnectAttempts,
           });
           this.isConnected = false;
           this.isConnecting = false;
@@ -1067,9 +1105,11 @@ export class WebSocketService {
     }, delay);
   }
 
-  disconnect(): void {
+  disconnect(origin?: string): void {
+    this.manualCloseOrigin = origin || this.manualCloseOrigin || "unknown";
     logger.websocket(`Disconnecting WebSocket`, {
       contractId: this.contractId,
+      origin: this.manualCloseOrigin,
     });
 
     this.isConnecting = false;
@@ -1107,6 +1147,13 @@ export class WebSocketService {
     // Send heartbeat every 30 seconds
     this.heartbeatInterval = setInterval(() => {
       if (this.isConnected && this.ws?.readyState === WebSocket.OPEN) {
+        this.lastHeartbeatSentAt = Date.now();
+        logger.websocket("Sending heartbeat", {
+          contractId: this.contractId,
+          sinceLastAckMs: this.lastHeartbeatAckAt
+            ? Date.now() - this.lastHeartbeatAckAt
+            : null,
+        });
         this.sendMessage({ type: "heartbeat" });
       } else {
         // Connection lost, clear heartbeat

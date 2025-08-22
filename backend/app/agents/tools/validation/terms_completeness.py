@@ -5,7 +5,7 @@ Contract terms completeness validation
 from typing import Dict, List, Any, Optional
 from langchain.tools import tool
 
-from app.models.workflow_outputs import ContractTermsValidationOutput
+from app.prompts.schema.workflow_outputs import ContractTermsValidationOutput
 
 
 @tool

@@ -2,19 +2,21 @@
 type: "user"
 name: "whole_document_extraction"
 version: "1.0.0"
-description: "Extract structured OCR data from entire document with page references"
+description: "Extract complete document content from Australian contracts"
 required_variables:
-  - "process_entire_document"
-optional_variables:
-  - "document_type"
   - "australian_state"
   - "contract_type"
-  - "filename"
-  - "use_quick_mode"
+  - "document_type"
+optional_variables:
+  - "quality_requirements"
+  - "user_type"
+  - "complexity"
+  - "extraction_focus"
 model_compatibility: ["gemini-2.5-flash", "gpt-4"]
 max_tokens: 8000
-temperature_range: [0.0, 0.1]
-tags: ["ocr", "extraction", "structured", "whole-document", "page-references"]
+temperature_range: [0.0, 0.2]
+output_parser: WholeDocumentExtractionOutput
+tags: ["ocr", "extraction", "complete", "australian", "contracts"]
 ---
 
 # Structured OCR Extraction - Entire Document Processing

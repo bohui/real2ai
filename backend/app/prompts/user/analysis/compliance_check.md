@@ -1,15 +1,25 @@
 ---
+type: "user"
+category: "instructions"
 name: "compliance_check"
-version: "2.0"
-description: "Comprehensive compliance assessment of Australian property contracts against state laws and regulations"
-required_variables: ["contract_terms", "australian_state", "contract_type"]
-optional_variables: ["user_experience", "expects_structured_output", "format_instructions"]
-model_compatibility: ["gemini-2.5-flash", "gpt-4", "claude-3-5-sonnet"]
-max_tokens: 5000
+version: "2.0.0"
+description: "Compliance verification for Australian property contracts"
+fragment_orchestration: "compliance_check"
+required_variables:
+  - "contract_text"
+  - "australian_state"
+  - "contract_type"
+  - "compliance_focus"
+optional_variables:
+  - "user_experience"
+  - "specific_regulations"
+  - "industry_standards"
+  - "audit_requirements"
+model_compatibility: ["gemini-2.5-flash", "gpt-4"]
+max_tokens: 8000
 temperature_range: [0.1, 0.3]
-tags: ["analysis", "compliance", "legal", "contract", "australian"]
-
-
+output_parser: ComplianceCheckOutput
+tags: ["compliance", "check", "contract", "australian", "property"]
 ---
 
 # Australian Property Contract Compliance Check

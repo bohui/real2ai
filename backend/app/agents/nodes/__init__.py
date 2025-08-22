@@ -16,6 +16,7 @@ from .compliance_analysis_node import ComplianceAnalysisNode
 from .diagram_analysis_node import DiagramAnalysisNode
 from .risk_assessment_node import RiskAssessmentNode
 from .recommendations_generation_node import RecommendationsGenerationNode
+from .entities_extraction_node import EntitiesExtractionNode
 from .input_validation_node import InputValidationNode
 from .final_validation_node import FinalValidationNode
 from .report_compilation_node import ReportCompilationNode
@@ -36,6 +37,7 @@ __all__ = [
     # Risk Assessment
     "RiskAssessmentNode",
     "RecommendationsGenerationNode",
+    "EntitiesExtractionNode",
     # Validation
     "FinalValidationNode",
     # Utilities

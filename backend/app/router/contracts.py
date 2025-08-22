@@ -705,13 +705,9 @@ async def _create_contract_record_with_cache(
         contract = await contracts_repo.upsert_contract_by_content_hash(
             content_hash=content_hash,
             contract_type=initial_contract_type,
-            australian_state=user.australian_state,
-            metadata={
-                "property_address": property_address,
-                "file_name": document.get("original_filename", "unknown"),
-                "file_type": document.get("file_type", "pdf"),
-                "user_id": str(user.id),
-            },
+            state=user.australian_state,
+            property_address=property_address,
+            updated_by="contracts_router_create",
         )
 
         if not contract.id:

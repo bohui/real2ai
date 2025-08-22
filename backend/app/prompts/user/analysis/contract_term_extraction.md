@@ -1,7 +1,7 @@
 ---
 type: "user"
 category: "instructions"
-name: "contract_analysis_base"
+name: "contract_term_extraction"
 version: "2.0.0"
 description: "Base contract analysis template that works with fragments"
 fragment_orchestration: "contract_analysis"
@@ -18,6 +18,7 @@ optional_variables:
 model_compatibility: ["gemini-2.5-flash", "gpt-4"]
 max_tokens: 8000
 temperature_range: [0.1, 0.4]
+output_parser: ContractTermsOutput
 tags: ["contract", "analysis", "fragment-based", "modular"]
 ---
 
@@ -149,3 +150,13 @@ Perform a comprehensive analysis of the provided Australian real estate contract
 
 Maintain clarity and accessibility while providing comprehensive legal analysis appropriate for the user's experience level.
 
+## Input context:
+- australian_state: {{ australian_state }}
+- document_type: {{ document_type or "contract" }}
+- hints: contract_type={{ contract_type_hint or "" }}, purchase_method={{ purchase_method_hint or "" }}, use_category={{ use_category_hint or "" }}
+- font_to_layout_mapping: {{ font_to_layout_mapping or "{}" }}
+
+## Text to process:
+```
+{{ contract_text }}
+```
