@@ -100,7 +100,7 @@ from app.clients.base.exceptions import (
     ClientConnectionError,
 )
 from app.schema.document import (
-    FastUploadResult,
+    UploadRecordResult,
     UploadRecordResult,
     FileValidationResult,
     UploadedFileInfo,
@@ -379,7 +379,7 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
         user_id: str,
         contract_type: Optional[str] = None,
         australian_state: Optional[str] = None,
-    ) -> FastUploadResult:
+    ) -> UploadRecordResult:
         """
         Fast document upload - stores file and creates record only.
 
@@ -403,7 +403,7 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
                 upload_time = (
                     datetime.now(timezone.utc) - upload_start
                 ).total_seconds()
-                return FastUploadResult(
+                return UploadRecordResult(
                     success=False,
                     document_id=None,
                     storage_path=None,
@@ -413,23 +413,26 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
                 )
 
             # Step 2: Upload to Supabase storage and create document record (USER OPERATION)
-            upload_result = await self._upload_and_create_document_record(
-                file,
-                user_id,
-                (
-                    validation_result.file_info.model_dump()
-                    if validation_result.file_info
-                    else {}
-                ),
-                contract_type,
-                australian_state,
+            file_info = (
+                validation_result.file_info.model_dump()
+                if validation_result.file_info
+                else {}
+            )
+            upload_result: UploadRecordResult = (
+                await self._upload_and_create_document_record(
+                    file,
+                    user_id,
+                    file_info,
+                    contract_type,
+                    australian_state,
+                )
             )
 
             if not upload_result.success:
                 upload_time = (
                     datetime.now(timezone.utc) - upload_start
                 ).total_seconds()
-                return FastUploadResult(
+                return UploadRecordResult(
                     success=False,
                     document_id=None,
                     storage_path=None,
@@ -454,10 +457,11 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
                 f"Fast upload completed for document {document_id} in {upload_time:.2f}s"
             )
 
-            return FastUploadResult(
+            return UploadRecordResult(
                 success=True,
                 document_id=document_id,
                 storage_path=upload_result.storage_path,
+                metadata=file_info,
                 processing_time=upload_time,
                 status="uploaded",
             )
@@ -479,7 +483,7 @@ class DocumentService(UserAwareService, ServiceInitializationMixin):
                 )
 
             upload_time = (datetime.now(timezone.utc) - upload_start).total_seconds()
-            return FastUploadResult(
+            return UploadRecordResult(
                 success=False,
                 document_id=None,
                 storage_path=None,

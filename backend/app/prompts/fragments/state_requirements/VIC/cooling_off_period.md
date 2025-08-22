@@ -19,29 +19,31 @@ type: consumer_protection
 
 ### Victoria Cooling-Off Period Provisions
 
-**VIC Standard Period**: 3 business days from contract signing
+**VIC Standard Period**: 3 clear business days after the purchaser signs the contract of sale
 
 **Key Victoria Features**:
-- **Timeframe**: 3 business days (excludes weekends and public holidays)
-- **Start Date**: From when purchaser signs the contract
-- **Penalty**: 0.2% of purchase price if cooling-off exercised
-- **Exercise Method**: Must be in writing before 5:00 PM on the last day
+- **Timeframe**: 3 clear business days (excludes weekends and Victorian public holidays)
+- **Start point**: From the date the purchaser signs (not when the vendor signs)
+- **Penalty on rescission**: Vendor may retain the greater of $100 or 0.2% of the purchase price from monies paid
+- **How to exercise**: Written notice of rescission to the vendor or the vendor’s estate agent within the period
 
 **VIC Exceptions (No Cooling-Off)**:
-- Properties sold at auction
-- Commercial properties
-- Properties over certain value thresholds (check current limits)
-- Some off-the-plan sales depending on circumstances
+- Purchased at a publicly advertised auction, or contract signed on the auction day
+- Contract signed within 3 clear business days before or after a publicly advertised auction for that property
+- Property used mainly for industrial or commercial purposes
+- Property more than 20 hectares and used mainly for farming
+- Purchaser is a corporate body
+- Purchaser is an estate agent or a related party of an estate agent
+- Purchaser has previously signed a contract for the same property with the same vendor on substantially the same terms
 
-**VIC Waiver Requirements**:
-- Must obtain independent legal advice from qualified solicitor
-- Solicitor must provide certificate in prescribed form
-- Cannot be waived at auction
-- Must be genuinely independent advice (not arranged by vendor)
+**VIC Waiver/Variation**:
+- No solicitor’s certificate mechanism (unlike NSW). If an exception applies, no cooling‑off right arises; otherwise the statutory right applies and cannot be waived by certificate
 
 **Important Victoria Notes**:
-- Shorter period than most other states (3 vs 5 business days)
-- Lower penalty rate (0.2% vs 0.25% in other states)
-- Must be exercised before 5:00 PM on final day
-- Victorian public holidays affect calculation (Melbourne Cup Day, AFL Grand Final Day, etc.)
-- Cooling-off applies even if Section 32 statement incomplete
+- “Clear business days” excludes weekends and Victorian public holidays
+- Applies to private sales of residential and small rural property only
+- Separate from contractual finance/special conditions and from remedies for defective Section 32 disclosures
+
+References:
+- Sale of Land Act 1962 (Vic) s 31
+- Consumer Affairs Victoria — Buying property: cooling‑off period (private sales)

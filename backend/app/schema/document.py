@@ -194,14 +194,8 @@ class UploadRecordResult(SchemaBase):
     success: bool
     document_id: Optional[str] = None
     storage_path: Optional[str] = None
-    error: Optional[str] = None
-
-
-class FastUploadResult(SchemaBase):
-    success: bool
-    document_id: Optional[str] = None
-    storage_path: Optional[str] = None
     processing_time: float = 0.0
+    metadata: Optional[Dict[str, Any]] = None
     status: str = "uploaded"
     error: Optional[str] = None
 

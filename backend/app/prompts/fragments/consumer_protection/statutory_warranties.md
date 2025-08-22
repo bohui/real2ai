@@ -1,5 +1,5 @@
 ---
-category: legal_framework
+category: consumer_protection
 context:
   state: '*'
   contract_type: '*'

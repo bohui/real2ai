@@ -7,7 +7,7 @@ It does NOT extract contract information like purchase_method, use_category,
 contract_terms, or property_address - only focuses on layout formatting.
 """
 
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 import re
 from datetime import datetime, timezone
 
@@ -15,6 +15,9 @@ from app.agents.subflows.document_processing_workflow import DocumentProcessingS
 from app.prompts.schema.contract_layout_summary_schema import LayoutFormatResult
 from .base_node import DocumentProcessingNodeBase
 from app.utils.font_layout_mapper import FontLayoutMapper
+from app.utils.storage_utils import ArtifactStorageService
+from app.services.repositories.artifacts_repository import ArtifactsRepository
+from app.utils.content_utils import compute_content_hmac, compute_params_fingerprint
 
 
 class LayoutFormatCleanupNode(DocumentProcessingNodeBase):
@@ -22,12 +25,24 @@ class LayoutFormatCleanupNode(DocumentProcessingNodeBase):
         super().__init__("layout_format_cleanup")
         self.font_mapper = FontLayoutMapper()
         self.progress_range = progress_range
+        self.storage_service = None
+        self.artifacts_repo = None
+
+    async def initialize(self):
+        """Initialize storage service and artifacts repository"""
+        if not self.storage_service:
+            self.storage_service = ArtifactStorageService(bucket_name="artifacts")
+        if not self.artifacts_repo:
+            self.artifacts_repo = ArtifactsRepository()
 
     async def execute(self, state: DocumentProcessingState) -> DocumentProcessingState:
         start_time = datetime.now(timezone.utc)
         self._record_execution()
 
         try:
+            # Initialize services
+            await self.initialize()
+
             document_id = state.get("document_id")
             text_extraction_result = state.get("text_extraction_result")
 
@@ -98,8 +113,37 @@ class LayoutFormatCleanupNode(DocumentProcessingNodeBase):
                 full_text, font_to_layout_mapping
             )
 
-            # STEP 3: Create a simple result object with formatted text
+            # STEP 3: Save formatted text as artifacts and build result
+            self._log_info(
+                "Saving formatted text as artifacts",
+                extra={"document_id": document_id},
+            )
 
+            # Compute content HMAC and parameters fingerprint for artifact storage
+            content_hmac = state.get("content_hmac")
+            if not content_hmac:
+                self._log_error("Content HMAC not found in state, shouldn't happen")
+                raise ValueError("Content HMAC not found in state")
+
+            algorithm_version = 1  # Layout formatting algorithm version
+            params = {
+                "font_mapping": font_to_layout_mapping,
+                "algorithm": "font_layout_mapping",
+                "version": algorithm_version,
+            }
+            params_fingerprint = compute_params_fingerprint(params)
+
+            # Store formatted text artifacts
+            formatted_text_artifact_id = await self._store_formatted_text_artifacts(
+                content_hmac,
+                algorithm_version,
+                params_fingerprint,
+                formatted_text,
+                text_extraction_result,
+                params,
+            )
+
+            # STEP 4: Create layout format result
             # Add debug logging to help identify validation issues
             self._log_info(
                 f"Creating LayoutFormatResult with font mapping: {font_to_layout_mapping}",
@@ -133,9 +177,10 @@ class LayoutFormatCleanupNode(DocumentProcessingNodeBase):
                 font_to_layout_mapping=font_to_layout_mapping,
             )
 
-            # Update state with formatted text
+            # Update state with formatted text and artifacts
             updated_state = state.copy()
             updated_state["layout_format_result"] = layout_result
+            updated_state["formatted_text_artifact_id"] = formatted_text_artifact_id
 
             duration = (datetime.now(timezone.utc) - start_time).total_seconds()
             self._record_success(duration)
@@ -150,6 +195,7 @@ class LayoutFormatCleanupNode(DocumentProcessingNodeBase):
                     "font_mapping_generated": bool(font_to_layout_mapping),
                     "original_text_length": len(full_text),
                     "formatted_text_length": len(formatted_text),
+                    "formatted_text_artifact_id": formatted_text_artifact_id,
                 },
             )
 
@@ -345,6 +391,83 @@ class LayoutFormatCleanupNode(DocumentProcessingNodeBase):
         page_delimiter_pattern = re.compile(r"^--- Page [^-\n]* ---\n", re.MULTILINE)
         cleaned_text = page_delimiter_pattern.sub("", cleaned_text)
         return cleaned_text
+
+    async def _store_formatted_text_artifacts(
+        self,
+        content_hmac: str,
+        algorithm_version: int,
+        params_fingerprint: str,
+        formatted_text: str,
+        original_result: Dict[str, Any],  # Changed from TextExtractionResult
+        params: dict,
+    ) -> str:
+        """
+        Store formatted text as artifacts with real object storage.
+
+        Args:
+            content_hmac: Content HMAC
+            algorithm_version: Algorithm version
+            params_fingerprint: Parameters fingerprint
+            formatted_text: Formatted text content
+            original_result: Original TextExtractionResult for metadata
+            params: Processing parameters
+
+        Returns:
+            str: The artifact ID of the created formatted text artifact
+        """
+        try:
+            # Upload formatted text to storage and get URI + SHA256
+            formatted_text_uri, formatted_text_sha256 = (
+                await self.storage_service.upload_text_blob(
+                    formatted_text, content_hmac, "formatted_text"
+                )
+            )
+
+            # Create formatted text artifact using existing full text artifact method
+            # Since formatted text is a processed version of the full text
+            formatted_text_artifact = (
+                await self.artifacts_repo.insert_full_text_artifact(
+                    content_hmac=content_hmac,
+                    algorithm_version=algorithm_version,
+                    params_fingerprint=params_fingerprint,
+                    full_text_uri=formatted_text_uri,
+                    full_text_sha256=formatted_text_sha256,
+                    total_pages=original_result.get("total_pages")
+                    or len(
+                        original_result.get("pages", [])
+                    ),  # Changed from original_result.total_pages
+                    total_words=len(formatted_text.split()),
+                    methods={
+                        "extraction_methods": ["layout_formatting"],
+                        "font_mapping": params.get("font_mapping", {}),
+                        "algorithm": params.get("algorithm", "font_layout_mapping"),
+                        "version": params.get("version", algorithm_version),
+                        "original_extraction_methods": original_result.get(
+                            "extraction_methods"
+                        )  # Changed from original_result.extraction_methods
+                        or [],
+                    },
+                    timings={
+                        "layout_formatting_time": 0.1,  # Estimated processing time
+                        "total_processing_time": 0.1,
+                    },
+                )
+            )
+
+            self._log_info(
+                f"Stored formatted text artifact: {formatted_text_artifact.id}",
+                extra={
+                    "artifact_id": str(formatted_text_artifact.id),
+                    "content_hmac": content_hmac,
+                    "formatted_text_uri": formatted_text_uri,
+                },
+            )
+
+            return str(formatted_text_artifact.id)
+
+        except Exception as e:
+            self._log_warning(f"Failed to store formatted text artifacts: {e}")
+            raise
 
     def _record_execution(self):
         """Record that this node has been executed."""

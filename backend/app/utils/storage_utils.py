@@ -4,7 +4,7 @@ Storage utilities for document processing artifacts
 
 import hashlib
 import io
-from typing import Tuple
+from typing import Tuple, Optional
 from uuid import uuid4
 
 from app.clients.factory import get_service_supabase_client
@@ -22,7 +22,7 @@ class ArtifactStorageService:
         self.bucket_name = bucket_name
 
     async def upload_text_blob(
-        self, content: str, content_hmac: str
+        self, content: str, content_hmac: str, file_name: Optional[str] = None
     ) -> Tuple[str, str]:
         """
         Upload text content to object storage and return URI and SHA256.
@@ -30,6 +30,7 @@ class ArtifactStorageService:
         Args:
             content: Text content to upload
             content_hmac: Content HMAC for path organization
+            file_name: Optional custom filename (without extension). If not provided, a UUID will be generated.
 
         Returns:
             Tuple of (uri, sha256_hash)
@@ -40,10 +41,19 @@ class ArtifactStorageService:
         # Compute SHA256 hash
         sha256_hash = hashlib.sha256(content_bytes).hexdigest()
 
-        # Generate storage path: artifacts/{full_hmac}/full_text/{uuid}.txt
+        # Generate storage path: artifacts/{full_hmac}/full_text/{filename}.txt
         # Use full HMAC for folder to group all artifacts for a document
-        file_uuid = str(uuid4())
-        storage_path = f"{content_hmac}/full_text/{file_uuid}.txt"
+        if file_name is None:
+            file_uuid = str(uuid4())
+            storage_path = f"{content_hmac}/full_text/{file_uuid}.txt"
+        else:
+            # Sanitize filename to ensure it's safe for storage
+            safe_filename = "".join(
+                c for c in file_name if c.isalnum() or c in ("-", "_")
+            ).rstrip()
+            if not safe_filename:
+                safe_filename = str(uuid4())
+            storage_path = f"{content_hmac}/full_text/{safe_filename}.txt"
 
         # Upload to Supabase Storage
         client = await get_service_supabase_client()

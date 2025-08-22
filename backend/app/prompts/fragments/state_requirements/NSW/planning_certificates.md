@@ -17,16 +17,16 @@ tags:
 - section-149
 ---
 
-### NSW Section 149 Planning Certificates
+### NSW Planning Certificates (Section 10.7, formerly Section 149)
 
-**Critical NSW Requirement**: Section 149 planning certificates must be provided under NSW Conveyancing Act.
+**Critical NSW Requirement**: A Section 10.7 planning certificate (Environmental Planning and Assessment Act 1979) must be provided by the local council. Section 10.7 certificates were formerly known as Section 149 certificates.
 
 **Key Information to Verify**:
 - **Zoning Classification**: Residential, commercial, industrial, or mixed-use designation
 - **Development Restrictions**: Height limits, floor space ratios, building setbacks
 - **Heritage Listings**: Any heritage conservation areas or individual listings
 - **Environmental Constraints**: Flood zones, contaminated land, acid sulfate soils
-- **Infrastructure Contributions**: Section 7.11 or 7.12 development contributions
+- **Infrastructure Contributions**: Section 7.11 or 7.12 development contributions (as applicable)
 - **Future Development**: Planned road widening, rezoning proposals, or infrastructure projects
 
 **Red Flags to Watch For**:

@@ -89,6 +89,7 @@ Perform a comprehensive analysis of the provided Australian real estate contract
 
 {{ analysis_depth }}
 
+
 ### 4. Risk Assessment Framework
 
 **Risk Evaluation Process:**
@@ -146,14 +147,5 @@ Perform a comprehensive analysis of the provided Australian real estate contract
 - Check compliance with state-specific requirements
 - Ensure all critical terms have been addressed
 
-## Output Format
-
-Present your analysis in a structured format that includes:
-
-1. **Executive Summary** with key findings and immediate actions
-2. **Detailed Analysis** covering all framework areas
-3. **Risk Assessment** with prioritized issues and recommendations
-4. **Compliance Review** against applicable regulations
-5. **Next Steps** with clear timelines and responsible parties
-
 Maintain clarity and accessibility while providing comprehensive legal analysis appropriate for the user's experience level.
+

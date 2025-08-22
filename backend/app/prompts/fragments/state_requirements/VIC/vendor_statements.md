@@ -20,30 +20,42 @@ type: legal_requirement
 
 ### Victoria Section 32 Vendor Statements
 
-**Critical VIC Requirement**: Section 32 vendor statements must be provided under Sale of Land Act 1962.
+**Critical VIC Requirement**: A Section 32 vendor statement must be provided to the purchaser before the contract is signed, per Sale of Land Act 1962 (Vic) s 32 and the Sale of Land Regulations. Failure to provide an accurate and complete statement can render the contract voidable by the purchaser.
 
-**Key Information to Verify**:
-- **Title Details**: Certificate of title, plan of subdivision, registered restrictions
-- **Rates and Charges**: Council rates, water rates, current and outstanding amounts
-- **Planning Information**: Zoning, overlays, planning permits, building permits
-- **Owners Corporation**: Body corporate details, fees, special levies, meeting minutes
-- **Services**: Connection to water, sewerage, electricity, gas, telecommunications
-- **Environmental Issues**: Contamination reports, environmental audits if applicable
+**Key information to verify (prescribed matters):**
+- **Title particulars**: Certificate of Title details, plan of subdivision, and any registered encumbrances (mortgages, easements, covenants, caveats)
+- **Outgoings**: Rates, taxes and other charges affecting the land (current and outstanding amounts)
+- **Planning information**: Planning scheme and zoning, applicable overlays (e.g., HO, BMO, LSIO, SBO, EAO), and any planning permits/conditions
+- **Building permits (last 7 years)**: Details of building permits issued; owner‑builder works and required insurance/warranty if applicable
+- **Owners corporation (if applicable)**: An Owners Corporation Certificate (Owners Corporations Act 2006 (Vic) s 151) and required attachments (fees, special levies, insurance, rules, minutes)
+- **Services**: Whether services (water, sewerage, electricity, gas, telecommunications) are connected or not available
+- **Notices and orders**: Any notices, orders or approved proposals by authorities affecting the land or requiring work
+- **Road access**: Adequate access to the property by road
+- **Agreements affecting the land**: e.g., Section 173 Agreements (Planning and Environment Act 1987 (Vic))
+- **Tax/levy regimes potentially applicable**: Growth Areas Infrastructure Contribution (GAIC) in growth areas; Windfall Gains Tax (WGT) exposure arising from rezoning
 
-**Mandatory Disclosures**:
-- **Building Permits**: All permits for building work on the property
-- **Planning Permits**: Current and historical planning applications
-- **Notices and Orders**: Any council or authority notices affecting the property
-- **Encumbrances**: Easements, covenants, caveats, or other registered interests
-- **Body Corporate**: Financial statements, insurance details, major decisions
+**Mandatory disclosures and typical attachments**:
+- Current title search and plan of subdivision
+- Owners Corporation Certificate with prescribed attachments (if applicable)
+- Schedule of outgoings and any special levies (if applicable)
+- Details of building permits issued in the last 7 years; owner‑builder warranty insurance (if relevant)
+- Copies or particulars of any notices, orders, proposals by authorities
+- Disclosure of encumbrances: mortgages, easements, covenants, caveats and other interests
 
-**Red Flags to Watch For**:
-- ⚠️ **Incomplete Statement**: Missing mandatory sections or attachments
-- ⚠️ **Outstanding Levies**: Unpaid body corporate fees or special assessments
-- ⚠️ **Building Permit Issues**: Unauthorised building work or non-compliant alterations
-- ⚠️ **Planning Overlays**: Heritage, environmental, or other restrictive overlays
+**Red flags to watch for**:
+- ⚠️ **Incomplete statement**: Missing prescribed matters or required OC certificate/attachments
+- ⚠️ **Unapproved works**: Owner‑builder or other works without permits or required warranty insurance
+- ⚠️ **Overlays/constraints**: Heritage, bushfire, flood/inundation, environmental audit overlays limiting use/development
+- ⚠️ **Outstanding OC levies**: Unpaid fees or flagged special levies
+- ⚠️ **Section 173 Agreements**: Restrictive conditions on use/development
 
-**Compliance Notes**:
-- Statement must be current and complete at time of contract
-- Purchaser has 3 business days cooling-off period (unless waived)
-- Additional reports may be referenced and should be carefully reviewed
+**Compliance notes**:
+- Statement must be current, complete and signed at the time of contract; update if material facts change
+- Cooling‑off rights for private sales are governed by Sale of Land Act 1962 (Vic) s 31 (3 clear business days; auction and other exceptions apply)
+- Additional reports (building/pest, engineering, surveys) are not substitutes for statutory disclosures and should be separately reviewed
+
+References:
+- Sale of Land Act 1962 (Vic) s 32; Sale of Land Regulations (prescribed matters)
+- Owners Corporations Act 2006 (Vic) s 151 (Owners Corporation Certificate)
+- Planning and Environment Act 1987 (Vic) (s 173 agreements; overlays)
+- State Revenue Office Victoria — WGT; Planning and Environment Act Part 9B — GAIC

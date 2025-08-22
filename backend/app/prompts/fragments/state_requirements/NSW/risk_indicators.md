@@ -1,5 +1,5 @@
 ---
-category: state_specific
+category: state_requirements
 context:
   state: NSW
   contract_type: '*'
@@ -21,9 +21,9 @@ type: risk_assessment
 ### NSW Known Risk Indicators
 
 **High Risk Factors:**
-- **No Section 149 Planning Certificate**: Missing or outdated planning information
+- **No Section 10.7 Planning Certificate**: Missing or outdated planning information (formerly Section 149)
 - **Missing Home Building Act Warranties**: Statutory warranties not properly included
-- **Unconditional Purchase**: No cooling-off period protection (auction sales)
+- **Unconditional Purchase**: No cooling-off period protection (auction sales; or waived via Section 66W certificate)
 - **Heritage Listing Restrictions**: Development limitations from heritage controls
 - **Flood or Bushfire Prone Areas**: Environmental hazards affecting property value/insurance
 
@@ -35,7 +35,7 @@ type: risk_assessment
 - **Planning Proposal Impacts**: Pending rezoning or development that may affect property
 
 **NSW-Specific Compliance Risks:**
-- **Fair Trading Act Disclosure**: Material facts not properly disclosed by vendor
-- **Conveyancing Act Requirements**: Non-compliance with statutory conveyancing procedures
+- **Material Facts Disclosure**: Failure to disclose prescribed material facts under NSW Fair Trading guidelines
+- **Conveyancing Act Requirements**: Non-compliance with statutory conveyancing procedures (e.g., cooling‑off management, notices)
 - **Strata Schemes Management**: Issues with strata documentation or management
-- **Environmental Planning**: Compliance with EPA requirements and planning instruments
+- **Environmental Planning**: Compliance with Environmental Planning and Assessment Act instruments

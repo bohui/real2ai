@@ -226,7 +226,7 @@ class ContractTermsExtractionNode(BaseNode):
             # )
 
             # Infer contract taxonomy from OCR text
-            await self._infer_contract_taxonomy(full_text, state)
+            # await self._infer_contract_taxonomy(full_text, state)
 
             # Extract terms using configured method
 
@@ -320,14 +320,14 @@ class ContractTermsExtractionNode(BaseNode):
             # Get document metadata for context
             document_metadata = state.get("document_metadata", {})
             # Required context for service mapping
-            australian_state_value = (
+            state_value = (
                 state.get("australian_state")
                 or document_metadata.get("australian_state")
                 or "NSW"
             )
             contract_type_value = state.get("contract_type") or "purchase_agreement"
             user_type_value = state.get("user_type") or "general"
-            user_experience_level_value = (
+            user_experience_value = (
                 state.get("user_experience_level")
                 or state.get("user_experience")
                 or "intermediate"
@@ -338,15 +338,14 @@ class ContractTermsExtractionNode(BaseNode):
                 variables={
                     # Template-required variables
                     "contract_text": text,  # Template expects 'contract_text', not 'extracted_text'
-                    "australian_state": australian_state_value,
+                    "state": state_value,
                     "analysis_type": "contract_terms_extraction",  # Required by template
                     # Additional context variables
-                    "extracted_text": text,  # Keep for backward compatibility
                     "document_metadata": document_metadata,
                     "extraction_type": "contract_terms",
                     "contract_type": contract_type_value,
                     "user_type": user_type_value,
-                    "user_experience_level": user_experience_level_value,
+                    "user_experience": user_experience_value,
                     "extraction_timestamp": datetime.now(UTC).isoformat(),
                     # Optional template variables (provide defaults to prevent errors)
                     "transaction_value": None,  # Will be extracted from contract text

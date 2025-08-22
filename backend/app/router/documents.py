@@ -24,9 +24,12 @@ from app.schema.enums import ContractType, AustralianState
 from app.services.document_service import DocumentService
 from app.services.communication.websocket_singleton import websocket_manager
 from app.services.communication.websocket_service import WebSocketEvents
-from app.services.repositories.analysis_progress_repository import AnalysisProgressRepository
+from app.services.repositories.analysis_progress_repository import (
+    AnalysisProgressRepository,
+)
 from app.schema.document import (
     DocumentUploadResponse,
+    UploadRecordResult,
     ReportGenerationRequest,
     ReportResponse,
 )
@@ -202,11 +205,15 @@ async def upload_document(
         # Fast upload - just store file and create record
         logger.info("Starting fast document upload...")
         try:
-            upload_result = await document_service.upload_document_fast(
-                file=file,
-                user_id=str(user.id),
-                contract_type=contract_type.value if contract_type else None,
-                australian_state=australian_state.value if australian_state else None,
+            upload_result: UploadRecordResult = (
+                await document_service.upload_document_fast(
+                    file=file,
+                    user_id=str(user.id),
+                    contract_type=contract_type.value if contract_type else None,
+                    australian_state=(
+                        australian_state.value if australian_state else None
+                    ),
+                )
             )
             logger.info(f"Fast upload result: {upload_result}")
         except Exception as upload_error:
@@ -245,9 +252,11 @@ async def upload_document(
         # Emit 5% progress for document_uploaded step according to PRD
         try:
             progress_repo = AnalysisProgressRepository()
-            document_metadata = upload_result.document_metadata or {}
-            content_hash = document_metadata.get('content_hash', upload_result.document_id)
-            
+            document_metadata = upload_result.metadata or {}
+            content_hash = document_metadata.get(
+                "content_hash", upload_result.document_id
+            )
+
             progress_data = {
                 "current_step": "document_uploaded",
                 "progress_percent": 5,
@@ -255,10 +264,12 @@ async def upload_document(
                 "status": "in_progress",
                 "step_started_at": datetime.now().isoformat(),
             }
-            
+
             # Persist progress
-            await progress_repo.upsert_progress(content_hash, str(user.id), progress_data)
-            
+            await progress_repo.upsert_progress(
+                content_hash, str(user.id), progress_data
+            )
+
             # Emit WebSocket progress as analysis_progress event
             if websocket_manager:
                 await websocket_manager.send_message(
@@ -270,12 +281,14 @@ async def upload_document(
                             "contract_id": upload_result.document_id,
                             "current_step": "document_uploaded",
                             "progress_percent": 5,
-                            "step_description": "Upload document"
-                        }
-                    }
+                            "step_description": "Upload document",
+                        },
+                    },
                 )
-            
-            logger.info(f"Emitted 5% progress for document upload: {upload_result.document_id}")
+
+            logger.info(
+                f"Emitted 5% progress for document upload: {upload_result.document_id}"
+            )
         except Exception as progress_error:
             # Don't fail upload if progress emission fails
             logger.warning(f"Failed to emit upload progress: {progress_error}")

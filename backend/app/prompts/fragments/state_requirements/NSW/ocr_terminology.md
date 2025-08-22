@@ -1,5 +1,5 @@
 ---
-category: state_specific
+category: state_requirements
 context:
   state: NSW
   contract_type: '*'
@@ -20,10 +20,10 @@ type: ocr_terminology
 
 ### NSW Specific Terms to Identify Accurately:
 
-- **Section 149 planning certificates** - Critical NSW planning disclosure document
+- **Section 10.7 planning certificates (formerly Section 149)** - Critical NSW planning disclosure document
 - **Home Building Act warranties** - Statutory building warranties under NSW law
 - **Fair Trading Act disclosures** - Consumer protection disclosure requirements
-- **Cooling-off period (5 business days standard)** - NSW standard withdrawal period
+- **Cooling-off period** - 5 business days standard for residential; 10 business days for off‑the‑plan; waiver via Section 66W certificate
 - **Conveyancing Act provisions** - NSW property transfer legal requirements
 - **Strata Schemes Management Act** - NSW strata title legislation
 - **Environmental Planning and Assessment Act** - NSW planning law
