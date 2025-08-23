@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     db_pool_eviction_policy: str = "LRU"
 
     # AI Services
-    openai_api_key: str
+    openai_api_key: Optional[str] = None
     openai_api_base: Optional[str] = None
     langsmith_api_key: Optional[str] = None
     langsmith_project: str = "real2ai-development"

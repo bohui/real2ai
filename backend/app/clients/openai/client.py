@@ -34,6 +34,98 @@ class OpenAIClient(BaseClient):
         self._openai_client: Optional[OpenAI] = None
         self._langchain_client: Optional[ChatOpenAI] = None
 
+        # Round-robin API key pool
+        self._api_keys: List[str] = []
+        self._rr_index: int = 0
+        self._rr_lock: asyncio.Lock = asyncio.Lock()
+        # Per-key client caches
+        self._openai_clients_by_key: Dict[str, OpenAI] = {}
+        # Cache LangChain clients by (api_key, model)
+        self._langchain_clients_by_key_model: Dict[str, ChatOpenAI] = {}
+
+    async def _select_next_key(self) -> str:
+        """Select the next API key using round-robin."""
+        async with self._rr_lock:
+            if not self._api_keys:
+                return self.config.api_key
+            key = self._api_keys[self._rr_index % len(self._api_keys)]
+            self._rr_index = (self._rr_index + 1) % len(self._api_keys)
+            return key
+
+    def _get_or_create_openai_client_for(self, api_key: str) -> OpenAI:
+        """Return an OpenAI client for a specific API key, creating it if missing."""
+        if api_key in self._openai_clients_by_key:
+            return self._openai_clients_by_key[api_key]
+
+        client_kwargs: Dict[str, Any] = {
+            "api_key": api_key,
+            "timeout": self.config.request_timeout,
+            "max_retries": self.config.max_retries,
+        }
+        if self.config.api_base:
+            client_kwargs["base_url"] = self.config.api_base
+        if self.config.organization:
+            client_kwargs["organization"] = self.config.organization
+        try:
+            default_headers = self.config.extra_config.get("default_headers")  # type: ignore[attr-defined]
+            if default_headers:
+                client_kwargs["default_headers"] = default_headers
+        except Exception:
+            pass
+
+        client = OpenAI(**client_kwargs)
+        self._openai_clients_by_key[api_key] = client
+        return client
+
+    def _get_or_create_langchain_client_for(
+        self,
+        api_key: str,
+        model: str,
+        *,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+        top_p: Optional[float] = None,
+        frequency_penalty: Optional[float] = None,
+        presence_penalty: Optional[float] = None,
+    ) -> ChatOpenAI:
+        """Return a LangChain ChatOpenAI client for a specific (api_key, model)."""
+        cache_key = f"{api_key}|{model}"
+        if cache_key in self._langchain_clients_by_key_model:
+            return self._langchain_clients_by_key_model[cache_key]
+
+        langchain_kwargs: Dict[str, Any] = {
+            "openai_api_key": api_key,
+            "model": model,
+            "temperature": (
+                temperature if temperature is not None else self.config.temperature
+            ),
+            "max_tokens": (
+                max_tokens if max_tokens is not None else self.config.max_tokens
+            ),
+            "top_p": top_p if top_p is not None else self.config.top_p,
+            "frequency_penalty": (
+                frequency_penalty
+                if frequency_penalty is not None
+                else self.config.frequency_penalty
+            ),
+            "presence_penalty": (
+                presence_penalty
+                if presence_penalty is not None
+                else self.config.presence_penalty
+            ),
+            "request_timeout": self.config.request_timeout,
+            "max_retries": self.config.max_retries,
+        }
+        if self.config.api_base:
+            langchain_kwargs["openai_api_base"] = self.config.api_base
+        if self.config.organization:
+            langchain_kwargs["openai_organization"] = self.config.organization
+        langchain_kwargs = {k: v for k, v in langchain_kwargs.items() if v is not None}
+
+        lc_client = ChatOpenAI(**langchain_kwargs)
+        self._langchain_clients_by_key_model[cache_key] = lc_client
+        return lc_client
+
     @property
     def openai_client(self) -> OpenAI:
         """Get the underlying OpenAI client."""
@@ -54,9 +146,40 @@ class OpenAIClient(BaseClient):
         try:
             self.logger.info("Initializing OpenAI client...")
 
+            # Build API key pool from extra_config if provided
+            api_keys_cfg = None
+            try:
+                api_keys_cfg = self.config.extra_config.get("api_keys")  # type: ignore[attr-defined]
+            except Exception:
+                api_keys_cfg = None
+
+            api_keys: List[str] = []
+            if isinstance(api_keys_cfg, list):
+                api_keys = [k for k in api_keys_cfg if isinstance(k, str) and k.strip()]
+            elif isinstance(api_keys_cfg, str):
+                # Support comma-separated keys in a single string
+                api_keys = [k.strip() for k in api_keys_cfg.split(",") if k.strip()]
+
+            if not api_keys and self.config.api_key:
+                api_keys = [self.config.api_key]
+
+            # Filter out any empty strings defensively
+            api_keys = [k for k in api_keys if isinstance(k, str) and k.strip()]
+
+            if not api_keys:
+                raise ClientAuthenticationError(
+                    "No OpenAI API keys configured. Set OPENAI_API_KEYS (comma-separated or JSON) or OPENAI_API_KEY.",
+                    client_name=self.client_name,
+                )
+
+            self._api_keys = api_keys
+            pool_size = len(self._api_keys)
+            self.logger.info(f"Configured OpenAI API key pool size: {pool_size}")
+
             # Create OpenAI client
             client_kwargs = {
-                "api_key": self.config.api_key,
+                # Use first key for initial client; others are created lazily
+                "api_key": self._api_keys[0],
                 "timeout": self.config.request_timeout,
                 "max_retries": self.config.max_retries,
             }
@@ -76,10 +199,11 @@ class OpenAIClient(BaseClient):
                 pass
 
             self._openai_client = OpenAI(**client_kwargs)
+            self._openai_clients_by_key[self._api_keys[0]] = self._openai_client
 
             # Initialize LangChain ChatOpenAI client for LangSmith tracing
             langchain_kwargs = {
-                "openai_api_key": self.config.api_key,
+                "openai_api_key": self._api_keys[0],
                 "model": self.config.model_name,
                 "temperature": self.config.temperature,
                 "max_tokens": self.config.max_tokens,
@@ -102,6 +226,9 @@ class OpenAIClient(BaseClient):
             }
 
             self._langchain_client = ChatOpenAI(**langchain_kwargs)
+            self._langchain_clients_by_key_model[
+                f"{self._api_keys[0]}|{self.config.model_name}"
+            ] = self._langchain_client
 
             # Test the connection (optionally, and with timeout)
             should_test = bool(
@@ -147,8 +274,13 @@ class OpenAIClient(BaseClient):
             # Use queue even for connection tests to respect global backoff
             async def _run_test(model_to_use: str, messages: list) -> Any:
                 queue = OpenAILLMQueueManager.get_queue(model_to_use)
+                # Use the first key's client for initialization test
+                key_for_test = (
+                    self._api_keys[0] if self._api_keys else self.config.api_key
+                )
+                openai_client = self._get_or_create_openai_client_for(key_for_test)
                 return await queue.run_in_executor(
-                    lambda: self._openai_client.chat.completions.create(
+                    lambda: openai_client.chat.completions.create(
                         model=model_to_use,
                         messages=messages,
                         max_tokens=1,
@@ -220,8 +352,12 @@ class OpenAIClient(BaseClient):
                         f"Model error during connection test: {e}. Trying fallback model: {DEFAULT_MODEL}"
                     )
                     queue = OpenAILLMQueueManager.get_queue(DEFAULT_MODEL)
+                    key_for_test = (
+                        self._api_keys[0] if self._api_keys else self.config.api_key
+                    )
+                    openai_client = self._get_or_create_openai_client_for(key_for_test)
                     _ = await queue.run_in_executor(
-                        lambda: self._openai_client.chat.completions.create(
+                        lambda: openai_client.chat.completions.create(
                             model=DEFAULT_MODEL,
                             messages=[{"role": "user", "content": "ping"}],
                             max_tokens=1,
@@ -289,6 +425,10 @@ class OpenAIClient(BaseClient):
                 # LangChain client doesn't require explicit closing
                 self._langchain_client = None
 
+            # Clear per-key caches
+            self._openai_clients_by_key.clear()
+            self._langchain_clients_by_key_model.clear()
+
             self._initialized = False
             self.logger.info(
                 "OpenAI client and LangChain ChatOpenAI closed successfully"
@@ -351,39 +491,25 @@ class OpenAIClient(BaseClient):
                 temperature=kwargs.get("temperature", self.config.temperature),
             )
 
-            # Use LangChain ChatOpenAI for automatic LangSmith tracing
-            # Update parameters if they differ from initialized values
-            langchain_client = self.langchain_client
-            if kwargs.get("model") and kwargs["model"] != self.config.model_name:
-                # Create a temporary client with different model
-                langchain_kwargs = {
-                    "openai_api_key": self.config.api_key,
-                    "model": kwargs["model"],
-                    "temperature": kwargs.get("temperature", self.config.temperature),
-                    "max_tokens": kwargs.get("max_tokens", self.config.max_tokens),
-                    "top_p": kwargs.get("top_p", self.config.top_p),
-                    "frequency_penalty": kwargs.get(
-                        "frequency_penalty", self.config.frequency_penalty
-                    ),
-                    "presence_penalty": kwargs.get(
-                        "presence_penalty", self.config.presence_penalty
-                    ),
-                }
-                if self.config.api_base:
-                    langchain_kwargs["openai_api_base"] = self.config.api_base
-                if self.config.organization:
-                    langchain_kwargs["openai_organization"] = self.config.organization
+            # Resolve model and select API key via round-robin
+            model_to_use = kwargs.get("model", self.config.model_name)
+            selected_key = await self._select_next_key()
 
-                # Remove None values
-                langchain_kwargs = {
-                    k: v for k, v in langchain_kwargs.items() if v is not None
-                }
-                langchain_client = ChatOpenAI(**langchain_kwargs)
+            # Get or create a per-key, per-model LangChain client
+            langchain_client = self._get_or_create_langchain_client_for(
+                selected_key,
+                model_to_use,
+                temperature=kwargs.get("temperature"),
+                max_tokens=kwargs.get("max_tokens"),
+                top_p=kwargs.get("top_p"),
+                frequency_penalty=kwargs.get("frequency_penalty"),
+                presence_penalty=kwargs.get("presence_penalty"),
+            )
 
             # Call LangChain ChatOpenAI through queue system for rate limiting
-            queue = OpenAILLMQueueManager.get_queue(
-                kwargs.get("model", self.config.model_name)
-            )
+            # Use a per-(model,key) queue to isolate 429 backoffs across keys
+            queue_key = f"{model_to_use}|{selected_key[:6]}"
+            queue = OpenAILLMQueueManager.get_queue(queue_key)
             if hasattr(langchain_client, "ainvoke"):
                 response = await queue.run_async(
                     lambda: langchain_client.ainvoke(langchain_messages)
