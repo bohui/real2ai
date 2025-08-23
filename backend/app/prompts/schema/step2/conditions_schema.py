@@ -10,36 +10,18 @@ from pydantic import BaseModel, Field, ConfigDict
 from enum import Enum
 from datetime import date
 
-
-class ConditionType(str, Enum):
-    """Condition type classification"""
-
-    STANDARD = "standard"
-    SPECIAL = "special"
-    PRECEDENT = "precedent"
-    SUBSEQUENT = "subsequent"
-
-
-class ConditionCategory(str, Enum):
-    """Condition category classification"""
-
-    FINANCE = "finance"
-    INSPECTION = "inspection"
-    PLANNING = "planning"
-    TITLE = "title"
-    STRATA = "strata"
-    SALE_OF_PROPERTY = "sale_of_property"
-    DEVELOPMENT = "development"
-    OTHER = "other"
+from app.schema.enums.entities import PartyRole
+from app.schema.enums import (
+    ConditionType,
+    ConditionCategory,
+    ConditionDependencyType,
+    RiskLevel,
+)
 
 
-class RiskLevel(str, Enum):
-    """Risk level classification"""
-
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
-    CRITICAL = "critical"
+"""
+Note: Local enum classes were removed in favor of shared enums from app.schema.enums.
+"""
 
 
 class BusinessDayCalculation(BaseModel):
@@ -82,7 +64,7 @@ class ConditionDetail(BaseModel):
     satisfaction_requirements: List[str] = Field(
         default_factory=list, description="Requirements for satisfaction"
     )
-    party_responsible: Optional[str] = Field(
+    party_responsible: Optional[List[PartyRole]] = Field(
         None, description="Party responsible for satisfaction"
     )
     evidence_required: List[str] = Field(
@@ -224,7 +206,7 @@ class TimelineDependency(BaseModel):
 
     condition_1: str = Field(..., description="First condition description")
     condition_2: str = Field(..., description="Second condition description")
-    dependency_type: str = Field(
+    dependency_type: ConditionDependencyType = Field(
         ..., description="Type of dependency (sequential, parallel, etc.)"
     )
     potential_conflicts: List[str] = Field(

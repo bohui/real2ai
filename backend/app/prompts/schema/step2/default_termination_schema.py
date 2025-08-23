@@ -9,6 +9,7 @@ from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field, ConfigDict
 from enum import Enum
 from datetime import date
+from app.schema.enums import RiskLevel, PartyRole
 
 
 class DefaultType(str, Enum):
@@ -41,15 +42,6 @@ class RemedyType(str, Enum):
     RETENTION = "retention"
     COMPENSATION = "compensation"
     CURE_PERIOD = "cure_period"
-
-
-class RiskLevel(str, Enum):
-    """Risk level classification"""
-
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
-    CRITICAL = "critical"
 
 
 class DefaultEvent(BaseModel):
@@ -101,7 +93,9 @@ class TerminationRight(BaseModel):
     termination_trigger: str = Field(
         ..., description="Event or condition triggering termination right"
     )
-    party_exercising: str = Field(..., description="Party who can exercise termination")
+    party_exercising: PartyRole = Field(
+        ..., description="Party who can exercise termination"
+    )
 
     # Exercise conditions
     notice_period: Optional[str] = Field(None, description="Required notice period")

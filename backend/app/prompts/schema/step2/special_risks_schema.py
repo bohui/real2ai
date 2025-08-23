@@ -8,6 +8,7 @@ unusual terms assessment, and buyer protection evaluation.
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field, ConfigDict
 from enum import Enum
+from app.schema.enums import RiskLevel
 
 
 class RiskCategory(str, Enum):
@@ -21,15 +22,6 @@ class RiskCategory(str, Enum):
     MARKET = "market"
     OPERATIONAL = "operational"
     REPUTATIONAL = "reputational"
-
-
-class RiskLevel(str, Enum):
-    """Risk level classification"""
-
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
-    CRITICAL = "critical"
 
 
 class UnusualTermType(str, Enum):

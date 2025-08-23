@@ -8,6 +8,9 @@ property identification verification, and inclusions/exclusions analysis.
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field, ConfigDict
 from enum import Enum
+from app.schema.enums import RiskLevel
+from app.schema.enums.entities import PartyRole
+from app.schema.enums.property import PropertyType
 
 
 class LegalCapacityStatus(str, Enum):
@@ -28,20 +31,11 @@ class PropertyDescriptionCompleteness(str, Enum):
     AMBIGUOUS = "ambiguous"
 
 
-class RiskLevel(str, Enum):
-    """Risk level classification"""
-
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
-    CRITICAL = "critical"
-
-
 class PartyDetails(BaseModel):
     """Individual party details and verification"""
 
     name: str = Field(..., description="Full legal name of the party")
-    role: str = Field(
+    role: PartyRole = Field(
         ..., description="Role in transaction (vendor, purchaser, guarantor, etc.)"
     )
     verification_status: LegalCapacityStatus = Field(
@@ -70,7 +64,7 @@ class PropertyIdentification(BaseModel):
     title_reference: Optional[str] = Field(
         None, description="Volume/folio or title reference"
     )
-    property_type: Optional[str] = Field(
+    property_type: Optional[PropertyType] = Field(
         None, description="Property type classification"
     )
 

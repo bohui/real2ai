@@ -8,15 +8,7 @@ deposit analysis, payment schedule review, and GST implications assessment.
 from typing import List, Optional, Dict, Any, Union
 from pydantic import BaseModel, Field, ConfigDict
 from enum import Enum
-
-
-class FinancialRiskLevel(str, Enum):
-    """Financial risk level classification"""
-
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
-    CRITICAL = "critical"
+from app.schema.enums import RiskLevel
 
 
 class PriceAssessment(str, Enum):
@@ -177,7 +169,7 @@ class FinancialRiskIndicator(BaseModel):
         ..., description="Risk category (price, deposit, payment, tax)"
     )
     description: str = Field(..., description="Description of the financial risk")
-    risk_level: FinancialRiskLevel = Field(..., description="Assessed risk level")
+    risk_level: RiskLevel = Field(..., description="Assessed risk level")
     financial_impact: Optional[float] = Field(
         None, description="Estimated financial impact (if quantifiable)"
     )
@@ -222,7 +214,7 @@ class FinancialTermsAnalysisResult(BaseModel):
     )
 
     # Overall Assessment
-    overall_risk_level: FinancialRiskLevel = Field(
+    overall_risk_level: RiskLevel = Field(
         ..., description="Overall financial risk level"
     )
     calculation_accuracy_score: float = Field(

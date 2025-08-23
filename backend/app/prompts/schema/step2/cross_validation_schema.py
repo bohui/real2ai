@@ -8,6 +8,7 @@ consistency checks, and comprehensive synthesis analysis.
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field, ConfigDict
 from enum import Enum
+from app.schema.enums import RiskLevel
 
 
 class ConsistencyLevel(str, Enum):
@@ -26,15 +27,6 @@ class ValidationStatus(str, Enum):
     FAILED = "failed"
     WARNING = "warning"
     REQUIRES_CLARIFICATION = "requires_clarification"
-
-
-class RiskLevel(str, Enum):
-    """Risk level classification"""
-
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
-    CRITICAL = "critical"
 
 
 class SectionValidation(BaseModel):

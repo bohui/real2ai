@@ -44,6 +44,9 @@ from .diagrams import DiagramType, ImageType
 # Entity Extraction Enums
 from .entities import EntityType, PartyRole, DateType, FinancialType
 
+# Condition Enums
+from .conditions import ConditionType, ConditionCategory, ConditionDependencyType
+
 # Confidence & Quality Enums
 from .quality import ConfidenceLevel, QualityTier
 
@@ -125,6 +128,10 @@ __all__ = [
     "PartyRole",
     "DateType",
     "FinancialType",
+    # Condition
+    "ConditionType",
+    "ConditionCategory",
+    "ConditionDependencyType",
     # Confidence & Quality
     "ConfidenceLevel",
     "QualityTier",

@@ -8,6 +8,7 @@ outgoings calculations, and apportionment analysis.
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field, ConfigDict
 from enum import Enum
+from app.schema.enums import RiskLevel
 from datetime import date
 
 
@@ -46,15 +47,6 @@ class CalculationMethod(str, Enum):
     ESTIMATED = "estimated"
     AGREED = "agreed"
     STATUTORY = "statutory"
-
-
-class RiskLevel(str, Enum):
-    """Risk level classification"""
-
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
-    CRITICAL = "critical"
 
 
 class AdjustmentItem(BaseModel):

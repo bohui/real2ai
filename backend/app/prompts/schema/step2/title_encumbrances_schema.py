@@ -8,6 +8,8 @@ and comprehensive diagram integration covering 20+ diagram types.
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field, ConfigDict
 from enum import Enum
+from app.schema.enums import RiskLevel
+from app.schema.enums.diagrams import DiagramType
 
 
 class EncumbranceType(str, Enum):
@@ -24,43 +26,6 @@ class EncumbranceType(str, Enum):
     LIEN = "lien"
     STATUTORY = "statutory"
     OTHER = "other"
-
-
-class DiagramType(str, Enum):
-    """Type of diagram identified in contract"""
-
-    FLOOR_PLAN = "floor_plan"
-    SITE_PLAN = "site_plan"
-    SURVEY_PLAN = "survey_plan"
-    BOUNDARY_PLAN = "boundary_plan"
-    EASEMENT_DIAGRAM = "easement_diagram"
-    SERVICES_DIAGRAM = "services_diagram"
-    DRAINAGE_PLAN = "drainage_plan"
-    LANDSCAPING_PLAN = "landscaping_plan"
-    PARKING_DIAGRAM = "parking_diagram"
-    STRATA_PLAN = "strata_plan"
-    SUBDIVISION_PLAN = "subdivision_plan"
-    DEVELOPMENT_PLAN = "development_plan"
-    ELEVATION_DRAWING = "elevation_drawing"
-    SECTION_DRAWING = "section_drawing"
-    DETAIL_DRAWING = "detail_drawing"
-    ELECTRICAL_PLAN = "electrical_plan"
-    PLUMBING_PLAN = "plumbing_plan"
-    FIRE_SAFETY_PLAN = "fire_safety_plan"
-    ACCESSIBILITY_PLAN = "accessibility_plan"
-    ENVIRONMENTAL_PLAN = "environmental_plan"
-    TRAFFIC_PLAN = "traffic_plan"
-    HERITAGE_PLAN = "heritage_plan"
-    OTHER = "other"
-
-
-class RiskLevel(str, Enum):
-    """Risk level classification"""
-
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
-    CRITICAL = "critical"
 
 
 class TitleAnalysis(BaseModel):

@@ -8,6 +8,7 @@ vendor statement adequacy, and regulatory requirement verification.
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field, ConfigDict
 from enum import Enum
+from app.schema.enums import RiskLevel
 
 
 class DisclosureType(str, Enum):
@@ -36,15 +37,6 @@ class ComplianceStatus(str, Enum):
     PARTIALLY_COMPLIANT = "partially_compliant"
     UNCLEAR = "unclear"
     NOT_APPLICABLE = "not_applicable"
-
-
-class RiskLevel(str, Enum):
-    """Risk level classification"""
-
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
-    CRITICAL = "critical"
 
 
 class DisclosureRequirement(BaseModel):

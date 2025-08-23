@@ -9,6 +9,7 @@ from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field, ConfigDict
 from enum import Enum
 from datetime import date
+from app.schema.enums import RiskLevel
 
 
 class WarrantyType(str, Enum):
@@ -41,15 +42,6 @@ class DisclosureCategory(str, Enum):
     STRUCTURAL = "structural"
     SERVICES = "services"
     OTHER = "other"
-
-
-class RiskLevel(str, Enum):
-    """Risk level classification"""
-
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
-    CRITICAL = "critical"
 
 
 class WarrantyDetail(BaseModel):

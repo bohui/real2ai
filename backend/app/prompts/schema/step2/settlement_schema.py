@@ -9,6 +9,7 @@ from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field, ConfigDict
 from enum import Enum
 from datetime import date
+from app.schema.enums import RiskLevel
 
 
 class SettlementLocation(str, Enum):
@@ -46,15 +47,6 @@ class FundingSource(str, Enum):
     DEPOSIT_RELEASE = "deposit_release"
     SALE_PROCEEDS = "sale_proceeds"
     OTHER = "other"
-
-
-class RiskLevel(str, Enum):
-    """Risk level classification"""
-
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
-    CRITICAL = "critical"
 
 
 class SettlementDocument(BaseModel):
