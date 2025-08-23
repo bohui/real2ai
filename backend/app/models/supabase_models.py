@@ -69,6 +69,7 @@ class Profile(TimestampedBaseModel):
     phone_number: Optional[str] = None
     australian_state: AustralianState = AustralianState.NSW
     user_type: UserType = UserType.BUYER
+    user_role: str = Field(default="user", description="Application role: user|admin")
     subscription_status: SubscriptionStatus = SubscriptionStatus.FREE
     credits_remaining: int = Field(default=1, ge=0)
     organization: Optional[str] = None

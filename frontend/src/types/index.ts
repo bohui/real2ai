@@ -30,6 +30,7 @@ export interface User {
   organization?: string;
   australian_state: AustralianState;
   user_type: UserType;
+  user_role?: 'user' | 'admin';
   subscription_status: SubscriptionStatus;
   credits_remaining: number;
   preferences: UserPreferences;

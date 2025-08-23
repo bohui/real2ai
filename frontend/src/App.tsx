@@ -352,9 +352,11 @@ const App: React.FC = () => {
                   <Route 
                     path="evaluation" 
                     element={
-                      <Suspense fallback={<IntelligenceSkeleton />}>
-                        <EvaluationPage />
-                      </Suspense>
+                      <ProtectedRoute requireAdmin>
+                        <Suspense fallback={<IntelligenceSkeleton />}>
+                          <EvaluationPage />
+                        </Suspense>
+                      </ProtectedRoute>
                     }
                   />
                   <Route path="settings" element={<SettingsPage />} />

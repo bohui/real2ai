@@ -33,14 +33,16 @@ const EvaluationPage: React.FC = () => {
   const [currentView, setCurrentView] = useState<ViewMode>("dashboard");
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
 
-  const { error, actions } = useEvaluationStore();
+  const error = useEvaluationStore((s) => s.error);
+  const clearError = useEvaluationStore((s) => s.actions.clearError);
+  const fetchJobs = useEvaluationStore((s) => s.actions.fetchJobs);
   const { dashboardStats, fetchDashboardStats } = useEvaluationAnalytics();
 
   useEffect(() => {
     // Load initial data
     fetchDashboardStats();
-    actions.fetchJobs();
-  }, [actions, fetchDashboardStats]);
+    fetchJobs();
+  }, [fetchDashboardStats, fetchJobs]);
 
   const handleCreateJob = () => {
     setCurrentView("create-job");
@@ -50,7 +52,7 @@ const EvaluationPage: React.FC = () => {
     setSelectedJobId(jobId);
     setCurrentView("job-details");
     // Refresh jobs list
-    actions.fetchJobs();
+    fetchJobs();
   };
 
   const handleViewJob = (job: EvaluationJob) => {
@@ -79,7 +81,15 @@ const EvaluationPage: React.FC = () => {
       );
     }
 
-    const { stats } = dashboardStats;
+    const stats =
+      dashboardStats?.stats ||
+      ({
+        total_prompts: 0,
+        total_datasets: 0,
+        total_jobs: 0,
+        total_evaluations: 0,
+        avg_overall_score: 0,
+      } as any);
 
     return (
       <Card className="p-6">
@@ -131,7 +141,7 @@ const EvaluationPage: React.FC = () => {
       );
     }
 
-    const { recent_jobs } = dashboardStats;
+    const recent_jobs = dashboardStats?.recent_jobs || [];
 
     const getStatusColor = (status: string) => {
       switch (status) {
@@ -170,7 +180,7 @@ const EvaluationPage: React.FC = () => {
           </div>
         ) : (
           <div className="space-y-3">
-            {recent_jobs.slice(0, 5).map((job) => (
+            {recent_jobs.slice(0, 5).map((job: any) => (
               <div
                 key={job.id}
                 className="flex items-center justify-between p-3 border rounded-md hover:bg-gray-50"
@@ -317,7 +327,7 @@ const EvaluationPage: React.FC = () => {
             <Button
               variant="outline"
               size="sm"
-              onClick={actions.clearError}
+              onClick={clearError}
               className="ml-4"
             >
               Dismiss

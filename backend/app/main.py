@@ -216,7 +216,7 @@ app = FastAPI(
 )
 
 # Configure CORS
-# Get allowed origins from environment variable or use defaults
+# Get allowed origins from environment variable
 allowed_origins = os.getenv("ALLOWED_ORIGINS", "").split(",")
 
 # Add production origins if configured

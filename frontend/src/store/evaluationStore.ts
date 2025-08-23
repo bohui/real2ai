@@ -10,6 +10,7 @@
 
 import { create } from "zustand";
 import { devtools } from "zustand/middleware";
+import { shallow } from "zustand/shallow";
 import {
   CreateEvaluationJobRequest,
   CreatePromptTemplateRequest,
@@ -463,31 +464,40 @@ export const useEvaluationStore = create<EvaluationState>()(
 
 // Selector hooks for better performance
 export const useEvaluationJobs = () =>
-  useEvaluationStore((state) => ({
-    jobs: state.jobs,
-    selectedJob: state.selectedJob,
-    loading: state.loading.jobs,
-    error: state.error,
-    fetchJobs: state.actions.fetchJobs,
-    selectJob: state.actions.selectJob,
-    cancelJob: state.actions.cancelJob,
-  }));
+  useEvaluationStore(
+    (state) => ({
+      jobs: state.jobs,
+      selectedJob: state.selectedJob,
+      loading: state.loading.jobs,
+      error: state.error,
+      fetchJobs: state.actions.fetchJobs,
+      selectJob: state.actions.selectJob,
+      cancelJob: state.actions.cancelJob,
+    }),
+    shallow,
+  );
 
 export const useJobCreation = () =>
-  useEvaluationStore((state) => ({
-    promptTemplates: state.promptTemplates,
-    testDatasets: state.testDatasets,
-    loading: state.loading.creating,
-    error: state.error,
-    createJob: state.actions.createJob,
-    fetchPromptTemplates: state.actions.fetchPromptTemplates,
-    fetchTestDatasets: state.actions.fetchTestDatasets,
-  }));
+  useEvaluationStore(
+    (state) => ({
+      promptTemplates: state.promptTemplates,
+      testDatasets: state.testDatasets,
+      loading: state.loading.creating,
+      error: state.error,
+      createJob: state.actions.createJob,
+      fetchPromptTemplates: state.actions.fetchPromptTemplates,
+      fetchTestDatasets: state.actions.fetchTestDatasets,
+    }),
+    shallow,
+  );
 
 export const useEvaluationAnalytics = () =>
-  useEvaluationStore((state) => ({
-    dashboardStats: state.dashboardStats,
-    modelComparisons: state.modelComparisons,
-    fetchDashboardStats: state.actions.fetchDashboardStats,
-    fetchModelComparisons: state.actions.fetchModelComparisons,
-  }));
+  useEvaluationStore(
+    (state) => ({
+      dashboardStats: state.dashboardStats,
+      modelComparisons: state.modelComparisons,
+      fetchDashboardStats: state.actions.fetchDashboardStats,
+      fetchModelComparisons: state.actions.fetchModelComparisons,
+    }),
+    shallow,
+  );
