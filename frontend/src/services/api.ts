@@ -162,22 +162,13 @@ class ApiService {
         } else if (
           error.code === "ERR_NETWORK" || error.message === "Network Error"
         ) {
-          // Handle network errors (including CORS issues) that might be 401-related
+          // Network/CORS errors: surface to caller; do not auto-logout to avoid loops
           console.log("🚨 Network error detected:", {
             url: error.config?.url,
             method: error.config?.method,
             code: error.code,
             message: error.message,
           });
-
-          // Check if this might be a 401 that got blocked by CORS
-          // If we have a token and get a network error, it's likely an auth issue
-          if (this.token) {
-            console.log(
-              "🚨 Network error with token present - likely auth issue, redirecting to login",
-            );
-            this.handleUnauthorized();
-          }
         }
 
         return Promise.reject(error);

@@ -10,7 +10,6 @@
 
 import { create } from "zustand";
 import { devtools } from "zustand/middleware";
-import { shallow } from "zustand/shallow";
 import {
   CreateEvaluationJobRequest,
   CreatePromptTemplateRequest,
@@ -29,6 +28,9 @@ export interface EvaluationState {
   jobs: EvaluationJob[];
   selectedJob: EvaluationJob | null;
   jobResults: Record<string, EvaluationResult[]>;
+  // Internal timing to dedupe burst fetches
+  lastJobsFetchAt?: number | null;
+  lastDashboardFetchAt?: number | null;
   loading: {
     jobs: boolean;
     jobDetails: boolean;
@@ -134,6 +136,8 @@ export const useEvaluationStore = create<EvaluationState>()(
       jobs: [],
       selectedJob: null,
       jobResults: {},
+      lastJobsFetchAt: null,
+      lastDashboardFetchAt: null,
       loading: {
         jobs: false,
         jobDetails: false,
@@ -162,14 +166,38 @@ export const useEvaluationStore = create<EvaluationState>()(
       actions: {
         // Job actions
         fetchJobs: async (params) => {
+          console.debug("[evaluationStore] fetchJobs called", params);
+          // Prevent duplicate concurrent calls (e.g., React StrictMode double effect)
+          if (get().loading.jobs) {
+            console.debug(
+              "[evaluationStore] fetchJobs skipped: already loading",
+            );
+            return;
+          }
+          // Debounce: skip if called again within 500ms
+          const now = Date.now();
+          const last = get().lastJobsFetchAt ?? 0;
+          if (now - last < 500) {
+            console.debug(
+              "[evaluationStore] fetchJobs skipped: debounced",
+              { sinceMs: now - last },
+            );
+            return;
+          }
           set((state) => ({
             loading: { ...state.loading, jobs: true },
             error: null,
+            lastJobsFetchAt: now,
           }));
           try {
             const jobs = await EvaluationAPI.getEvaluationJobs(params);
+            console.debug(
+              "[evaluationStore] fetchJobs success",
+              { count: jobs?.length ?? 0 },
+            );
             set({ jobs, loading: { ...get().loading, jobs: false } });
           } catch (error) {
+            console.error("[evaluationStore] fetchJobs error", error);
             set({
               error: error instanceof Error
                 ? error.message
@@ -367,10 +395,24 @@ export const useEvaluationStore = create<EvaluationState>()(
 
         // Analytics actions
         fetchDashboardStats: async () => {
+          console.debug("[evaluationStore] fetchDashboardStats called");
+          // Debounce duplicate calls (e.g., StrictMode double effect)
+          const now = Date.now();
+          const last = get().lastDashboardFetchAt ?? 0;
+          const hasRecentStats = !!get().dashboardStats && now - last < 3000;
+          if (now - last < 3000 || hasRecentStats) {
+            console.debug(
+              "[evaluationStore] fetchDashboardStats skipped: debounced",
+              { sinceMs: now - last },
+            );
+            return;
+          }
           try {
             const stats = await EvaluationAPI.getDashboardStats();
-            set({ dashboardStats: stats });
+            console.debug("[evaluationStore] fetchDashboardStats success");
+            set({ dashboardStats: stats, lastDashboardFetchAt: now });
           } catch (error) {
+            console.error("[evaluationStore] fetchDashboardStats error", error);
             set({
               error: error instanceof Error
                 ? error.message
@@ -464,40 +506,41 @@ export const useEvaluationStore = create<EvaluationState>()(
 
 // Selector hooks for better performance
 export const useEvaluationJobs = () =>
-  useEvaluationStore(
-    (state) => ({
-      jobs: state.jobs,
-      selectedJob: state.selectedJob,
-      loading: state.loading.jobs,
-      error: state.error,
-      fetchJobs: state.actions.fetchJobs,
-      selectJob: state.actions.selectJob,
-      cancelJob: state.actions.cancelJob,
-    }),
-    shallow,
-  );
+  useEvaluationStore((state) => ({
+    jobs: state.jobs,
+    selectedJob: state.selectedJob,
+    loading: state.loading.jobs,
+    error: state.error,
+    fetchJobs: state.actions.fetchJobs,
+    selectJob: state.actions.selectJob,
+    cancelJob: state.actions.cancelJob,
+  }));
 
 export const useJobCreation = () =>
-  useEvaluationStore(
-    (state) => ({
-      promptTemplates: state.promptTemplates,
-      testDatasets: state.testDatasets,
-      loading: state.loading.creating,
-      error: state.error,
-      createJob: state.actions.createJob,
-      fetchPromptTemplates: state.actions.fetchPromptTemplates,
-      fetchTestDatasets: state.actions.fetchTestDatasets,
-    }),
-    shallow,
-  );
+  useEvaluationStore((state) => ({
+    promptTemplates: state.promptTemplates,
+    testDatasets: state.testDatasets,
+    loading: state.loading.creating,
+    error: state.error,
+    createJob: state.actions.createJob,
+    fetchPromptTemplates: state.actions.fetchPromptTemplates,
+    fetchTestDatasets: state.actions.fetchTestDatasets,
+  }));
 
 export const useEvaluationAnalytics = () =>
-  useEvaluationStore(
-    (state) => ({
-      dashboardStats: state.dashboardStats,
-      modelComparisons: state.modelComparisons,
-      fetchDashboardStats: state.actions.fetchDashboardStats,
-      fetchModelComparisons: state.actions.fetchModelComparisons,
-    }),
-    shallow,
-  );
+  useEvaluationStore((state) => ({
+    dashboardStats: state.dashboardStats,
+    modelComparisons: state.modelComparisons,
+    fetchDashboardStats: state.actions.fetchDashboardStats,
+    fetchModelComparisons: state.actions.fetchModelComparisons,
+  }));
+
+// Primitive selectors to avoid selector-created object thrash in effects
+export const useDashboardStats = () =>
+  useEvaluationStore((state) => state.dashboardStats);
+
+export const useFetchDashboardStats = () =>
+  useEvaluationStore((state) => state.actions.fetchDashboardStats);
+
+export const useFetchJobs = () =>
+  useEvaluationStore((state) => state.actions.fetchJobs);

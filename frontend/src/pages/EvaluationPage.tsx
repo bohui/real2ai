@@ -8,7 +8,7 @@
  * - Real-time updates and notifications
  */
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Card } from "../components/ui/Card";
 import Button from "../components/ui/Button";
 import Loading from "../components/ui/Loading";
@@ -18,7 +18,9 @@ import { EvaluationJobsDashboard } from "../components/evaluation/EvaluationJobs
 import { EvaluationJobDetails } from "../components/evaluation/EvaluationJobDetails";
 import {
   useEvaluationStore,
-  useEvaluationAnalytics,
+  useDashboardStats,
+  useFetchDashboardStats,
+  useFetchJobs,
 } from "../store/evaluationStore";
 import type { EvaluationJob } from "../services/evaluationApi";
 
@@ -35,14 +37,18 @@ const EvaluationPage: React.FC = () => {
 
   const error = useEvaluationStore((s) => s.error);
   const clearError = useEvaluationStore((s) => s.actions.clearError);
-  const fetchJobs = useEvaluationStore((s) => s.actions.fetchJobs);
-  const { dashboardStats, fetchDashboardStats } = useEvaluationAnalytics();
+  const fetchJobs = useFetchJobs();
+  const dashboardStats = useDashboardStats();
+  const fetchDashboardStats = useFetchDashboardStats();
+  const didFetchDashboardRef = useRef(false);
 
   useEffect(() => {
-    // Load initial data
+    // Load initial data once (gate StrictMode double-invoke in dev)
+    if (didFetchDashboardRef.current) return;
+    didFetchDashboardRef.current = true;
+    console.log("[EvaluationPage] init effect: fetching dashboard");
     fetchDashboardStats();
-    fetchJobs();
-  }, [fetchDashboardStats, fetchJobs]);
+  }, [fetchDashboardStats]);
 
   const handleCreateJob = () => {
     setCurrentView("create-job");
