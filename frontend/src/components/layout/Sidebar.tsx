@@ -16,11 +16,13 @@ import {
 import { motion } from "framer-motion";
 
 import { useAnalysisStore } from "@/store/analysisStore";
+import { useAuthStore } from "@/store/authStore";
 import { cn } from "@/utils";
 
 const Sidebar: React.FC = () => {
   const location = useLocation();
   const { recentAnalyses, isAnalyzing } = useAnalysisStore();
+  const { user } = useAuthStore();
 
   const navigation = [
     {
@@ -70,13 +72,15 @@ const Sidebar: React.FC = () => {
       current: location.pathname === "/app/financial-analysis",
       badge: "NEW",
     },
-    {
-      name: "LLM Evaluation",
-      href: "/app/evaluation",
-      icon: TestTube2,
-      current: location.pathname === "/app/evaluation",
-      badge: "NEW",
-    },
+    user?.user_role === "admin"
+      ? {
+          name: "LLM Evaluation",
+          href: "/app/evaluation",
+          icon: TestTube2,
+          current: location.pathname === "/app/evaluation",
+          badge: "NEW",
+        }
+      : null,
     {
       name: "Settings",
       href: "/app/settings",
@@ -106,54 +110,56 @@ const Sidebar: React.FC = () => {
 
       {/* Navigation */}
       <nav className="flex-1 px-4 py-6 space-y-2">
-        {navigation.map((item) => {
-          const IconComponent = item.icon;
+        {navigation
+          .filter((n): n is NonNullable<typeof n> => Boolean(n))
+          .map((item) => {
+            const IconComponent = item.icon;
 
-          return (
-            <Link
-              key={item.name}
-              to={item.href}
-              className={cn(
-                "group flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200",
-                item.current
-                  ? "bg-primary-50 text-primary-700 border border-primary-200"
-                  : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-50"
-              )}
-              aria-current={item.current ? "page" : undefined}
-            >
-              <div className="flex items-center gap-3">
-                <IconComponent
-                  className={cn(
-                    "w-5 h-5",
-                    item.current
-                      ? "text-primary-600"
-                      : "text-neutral-400 group-hover:text-neutral-600"
-                  )}
-                />
-                <span>{item.name}</span>
-              </div>
+            return (
+              <Link
+                key={item.name}
+                to={item.href}
+                className={cn(
+                  "group flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200",
+                  item.current
+                    ? "bg-primary-50 text-primary-700 border border-primary-200"
+                    : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-50"
+                )}
+                aria-current={item.current ? "page" : undefined}
+              >
+                <div className="flex items-center gap-3">
+                  <IconComponent
+                    className={cn(
+                      "w-5 h-5",
+                      item.current
+                        ? "text-primary-600"
+                        : "text-neutral-400 group-hover:text-neutral-600"
+                    )}
+                  />
+                  <span>{item.name}</span>
+                </div>
 
-              {item.badge && (
-                <motion.span
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  className={cn(
-                    "inline-flex items-center px-2 py-1 rounded-full text-xs font-medium",
-                    item.name === "New Analysis" && isAnalyzing
-                      ? "bg-success-100 text-success-700"
-                      : item.badge === "NEW"
-                      ? "bg-accent-100 text-accent-700"
-                      : item.current
-                      ? "bg-primary-100 text-primary-700"
-                      : "bg-neutral-100 text-neutral-600"
-                  )}
-                >
-                  {item.badge}
-                </motion.span>
-              )}
-            </Link>
-          );
-        })}
+                {item.badge && (
+                  <motion.span
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    className={cn(
+                      "inline-flex items-center px-2 py-1 rounded-full text-xs font-medium",
+                      item.name === "New Analysis" && isAnalyzing
+                        ? "bg-success-100 text-success-700"
+                        : item.badge === "NEW"
+                        ? "bg-accent-100 text-accent-700"
+                        : item.current
+                        ? "bg-primary-100 text-primary-700"
+                        : "bg-neutral-100 text-neutral-600"
+                    )}
+                  >
+                    {item.badge}
+                  </motion.span>
+                )}
+              </Link>
+            );
+          })}
       </nav>
 
       {/* Recent Analyses */}

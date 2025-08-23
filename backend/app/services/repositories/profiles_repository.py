@@ -74,6 +74,7 @@ class ProfilesRepository:
                     phone_number,
                     australian_state,
                     user_type,
+                    user_role,
                     subscription_status,
                     credits_remaining,
                     organization,
@@ -99,6 +100,7 @@ class ProfilesRepository:
                 phone_number=row["phone_number"],
                 australian_state=row["australian_state"],
                 user_type=row["user_type"],
+                user_role=row["user_role"],
                 subscription_status=row["subscription_status"],
                 credits_remaining=row["credits_remaining"],
                 organization=row["organization"],
@@ -132,11 +134,11 @@ class ProfilesRepository:
                 """
                 INSERT INTO profiles (
                     id, email, full_name, phone_number, australian_state, user_type,
-                    subscription_status, credits_remaining, organization, preferences,
+                    user_role, subscription_status, credits_remaining, organization, preferences,
                     onboarding_completed, onboarding_completed_at, onboarding_preferences
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
                 RETURNING id, email, full_name, phone_number, australian_state, user_type,
-                          subscription_status, credits_remaining, organization, preferences,
+                          user_role, subscription_status, credits_remaining, organization, preferences,
                           onboarding_completed, onboarding_completed_at, onboarding_preferences,
                           created_at, updated_at
                 """,
@@ -146,6 +148,7 @@ class ProfilesRepository:
                 kwargs.get("phone_number"),
                 kwargs.get("australian_state", "NSW"),
                 kwargs.get("user_type", "buyer"),
+                kwargs.get("user_role", "user"),
                 kwargs.get("subscription_status", "free"),
                 kwargs.get("credits_remaining", 1),
                 kwargs.get("organization"),
@@ -162,6 +165,7 @@ class ProfilesRepository:
                 phone_number=row["phone_number"],
                 australian_state=row["australian_state"],
                 user_type=row["user_type"],
+                user_role=row["user_role"],
                 subscription_status=row["subscription_status"],
                 credits_remaining=row["credits_remaining"],
                 organization=row["organization"],
@@ -194,6 +198,7 @@ class ProfilesRepository:
             params = []
             param_count = 0
 
+            # Note: user_role is intentionally excluded from self-updates
             updateable_fields = [
                 "full_name",
                 "phone_number",
@@ -241,6 +246,7 @@ class ProfilesRepository:
                     phone_number,
                     australian_state,
                     user_type,
+                    user_role,
                     subscription_status,
                     credits_remaining,
                     organization,
@@ -264,6 +270,7 @@ class ProfilesRepository:
                 phone_number=row["phone_number"],
                 australian_state=row["australian_state"],
                 user_type=row["user_type"],
+                user_role=row["user_role"],
                 subscription_status=row["subscription_status"],
                 credits_remaining=row["credits_remaining"],
                 organization=row["organization"],

@@ -6,6 +6,7 @@ CREATE TABLE profiles (
     phone_number TEXT,
     australian_state australian_state NOT NULL DEFAULT 'NSW',
     user_type user_type NOT NULL DEFAULT 'buyer',
+    user_role TEXT NOT NULL DEFAULT 'user' CHECK (user_role IN ('user','admin')),
     subscription_status subscription_status NOT NULL DEFAULT 'free',
     credits_remaining INTEGER NOT NULL DEFAULT 1,
     organization TEXT,
@@ -221,11 +222,14 @@ CREATE POLICY "Users can view own profile"
 
 CREATE POLICY "Users can update own profile" 
     ON profiles FOR UPDATE 
-    USING (auth.uid() = id);
+    USING (auth.uid() = id)
+    WITH CHECK (
+        user_role = (SELECT user_role FROM public.profiles WHERE id = auth.uid())
+    );
 
 CREATE POLICY "Users can insert own profile on signup" 
     ON profiles FOR INSERT 
-    WITH CHECK (auth.uid() = id);
+    WITH CHECK (auth.uid() = id AND user_role = 'user');
 
 -- Documents policies
 CREATE POLICY "Users can view own documents" 

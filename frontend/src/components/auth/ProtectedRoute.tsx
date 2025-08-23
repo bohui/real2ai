@@ -6,12 +6,14 @@ import { useUIStore } from "@/store/uiStore";
 interface ProtectedRouteProps {
   children: React.ReactNode;
   requiredRole?: string;
+  requireAdmin?: boolean;
   fallbackPath?: string;
 }
 
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   children,
   requiredRole,
+  requireAdmin,
   fallbackPath = "/auth/login",
 }) => {
   const { isAuthenticated, user } = useAuthStore();
@@ -27,6 +29,16 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
 
   // Check role-based access if required
   if (requiredRole && user.user_type !== requiredRole) {
+    return (
+      <Navigate
+        to={import.meta.env.DEV ? "/app/analysis" : "/app/dashboard"}
+        replace
+      />
+    );
+  }
+
+  // Admin-only guard
+  if (requireAdmin && user.user_role !== 'admin') {
     return (
       <Navigate
         to={import.meta.env.DEV ? "/app/analysis" : "/app/dashboard"}

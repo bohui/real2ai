@@ -16,7 +16,7 @@ import { Card } from "../ui/Card";
 import Alert from "../ui/Alert";
 import Loading from "../ui/Loading";
 import StatusBadge from "../ui/StatusBadge";
-import { useEvaluationJobs } from "../../store/evaluationStore";
+import { useEvaluationStore } from "../../store/evaluationStore";
 import type { EvaluationJob } from "../../services/evaluationApi";
 import type { StatusType } from "../ui/StatusBadge";
 
@@ -67,16 +67,27 @@ export const EvaluationJobsDashboard: React.FC<
   >("created_at");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
 
-  const { jobs, selectedJob, loading, error, fetchJobs, selectJob, cancelJob } =
-    useEvaluationJobs();
+  const jobs = useEvaluationStore((s) => s.jobs);
+  const selectedJob = useEvaluationStore((s) => s.selectedJob);
+  const loading = useEvaluationStore((s) => s.loading.jobs);
+  const error = useEvaluationStore((s) => s.error);
+  const fetchJobs = useEvaluationStore((s) => s.actions.fetchJobs);
+  const selectJob = useEvaluationStore((s) => s.actions.selectJob);
+  const cancelJob = useEvaluationStore((s) => s.actions.cancelJob);
 
   useEffect(() => {
-    fetchJobs({ status: statusFilter || undefined });
+    console.log("[EvaluationJobsDashboard] fetchJobs effect", { statusFilter });
+    // Dedupe burst calls in dev/StrictMode by scheduling on microtask
+    const id = window.setTimeout(() => {
+      fetchJobs({ status: statusFilter || undefined });
+    }, 0);
+    return () => window.clearTimeout(id);
   }, [statusFilter, fetchJobs]);
 
   // Filter and sort jobs
   const filteredJobs = useMemo(() => {
-    let filtered = jobs;
+    // Always work on a copy to avoid mutating store state
+    let filtered = [...jobs];
 
     // Apply search filter
     if (searchQuery.trim()) {

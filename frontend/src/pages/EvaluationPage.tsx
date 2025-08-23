@@ -8,7 +8,7 @@
  * - Real-time updates and notifications
  */
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Card } from "../components/ui/Card";
 import Button from "../components/ui/Button";
 import Loading from "../components/ui/Loading";
@@ -18,7 +18,9 @@ import { EvaluationJobsDashboard } from "../components/evaluation/EvaluationJobs
 import { EvaluationJobDetails } from "../components/evaluation/EvaluationJobDetails";
 import {
   useEvaluationStore,
-  useEvaluationAnalytics,
+  useDashboardStats,
+  useFetchDashboardStats,
+  useFetchJobs,
 } from "../store/evaluationStore";
 import type { EvaluationJob } from "../services/evaluationApi";
 
@@ -33,14 +35,20 @@ const EvaluationPage: React.FC = () => {
   const [currentView, setCurrentView] = useState<ViewMode>("dashboard");
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
 
-  const { error, actions } = useEvaluationStore();
-  const { dashboardStats, fetchDashboardStats } = useEvaluationAnalytics();
+  const error = useEvaluationStore((s) => s.error);
+  const clearError = useEvaluationStore((s) => s.actions.clearError);
+  const fetchJobs = useFetchJobs();
+  const dashboardStats = useDashboardStats();
+  const fetchDashboardStats = useFetchDashboardStats();
+  const didFetchDashboardRef = useRef(false);
 
   useEffect(() => {
-    // Load initial data
+    // Load initial data once (gate StrictMode double-invoke in dev)
+    if (didFetchDashboardRef.current) return;
+    didFetchDashboardRef.current = true;
+    console.log("[EvaluationPage] init effect: fetching dashboard");
     fetchDashboardStats();
-    actions.fetchJobs();
-  }, [actions, fetchDashboardStats]);
+  }, [fetchDashboardStats]);
 
   const handleCreateJob = () => {
     setCurrentView("create-job");
@@ -50,7 +58,7 @@ const EvaluationPage: React.FC = () => {
     setSelectedJobId(jobId);
     setCurrentView("job-details");
     // Refresh jobs list
-    actions.fetchJobs();
+    fetchJobs();
   };
 
   const handleViewJob = (job: EvaluationJob) => {
@@ -79,7 +87,15 @@ const EvaluationPage: React.FC = () => {
       );
     }
 
-    const { stats } = dashboardStats;
+    const stats =
+      dashboardStats?.stats ||
+      ({
+        total_prompts: 0,
+        total_datasets: 0,
+        total_jobs: 0,
+        total_evaluations: 0,
+        avg_overall_score: 0,
+      } as any);
 
     return (
       <Card className="p-6">
@@ -131,7 +147,7 @@ const EvaluationPage: React.FC = () => {
       );
     }
 
-    const { recent_jobs } = dashboardStats;
+    const recent_jobs = dashboardStats?.recent_jobs || [];
 
     const getStatusColor = (status: string) => {
       switch (status) {
@@ -170,7 +186,7 @@ const EvaluationPage: React.FC = () => {
           </div>
         ) : (
           <div className="space-y-3">
-            {recent_jobs.slice(0, 5).map((job) => (
+            {recent_jobs.slice(0, 5).map((job: any) => (
               <div
                 key={job.id}
                 className="flex items-center justify-between p-3 border rounded-md hover:bg-gray-50"
@@ -317,7 +333,7 @@ const EvaluationPage: React.FC = () => {
             <Button
               variant="outline"
               size="sm"
-              onClick={actions.clearError}
+              onClick={clearError}
               className="ml-4"
             >
               Dismiss

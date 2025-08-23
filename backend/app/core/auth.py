@@ -86,6 +86,7 @@ class User(BaseModel):
     email: str
     australian_state: str
     user_type: str
+    user_role: str = "user"
     subscription_status: str = "free"
     credits_remaining: int = 0
     preferences: dict = {}
@@ -233,6 +234,7 @@ class AuthService:
                 email=profile.email,
                 australian_state=profile.australian_state,
                 user_type=profile.user_type,
+                user_role=getattr(profile, "user_role", "user"),
                 subscription_status=profile.subscription_status or "free",
                 credits_remaining=profile.credits_remaining or 0,
                 preferences=_to_dict(profile.preferences),
@@ -324,36 +326,36 @@ async def get_admin_user(
     current_user: User = Depends(get_current_user),
 ) -> User:
     """Get current user and verify they have admin privileges."""
-    # Check if user has admin role - you can customize this logic
-    # Option 1: Check specific admin emails
-    admin_emails = [
-        "admin@real2ai.com",  # Add your admin emails here
-        "bohuihan@real2ai.com",
-        # Add more admin emails as needed
-    ]
-
-    # Option 2: Check user_type (if you want to add admin as a user_type)
-    # if current_user.user_type != "admin":
-    #     raise HTTPException(
-    #         status_code=status.HTTP_403_FORBIDDEN,
-    #         detail="Admin access required"
-    #     )
-
-    # Option 3: Check if user has admin organization
-    # if current_user.organization != "real2ai_admin":
-    #     raise HTTPException(
-    #         status_code=status.HTTP_403_FORBIDDEN,
-    #         detail="Admin access required"
-    #     )
-
-    # For now, using Option 1: email-based admin check
-    if current_user.email not in admin_emails:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin access required. Please contact support if you need access.",
+    try:
+        # Use service role to check profile role securely (bypasses RLS)
+        client = await get_supabase_client(use_service_role=True)
+        result = (
+            client.supabase_client.table("profiles")
+            .select("user_role")
+            .eq("id", current_user.id)
+            .limit(1)
+            .execute()
         )
 
-    return current_user
+        role = None
+        if result.data and len(result.data) > 0:
+            role = result.data[0].get("user_role")
+
+        if role != "admin":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Admin access required. Please contact support if you need access.",
+            )
+
+        return current_user
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to verify admin role: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
 
 
 async def get_current_user_token(

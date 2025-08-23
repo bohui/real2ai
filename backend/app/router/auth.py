@@ -46,6 +46,7 @@ async def register_user(
                 "email": user_data.email,
                 "australian_state": user_data.australian_state,
                 "user_type": user_data.user_type,
+                "user_role": "user",
                 "subscription_status": "free",
                 "credits_remaining": 1,  # First contract free
                 "onboarding_completed": False,

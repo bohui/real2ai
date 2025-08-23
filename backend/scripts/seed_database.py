@@ -205,7 +205,8 @@ class DatabaseSeeder:
                                     credits_remaining = $6,
                                     onboarding_completed = $7,
                                     onboarding_completed_at = $8,
-                                    onboarding_preferences = $9
+                                    onboarding_preferences = $9,
+                                    user_role = $10
                                 WHERE id = $1
                             """,
                                 user["id"],
@@ -217,20 +218,24 @@ class DatabaseSeeder:
                                 user.get("onboarding_completed", False),
                                 user.get("onboarding_completed_at"),
                                 json.dumps(user.get("onboarding_preferences", {})),
+                                "admin",
                             )
                             logger.info(f"Updated demo user profile: {user['email']}")
                             created_users.append(user)
                         else:
                             await conn.execute(
                                 """
-                                INSERT INTO profiles (id, email, australian_state, user_type, 
-                                                    subscription_status, credits_remaining,
-                                                    onboarding_completed, onboarding_completed_at, onboarding_preferences)
-                                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                                INSERT INTO profiles (
+                                    id, email, australian_state, user_type, user_role,
+                                    subscription_status, credits_remaining,
+                                    onboarding_completed, onboarding_completed_at, onboarding_preferences
+                                )
+                                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                                 ON CONFLICT (id) DO UPDATE SET
                                     email = EXCLUDED.email,
                                     australian_state = EXCLUDED.australian_state,
                                     user_type = EXCLUDED.user_type,
+                                    user_role = EXCLUDED.user_role,
                                     subscription_status = EXCLUDED.subscription_status,
                                     credits_remaining = EXCLUDED.credits_remaining,
                                     onboarding_completed = EXCLUDED.onboarding_completed,
@@ -241,6 +246,7 @@ class DatabaseSeeder:
                                 user["email"],
                                 user["australian_state"],
                                 user["user_type"],
+                                "admin",
                                 user["subscription_status"],
                                 user["credits_remaining"],
                                 user.get("onboarding_completed", False),

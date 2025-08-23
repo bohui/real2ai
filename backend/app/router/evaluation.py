@@ -9,6 +9,8 @@ Production-ready REST API for LLM evaluation system including:
 - Analytics and reporting
 """
 
+import logging
+
 from fastapi import (
     APIRouter,
     Depends,
@@ -36,6 +38,7 @@ from app.services.evaluation_service import (
 from app.clients.factory import get_supabase_client
 
 router = APIRouter(prefix="/api/v1/evaluation", tags=["evaluation"])
+logger = logging.getLogger(__name__)
 
 # Pydantic Models for API
 
@@ -255,7 +258,7 @@ async def create_prompt_template(
         "created_by": current_user.id,
     }
 
-    result = await supabase.table("prompt_templates").insert(template_data).execute()
+    result = supabase.table("prompt_templates").insert(template_data).execute()
 
     if not result.data:
         raise HTTPException(status_code=500, detail="Failed to create prompt template")
@@ -291,7 +294,7 @@ async def list_prompt_templates(
         if tag:
             query = query.contains("tags", [tag])
 
-        result = await query.execute()
+        result = query.execute()
 
         return [PromptTemplateResponse(**item) for item in result.data]
     except Exception as e:
@@ -411,7 +414,7 @@ async def create_dataset(
         "created_by": current_user.id,
     }
 
-    result = await supabase.table("test_datasets").insert(dataset_data).execute()
+    result = supabase.table("test_datasets").insert(dataset_data).execute()
 
     if not result.data:
         raise HTTPException(status_code=500, detail="Failed to create test dataset")
@@ -441,7 +444,7 @@ async def list_datasets(
     if domain:
         query = query.eq("domain", domain)
 
-    result = await query.execute()
+    result = query.execute()
 
     return [TestDatasetResponse(**item) for item in result.data]
 
@@ -476,7 +479,7 @@ async def add_test_case(
         "tags": test_case.tags or [],
     }
 
-    result = await supabase.table("test_cases").insert(test_case_data).execute()
+    result = supabase.table("test_cases").insert(test_case_data).execute()
 
     if not result.data:
         raise HTTPException(status_code=500, detail="Failed to create test case")
@@ -591,7 +594,7 @@ async def import_dataset(
 
         # Batch insert test cases
         if test_cases:
-            result = await supabase.table("test_cases").insert(test_cases).execute()
+            result = supabase.table("test_cases").insert(test_cases).execute()
             imported_count = len(result.data) if result.data else 0
         else:
             imported_count = 0
@@ -659,7 +662,7 @@ async def list_evaluation_jobs(
         if status:
             query = query.eq("status", status)
 
-        result = await query.execute()
+        result = query.execute()
 
         return [
             EvaluationJobResponse(
@@ -731,7 +734,7 @@ async def get_evaluation_results(
     if model_name:
         query = query.eq("model_name", model_name)
 
-    result = await query.execute()
+    result = query.execute()
 
     return [
         EvaluationResultResponse(
@@ -797,7 +800,7 @@ async def get_model_comparison_analytics(
         },
     )
 
-    result = await query.execute()
+    result = query.execute()
 
     return [ModelComparisonResponse(**item) for item in result.data or []]
 
@@ -851,7 +854,7 @@ async def get_evaluation_dashboard(current_user: User = Depends(get_admin_user))
         supabase = await get_supabase_client()
 
         # Get summary statistics
-        stats_result = await supabase.rpc(
+        stats_result = supabase.rpc(
             "get_user_evaluation_stats", {"user_id": current_user.id}
         ).execute()
 

@@ -28,6 +28,9 @@ export interface EvaluationState {
   jobs: EvaluationJob[];
   selectedJob: EvaluationJob | null;
   jobResults: Record<string, EvaluationResult[]>;
+  // Internal timing to dedupe burst fetches
+  lastJobsFetchAt?: number | null;
+  lastDashboardFetchAt?: number | null;
   loading: {
     jobs: boolean;
     jobDetails: boolean;
@@ -133,6 +136,8 @@ export const useEvaluationStore = create<EvaluationState>()(
       jobs: [],
       selectedJob: null,
       jobResults: {},
+      lastJobsFetchAt: null,
+      lastDashboardFetchAt: null,
       loading: {
         jobs: false,
         jobDetails: false,
@@ -161,14 +166,38 @@ export const useEvaluationStore = create<EvaluationState>()(
       actions: {
         // Job actions
         fetchJobs: async (params) => {
+          console.debug("[evaluationStore] fetchJobs called", params);
+          // Prevent duplicate concurrent calls (e.g., React StrictMode double effect)
+          if (get().loading.jobs) {
+            console.debug(
+              "[evaluationStore] fetchJobs skipped: already loading",
+            );
+            return;
+          }
+          // Debounce: skip if called again within 500ms
+          const now = Date.now();
+          const last = get().lastJobsFetchAt ?? 0;
+          if (now - last < 500) {
+            console.debug(
+              "[evaluationStore] fetchJobs skipped: debounced",
+              { sinceMs: now - last },
+            );
+            return;
+          }
           set((state) => ({
             loading: { ...state.loading, jobs: true },
             error: null,
+            lastJobsFetchAt: now,
           }));
           try {
             const jobs = await EvaluationAPI.getEvaluationJobs(params);
+            console.debug(
+              "[evaluationStore] fetchJobs success",
+              { count: jobs?.length ?? 0 },
+            );
             set({ jobs, loading: { ...get().loading, jobs: false } });
           } catch (error) {
+            console.error("[evaluationStore] fetchJobs error", error);
             set({
               error: error instanceof Error
                 ? error.message
@@ -366,10 +395,24 @@ export const useEvaluationStore = create<EvaluationState>()(
 
         // Analytics actions
         fetchDashboardStats: async () => {
+          console.debug("[evaluationStore] fetchDashboardStats called");
+          // Debounce duplicate calls (e.g., StrictMode double effect)
+          const now = Date.now();
+          const last = get().lastDashboardFetchAt ?? 0;
+          const hasRecentStats = !!get().dashboardStats && now - last < 3000;
+          if (now - last < 3000 || hasRecentStats) {
+            console.debug(
+              "[evaluationStore] fetchDashboardStats skipped: debounced",
+              { sinceMs: now - last },
+            );
+            return;
+          }
           try {
             const stats = await EvaluationAPI.getDashboardStats();
-            set({ dashboardStats: stats });
+            console.debug("[evaluationStore] fetchDashboardStats success");
+            set({ dashboardStats: stats, lastDashboardFetchAt: now });
           } catch (error) {
+            console.error("[evaluationStore] fetchDashboardStats error", error);
             set({
               error: error instanceof Error
                 ? error.message
@@ -491,3 +534,13 @@ export const useEvaluationAnalytics = () =>
     fetchDashboardStats: state.actions.fetchDashboardStats,
     fetchModelComparisons: state.actions.fetchModelComparisons,
   }));
+
+// Primitive selectors to avoid selector-created object thrash in effects
+export const useDashboardStats = () =>
+  useEvaluationStore((state) => state.dashboardStats);
+
+export const useFetchDashboardStats = () =>
+  useEvaluationStore((state) => state.actions.fetchDashboardStats);
+
+export const useFetchJobs = () =>
+  useEvaluationStore((state) => state.actions.fetchJobs);
