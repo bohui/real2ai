@@ -158,6 +158,11 @@ class LayoutFormatCleanupNode(DocumentProcessingNodeBase):
                     await contracts_repo.upsert_contract_by_content_hash(
                         content_hash=content_hash,
                         contract_type=str(state.get("contract_type") or "unknown"),
+                        state=(
+                            str(state.get("australian_state"))
+                            if state.get("australian_state") is not None
+                            else None
+                        ),
                         raw_text=formatted_text,
                         updated_by=self.node_name,
                     )

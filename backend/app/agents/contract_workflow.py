@@ -57,7 +57,7 @@ from app.agents.nodes import (
     DocumentProcessingNode,
     DocumentQualityValidationNode,
     # Contract Analysis
-    ContractTermsExtractionNode,
+    SectionAnalysisNode,
     TermsValidationNode,
     # Compliance Analysis
     ComplianceAnalysisNode,
@@ -250,7 +250,7 @@ class ContractAnalysisWorkflow:
 
         # Contract Analysis Nodes
         self.entities_extraction_node = EntitiesExtractionNode(self)
-        self.contract_terms_extraction_node = ContractTermsExtractionNode(self)
+        self.section_analysis_node = SectionAnalysisNode(self)
         self.terms_validation_node = TermsValidationNode(self)
 
         # Compliance Analysis Nodes
@@ -276,7 +276,7 @@ class ContractAnalysisWorkflow:
             "document_processing": self.document_processing_node,
             "document_quality_validation": self.document_quality_validation_node,
             "entities_extraction": self.entities_extraction_node,
-            "contract_terms_extraction": self.contract_terms_extraction_node,
+            "section_analysis": self.section_analysis_node,
             "terms_validation": self.terms_validation_node,
             "compliance_analysis": self.compliance_analysis_node,
             "diagram_analysis": self.diagram_analysis_node,
@@ -350,7 +350,7 @@ class ContractAnalysisWorkflow:
         workflow.add_node("validate_input", self.validate_input)
         workflow.add_node("process_document", self.process_document)
         workflow.add_node("extract_entities", self.extract_entities)
-        workflow.add_node("extract_terms", self.extract_contract_terms)
+        workflow.add_node("extract_terms", self.extract_section_analysis)
         workflow.add_node("analyze_compliance", self.analyze_australian_compliance)
         workflow.add_node("analyze_contract_diagrams", self.analyze_contract_diagrams)
         workflow.add_node("assess_risks", self.assess_contract_risks)
@@ -735,11 +735,11 @@ class ContractAnalysisWorkflow:
             self.document_quality_validation_node.execute(state)
         )
 
-    def extract_contract_terms(
+    def extract_section_analysis(
         self, state: RealEstateAgentState
     ) -> RealEstateAgentState:
-        """Execute contract terms extraction node."""
-        return self._run_async_node(self.contract_terms_extraction_node.execute(state))
+        """Execute Step 2 section-by-section analysis node."""
+        return self._run_async_node(self.section_analysis_node.execute(state))
 
     def validate_terms_completeness_step(
         self, state: RealEstateAgentState
@@ -1231,22 +1231,22 @@ class ProgressTrackingWorkflow(ContractAnalysisWorkflow):
         )
         return super().validate_document_quality_step(state)
 
-    async def extract_contract_terms(self, state):
+    async def extract_section_analysis(self, state):
         if self._should_skip("extract_terms", state):
             return state
         self._ws_progress(
             state,
             "extract_terms",
             59,
-            "Extracting key contract terms using Australian tools",
+            "Performing Step 2 section-by-section analysis",
         )
         await self._notify_status(
             state,
             "extract_terms",
             59,
-            "Extracting key contract terms using Australian tools",
+            "Performing Step 2 section-by-section analysis",
         )
-        return super().extract_contract_terms(state)
+        return super().extract_section_analysis(state)
 
     async def analyze_australian_compliance(self, state):
         if self._should_skip("analyze_compliance", state):

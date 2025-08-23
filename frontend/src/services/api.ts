@@ -1252,7 +1252,7 @@ class WebSocketConnectionManager {
       logger.websocket(`Closing existing connection for document`, {
         documentId,
       });
-      existing.disconnect();
+      existing.disconnect("connectionManager.createConnection");
       this.connections.delete(documentId);
     }
 
@@ -1267,14 +1267,14 @@ class WebSocketConnectionManager {
   removeConnection(documentId: string): void {
     const connection = this.connections.get(documentId);
     if (connection) {
-      connection.disconnect();
+      connection.disconnect("connectionManager.removeConnection");
       this.connections.delete(documentId);
     }
   }
 
   disconnectAll(): void {
     for (const [, connection] of this.connections) {
-      connection.disconnect();
+      connection.disconnect("connectionManager.disconnectAll");
     }
     this.connections.clear();
   }
@@ -1294,13 +1294,39 @@ export default apiService;
 
 // Cleanup connections on page unload
 window.addEventListener("beforeunload", () => {
+  logger.websocket("beforeunload: disconnecting all WebSocket connections");
   wsConnectionManager.disconnectAll();
 });
 
-// Cleanup connections on page visibility change (mobile Safari)
+// Optional: disconnect on page visibility hidden after a configurable delay
+let __wsHiddenDisconnectTimer: ReturnType<typeof setTimeout> | null = null;
+const WS_HIDDEN_DISCONNECT_MS = Number(
+  (import.meta.env.VITE_WS_HIDDEN_DISCONNECT_MS as string) || 0,
+);
+
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) {
-    // Page is hidden, disconnect WebSockets to save resources
-    wsConnectionManager.disconnectAll();
+    logger.websocket("visibilitychange(hidden): page hidden");
+    if (WS_HIDDEN_DISCONNECT_MS > 0) {
+      if (__wsHiddenDisconnectTimer) {
+        clearTimeout(__wsHiddenDisconnectTimer);
+      }
+      __wsHiddenDisconnectTimer = setTimeout(() => {
+        logger.websocket(
+          "visibility hidden timeout reached: disconnecting all WebSocket connections",
+          { timeoutMs: WS_HIDDEN_DISCONNECT_MS },
+        );
+        wsConnectionManager.disconnectAll();
+      }, WS_HIDDEN_DISCONNECT_MS);
+    }
+  } else {
+    // Page visible again: cancel any pending hidden disconnect
+    logger.websocket(
+      "visibilitychange(visible): clearing hidden disconnect timer",
+    );
+    if (__wsHiddenDisconnectTimer) {
+      clearTimeout(__wsHiddenDisconnectTimer);
+      __wsHiddenDisconnectTimer = null;
+    }
   }
 });

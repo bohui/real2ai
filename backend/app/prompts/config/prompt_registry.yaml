@@ -61,6 +61,13 @@ registry:
       dependencies: []
       description: "Standards and rules for structured entity extraction"
 
+    step2_section_analysis:
+      path: "system/step2_section_analysis.md"
+      category: "analysis"
+      priority: 85
+      dependencies: ["legal_specialist", "australian_legal"]
+      description: "Step 2 section-by-section analysis framework and guidelines"
+
   user_prompts:
     contract_analysis_base:
       path: "user/analysis/contract_analysis_full.md"
@@ -153,6 +160,84 @@ registry:
       system_requirements: ["entity_extraction_core"]
       description: "Extract entities from contracts using the ContractEntityExtraction schema"
       estimated_tokens: 6000
+
+    # Step 2 Section Analysis Prompts
+    step2_parties_property:
+      path: "user/analysis/step2/parties_property.md"
+      category: "analysis"
+      system_requirements: ["legal_specialist", "australian_legal"]
+      description: "Step 2.1 - Parties and Property Verification Analysis"
+      estimated_tokens: 6000
+
+    step2_financial_terms:
+      path: "user/analysis/step2/financial_terms.md"
+      category: "analysis"
+      system_requirements: ["legal_specialist", "australian_legal"]
+      description: "Step 2.2 - Financial Terms Analysis and Verification"
+      estimated_tokens: 6000
+
+    step2_conditions:
+      path: "user/analysis/step2/conditions.md"
+      category: "analysis"
+      system_requirements: ["legal_specialist", "australian_legal"]
+      description: "Step 2.4 - Conditions Risk Assessment Analysis"
+      estimated_tokens: 8000
+
+    step2_warranties:
+      path: "user/analysis/step2/warranties.md"
+      category: "analysis"
+      system_requirements: ["legal_specialist", "australian_legal"]
+      description: "Step 2.5 - Warranties and Representations Analysis"
+      estimated_tokens: 8000
+
+    step2_default_termination:
+      path: "user/analysis/step2/default_termination.md"
+      category: "analysis"
+      system_requirements: ["legal_specialist", "australian_legal"]
+      description: "Step 2.6 - Default and Termination Analysis"
+      estimated_tokens: 8000
+
+    step2_settlement:
+      path: "user/analysis/step2/settlement.md"
+      category: "analysis"
+      system_requirements: ["legal_specialist", "australian_legal"]
+      description: "Step 2.7 - Settlement Logistics Analysis"
+      estimated_tokens: 8000
+
+    step2_title_encumbrances:
+      path: "user/analysis/step2/title_encumbrances.md"
+      category: "analysis"
+      system_requirements: ["legal_specialist", "australian_legal"]
+      description: "Step 2.8 - Title and Encumbrances Analysis with Diagram Integration"
+      estimated_tokens: 10000
+
+    step2_adjustments:
+      path: "user/analysis/step2/adjustments.md"
+      category: "analysis"
+      system_requirements: ["legal_specialist", "australian_legal"]
+      description: "Step 2.9 - Adjustments and Outgoings Calculator"
+      estimated_tokens: 8000
+
+    step2_disclosure:
+      path: "user/analysis/step2/disclosure.md"
+      category: "analysis"
+      system_requirements: ["legal_specialist", "australian_legal"]
+      description: "Step 2.10 - Disclosure Compliance Check"
+      estimated_tokens: 8000
+
+    step2_special_risks:
+      path: "user/analysis/step2/special_risks.md"
+      category: "analysis"
+      system_requirements: ["legal_specialist", "australian_legal"]
+      description: "Step 2.11 - Special Risks Identification"
+      estimated_tokens: 8000
+
+    step2_cross_validation:
+      path: "user/analysis/step2/cross_validation.md"
+      category: "analysis"
+      system_requirements: ["legal_specialist", "australian_legal"]
+      description: "Step 2.12 - Cross-Section Validation and Consistency Checks"
+      estimated_tokens: 10000
       
     # clarification_prompts:
     #   path: "interactions/clarification.md"

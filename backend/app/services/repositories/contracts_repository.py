@@ -10,7 +10,7 @@ discrepancies across environments.
 from typing import Dict, List, Optional, Any
 import json
 from uuid import UUID
-from datetime import datetime
+from datetime import datetime, date
 import logging
 
 from app.database.connection import get_service_role_connection, get_user_connection
@@ -59,33 +59,47 @@ class ContractsRepository:
         Returns:
             Contract: Existing or newly created contract
         """
+        # Entry log with core inputs (avoid large fields)
+        logger.info(
+            "Upserting contract by content_hash",
+            extra={
+                "content_hash": content_hash,
+                "contract_type": contract_type,
+                "purchase_method": purchase_method,
+                "use_category": use_category,
+                "state": state,
+                "updated_by": updated_by,
+                "has_contract_terms": contract_terms is not None,
+                "has_extracted_entity": extracted_entity is not None,
+                "has_raw_text": raw_text is not None,
+                "has_property_address": property_address is not None,
+                "user_scoped": self.user_id is not None,
+            },
+        )
+
         # Sanitize inputs to satisfy DB taxonomy constraints conservatively
         adjusted_contract_type = contract_type
         adjusted_purchase_method = purchase_method
         adjusted_use_category = use_category
+        # Avoid NULL state insert into NOT NULL column; fall back to DB default semantics
+        adjusted_state = state
 
-        try:
-            if contract_type == "lease_agreement" and purchase_method is not None:
-                logger.warning(
-                    "Dropping purchase_method for lease_agreement to satisfy constraints",
-                    extra={"content_hash": content_hash},
-                )
-                adjusted_purchase_method = None
-            elif contract_type == "option_to_purchase":
-                if purchase_method is not None or use_category is not None:
-                    logger.warning(
-                        "Dropping purchase_method/use_category for option_to_purchase to satisfy constraints",
-                        extra={"content_hash": content_hash},
-                    )
-                adjusted_purchase_method = None
-                adjusted_use_category = None
-        except Exception:
-            # Defensive: never block upsert due to sanitization logging issues
-            pass
+        # No repository-level validation/sanitization beyond formatting; validation must happen upstream
 
-        async with get_service_role_connection() as conn:
-            row = await conn.fetchrow(
-                """
+        # Safe JSON serializer to handle datetime/date and other non-JSON-native types
+        def _json_default(value: Any):
+            if isinstance(value, (datetime, date)):
+                return value.isoformat()
+            return str(value)
+
+        # Build the upsert query and params. If state is None, let DB DEFAULT apply by
+        # using DEFAULT keyword instead of passing NULL which violates NOT NULL.
+        if state is None:
+            logger.debug(
+                "State not provided; using DB DEFAULT for state",
+                extra={"content_hash": content_hash},
+            )
+            insert_query = """
                 INSERT INTO contracts (
                     content_hash, contract_type, purchase_method, use_category,
                     ocr_confidence, state, contract_terms, extracted_entity,
@@ -93,18 +107,40 @@ class ContractsRepository:
                 ) VALUES (
                     $1, $2, $3, $4,
                     COALESCE($5::jsonb, '{}'::jsonb),
-                    $6,
+                    DEFAULT,
+                    COALESCE($6::jsonb, '{}'::jsonb),
                     COALESCE($7::jsonb, '{}'::jsonb),
-                    COALESCE($8::jsonb, '{}'::jsonb),
+                    $8,
                     $9,
-                    $10,
-                    $11
+                    $10
                 )
                 ON CONFLICT (content_hash) DO UPDATE SET
-                    -- Prefer incoming non-null values while keeping existing when incoming is null
-                    contract_type = COALESCE(EXCLUDED.contract_type, contracts.contract_type),
-                    purchase_method = COALESCE(EXCLUDED.purchase_method, contracts.purchase_method),
-                    use_category = COALESCE(EXCLUDED.use_category, contracts.use_category),
+                    -- Prefer specific contract_type over 'unknown' and avoid downgrades
+                    contract_type = CASE
+                        WHEN EXCLUDED.contract_type IS NULL OR EXCLUDED.contract_type = 'unknown' THEN contracts.contract_type
+                        ELSE EXCLUDED.contract_type
+                    END,
+                    -- Enforce taxonomy rules in upsert to satisfy DB CHECK constraints
+                    purchase_method = CASE
+                        WHEN (
+                            CASE
+                                WHEN EXCLUDED.contract_type IS NULL OR EXCLUDED.contract_type = 'unknown' THEN contracts.contract_type
+                                ELSE EXCLUDED.contract_type
+                            END
+                        ) = 'purchase_agreement'
+                            THEN COALESCE(EXCLUDED.purchase_method, contracts.purchase_method)
+                        ELSE NULL
+                    END,
+                    use_category = CASE
+                        WHEN (
+                            CASE
+                                WHEN EXCLUDED.contract_type IS NULL OR EXCLUDED.contract_type = 'unknown' THEN contracts.contract_type
+                                ELSE EXCLUDED.contract_type
+                            END
+                        ) = 'option_to_purchase'
+                            THEN NULL
+                        ELSE COALESCE(EXCLUDED.use_category, contracts.use_category)
+                    END,
                     ocr_confidence = COALESCE(EXCLUDED.ocr_confidence, contracts.ocr_confidence),
                     state = COALESCE(EXCLUDED.state, contracts.state),
                     contract_terms = COALESCE(EXCLUDED.contract_terms, contracts.contract_terms),
@@ -122,50 +158,204 @@ class ContractsRepository:
                          property_address,
                          updated_by,
                          created_at, updated_at
-                """,
+                """
+            params = [
                 content_hash,
                 adjusted_contract_type,
                 adjusted_purchase_method,
                 adjusted_use_category,
                 json.dumps(ocr_confidence) if ocr_confidence is not None else None,
-                state,
-                json.dumps(contract_terms) if contract_terms is not None else None,
-                json.dumps(extracted_entity) if extracted_entity is not None else None,
+                (
+                    json.dumps(contract_terms, default=_json_default)
+                    if contract_terms is not None
+                    else None
+                ),
+                (
+                    json.dumps(extracted_entity, default=_json_default)
+                    if extracted_entity is not None
+                    else None
+                ),
                 raw_text,
                 property_address,
                 updated_by,
-            )
+            ]
+        else:
+            insert_query = """
+                INSERT INTO contracts (
+                    content_hash, contract_type, purchase_method, use_category,
+                    ocr_confidence, state, contract_terms, extracted_entity,
+                    raw_text, property_address, updated_by
+                ) VALUES (
+                    $1, $2, $3, $4,
+                    COALESCE($5::jsonb, '{}'::jsonb),
+                    $6,
+                    COALESCE($7::jsonb, '{}'::jsonb),
+                    COALESCE($8::jsonb, '{}'::jsonb),
+                    $9,
+                    $10,
+                    $11
+                )
+                ON CONFLICT (content_hash) DO UPDATE SET
+                    -- Prefer specific contract_type over 'unknown' and avoid downgrades
+                    contract_type = CASE
+                        WHEN EXCLUDED.contract_type IS NULL OR EXCLUDED.contract_type = 'unknown' THEN contracts.contract_type
+                        ELSE EXCLUDED.contract_type
+                    END,
+                    -- Enforce taxonomy rules in upsert to satisfy DB CHECK constraints
+                    purchase_method = CASE
+                        WHEN (
+                            CASE
+                                WHEN EXCLUDED.contract_type IS NULL OR EXCLUDED.contract_type = 'unknown' THEN contracts.contract_type
+                                ELSE EXCLUDED.contract_type
+                            END
+                        ) = 'purchase_agreement'
+                            THEN COALESCE(EXCLUDED.purchase_method, contracts.purchase_method)
+                        ELSE NULL
+                    END,
+                    use_category = CASE
+                        WHEN (
+                            CASE
+                                WHEN EXCLUDED.contract_type IS NULL OR EXCLUDED.contract_type = 'unknown' THEN contracts.contract_type
+                                ELSE EXCLUDED.contract_type
+                            END
+                        ) = 'option_to_purchase'
+                            THEN NULL
+                        ELSE COALESCE(EXCLUDED.use_category, contracts.use_category)
+                    END,
+                    ocr_confidence = COALESCE(EXCLUDED.ocr_confidence, contracts.ocr_confidence),
+                    state = COALESCE(EXCLUDED.state, contracts.state),
+                    contract_terms = COALESCE(EXCLUDED.contract_terms, contracts.contract_terms),
+                    extracted_entity = COALESCE(EXCLUDED.extracted_entity, contracts.extracted_entity),
+                    raw_text = COALESCE(EXCLUDED.raw_text, contracts.raw_text),
+                    property_address = COALESCE(EXCLUDED.property_address, contracts.property_address),
+                    updated_by = COALESCE(EXCLUDED.updated_by, contracts.updated_by),
+                    updated_at = now()
+                RETURNING id, content_hash, contract_type, purchase_method, use_category,
+                         COALESCE(ocr_confidence, '{}'::jsonb) as ocr_confidence,
+                         state,
+                         COALESCE(contract_terms, '{}'::jsonb) as contract_terms,
+                         COALESCE(extracted_entity, '{}'::jsonb) as extracted_entity,
+                         raw_text,
+                         property_address,
+                         updated_by,
+                         created_at, updated_at
+                """
+            params = [
+                content_hash,
+                adjusted_contract_type,
+                adjusted_purchase_method,
+                adjusted_use_category,
+                json.dumps(ocr_confidence) if ocr_confidence is not None else None,
+                adjusted_state,
+                (
+                    json.dumps(contract_terms, default=_json_default)
+                    if contract_terms is not None
+                    else None
+                ),
+                (
+                    json.dumps(extracted_entity, default=_json_default)
+                    if extracted_entity is not None
+                    else None
+                ),
+                raw_text,
+                property_address,
+                updated_by,
+            ]
 
-            # Normalize JSON fields in case the driver returns strings instead of dicts
-            def _normalize_json(value: Optional[Any]) -> Dict[str, Any]:
-                if value is None:
-                    return {}
-                if isinstance(value, dict):
-                    return value
-                if isinstance(value, str):
-                    try:
-                        parsed = json.loads(value)
-                        return parsed if isinstance(parsed, dict) else {}
-                    except Exception:
-                        return {}
+        # Try user-scoped connection first when available; fall back to service-role
+        row = None
+        if self.user_id is not None:
+            try:
+                logger.debug(
+                    "Attempting user-scoped upsert",
+                    extra={"content_hash": content_hash, "user_id": str(self.user_id)},
+                )
+                async with get_user_connection(self.user_id) as conn:
+                    row = await conn.fetchrow(insert_query, *params)
+            except Exception:
+                logger.warning(
+                    "User-scoped upsert failed; falling back to service-role",
+                    extra={"content_hash": content_hash},
+                )
+                row = None
+        if row is None:
+            try:
+                logger.debug(
+                    "Attempting service-role upsert",
+                    extra={"content_hash": content_hash},
+                )
+                async with get_service_role_connection() as conn:
+                    row = await conn.fetchrow(insert_query, *params)
+            except Exception as e:
+                logger.error(
+                    "Service-role upsert failed",
+                    extra={
+                        "content_hash": content_hash,
+                        "contract_type": adjusted_contract_type,
+                        "purchase_method": adjusted_purchase_method,
+                        "use_category": adjusted_use_category,
+                        "state": adjusted_state,
+                    },
+                    exc_info=True,
+                )
+                raise
+
+        # Normalize JSON fields in case the driver returns strings instead of dicts
+        def _normalize_json(value: Optional[Any]) -> Dict[str, Any]:
+            if value is None:
                 return {}
+            if isinstance(value, dict):
+                return value
+            if isinstance(value, str):
+                try:
+                    parsed = json.loads(value)
+                    return parsed if isinstance(parsed, dict) else {}
+                except Exception:
+                    logger.warning(
+                        "Failed to parse JSON string from DB; defaulting to empty object",
+                        extra={"content_hash": content_hash},
+                    )
+                    return {}
+            return {}
 
-            return Contract(
-                id=row["id"],
-                content_hash=row["content_hash"],
-                contract_type=row["contract_type"],
-                purchase_method=row.get("purchase_method"),
-                use_category=row.get("use_category"),
-                ocr_confidence=_normalize_json(row.get("ocr_confidence")),
-                state=row["state"],
-                contract_terms=_normalize_json(row.get("contract_terms")),
-                extracted_entity=_normalize_json(row.get("extracted_entity")),
-                raw_text=row.get("raw_text"),
-                property_address=row.get("property_address"),
-                updated_by=row.get("updated_by"),
-                created_at=row["created_at"],
-                updated_at=row["updated_at"],
-            )
+        contract = Contract(
+            id=row["id"],
+            content_hash=row["content_hash"],
+            contract_type=row["contract_type"],
+            purchase_method=row.get("purchase_method"),
+            use_category=row.get("use_category"),
+            ocr_confidence=_normalize_json(row.get("ocr_confidence")),
+            state=row.get("state") or row.get("australian_state") or "NSW",
+            contract_terms=_normalize_json(row.get("contract_terms")),
+            extracted_entity=_normalize_json(row.get("extracted_entity")),
+            raw_text=row.get("raw_text"),
+            property_address=row.get("property_address"),
+            updated_by=row.get("updated_by"),
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+        )
+
+        logger.info(
+            "Upserted contract successfully",
+            extra={
+                "contract_id": str(contract.id),
+                "content_hash": content_hash,
+                "contract_type": str(contract.contract_type),
+                "purchase_method": (
+                    str(contract.purchase_method)
+                    if contract.purchase_method is not None
+                    else None
+                ),
+                "use_category": (
+                    str(contract.use_category)
+                    if contract.use_category is not None
+                    else None
+                ),
+                "state": str(contract.state),
+            },
+        )
+
+        return contract
 
     async def get_contract_id_by_content_hash(
         self, content_hash: str
@@ -207,23 +397,27 @@ class ContractsRepository:
         Returns:
             Contract or None if not found
         """
+        row = None
         if self.user_id is not None:
-            async with get_user_connection(self.user_id) as conn:
-                row = await conn.fetchrow(
-                    """
-                    SELECT id, content_hash, contract_type, purchase_method, use_category,
-                           COALESCE(ocr_confidence, '{}'::jsonb) as ocr_confidence,
-                           state,
-                           COALESCE(contract_terms, '{}'::jsonb) as contract_terms,
-                           COALESCE(extracted_entity, '{}'::jsonb) as extracted_entity,
-                           raw_text, 
-                           property_address, updated_by, created_at, updated_at
-                    FROM contracts
-                    WHERE content_hash = $1
-                    """,
-                    content_hash,
-                )
-        else:
+            try:
+                async with get_user_connection(self.user_id) as conn:
+                    row = await conn.fetchrow(
+                        """
+                        SELECT id, content_hash, contract_type, purchase_method, use_category,
+                               COALESCE(ocr_confidence, '{}'::jsonb) as ocr_confidence,
+                               state,
+                               COALESCE(contract_terms, '{}'::jsonb) as contract_terms,
+                               COALESCE(extracted_entity, '{}'::jsonb) as extracted_entity,
+                               raw_text, 
+                               property_address, updated_by, created_at, updated_at
+                        FROM contracts
+                        WHERE content_hash = $1
+                        """,
+                        content_hash,
+                    )
+            except Exception:
+                row = None
+        if row is None:
             async with get_service_role_connection() as conn:
                 row = await conn.fetchrow(
                     """
@@ -240,38 +434,38 @@ class ContractsRepository:
                     content_hash,
                 )
 
-            if not row:
-                return None
+        if not row:
+            return None
 
-            def _normalize_json(value: Optional[Any]) -> Dict[str, Any]:
-                if value is None:
-                    return {}
-                if isinstance(value, dict):
-                    return value
-                if isinstance(value, str):
-                    try:
-                        parsed = json.loads(value)
-                        return parsed if isinstance(parsed, dict) else {}
-                    except Exception:
-                        return {}
+        def _normalize_json(value: Optional[Any]) -> Dict[str, Any]:
+            if value is None:
                 return {}
+            if isinstance(value, dict):
+                return value
+            if isinstance(value, str):
+                try:
+                    parsed = json.loads(value)
+                    return parsed if isinstance(parsed, dict) else {}
+                except Exception:
+                    return {}
+            return {}
 
-            return Contract(
-                id=row["id"],
-                content_hash=row["content_hash"],
-                contract_type=row["contract_type"],
-                purchase_method=row.get("purchase_method"),
-                use_category=row.get("use_category"),
-                ocr_confidence=_normalize_json(row.get("ocr_confidence")),
-                state=row["state"],
-                contract_terms=_normalize_json(row.get("contract_terms")),
-                extracted_entity=_normalize_json(row.get("extracted_entity")),
-                raw_text=row.get("raw_text"),
-                property_address=row.get("property_address"),
-                updated_by=row.get("updated_by"),
-                created_at=row["created_at"],
-                updated_at=row["updated_at"],
-            )
+        return Contract(
+            id=row["id"],
+            content_hash=row["content_hash"],
+            contract_type=row["contract_type"],
+            purchase_method=row.get("purchase_method"),
+            use_category=row.get("use_category"),
+            ocr_confidence=_normalize_json(row.get("ocr_confidence")),
+            state=row.get("state") or row.get("australian_state") or "NSW",
+            contract_terms=_normalize_json(row.get("contract_terms")),
+            extracted_entity=_normalize_json(row.get("extracted_entity")),
+            raw_text=row.get("raw_text"),
+            property_address=row.get("property_address"),
+            updated_by=row.get("updated_by"),
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+        )
 
     async def get_contracts_by_content_hash(
         self, content_hash: str, limit: int = 1
@@ -324,7 +518,7 @@ class ContractsRepository:
                 purchase_method=row.get("purchase_method"),
                 use_category=row.get("use_category"),
                 ocr_confidence=row.get("ocr_confidence", {}),
-                state=row["state"],
+                state=row.get("state") or row.get("australian_state") or "NSW",
                 contract_terms=row.get("contract_terms", {}),
                 extracted_entity=row.get("extracted_entity", {}),
                 raw_text=row.get("raw_text"),
@@ -413,7 +607,7 @@ class ContractsRepository:
                     purchase_method=row.get("purchase_method"),
                     use_category=row.get("use_category"),
                     ocr_confidence=_normalize_json(row.get("ocr_confidence")),
-                    state=row["state"],
+                    state=row.get("state") or row.get("australian_state") or "NSW",
                     contract_terms=_normalize_json(row.get("contract_terms")),
                     extracted_entity=_normalize_json(row.get("extracted_entity")),
                     raw_text=row.get("raw_text"),
@@ -479,7 +673,7 @@ class ContractsRepository:
                     purchase_method=row.get("purchase_method"),
                     use_category=row.get("use_category"),
                     ocr_confidence=_normalize_json(row.get("ocr_confidence")),
-                    state=row["state"],
+                    state=row.get("state") or row.get("australian_state") or "NSW",
                     contract_terms=_normalize_json(row.get("contract_terms")),
                     extracted_entity=_normalize_json(row.get("extracted_entity")),
                     raw_text=row.get("raw_text"),
@@ -578,7 +772,7 @@ class ContractsRepository:
                     purchase_method=row.get("purchase_method"),
                     use_category=row.get("use_category"),
                     ocr_confidence=row.get("ocr_confidence", {}),
-                    state=row["state"],
+                    state=row.get("state") or row.get("australian_state") or "NSW",
                     contract_terms=row.get("contract_terms", {}),
                     extracted_entity=row.get("extracted_entity", {}),
                     raw_text=row.get("raw_text"),
@@ -649,5 +843,8 @@ class ContractsRepository:
                 "by_use_category": {
                     row["use_category"]: row["count"] for row in use_category_rows
                 },
-                "by_state": {row["state"]: row["count"] for row in state_rows},
+                "by_state": {
+                    (row.get("state") or row.get("australian_state")): row["count"]
+                    for row in state_rows
+                },
             }
