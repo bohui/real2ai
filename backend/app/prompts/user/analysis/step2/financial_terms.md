@@ -1,6 +1,28 @@
-# Financial Terms Analysis
+---
+type: "user"
+category: "instructions"
+name: "financial_terms_analysis"
+version: "1.0.0"
+description: "Step 2.2 - Financial Terms Analysis and Verification"
+fragment_orchestration: "step2_financial_terms"
+required_variables:
+  - "contract_text"
+  - "australian_state"
+  - "analysis_timestamp"
+optional_variables:
+  - "entities_extraction_result"
+  - "legal_requirements_matrix"
+  - "contract_type"
+model_compatibility: ["gemini-2.5-flash", "gpt-4"]
+max_tokens: 6000
+temperature_range: [0.1, 0.3]
+output_parser: FinancialTermsAnalysisResult
+tags: ["step2", "financial", "terms", "verification"]
+---
 
-Analyze the financial terms and monetary obligations in this Australian real estate contract with focus on accuracy, market alignment, and risk assessment.
+# Financial Terms Analysis (Step 2.2)
+
+Perform comprehensive analysis of financial terms and monetary obligations in this Australian real estate contract, focusing on accuracy verification, market alignment, and risk assessment.
 
 ## Contract Context
 - **State**: {{australian_state}}

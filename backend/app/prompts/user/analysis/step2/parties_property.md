@@ -1,6 +1,28 @@
-# Parties & Property Verification Analysis
+---
+type: "user"
+category: "instructions"
+name: "parties_property_analysis"
+version: "1.0.0"
+description: "Step 2.1 - Parties and Property Verification Analysis"
+fragment_orchestration: "step2_parties_property"
+required_variables:
+  - "contract_text"
+  - "australian_state"
+  - "analysis_timestamp"
+optional_variables:
+  - "entities_extraction_result"
+  - "legal_requirements_matrix"
+  - "contract_type"
+model_compatibility: ["gemini-2.5-flash", "gpt-4"]
+max_tokens: 6000
+temperature_range: [0.1, 0.3]
+output_parser: PartiesPropertyAnalysisResult
+tags: ["step2", "parties", "property", "verification"]
+---
 
-Analyze the parties and property details in this Australian real estate contract with focus on verification, legal capacity, and property identification completeness.
+# Parties & Property Verification Analysis (Step 2.1)
+
+Perform systematic verification analysis of parties and property details in this Australian real estate contract, focusing on legal capacity assessment and property identification completeness.
 
 ## Contract Context
 - **State**: {{australian_state}}

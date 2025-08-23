@@ -148,7 +148,7 @@ registry:
       estimated_tokens: 2000
 
     contract_entities_extraction:
-      path: "user/analysis/contract_entities_extraction.md"
+      path: "user/analysis/step1/contract_entities_extraction.md"
       category: "analysis"
       system_requirements: ["entity_extraction_core"]
       description: "Extract entities from contracts using the ContractEntityExtraction schema"

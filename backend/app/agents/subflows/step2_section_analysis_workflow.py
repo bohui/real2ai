@@ -73,6 +73,12 @@ class Step2AnalysisState(TypedDict):
     phase_completion_times: Annotated[Dict[str, datetime], lambda x, y: {**(x or {}), **(y or {})}}
     total_diagrams_processed: Annotated[int, lambda x, y: y]
     diagram_processing_success_rate: Annotated[float, lambda x, y: y]
+    
+    # Progress notification callback
+    notify_progress: Annotated[
+        Optional[Callable[[str, int, str], Awaitable[None]]],
+        lambda x, y: y,
+    ]
 
 
 class Step2AnalysisWorkflow:
@@ -91,6 +97,25 @@ class Step2AnalysisWorkflow:
         # Initialize prompt manager (will be properly configured in Story S13)
         from app.core.prompts import PromptManager
         self.prompt_manager = PromptManager()
+        
+        # Progress tracking ranges for each phase
+        self.PROGRESS_RANGES = {
+            "initialize_workflow": (0, 2),
+            "analyze_parties_property": (2, 12),
+            "analyze_financial_terms": (12, 22),
+            "analyze_conditions": (22, 32),
+            "analyze_warranties": (32, 40),
+            "analyze_default_termination": (40, 48),
+            "check_phase1_completion": (48, 50),
+            "analyze_settlement_logistics": (50, 60),
+            "analyze_title_encumbrances": (60, 75),
+            "check_phase2_completion": (75, 77),
+            "calculate_adjustments_outgoings": (77, 83),
+            "check_disclosure_compliance": (83, 89),
+            "identify_special_risks": (89, 94),
+            "validate_cross_sections": (94, 98),
+            "finalize_results": (98, 100),
+        }
         
         self.graph = self._build_workflow_graph()
         
@@ -242,6 +267,9 @@ class Step2AnalysisWorkflow:
             "phase_completion_times": {},
             "total_diagrams_processed": 0,
             "diagram_processing_success_rate": 0.0,
+            
+            # Pass through progress callback from parent state
+            "notify_progress": parent_state.get("notify_progress"),
         }
         
         try:
@@ -264,6 +292,15 @@ class Step2AnalysisWorkflow:
                 "processing_errors": [str(e)],
             }
     
+    async def _notify_status(self, state: Step2AnalysisState, step: str, percent: int, desc: str) -> None:
+        """Notify progress status - similar to document processing workflow pattern."""
+        try:
+            # Best-effort async persistence callback from parent state
+            notify = (state or {}).get("notify_progress")
+            if notify and callable(notify):
+                await notify(step, percent, desc)
+        except Exception as e:
+            logger.warning(f"Failed to notify progress for step {step}: {e}")
         
     async def _get_parser(self, parser_name: str, schema_class):
         """Get output parser for structured analysis"""
@@ -325,6 +362,11 @@ class Step2AnalysisWorkflow:
     async def _initialize_workflow(self, state: Step2AnalysisState) -> Step2AnalysisState:
         """Initialize the Step 2 workflow with validation and setup"""
         logger.info("Initializing Step 2 section analysis workflow")
+        
+        # Notify progress
+        await self._notify_status(state, "initialize_workflow", 
+                                self.PROGRESS_RANGES["initialize_workflow"][1],
+                                "Starting Step 2 section analysis")
         
         # Validate required inputs
         if not state.get("contract_text"):
@@ -424,6 +466,11 @@ class Step2AnalysisWorkflow:
                             "parties_count": len(result_dict.get("parties", [])),
                         }
                     )
+                    
+                    # Notify progress completion
+                    await self._notify_status(state, "analyze_parties_property",
+                                            self.PROGRESS_RANGES["analyze_parties_property"][1],
+                                            "Parties and property analysis completed")
                 else:
                     # Fallback result on parsing failure
                     result = {
@@ -538,6 +585,11 @@ class Step2AnalysisWorkflow:
                             "purchase_price": result_dict.get("purchase_price", {}).get("price_numeric"),
                         }
                     )
+                    
+                    # Notify progress completion
+                    await self._notify_status(state, "analyze_financial_terms",
+                                            self.PROGRESS_RANGES["analyze_financial_terms"][1],
+                                            "Financial terms analysis completed")
                 else:
                     # Fallback result on parsing failure
                     result = {
@@ -586,21 +638,117 @@ class Step2AnalysisWorkflow:
         logger.info("Starting conditions analysis")
         
         try:
-            # Placeholder implementation - will be completed in Story S4
-            result = {
-                "analyzer": "conditions",
-                "status": "placeholder",
-                "message": "Implementation pending Story S4", 
-                "timestamp": datetime.now(UTC).isoformat(),
-            }
+            from app.core.prompts import PromptContext, ContextType
+            from app.services import get_llm_service
+            from app.prompts.schema.step2.conditions_schema import ConditionsAnalysisResult
             
-            state["conditions_result"] = result
-            logger.info("Conditions analysis completed (placeholder)")
+            # Prepare prompt context
+            context = PromptContext(
+                context_type=ContextType.ANALYSIS,
+                variables={
+                    "contract_text": state.get("contract_text", ""),
+                    "australian_state": state.get("australian_state", "NSW"),
+                    "contract_type": state.get("contract_type", "purchase_agreement"),
+                    "analysis_timestamp": datetime.now(UTC).isoformat(),
+                    "entities_extraction_result": state.get("entities_extraction_result", {}),
+                    "legal_requirements_matrix": state.get("legal_requirements_matrix", {}),
+                }
+            )
+            
+            # Get parser for structured output
+            conditions_parser = await self._get_parser("conditions_analysis", ConditionsAnalysisResult)
+            
+            # Use prompt manager to compose prompts
+            composition_result = await self.prompt_manager.render_composed(
+                composition_name="step2_conditions_analysis",
+                context=context,
+                output_parser=conditions_parser,
+            )
+            
+            system_prompt = composition_result.get("system_prompt", "You are an expert Australian contract conditions analyst.")
+            user_prompt = composition_result.get("user_prompt", f"Analyze conditions in this contract: {context.variables.get('contract_text', '')}")
+            model_name = composition_result.get("metadata", {}).get("model", "gpt-4")
+            
+            # Execute LLM analysis
+            llm_service = await get_llm_service()
+            
+            if conditions_parser:
+                parsing_result = await llm_service.generate_content(
+                    prompt=user_prompt,
+                    system_message=system_prompt,
+                    model=model_name,
+                    output_parser=conditions_parser,
+                    parse_generation_max_attempts=2,
+                )
+                
+                if parsing_result.success and parsing_result.parsed_data:
+                    result = parsing_result.parsed_data
+                    if hasattr(result, "model_dump"):
+                        result_dict = result.model_dump()
+                    else:
+                        result_dict = result
+                        
+                    # Add metadata
+                    result_dict["analyzer"] = "conditions"
+                    result_dict["status"] = "completed"
+                    result_dict["timestamp"] = datetime.now(UTC).isoformat()
+                    
+                    state["conditions_result"] = result_dict
+                    
+                    logger.info(
+                        "Conditions analysis completed successfully",
+                        extra={
+                            "confidence_score": result_dict.get("confidence_score", 0),
+                            "total_conditions": result_dict.get("total_conditions", 0),
+                            "special_conditions": result_dict.get("special_conditions_count", 0),
+                            "overall_risk": result_dict.get("overall_condition_risk", "unknown"),
+                        }
+                    )
+                    
+                    # Notify progress completion
+                    await self._notify_status(state, "analyze_conditions",
+                                            self.PROGRESS_RANGES["analyze_conditions"][1],
+                                            "Conditions analysis completed")
+                else:
+                    # Fallback result on parsing failure
+                    result = {
+                        "analyzer": "conditions",
+                        "status": "parsing_failed",
+                        "error": "Failed to parse LLM output",
+                        "timestamp": datetime.now(UTC).isoformat(),
+                    }
+                    state["conditions_result"] = result
+                    state["processing_errors"].append("Conditions analysis: parsing failed")
+            else:
+                # Fallback without structured parsing
+                response = await llm_service.generate_content(
+                    prompt=user_prompt,
+                    system_message=system_prompt,
+                    model=model_name,
+                )
+                
+                result = {
+                    "analyzer": "conditions",
+                    "status": "unstructured",
+                    "response": response,
+                    "timestamp": datetime.now(UTC).isoformat(),
+                }
+                state["conditions_result"] = result
             
         except Exception as e:
             error_msg = f"Conditions analysis failed: {str(e)}"
             state["processing_errors"].append(error_msg)
             logger.error(error_msg, exc_info=True)
+            
+            # Store error result
+            result = {
+                "analyzer": "conditions",
+                "status": "error",
+                "error": str(e),
+                "error_type": type(e).__name__,
+                "timestamp": datetime.now(UTC).isoformat(),
+            }
+            state["conditions_result"] = result
             
         return state
     
