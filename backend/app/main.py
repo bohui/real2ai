@@ -21,8 +21,12 @@ settings = get_settings()
 level_name = os.getenv("LOG_LEVEL", settings.log_level or "INFO").upper()
 log_level = getattr(logging, level_name, logging.INFO)
 
-# Configure logging with JSON formatter that preserves `extra` fields
-configure_logging(level=log_level, use_json=True)
+# Configure logging formatter via env/setting: LOG_FORMAT in {json, console}
+log_format_name = os.getenv(
+    "LOG_FORMAT", getattr(settings, "log_format", "json")
+).lower()
+use_json = log_format_name == "json"
+configure_logging(level=log_level, use_json=use_json)
 
 # Ensure key loggers follow the configured level even if basicConfig was a no-op
 for logger_name in (

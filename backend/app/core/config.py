@@ -127,6 +127,9 @@ class Settings(BaseSettings):
     # Monitoring
     sentry_dsn: Optional[str] = None
     log_level: str = "INFO"
+    log_format: str = (
+        "console"  # "json" or "console"; default console per user preference
+    )
 
     # OCR Monitoring
     ocr_performance_monitoring: bool = True

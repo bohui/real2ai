@@ -10,8 +10,10 @@ from app.core.logging_config import configure_logging
 # Get settings
 settings = get_settings()
 
-# Ensure Celery workers use the same JSON logging formatter and level
-configure_logging(level=get_settings().log_level, use_json=True)
+# Ensure Celery workers use the configured logging formatter and level
+log_format_name = (getattr(settings, "log_format", "json") or "json").lower()
+use_json = log_format_name == "json"
+configure_logging(level=get_settings().log_level, use_json=use_json)
 
 # Create Celery app instance
 celery_app = Celery(
@@ -39,6 +41,7 @@ celery_app.conf.update(
     worker_prefetch_multiplier=1,
     task_acks_late=True,
     worker_disable_rate_limits=False,
+    worker_hijack_root_logger=False,
     # Connection resilience
     broker_connection_retry_on_startup=True,
     broker_connection_max_retries=100,
