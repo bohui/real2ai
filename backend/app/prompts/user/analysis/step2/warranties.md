@@ -2,17 +2,18 @@
 type: "user"
 category: "instructions"
 name: "warranties_analysis"
-version: "1.0.0"
+version: "2.0.0"
 description: "Step 2.5 - Warranties and Representations Analysis"
 fragment_orchestration: "step2_warranties"
 required_variables:
-  - "contract_text"
-  - "australian_state"
   - "analysis_timestamp"
 optional_variables:
   - "entities_extraction"
   - "legal_requirements_matrix"
   - "contract_type"
+  - "australian_state"
+  - "retrieval_index_id"
+  - "seed_snippets"
 model_compatibility: ["gemini-2.5-flash", "gpt-4"]
 max_tokens: 8000
 temperature_range: [0.1, 0.3]
@@ -25,8 +26,12 @@ tags: ["step2", "warranties", "representations", "disclosures"]
 Perform comprehensive analysis of all warranties, representations, vendor disclosures, and buyer acknowledgments in this Australian real estate contract, focusing on enforceability, buyer protection, and risk assessment.
 
 ## Contract Context
-- **State**: {{australian_state}}
-- **Contract Type**: {{contract_type}}
+{% set meta = (entities_extraction or {}).get('metadata') or {} %}
+- **State**: {{ australian_state or meta.get('state') or 'unknown' }}
+- **Contract Type**: {{ contract_type or meta.get('contract_type') or 'unknown' }}
+- **Purchase Method**: {{ meta.get('purchase_method') or 'unknown' }}
+- **Use Category**: {{ meta.get('use_category') or 'unknown' }}
+- **Property Condition**: {{ meta.get('property_condition') or 'unknown' }}
 - **Analysis Date**: {{analysis_timestamp}}
 
 ## Analysis Requirements
@@ -148,17 +153,20 @@ Perform comprehensive analysis of all warranties, representations, vendor disclo
 - Cost and complexity of pursuing claims
 - Alternative dispute resolution provisions
 
-## Contract Text for Analysis
+## Seed Snippets (Primary Context)
 
-```
-{{contract_text}}
-```
+{% if seed_snippets %}
+Use these high-signal warranty/representation/disclosure snippets as primary context:
+{{seed_snippets | tojsonpretty}}
+{% else %}
+No seed snippets provided.
+{% endif %}
 
 ## Additional Context
 
 {% if entities_extraction %}
-### Entity Extraction Results
-Previously extracted warranty data:
+### Entity Extraction Results (Baseline)
+Previously extracted warranty data (use as baseline; verify and reconcile):
 {{entities_extraction | tojsonpretty}}
 {% endif %}
 
@@ -168,16 +176,13 @@ Previously extracted warranty data:
 {{legal_requirements_matrix | tojsonpretty}}
 {% endif %}
 
-## Analysis Instructions
+## Analysis Instructions (Seeds + Retrieval + Metadata Scoping)
 
-1. **Comprehensive Review**: Examine all contract sections for warranties, representations, and disclosures
-2. **Classification**: Categorize each warranty by type, scope, and enforceability
-3. **Risk Assessment**: Evaluate buyer protection and enforcement risks
-4. **Statutory Compliance**: Apply {{australian_state}} consumer protection and disclosure laws
-5. **Practical Focus**: Emphasize actionable insights for buyer decision-making
-6. **Evidence Documentation**: Reference specific contract clauses and legal requirements
-7. **Market Context**: Compare to standard market practices in {{australian_state}}
-8. **Consumer Protection**: Apply unfair contract terms and consumer guarantee provisions
+1. Use `entities_extraction` and `metadata` as the baseline. Verify and enrich using `seed_snippets` as primary evidence.
+2. If baseline + seeds are insufficient, retrieve targeted warranties/representations/disclosures from `retrieval_index_id` with concise queries.
+3. Classify each warranty and evaluate enforceability, scope, exclusions, and durations. Review buyer acknowledgments and statutory warranties.
+4. Assess overall warranty risk and buyer protection; provide clause citations and recommendations.
+5. Record whether retrieval was used and how many additional snippets were incorporated.
 
 ## Expected Output
 

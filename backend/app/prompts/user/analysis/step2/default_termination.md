@@ -2,17 +2,18 @@
 type: "user"
 category: "instructions"
 name: "default_termination_analysis"
-version: "1.0.0"
+version: "2.0.0"
 description: "Step 2.6 - Default and Termination Analysis"
 fragment_orchestration: "step2_default_termination"
 required_variables:
-  - "contract_text"
-  - "australian_state"
   - "analysis_timestamp"
 optional_variables:
   - "entities_extraction"
   - "legal_requirements_matrix"
   - "contract_type"
+  - "australian_state"
+  - "retrieval_index_id"
+  - "seed_snippets"
 model_compatibility: ["gemini-2.5-flash", "gpt-4"]
 max_tokens: 8000
 temperature_range: [0.1, 0.3]
@@ -25,8 +26,12 @@ tags: ["step2", "default", "termination", "remedies"]
 Perform comprehensive analysis of default events, termination rights, remedy provisions, and enforcement mechanisms in this Australian real estate contract, focusing on risk assessment and party protection evaluation.
 
 ## Contract Context
-- **State**: {{australian_state}}
-- **Contract Type**: {{contract_type}}
+{% set meta = (entities_extraction or {}).get('metadata') or {} %}
+- **State**: {{ australian_state or meta.get('state') or 'unknown' }}
+- **Contract Type**: {{ contract_type or meta.get('contract_type') or 'unknown' }}
+- **Purchase Method**: {{ meta.get('purchase_method') or 'unknown' }}
+- **Use Category**: {{ meta.get('use_category') or 'unknown' }}
+- **Property Condition**: {{ meta.get('property_condition') or 'unknown' }}
 - **Analysis Date**: {{analysis_timestamp}}
 
 ## Analysis Requirements
@@ -151,17 +156,20 @@ Perform comprehensive analysis of default events, termination rights, remedy pro
 - Likelihood of successful enforcement
 - Barriers to remedy pursuit
 
-## Contract Text for Analysis
+## Seed Snippets (Primary Context)
 
-```
-{{contract_text}}
-```
+{% if seed_snippets %}
+Use these high-signal default/termination/remedies snippets as primary context:
+{{seed_snippets | tojsonpretty}}
+{% else %}
+No seed snippets provided.
+{% endif %}
 
 ## Additional Context
 
 {% if entities_extraction %}
-### Entity Extraction Results
-Previously extracted default/termination data:
+### Entity Extraction Results (Baseline)
+Previously extracted default/termination data (use as baseline; verify and reconcile):
 {{entities_extraction | tojsonpretty}}
 {% endif %}
 
@@ -171,16 +179,13 @@ Previously extracted default/termination data:
 {{legal_requirements_matrix | tojsonpretty}}
 {% endif %}
 
-## Analysis Instructions
+## Analysis Instructions (Seeds + Retrieval + Metadata Scoping)
 
-1. **Systematic Review**: Examine all contract sections for default, termination, and remedy provisions
-2. **Legal Classification**: Categorize each provision by type and enforceability
-3. **Risk Assessment**: Evaluate likelihood and consequences of each default scenario
-4. **Fairness Analysis**: Assess balance of rights and remedies between parties
-5. **Consumer Protection**: Apply {{australian_state}} unfair contract terms and consumer laws
-6. **Practical Focus**: Emphasize actionable insights for risk management
-7. **Evidence Documentation**: Reference specific contract clauses and legal precedents
-8. **Enforcement Reality**: Consider practical enforceability and cost implications
+1. Use `entities_extraction` and `metadata` as the baseline. Verify and enrich using `seed_snippets` as primary evidence.
+2. If baseline + seeds are insufficient, retrieve targeted default/termination/remedy clauses from `retrieval_index_id` with concise queries.
+3. Classify each default and termination right; analyze remedies, fairness, and consumer protection compliance.
+4. Assess overall default/termination risk; provide clause citations and practical enforcement considerations.
+5. Record whether retrieval was used and how many additional snippets were incorporated.
 
 ## Expected Output
 

@@ -2,17 +2,18 @@
 type: "user"
 category: "instructions"
 name: "financial_terms_analysis"
-version: "1.0.0"
+version: "2.0.0"
 description: "Step 2.2 - Financial Terms Analysis and Verification"
 fragment_orchestration: "step2_financial_terms"
 required_variables:
-  - "contract_text"
-  - "australian_state"
   - "analysis_timestamp"
 optional_variables:
   - "entities_extraction"
   - "legal_requirements_matrix"
   - "contract_type"
+  - "australian_state"
+  - "retrieval_index_id"
+  - "seed_snippets"
 model_compatibility: ["gemini-2.5-flash", "gpt-4"]
 max_tokens: 6000
 temperature_range: [0.1, 0.3]
@@ -25,8 +26,12 @@ tags: ["step2", "financial", "terms", "verification"]
 Perform comprehensive analysis of financial terms and monetary obligations in this Australian real estate contract, focusing on accuracy verification, market alignment, and risk assessment.
 
 ## Contract Context
-- **State**: {{australian_state}}
-- **Contract Type**: {{contract_type}}
+{% set meta = (entities_extraction or {}).get('metadata') or {} %}
+- **State**: {{ australian_state or meta.get('state') or 'unknown' }}
+- **Contract Type**: {{ contract_type or meta.get('contract_type') or 'unknown' }}
+- **Purchase Method**: {{ meta.get('purchase_method') or 'unknown' }}
+- **Use Category**: {{ meta.get('use_category') or 'unknown' }}
+- **Property Condition**: {{ meta.get('property_condition') or 'unknown' }}
 - **Analysis Date**: {{analysis_timestamp}}
 
 ## Analysis Requirements
@@ -124,17 +129,20 @@ Perform comprehensive analysis of financial terms and monetary obligations in th
 - Market volatility exposure
 - Legal and compliance consequences
 
-## Contract Text for Analysis
+## Seed Snippets (Primary Context)
 
-```
-{{contract_text}}
-```
+{% if seed_snippets %}
+Use these high-signal financial snippets as primary context:
+{{seed_snippets | tojsonpretty}}
+{% else %}
+No seed snippets provided.
+{% endif %}
 
 ## Additional Context
 
 {% if entities_extraction %}
-### Entity Extraction Results
-Previously extracted financial data:
+### Entity Extraction Results (Baseline)
+Previously extracted financial data (use as baseline; verify and reconcile):
 {{entities_extraction | tojsonpretty}}
 {% endif %}
 
@@ -144,16 +152,13 @@ Previously extracted financial data:
 {{legal_requirements_matrix | tojsonpretty}}
 {% endif %}
 
-## Analysis Instructions
+## Analysis Instructions (Seeds + Retrieval + Metadata Scoping)
 
-1. **Systematic Review**: Examine all financial clauses, schedules, and appendices
-2. **Arithmetic Verification**: Double-check all calculations and numerical consistency
-3. **Market Context**: Apply {{australian_state}} market knowledge where possible
-4. **Risk Focus**: Identify financial risks with quantified impact where feasible
-5. **GST Compliance**: Apply current Australian GST law and ATO guidance
-6. **Evidence Documentation**: Reference specific contract clauses and sections
-7. **Confidence Assessment**: Provide confidence scores for all major determinations
-8. **Practical Impact**: Focus on buyer's financial position and obligations
+1. Use `entities_extraction` and `metadata` as the baseline. Verify and enrich using `seed_snippets` as primary evidence.
+2. If baseline + seeds are insufficient, retrieve targeted financial clauses (price, deposit, payment schedule, interest/penalty, GST) from `retrieval_index_id` with concise queries.
+3. Double-check arithmetic and consistency; compute totals and percentages; validate GST calculations.
+4. Assess financial risks (RED/AMBER/GREEN) and quantify impact where feasible. Provide clause citations.
+5. Record whether retrieval was used and how many additional snippets were incorporated.
 
 ## Expected Output
 

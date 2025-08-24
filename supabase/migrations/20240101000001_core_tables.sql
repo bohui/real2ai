@@ -59,6 +59,7 @@ CREATE TABLE contracts (
     purchase_method purchase_method,
     use_category use_category,
     extracted_entity JSONB DEFAULT '{}'::jsonb,
+
     parties_property JSONB DEFAULT '{}'::jsonb,
     financial_terms JSONB DEFAULT '{}'::jsonb,
     conditions JSONB DEFAULT '{}'::jsonb,
