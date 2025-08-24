@@ -10,7 +10,7 @@ required_variables:
   - "australian_state"
   - "analysis_timestamp"
 optional_variables:
-  - "entities_extraction_result"
+  - "entities_extraction"
   - "uploaded_diagrams"
   - "legal_requirements_matrix"
   - "contract_type"
@@ -220,10 +220,10 @@ The following diagrams have been uploaded for integrated analysis:
 
 ## Additional Context
 
-{% if entities_extraction_result %}
+{% if entities_extraction %}
 ### Entity Extraction Results
 Previously extracted title and encumbrance data:
-{{entities_extraction_result | tojsonpretty}}
+{{entities_extraction | tojsonpretty}}
 {% endif %}
 
 {% if legal_requirements_matrix %}

@@ -9,7 +9,6 @@ This module implements the comprehensive contract analysis workflow with three p
 Replaces ContractTermsExtractionNode with specialized section analyzers.
 """
 
-import asyncio
 import logging
 from datetime import datetime, UTC
 from typing import Dict, Any, Optional, List, TypedDict, Annotated, Callable, Awaitable
@@ -19,6 +18,7 @@ from langgraph.graph import StateGraph, START, END
 from langgraph.graph.state import CompiledStateGraph
 
 from app.models.contract_state import RealEstateAgentState
+from app.core.langsmith_config import langsmith_trace
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +28,7 @@ class Step2AnalysisState(TypedDict):
 
     # Input data
     contract_text: str
-    entities_extraction_result: Dict[str, Any]
+    entities_extraction: Dict[str, Any]
     legal_requirements_matrix: Optional[Dict[str, Any]]
     uploaded_diagrams: Optional[Dict[str, bytes]]
 
@@ -120,7 +120,97 @@ class Step2AnalysisWorkflow:
             "finalize_results": (98, 100),
         }
 
+        # Initialize node instances for delegation
+        self._create_nodes()
+
+        # Build workflow graph bound to node.execute handlers
         self.graph = self._build_workflow_graph()
+
+    def _create_nodes(self):
+        """Create node instances for Step 2 subflow."""
+        from app.agents.nodes.step2_section_analysis_subflow import (
+            InitializeWorkflowNode,
+            PartiesPropertyNode,
+            FinancialTermsNode,
+            ConditionsNode,
+            WarrantiesNode,
+            DefaultTerminationNode,
+            CheckPhase1CompletionNode,
+            SettlementLogisticsNode,
+            TitleEncumbrancesNode,
+            CheckPhase2CompletionNode,
+            AdjustmentsOutgoingsNode,
+            DisclosureComplianceNode,
+            SpecialRisksNode,
+            CrossSectionValidationNode,
+            FinalizeResultsNode,
+        )
+
+        # Instantiate nodes with progress ranges
+        self.initialize_workflow_node = InitializeWorkflowNode(
+            progress_range=self.PROGRESS_RANGES["initialize_workflow"]
+        )
+        self.parties_property_node = PartiesPropertyNode(
+            progress_range=self.PROGRESS_RANGES["analyze_parties_property"]
+        )
+        self.financial_terms_node = FinancialTermsNode(
+            progress_range=self.PROGRESS_RANGES["analyze_financial_terms"]
+        )
+        self.conditions_node = ConditionsNode(
+            progress_range=self.PROGRESS_RANGES["analyze_conditions"]
+        )
+        self.warranties_node = WarrantiesNode(
+            progress_range=self.PROGRESS_RANGES["analyze_warranties"]
+        )
+        self.default_termination_node = DefaultTerminationNode(
+            progress_range=self.PROGRESS_RANGES["analyze_default_termination"]
+        )
+        self.check_phase1_completion_node = CheckPhase1CompletionNode(
+            progress_range=self.PROGRESS_RANGES["check_phase1_completion"]
+        )
+        self.settlement_logistics_node = SettlementLogisticsNode(
+            progress_range=self.PROGRESS_RANGES["analyze_settlement_logistics"]
+        )
+        self.title_encumbrances_node = TitleEncumbrancesNode(
+            progress_range=self.PROGRESS_RANGES["analyze_title_encumbrances"]
+        )
+        self.check_phase2_completion_node = CheckPhase2CompletionNode(
+            progress_range=self.PROGRESS_RANGES["check_phase2_completion"]
+        )
+        self.adjustments_outgoings_node = AdjustmentsOutgoingsNode(
+            progress_range=self.PROGRESS_RANGES["calculate_adjustments_outgoings"]
+        )
+        self.disclosure_compliance_node = DisclosureComplianceNode(
+            progress_range=self.PROGRESS_RANGES["check_disclosure_compliance"]
+        )
+        self.special_risks_node = SpecialRisksNode(
+            progress_range=self.PROGRESS_RANGES["identify_special_risks"]
+        )
+        self.cross_section_validation_node = CrossSectionValidationNode(
+            progress_range=self.PROGRESS_RANGES["validate_cross_sections"]
+        )
+        self.finalize_results_node = FinalizeResultsNode(
+            progress_range=self.PROGRESS_RANGES["finalize_results"]
+        )
+
+        # Optional: registry
+        self.nodes = {
+            "initialize_workflow": self.initialize_workflow_node,
+            "analyze_parties_property": self.parties_property_node,
+            "analyze_financial_terms": self.financial_terms_node,
+            "analyze_conditions": self.conditions_node,
+            "analyze_warranties": self.warranties_node,
+            "analyze_default_termination": self.default_termination_node,
+            "check_phase1_completion": self.check_phase1_completion_node,
+            "analyze_settlement_logistics": self.settlement_logistics_node,
+            "analyze_title_encumbrances": self.title_encumbrances_node,
+            "check_phase2_completion": self.check_phase2_completion_node,
+            "calculate_adjustments_outgoings": self.adjustments_outgoings_node,
+            "check_disclosure_compliance": self.disclosure_compliance_node,
+            "identify_special_risks": self.special_risks_node,
+            "validate_cross_sections": self.cross_section_validation_node,
+            "finalize_results": self.finalize_results_node,
+        }
 
     def _build_workflow_graph(self) -> CompiledStateGraph:
         """Build the LangGraph state graph for Step 2 analysis"""
@@ -129,37 +219,37 @@ class Step2AnalysisWorkflow:
         graph = StateGraph(Step2AnalysisState)
 
         # Add workflow initialization
-        graph.add_node("initialize_workflow", self._initialize_workflow)
+        graph.add_node("initialize_workflow", self.initialize_workflow)
 
         # Phase 1: Foundation Analysis Nodes (Parallel)
-        graph.add_node("analyze_parties_property", self._analyze_parties_property)
-        graph.add_node("analyze_financial_terms", self._analyze_financial_terms)
-        graph.add_node("analyze_conditions", self._analyze_conditions)
-        graph.add_node("analyze_warranties", self._analyze_warranties)
-        graph.add_node("analyze_default_termination", self._analyze_default_termination)
+        graph.add_node("analyze_parties_property", self.analyze_parties_property)
+        graph.add_node("analyze_financial_terms", self.analyze_financial_terms)
+        graph.add_node("analyze_conditions", self.analyze_conditions)
+        graph.add_node("analyze_warranties", self.analyze_warranties)
+        graph.add_node("analyze_default_termination", self.analyze_default_termination)
 
         # Phase 1 completion check
-        graph.add_node("check_phase1_completion", self._check_phase1_completion)
+        graph.add_node("check_phase1_completion", self.check_phase1_completion)
 
         # Phase 2: Dependent Analysis Nodes (Sequential)
         graph.add_node(
-            "analyze_settlement_logistics", self._analyze_settlement_logistics
+            "analyze_settlement_logistics", self.analyze_settlement_logistics
         )
-        graph.add_node("analyze_title_encumbrances", self._analyze_title_encumbrances)
+        graph.add_node("analyze_title_encumbrances", self.analyze_title_encumbrances)
 
         # Phase 2 completion check
-        graph.add_node("check_phase2_completion", self._check_phase2_completion)
+        graph.add_node("check_phase2_completion", self.check_phase2_completion)
 
         # Phase 3: Synthesis Analysis Nodes (Sequential)
         graph.add_node(
-            "calculate_adjustments_outgoings", self._calculate_adjustments_outgoings
+            "calculate_adjustments_outgoings", self.calculate_adjustments_outgoings
         )
-        graph.add_node("check_disclosure_compliance", self._check_disclosure_compliance)
-        graph.add_node("identify_special_risks", self._identify_special_risks)
+        graph.add_node("check_disclosure_compliance", self.check_disclosure_compliance)
+        graph.add_node("identify_special_risks", self.identify_special_risks)
 
         # Cross-section validation and finalization
-        graph.add_node("validate_cross_sections", self._validate_cross_sections)
-        graph.add_node("finalize_results", self._finalize_results)
+        graph.add_node("validate_cross_sections", self.validate_cross_sections)
+        graph.add_node("finalize_results", self.finalize_results)
 
         # Define workflow edges
         self._define_workflow_edges(graph)
@@ -216,7 +306,7 @@ class Step2AnalysisWorkflow:
     async def execute(
         self,
         contract_text: str,
-        entities_extraction_result: Dict[str, Any],
+        entities_extraction: Dict[str, Any],
         parent_state: RealEstateAgentState,
         **kwargs,
     ) -> Dict[str, Any]:
@@ -225,7 +315,7 @@ class Step2AnalysisWorkflow:
 
         Args:
             contract_text: Full contract text from document processing
-            entities_extraction_result: Results from Step 1 entity extraction
+            entities_extraction: Results from Step 1 entity extraction
             parent_state: Parent workflow state for context
             **kwargs: Additional context (diagrams, legal matrix, etc.)
 
@@ -237,7 +327,7 @@ class Step2AnalysisWorkflow:
         step2_state: Step2AnalysisState = {
             # Input data
             "contract_text": contract_text,
-            "entities_extraction_result": entities_extraction_result,
+            "entities_extraction": entities_extraction,
             "legal_requirements_matrix": kwargs.get("legal_requirements_matrix"),
             "uploaded_diagrams": kwargs.get("uploaded_diagrams"),
             # Context from parent state
@@ -366,721 +456,37 @@ class Step2AnalysisWorkflow:
     # Node Implementation Methods
     # These will be implemented in subsequent stories
 
-    async def _initialize_workflow(
+    @langsmith_trace(name="initialize_workflow", run_type="tool")
+    async def initialize_workflow(
         self, state: Step2AnalysisState
     ) -> Step2AnalysisState:
-        """Initialize the Step 2 workflow with validation and setup"""
-        logger.info("Initializing Step 2 section analysis workflow")
+        return await self.initialize_workflow_node.execute(state)
 
-        # Notify progress
-        await self._notify_status(
-            state,
-            "initialize_workflow",
-            self.PROGRESS_RANGES["initialize_workflow"][1],
-            "Starting Step 2 section analysis",
-        )
-
-        # Validate required inputs
-        if not state.get("contract_text"):
-            error_msg = "No contract text provided for Step 2 analysis"
-            state["processing_errors"].append(error_msg)
-            logger.error(error_msg)
-
-        if not state.get("entities_extraction_result"):
-            error_msg = "No entities extraction result provided for Step 2 analysis"
-            state["processing_errors"].append(error_msg)
-            logger.error(error_msg)
-
-        # Prepare updates only (avoid returning entire state)
-        updates: Dict[str, Any] = {}
-
-        # Set workflow start time
-        updates["start_time"] = datetime.now(UTC)
-
-        # Log workflow initialization
-        logger.info(
-            "Step 2 workflow initialized",
-            extra={
-                "contract_text_length": len(state.get("contract_text", "")),
-                "entities_present": bool(state.get("entities_extraction_result")),
-                "diagrams_count": len(state.get("uploaded_diagrams") or {}),
-                "legal_matrix_present": bool(state.get("legal_requirements_matrix")),
-            },
-        )
-
-        return updates
-
-    async def _analyze_parties_property(
+    @langsmith_trace(name="analyze_parties_property", run_type="tool")
+    async def analyze_parties_property(
         self, state: Step2AnalysisState
     ) -> Step2AnalysisState:
-        """Analyze parties and property verification (Story S2)"""
-        logger.info("Starting parties and property analysis")
+        return await self.parties_property_node.execute(state)
 
-        try:
-            # Short-circuit if persisted
-            from app.services.repositories.contracts_repository import (
-                ContractsRepository,
-            )
-
-            content_hash = (state.get("entities_extraction_result") or {}).get(
-                "content_hash"
-            ) or (state.get("entities_extraction_result") or {}).get(
-                "document", {}
-            ).get(
-                "content_hash"
-            )
-            if content_hash:
-                repo = ContractsRepository()
-                existing = await repo.get_contract_by_content_hash(content_hash)
-                persisted = (existing.parties_property or {}) if existing else None
-                if persisted:
-                    logger.info(
-                        "Short-circuiting parties_property: found persisted result"
-                    )
-                    return {"parties_property_result": persisted}
-
-            from app.core.prompts import PromptContext, ContextType
-            from app.services import get_llm_service
-            from app.prompts.schema.step2.parties_property_schema import (
-                PartiesPropertyAnalysisResult,
-            )
-
-            # Prepare prompt context
-            context = PromptContext(
-                context_type=ContextType.ANALYSIS,
-                variables={
-                    "contract_text": state.get("contract_text", ""),
-                    "australian_state": state.get("australian_state", "NSW"),
-                    "contract_type": state.get("contract_type", "purchase_agreement"),
-                    "analysis_timestamp": datetime.now(UTC).isoformat(),
-                    "entities_extraction_result": state.get(
-                        "entities_extraction_result", {}
-                    ),
-                    "legal_requirements_matrix": state.get(
-                        "legal_requirements_matrix", {}
-                    ),
-                },
-            )
-
-            # Get parser for structured output
-            parties_parser = await self._get_parser(
-                "parties_property_analysis", PartiesPropertyAnalysisResult
-            )
-
-            # Use prompt manager to compose prompts (will be enhanced in Story S13)
-            # For now, use a basic composition
-            composition_result = await self.prompt_manager.render_composed(
-                composition_name="step2_parties_property",
-                context=context,
-                output_parser=parties_parser,
-            )
-
-            system_prompt = composition_result.get(
-                "system_prompt",
-                "You are an expert Australian real estate contract analyst.",
-            )
-            user_prompt = composition_result.get(
-                "user_prompt",
-                f"Analyze parties and property in this contract: {context.variables.get('contract_text', '')}",
-            )
-            model_name = composition_result.get("metadata", {}).get("model", "gpt-4")
-
-            # Execute LLM analysis
-            llm_service = await get_llm_service()
-
-            if parties_parser:
-                parsing_result = await llm_service.generate_content(
-                    prompt=user_prompt,
-                    system_message=system_prompt,
-                    model=model_name,
-                    output_parser=parties_parser,
-                    parse_generation_max_attempts=2,
-                )
-
-                if parsing_result.success and parsing_result.parsed_data:
-                    result = parsing_result.parsed_data
-                    if hasattr(result, "model_dump"):
-                        result_dict = result.model_dump()
-                    else:
-                        result_dict = result
-
-                    # Add metadata
-                    result_dict["analyzer"] = "parties_property"
-                    result_dict["status"] = "completed"
-                    result_dict["timestamp"] = datetime.now(UTC).isoformat()
-
-                    updates = {"parties_property_result": result_dict}
-
-                    # Persist result for idempotency
-                    if content_hash:
-                        try:
-                            await repo.update_section_analysis_key(
-                                content_hash,
-                                "parties_property",
-                                result_dict,
-                                updated_by="step2_parties_property",
-                            )
-                        except Exception as pe:
-                            logger.warning(f"Failed to persist parties_property: {pe}")
-
-                    logger.info(
-                        "Parties and property analysis completed successfully",
-                        extra={
-                            "confidence_score": result_dict.get("confidence_score", 0),
-                            "risk_level": result_dict.get(
-                                "overall_risk_level", "unknown"
-                            ),
-                            "parties_count": len(result_dict.get("parties", [])),
-                        },
-                    )
-
-                    # Notify progress completion
-                    await self._notify_status(
-                        state,
-                        "analyze_parties_property",
-                        self.PROGRESS_RANGES["analyze_parties_property"][1],
-                        "Parties and property analysis completed",
-                    )
-                else:
-                    # Fallback result on parsing failure
-                    result = {
-                        "analyzer": "parties_property",
-                        "status": "parsing_failed",
-                        "error": "Failed to parse LLM output",
-                        "timestamp": datetime.now(UTC).isoformat(),
-                    }
-                    updates = {
-                        "parties_property_result": result,
-                        "processing_errors": [
-                            "Parties property analysis: parsing failed"
-                        ],
-                    }
-            else:
-                # Fallback without structured parsing
-                response = await llm_service.generate_content(
-                    prompt=user_prompt,
-                    system_message=system_prompt,
-                    model=model_name,
-                )
-
-                result = {
-                    "analyzer": "parties_property",
-                    "status": "unstructured",
-                    "response": response,
-                    "timestamp": datetime.now(UTC).isoformat(),
-                }
-                updates = {"parties_property_result": result}
-
-        except Exception as e:
-            error_msg = f"Parties and property analysis failed: {str(e)}"
-            state["processing_errors"].append(error_msg)
-            logger.error(error_msg, exc_info=True)
-
-            # Store error result
-            result = {
-                "analyzer": "parties_property",
-                "status": "error",
-                "error": str(e),
-                "error_type": type(e).__name__,
-                "timestamp": datetime.now(UTC).isoformat(),
-            }
-            updates = {"parties_property_result": result}
-
-        return updates
-
-    async def _analyze_financial_terms(
+    @langsmith_trace(name="analyze_financial_terms", run_type="tool")
+    async def analyze_financial_terms(
         self, state: Step2AnalysisState
     ) -> Step2AnalysisState:
-        """Analyze financial terms (Story S3)"""
-        logger.info("Starting financial terms analysis")
+        return await self.financial_terms_node.execute(state)
 
-        try:
-            # Short-circuit if persisted
-            from app.services.repositories.contracts_repository import (
-                ContractsRepository,
-            )
+    @langsmith_trace(name="analyze_conditions", run_type="tool")
+    async def analyze_conditions(self, state: Step2AnalysisState) -> Step2AnalysisState:
+        return await self.conditions_node.execute(state)
 
-            content_hash = (state.get("entities_extraction_result") or {}).get(
-                "content_hash"
-            ) or (state.get("entities_extraction_result") or {}).get(
-                "document", {}
-            ).get(
-                "content_hash"
-            )
-            if content_hash:
-                repo = ContractsRepository()
-                existing = await repo.get_contract_by_content_hash(content_hash)
-                persisted = (existing.financial_terms or {}) if existing else None
-                if persisted:
-                    logger.info(
-                        "Short-circuiting financial_terms: found persisted result"
-                    )
-                    return {"financial_terms_result": persisted}
+    @langsmith_trace(name="analyze_warranties", run_type="tool")
+    async def analyze_warranties(self, state: Step2AnalysisState) -> Step2AnalysisState:
+        return await self.warranties_node.execute(state)
 
-            from app.core.prompts import PromptContext, ContextType
-            from app.services import get_llm_service
-            from app.prompts.schema.step2.financial_terms_schema import (
-                FinancialTermsAnalysisResult,
-            )
-
-            # Prepare prompt context
-            context = PromptContext(
-                context_type=ContextType.ANALYSIS,
-                variables={
-                    "contract_text": state.get("contract_text", ""),
-                    "australian_state": state.get("australian_state", "NSW"),
-                    "contract_type": state.get("contract_type", "purchase_agreement"),
-                    "analysis_timestamp": datetime.now(UTC).isoformat(),
-                    "entities_extraction_result": state.get(
-                        "entities_extraction_result", {}
-                    ),
-                    "legal_requirements_matrix": state.get(
-                        "legal_requirements_matrix", {}
-                    ),
-                },
-            )
-
-            # Get parser for structured output
-            financial_parser = await self._get_parser(
-                "financial_terms_analysis", FinancialTermsAnalysisResult
-            )
-
-            # Use prompt manager to compose prompts
-            composition_result = await self.prompt_manager.render_composed(
-                composition_name="step2_financial_terms",
-                context=context,
-                output_parser=financial_parser,
-            )
-
-            system_prompt = composition_result.get(
-                "system_prompt",
-                "You are an expert Australian real estate financial analyst.",
-            )
-            user_prompt = composition_result.get(
-                "user_prompt",
-                f"Analyze financial terms in this contract: {context.variables.get('contract_text', '')}",
-            )
-            model_name = composition_result.get("metadata", {}).get("model", "gpt-4")
-
-            # Execute LLM analysis
-            llm_service = await get_llm_service()
-
-            if financial_parser:
-                parsing_result = await llm_service.generate_content(
-                    prompt=user_prompt,
-                    system_message=system_prompt,
-                    model=model_name,
-                    output_parser=financial_parser,
-                    parse_generation_max_attempts=2,
-                )
-
-                if parsing_result.success and parsing_result.parsed_data:
-                    result = parsing_result.parsed_data
-                    if hasattr(result, "model_dump"):
-                        result_dict = result.model_dump()
-                    else:
-                        result_dict = result
-
-                    # Add metadata
-                    result_dict["analyzer"] = "financial_terms"
-                    result_dict["status"] = "completed"
-                    result_dict["timestamp"] = datetime.now(UTC).isoformat()
-
-                    updates = {"financial_terms_result": result_dict}
-
-                    # Persist result for idempotency
-                    if content_hash:
-                        try:
-                            await repo.update_section_analysis_key(
-                                content_hash,
-                                "financial_terms",
-                                result_dict,
-                                updated_by="step2_financial_terms",
-                            )
-                        except Exception as pe:
-                            logger.warning(f"Failed to persist financial_terms: {pe}")
-
-                    logger.info(
-                        "Financial terms analysis completed successfully",
-                        extra={
-                            "confidence_score": result_dict.get("confidence_score", 0),
-                            "risk_level": result_dict.get(
-                                "overall_risk_level", "unknown"
-                            ),
-                            "calculation_accuracy": result_dict.get(
-                                "calculation_accuracy_score", 0
-                            ),
-                            "purchase_price": result_dict.get("purchase_price", {}).get(
-                                "price_numeric"
-                            ),
-                        },
-                    )
-
-                    # Notify progress completion
-                    await self._notify_status(
-                        state,
-                        "analyze_financial_terms",
-                        self.PROGRESS_RANGES["analyze_financial_terms"][1],
-                        "Financial terms analysis completed",
-                    )
-                    # Persist for idempotency
-                    if content_hash:
-                        try:
-                            await repo.update_section_analysis_key(
-                                content_hash,
-                                "financial_terms",
-                                result_dict,
-                                updated_by="step2_financial_terms",
-                            )
-                        except Exception as pe:
-                            logger.warning(f"Failed to persist financial_terms: {pe}")
-                else:
-                    # Fallback result on parsing failure
-                    result = {
-                        "analyzer": "financial_terms",
-                        "status": "parsing_failed",
-                        "error": "Failed to parse LLM output",
-                        "timestamp": datetime.now(UTC).isoformat(),
-                    }
-                    updates = {
-                        "financial_terms_result": result,
-                        "processing_errors": [
-                            "Financial terms analysis: parsing failed"
-                        ],
-                    }
-            else:
-                # Fallback without structured parsing
-                response = await llm_service.generate_content(
-                    prompt=user_prompt,
-                    system_message=system_prompt,
-                    model=model_name,
-                )
-
-                result = {
-                    "analyzer": "financial_terms",
-                    "status": "unstructured",
-                    "response": response,
-                    "timestamp": datetime.now(UTC).isoformat(),
-                }
-                updates = {"financial_terms_result": result}
-
-        except Exception as e:
-            error_msg = f"Financial terms analysis failed: {str(e)}"
-            state["processing_errors"].append(error_msg)
-            logger.error(error_msg, exc_info=True)
-
-            # Store error result
-            result = {
-                "analyzer": "financial_terms",
-                "status": "error",
-                "error": str(e),
-                "error_type": type(e).__name__,
-                "timestamp": datetime.now(UTC).isoformat(),
-            }
-            updates = {"financial_terms_result": result}
-
-        return updates
-
-    async def _analyze_conditions(
+    @langsmith_trace(name="analyze_default_termination", run_type="tool")
+    async def analyze_default_termination(
         self, state: Step2AnalysisState
     ) -> Step2AnalysisState:
-        """Analyze conditions and risk assessment (Story S4)"""
-        logger.info("Starting conditions analysis")
-
-        try:
-            # Short-circuit if persisted
-            from app.services.repositories.contracts_repository import (
-                ContractsRepository,
-            )
-
-            content_hash = (state.get("entities_extraction_result") or {}).get(
-                "content_hash"
-            ) or (state.get("entities_extraction_result") or {}).get(
-                "document", {}
-            ).get(
-                "content_hash"
-            )
-            if content_hash:
-                repo = ContractsRepository()
-                existing = await repo.get_contract_by_content_hash(content_hash)
-                persisted = (existing.conditions or {}) if existing else None
-                if persisted:
-                    logger.info("Short-circuiting conditions: found persisted result")
-                    return {"conditions_result": persisted}
-
-            from app.core.prompts import PromptContext, ContextType
-            from app.services import get_llm_service
-            from app.prompts.schema.step2.conditions_schema import (
-                ConditionsAnalysisResult,
-            )
-
-            # Prepare prompt context
-            context = PromptContext(
-                context_type=ContextType.ANALYSIS,
-                variables={
-                    "contract_text": state.get("contract_text", ""),
-                    "australian_state": state.get("australian_state", "NSW"),
-                    "contract_type": state.get("contract_type", "purchase_agreement"),
-                    "analysis_timestamp": datetime.now(UTC).isoformat(),
-                    "entities_extraction_result": state.get(
-                        "entities_extraction_result", {}
-                    ),
-                    "legal_requirements_matrix": state.get(
-                        "legal_requirements_matrix", {}
-                    ),
-                },
-            )
-
-            # Get parser for structured output
-            conditions_parser = await self._get_parser(
-                "conditions_analysis", ConditionsAnalysisResult
-            )
-
-            # Use prompt manager to compose prompts
-            composition_result = await self.prompt_manager.render_composed(
-                composition_name="step2_conditions",
-                context=context,
-                output_parser=conditions_parser,
-            )
-
-            system_prompt = composition_result.get(
-                "system_prompt",
-                "You are an expert Australian contract conditions analyst.",
-            )
-            user_prompt = composition_result.get(
-                "user_prompt",
-                f"Analyze conditions in this contract: {context.variables.get('contract_text', '')}",
-            )
-            model_name = composition_result.get("metadata", {}).get("model", "gpt-4")
-
-            # Execute LLM analysis
-            llm_service = await get_llm_service()
-
-            if conditions_parser:
-                parsing_result = await llm_service.generate_content(
-                    prompt=user_prompt,
-                    system_message=system_prompt,
-                    model=model_name,
-                    output_parser=conditions_parser,
-                    parse_generation_max_attempts=2,
-                )
-
-                if parsing_result.success and parsing_result.parsed_data:
-                    result = parsing_result.parsed_data
-                    if hasattr(result, "model_dump"):
-                        result_dict = result.model_dump()
-                    else:
-                        result_dict = result
-
-                    # Add metadata
-                    result_dict["analyzer"] = "conditions"
-                    result_dict["status"] = "completed"
-                    result_dict["timestamp"] = datetime.now(UTC).isoformat()
-
-                    updates = {"conditions_result": result_dict}
-
-                    # Persist result for idempotency
-                    if content_hash:
-                        try:
-                            await repo.update_section_analysis_key(
-                                content_hash,
-                                "conditions",
-                                result_dict,
-                                updated_by="step2_conditions",
-                            )
-
-                        except Exception as pe:
-                            logger.warning(f"Failed to persist conditions: {pe}")
-
-                    logger.info(
-                        "Conditions analysis completed successfully",
-                        extra={
-                            "confidence_score": result_dict.get("confidence_score", 0),
-                            "total_conditions": result_dict.get("total_conditions", 0),
-                            "special_conditions": result_dict.get(
-                                "special_conditions_count", 0
-                            ),
-                            "overall_risk": result_dict.get(
-                                "overall_condition_risk", "unknown"
-                            ),
-                        },
-                    )
-
-                    # Notify progress completion
-                    await self._notify_status(
-                        state,
-                        "analyze_conditions",
-                        self.PROGRESS_RANGES["analyze_conditions"][1],
-                        "Conditions analysis completed",
-                    )
-                    # Persist for idempotency
-                    if content_hash:
-                        try:
-                            await repo.update_section_analysis_key(
-                                content_hash,
-                                "conditions",
-                                result_dict,
-                                updated_by="step2_conditions",
-                            )
-                        except Exception as pe:
-                            logger.warning(f"Failed to persist conditions: {pe}")
-                else:
-                    # Fallback result on parsing failure
-                    result = {
-                        "analyzer": "conditions",
-                        "status": "parsing_failed",
-                        "error": "Failed to parse LLM output",
-                        "timestamp": datetime.now(UTC).isoformat(),
-                    }
-                    updates = {
-                        "conditions_result": result,
-                        "processing_errors": ["Conditions analysis: parsing failed"],
-                    }
-            else:
-                # Fallback without structured parsing
-                response = await llm_service.generate_content(
-                    prompt=user_prompt,
-                    system_message=system_prompt,
-                    model=model_name,
-                )
-
-                result = {
-                    "analyzer": "conditions",
-                    "status": "unstructured",
-                    "response": response,
-                    "timestamp": datetime.now(UTC).isoformat(),
-                }
-                updates = {"conditions_result": result}
-
-        except Exception as e:
-            error_msg = f"Conditions analysis failed: {str(e)}"
-            state["processing_errors"].append(error_msg)
-            logger.error(error_msg, exc_info=True)
-
-            # Store error result
-            result = {
-                "analyzer": "conditions",
-                "status": "error",
-                "error": str(e),
-                "error_type": type(e).__name__,
-                "timestamp": datetime.now(UTC).isoformat(),
-            }
-            updates = {"conditions_result": result}
-
-        return updates
-
-    async def _analyze_warranties(
-        self, state: Step2AnalysisState
-    ) -> Step2AnalysisState:
-        """Analyze warranties and representations (Story S5)"""
-        logger.info("Starting warranties analysis")
-
-        try:
-            # Short-circuit if persisted
-            from app.services.repositories.contracts_repository import (
-                ContractsRepository,
-            )
-
-            content_hash = (state.get("entities_extraction_result") or {}).get(
-                "content_hash"
-            ) or (state.get("entities_extraction_result") or {}).get(
-                "document", {}
-            ).get(
-                "content_hash"
-            )
-            if content_hash:
-                repo = ContractsRepository()
-                existing = await repo.get_contract_by_content_hash(content_hash)
-                persisted = (existing.warranties or {}) if existing else None
-                if persisted:
-                    logger.info("Short-circuiting warranties: found persisted result")
-                    return {"warranties_result": persisted}
-
-            # Placeholder implementation - will be completed in Story S5
-            result = {
-                "analyzer": "warranties",
-                "status": "placeholder",
-                "message": "Implementation pending Story S5",
-                "timestamp": datetime.now(UTC).isoformat(),
-            }
-
-            # Persist placeholder as well to prevent repeated execution
-            if content_hash:
-                try:
-                    await repo.update_section_analysis_key(
-                        content_hash,
-                        "warranties",
-                        result,
-                        updated_by="step2_warranties",
-                    )
-                except Exception as pe:
-                    logger.warning(f"Failed to persist warranties: {pe}")
-
-            logger.info("Warranties analysis completed (placeholder)")
-
-        except Exception as e:
-            error_msg = f"Warranties analysis failed: {str(e)}"
-            logger.error(error_msg, exc_info=True)
-            return {"processing_errors": [error_msg]}
-
-        return {"warranties_result": result}
-
-    async def _analyze_default_termination(
-        self, state: Step2AnalysisState
-    ) -> Step2AnalysisState:
-        """Analyze default and termination terms (Story S6)"""
-        logger.info("Starting default and termination analysis")
-
-        try:
-            # Short-circuit if persisted
-            from app.services.repositories.contracts_repository import (
-                ContractsRepository,
-            )
-
-            content_hash = (state.get("entities_extraction_result") or {}).get(
-                "content_hash"
-            ) or (state.get("entities_extraction_result") or {}).get(
-                "document", {}
-            ).get(
-                "content_hash"
-            )
-            if content_hash:
-                repo = ContractsRepository()
-                existing = await repo.get_contract_by_content_hash(content_hash)
-                persisted = (existing.default_termination or {}) if existing else None
-                if persisted:
-                    logger.info(
-                        "Short-circuiting default_termination: found persisted result"
-                    )
-                    return {"default_termination_result": persisted}
-
-            # Placeholder implementation - will be completed in Story S6
-            result = {
-                "analyzer": "default_termination",
-                "status": "placeholder",
-                "message": "Implementation pending Story S6",
-                "timestamp": datetime.now(UTC).isoformat(),
-            }
-
-            if content_hash:
-                try:
-                    await repo.update_section_analysis_key(
-                        content_hash,
-                        "default_termination",
-                        result,
-                        updated_by="step2_default_termination",
-                    )
-                except Exception as pe:
-                    logger.warning(f"Failed to persist default_termination: {pe}")
-
-            logger.info("Default and termination analysis completed (placeholder)")
-
-        except Exception as e:
-            error_msg = f"Default and termination analysis failed: {str(e)}"
-            logger.error(error_msg, exc_info=True)
-            return {"processing_errors": [error_msg]}
-
-        return {"default_termination_result": result}
+        return await self.default_termination_node.execute(state)
 
     async def _check_phase1_completion(
         self, state: Step2AnalysisState
@@ -1116,436 +522,51 @@ class Step2AnalysisWorkflow:
             )
         return {}
 
-    async def _analyze_settlement_logistics(
+    @langsmith_trace(name="analyze_settlement_logistics", run_type="tool")
+    async def analyze_settlement_logistics(
         self, state: Step2AnalysisState
     ) -> Step2AnalysisState:
-        """Analyze settlement logistics with dependencies (Story S7)"""
-        logger.info("Starting settlement logistics analysis")
+        return await self.settlement_logistics_node.execute(state)
 
-        try:
-            from app.services.repositories.contracts_repository import (
-                ContractsRepository,
-            )
-
-            content_hash = (state.get("entities_extraction_result") or {}).get(
-                "content_hash"
-            ) or (state.get("entities_extraction_result") or {}).get(
-                "document", {}
-            ).get(
-                "content_hash"
-            )
-            if content_hash:
-                repo = ContractsRepository()
-                existing = await repo.get_contract_by_content_hash(content_hash)
-                persisted = (
-                    (existing.section_analysis or {}).get("settlement_logistics")
-                    if existing
-                    else None
-                )
-                if persisted:
-                    logger.info(
-                        "Short-circuiting settlement_logistics: found persisted result"
-                    )
-                    return {"settlement_logistics_result": persisted}
-
-            # Check dependencies
-            conditions_result = state.get("conditions_result")
-            financial_result = state.get("financial_terms_result")
-
-            if not conditions_result or not financial_result:
-                error_msg = (
-                    "Settlement analysis requires conditions and financial results"
-                )
-                logger.error(error_msg)
-                return {"processing_errors": [error_msg]}
-
-            # Placeholder implementation - will be completed in Story S7
-            result = {
-                "analyzer": "settlement_logistics",
-                "status": "placeholder",
-                "message": "Implementation pending Story S7",
-                "dependencies_satisfied": True,
-                "timestamp": datetime.now(UTC).isoformat(),
-            }
-
-            logger.info("Settlement logistics analysis completed (placeholder)")
-
-            # Persist placeholder
-            if content_hash:
-                try:
-                    await repo.update_section_analysis_key(
-                        content_hash,
-                        "settlement_logistics",
-                        result,
-                        updated_by="step2_settlement_logistics",
-                    )
-                except Exception as pe:
-                    logger.warning(f"Failed to persist settlement_logistics: {pe}")
-
-        except Exception as e:
-            error_msg = f"Settlement logistics analysis failed: {str(e)}"
-            logger.error(error_msg, exc_info=True)
-            return {"processing_errors": [error_msg]}
-
-        return {"settlement_logistics_result": result}
-
-    async def _analyze_title_encumbrances(
+    @langsmith_trace(name="analyze_title_encumbrances", run_type="tool")
+    async def analyze_title_encumbrances(
         self, state: Step2AnalysisState
     ) -> Step2AnalysisState:
-        """Analyze title and encumbrances with comprehensive diagrams (Story S8)"""
-        logger.info("Starting title and encumbrances analysis")
+        return await self.title_encumbrances_node.execute(state)
 
-        try:
-            from app.services.repositories.contracts_repository import (
-                ContractsRepository,
-            )
-
-            content_hash = (state.get("entities_extraction_result") or {}).get(
-                "content_hash"
-            ) or (state.get("entities_extraction_result") or {}).get(
-                "document", {}
-            ).get(
-                "content_hash"
-            )
-            if content_hash:
-                repo = ContractsRepository()
-                existing = await repo.get_contract_by_content_hash(content_hash)
-                persisted = (
-                    (existing.section_analysis or {}).get("title_encumbrances")
-                    if existing
-                    else None
-                )
-                if persisted:
-                    logger.info(
-                        "Short-circuiting title_encumbrances: found persisted result"
-                    )
-                    return {"title_encumbrances_result": persisted}
-
-            # Check dependencies
-            parties_result = state.get("parties_property_result")
-            if not parties_result:
-                error_msg = "Title analysis requires parties and property result"
-                logger.error(error_msg)
-                return {"processing_errors": [error_msg]}
-
-            # Count available diagrams
-            diagrams = state.get("uploaded_diagrams") or {}
-            total_diagrams_processed = len(diagrams)
-
-            # Placeholder implementation - will be completed in Story S8
-            result = {
-                "analyzer": "title_encumbrances",
-                "status": "placeholder",
-                "message": "Implementation pending Story S8",
-                "dependencies_satisfied": True,
-                "diagrams_processed": total_diagrams_processed,
-                "timestamp": datetime.now(UTC).isoformat(),
-            }
-
-            # Assume 90% success rate for placeholder
-            diagram_processing_success_rate = 0.9 if diagrams else 1.0
-            logger.info("Title and encumbrances analysis completed (placeholder)")
-
-            # Persist placeholder
-            if content_hash:
-                try:
-                    await repo.update_section_analysis_key(
-                        content_hash,
-                        "title_encumbrances",
-                        result,
-                        updated_by="step2_title_encumbrances",
-                    )
-                except Exception as pe:
-                    logger.warning(f"Failed to persist title_encumbrances: {pe}")
-
-        except Exception as e:
-            error_msg = f"Title and encumbrances analysis failed: {str(e)}"
-            logger.error(error_msg, exc_info=True)
-            return {"processing_errors": [error_msg]}
-
-        return {
-            "title_encumbrances_result": result,
-            "total_diagrams_processed": total_diagrams_processed,
-            "diagram_processing_success_rate": diagram_processing_success_rate,
-        }
-
-    async def _check_phase2_completion(
+    @langsmith_trace(name="check_phase2_completion", run_type="tool")
+    async def check_phase2_completion(
         self, state: Step2AnalysisState
     ) -> Step2AnalysisState:
-        """Check Phase 2 completion"""
-        logger.info("Checking Phase 2 completion")
+        return await self.check_phase2_completion_node.execute(state)
 
-        # Check if all Phase 2 analyzers completed
-        required_results = ["settlement_logistics_result", "title_encumbrances_result"]
-
-        completed_count = sum(
-            1 for key in required_results if state.get(key) is not None
-        )
-        total_count = len(required_results)
-
-        if completed_count == total_count:
-            logger.info(
-                f"Phase 2 completed successfully: {completed_count}/{total_count} analyzers"
-            )
-            return {
-                "phase2_complete": True,
-                "phase_completion_times": {"phase2": datetime.now(UTC)},
-            }
-        else:
-            logger.warning(
-                f"Phase 2 incomplete: {completed_count}/{total_count} analyzers completed"
-            )
-        return {}
-
-    async def _calculate_adjustments_outgoings(
+    @langsmith_trace(name="calculate_adjustments_outgoings", run_type="tool")
+    async def calculate_adjustments_outgoings(
         self, state: Step2AnalysisState
     ) -> Step2AnalysisState:
-        """Calculate adjustments and outgoings (Story S9)"""
-        logger.info("Starting adjustments and outgoings calculation")
+        return await self.adjustments_outgoings_node.execute(state)
 
-        try:
-            from app.services.repositories.contracts_repository import (
-                ContractsRepository,
-            )
-
-            content_hash = (state.get("entities_extraction_result") or {}).get(
-                "content_hash"
-            ) or (state.get("entities_extraction_result") or {}).get(
-                "document", {}
-            ).get(
-                "content_hash"
-            )
-            if content_hash:
-                repo = ContractsRepository()
-                existing = await repo.get_contract_by_content_hash(content_hash)
-                persisted = (
-                    (existing.section_analysis or {}).get("adjustments_outgoings")
-                    if existing
-                    else None
-                )
-                if persisted:
-                    logger.info(
-                        "Short-circuiting adjustments_outgoings: found persisted result"
-                    )
-                    return {"adjustments_outgoings_result": persisted}
-
-            # Check dependencies
-            financial_result = state.get("financial_terms_result")
-            settlement_result = state.get("settlement_logistics_result")
-
-            if not financial_result or not settlement_result:
-                error_msg = (
-                    "Adjustments calculation requires financial and settlement results"
-                )
-                logger.error(error_msg)
-                return {"processing_errors": [error_msg]}
-
-            # Placeholder implementation - will be completed in Story S9
-            result = {
-                "analyzer": "adjustments_outgoings",
-                "status": "placeholder",
-                "message": "Implementation pending Story S9",
-                "dependencies_satisfied": True,
-                "timestamp": datetime.now(UTC).isoformat(),
-            }
-
-            logger.info("Adjustments and outgoings calculation completed (placeholder)")
-
-            if content_hash:
-                try:
-                    await repo.update_section_analysis_key(
-                        content_hash,
-                        "adjustments_outgoings",
-                        result,
-                        updated_by="step2_adjustments_outgoings",
-                    )
-                except Exception as pe:
-                    logger.warning(f"Failed to persist adjustments_outgoings: {pe}")
-
-        except Exception as e:
-            error_msg = f"Adjustments and outgoings calculation failed: {str(e)}"
-            logger.error(error_msg, exc_info=True)
-            return {"processing_errors": [error_msg]}
-
-        return {"adjustments_outgoings_result": result}
-
-    async def _check_disclosure_compliance(
+    @langsmith_trace(name="check_disclosure_compliance", run_type="tool")
+    async def check_disclosure_compliance(
         self, state: Step2AnalysisState
     ) -> Step2AnalysisState:
-        """Check disclosure compliance (Story S10)"""
-        logger.info("Starting disclosure compliance check")
+        return await self.disclosure_compliance_node.execute(state)
 
-        try:
-            from app.services.repositories.contracts_repository import (
-                ContractsRepository,
-            )
-
-            content_hash = (state.get("entities_extraction_result") or {}).get(
-                "content_hash"
-            ) or (state.get("entities_extraction_result") or {}).get(
-                "document", {}
-            ).get(
-                "content_hash"
-            )
-            if content_hash:
-                repo = ContractsRepository()
-                existing = await repo.get_contract_by_content_hash(content_hash)
-                persisted = (
-                    (existing.section_analysis or {}).get("disclosure_compliance")
-                    if existing
-                    else None
-                )
-                if persisted:
-                    logger.info(
-                        "Short-circuiting disclosure_compliance: found persisted result"
-                    )
-                    return {"disclosure_compliance_result": persisted}
-
-            # Placeholder implementation - will be completed in Story S10
-            result = {
-                "analyzer": "disclosure_compliance",
-                "status": "placeholder",
-                "message": "Implementation pending Story S10",
-                "timestamp": datetime.now(UTC).isoformat(),
-            }
-
-            logger.info("Disclosure compliance check completed (placeholder)")
-
-            if content_hash:
-                try:
-                    await repo.update_section_analysis_key(
-                        content_hash,
-                        "disclosure_compliance",
-                        result,
-                        updated_by="step2_disclosure_compliance",
-                    )
-                except Exception as pe:
-                    logger.warning(f"Failed to persist disclosure_compliance: {pe}")
-
-        except Exception as e:
-            error_msg = f"Disclosure compliance check failed: {str(e)}"
-            logger.error(error_msg, exc_info=True)
-            return {"processing_errors": [error_msg]}
-
-        return {"disclosure_compliance_result": result}
-
-    async def _identify_special_risks(
+    @langsmith_trace(name="identify_special_risks", run_type="tool")
+    async def identify_special_risks(
         self, state: Step2AnalysisState
     ) -> Step2AnalysisState:
-        """Identify special risks (Story S11)"""
-        logger.info("Starting special risks identification")
+        return await self.special_risks_node.execute(state)
 
-        try:
-            from app.services.repositories.contracts_repository import (
-                ContractsRepository,
-            )
-
-            content_hash = (state.get("entities_extraction_result") or {}).get(
-                "content_hash"
-            ) or (state.get("entities_extraction_result") or {}).get(
-                "document", {}
-            ).get(
-                "content_hash"
-            )
-            if content_hash:
-                repo = ContractsRepository()
-                existing = await repo.get_contract_by_content_hash(content_hash)
-                persisted = (
-                    (existing.section_analysis or {}).get("special_risks")
-                    if existing
-                    else None
-                )
-                if persisted:
-                    logger.info(
-                        "Short-circuiting special_risks: found persisted result"
-                    )
-                    return {"special_risks_result": persisted}
-
-            # Placeholder implementation - will be completed in Story S11
-            result = {
-                "analyzer": "special_risks",
-                "status": "placeholder",
-                "message": "Implementation pending Story S11",
-                "timestamp": datetime.now(UTC).isoformat(),
-            }
-
-            logger.info("Special risks identification completed (placeholder)")
-
-            if content_hash:
-                try:
-                    await repo.update_section_analysis_key(
-                        content_hash,
-                        "special_risks",
-                        result,
-                        updated_by="step2_special_risks",
-                    )
-                except Exception as pe:
-                    logger.warning(f"Failed to persist special_risks: {pe}")
-
-        except Exception as e:
-            error_msg = f"Special risks identification failed: {str(e)}"
-            logger.error(error_msg, exc_info=True)
-            return {"processing_errors": [error_msg]}
-
-        return {"special_risks_result": result}
-
-    async def _validate_cross_sections(
+    @langsmith_trace(name="validate_cross_sections", run_type="tool")
+    async def validate_cross_sections(
         self, state: Step2AnalysisState
     ) -> Step2AnalysisState:
-        """Validate cross-section consistency (Story S12)"""
-        logger.info("Starting cross-section validation")
+        return await self.cross_section_validation_node.execute(state)
 
-        try:
-            phase3_time = datetime.now(UTC)
-
-            # Placeholder implementation - will be completed in Story S12
-            result = {
-                "validator": "cross_section_validation",
-                "status": "placeholder",
-                "message": "Implementation pending Story S12",
-                "timestamp": datetime.now(UTC).isoformat(),
-            }
-
-            logger.info("Cross-section validation completed (placeholder)")
-
-        except Exception as e:
-            error_msg = f"Cross-section validation failed: {str(e)}"
-            logger.error(error_msg, exc_info=True)
-            return {"processing_errors": [error_msg]}
-
-        return {
-            "phase3_complete": True,
-            "phase_completion_times": {"phase3": phase3_time},
-            "cross_section_validation_result": result,
-        }
-
-    async def _finalize_results(self, state: Step2AnalysisState) -> Step2AnalysisState:
-        """Finalize Step 2 results and prepare for Step 3"""
-        logger.info("Finalizing Step 2 results")
-
-        total_duration = (
-            (datetime.now(UTC) - state["start_time"]).total_seconds()
-            if state.get("start_time")
-            else 0
-        )
-
-        # Log completion summary
-        logger.info(
-            "Step 2 workflow completed",
-            extra={
-                "total_duration_seconds": total_duration,
-                "phase1_complete": state.get("phase1_complete", False),
-                "phase2_complete": state.get("phase2_complete", False),
-                "phase3_complete": state.get("phase3_complete", False),
-                "processing_errors": len(state.get("processing_errors", [])),
-                "skipped_analyzers": len(state.get("skipped_analyzers", [])),
-                "total_risk_flags": len(state.get("total_risk_flags", [])),
-                "diagrams_processed": state.get("total_diagrams_processed", 0),
-            },
-        )
-
-        # Final node returns no updates
-        return {}
+    @langsmith_trace(name="finalize_results", run_type="tool")
+    async def finalize_results(self, state: Step2AnalysisState) -> Step2AnalysisState:
+        return await self.finalize_results_node.execute(state)
 
 
 # Factory function for workflow creation

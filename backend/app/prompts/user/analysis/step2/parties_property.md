@@ -8,7 +8,7 @@ fragment_orchestration: "step2_parties_property"
 required_variables:
   - "analysis_timestamp"
 optional_variables:
-  - "entities_extraction_result"
+  - "entities_extraction"
   - "legal_requirements_matrix"
   - "contract_type"
   - "retrieval_index_id"
@@ -29,7 +29,7 @@ tags: ["step2", "parties", "property", "verification"]
 Perform systematic verification analysis of parties and property details using Step 1 outputs as baseline. Use provided seed snippets first; expand via targeted retrieval only if coverage or confidence is insufficient. Avoid using full contract text unless explicitly instructed or required to resolve ambiguities.
 
 ## Contract Context
-{% set meta = (entities_extraction_result or {}).get('metadata') or {} %}
+{% set meta = (entities_extraction or {}).get('metadata') or {} %}
 - **State**: {{ australian_state or meta.get('state') or 'unknown' }}
 - **Contract Type**: {{ contract_type or meta.get('contract_type') or 'unknown' }}
 - **Purchase Method**: {{ purchase_method or meta.get('purchase_method') or 'unknown' }}
@@ -126,10 +126,10 @@ No seed snippets provided.
 
 ## Additional Context
 
-{% if entities_extraction_result %}
+{% if entities_extraction %}
 ### Entity Extraction Results (Baseline)
 Use these as the canonical baseline; verify and reconcile discrepancies found in seeds or retrieval:
-{{entities_extraction_result | tojsonpretty}}
+{{entities_extraction | tojsonpretty}}
 
 ### Step 1 Metadata (Scoping)
 Use `metadata` to scope applicable checks and thresholds (state, contract_type, purchase_method, use_category, property_condition):
@@ -144,7 +144,7 @@ Relevant legal requirements for {{australian_state}} {{contract_type}}:
 
 ## Analysis Instructions (Seeds + Retrieval + Metadata Scoping)
 
-1. Use `entities_extraction_result` (and its `metadata`) as the baseline; scope checks per state/contract_type/purchase_method/use_category/property_condition.
+1. Use `entities_extraction` (and its `metadata`) as the baseline; scope checks per state/contract_type/purchase_method/use_category/property_condition.
 2. Use `seed_snippets` as primary evidence. Cite clause ids/sections where possible.
 3. If seed coverage/confidence is insufficient, perform targeted retrieval from `retrieval_index_id` using concise queries (e.g., names/roles, authority/witness requirements, legal description lot/plan/title). Limit retrieval to only what is necessary.
 4. Reconcile any discrepancies between seeds, retrieval snippets, and baseline entities; prefer explicit contract language.

@@ -10,7 +10,7 @@ required_variables:
   - "australian_state"
   - "analysis_timestamp"
 optional_variables:
-  - "entities_extraction_result"
+  - "entities_extraction"
   - "financial_terms_result"
   - "conditions_result"
   - "legal_requirements_matrix"
@@ -193,10 +193,10 @@ Settlement timing must account for condition satisfaction:
 
 ## Additional Context
 
-{% if entities_extraction_result %}
+{% if entities_extraction %}
 ### Entity Extraction Results
 Previously extracted settlement data:
-{{entities_extraction_result | tojsonpretty}}
+{{entities_extraction | tojsonpretty}}
 {% endif %}
 
 {% if legal_requirements_matrix %}

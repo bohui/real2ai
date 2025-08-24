@@ -836,7 +836,7 @@ class ContractAnalysisWorkflow:
         """Check if entities extraction was successful."""
         try:
             # Check if entities extraction completed successfully
-            if state.get("entities_extraction_result"):
+            if state.get("entities_extraction"):
                 return "success"
             elif state.get("entities_extraction_skipped"):
                 # If skipped, still continue to next step

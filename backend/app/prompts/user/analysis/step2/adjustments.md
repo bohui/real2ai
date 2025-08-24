@@ -10,7 +10,7 @@ required_variables:
   - "australian_state"
   - "analysis_timestamp"
 optional_variables:
-  - "entities_extraction_result"
+  - "entities_extraction"
   - "financial_terms_result"
   - "settlement_result"
   - "legal_requirements_matrix"
@@ -182,10 +182,10 @@ Adjustment preparation must coordinate with settlement logistics:
 
 ## Additional Context
 
-{% if entities_extraction_result %}
+{% if entities_extraction %}
 ### Entity Extraction Results
 Previously extracted adjustment data:
-{{entities_extraction_result | tojsonpretty}}
+{{entities_extraction | tojsonpretty}}
 {% endif %}
 
 {% if legal_requirements_matrix %}

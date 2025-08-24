@@ -80,15 +80,15 @@ class RealEstateAgentState(TypedDict):
 
     # Analysis Results Structure
     # Step 1: Entity extraction results
-    entities_extraction_result: Annotated[
+    entities_extraction: Annotated[
         Optional[Dict[str, Any]], lambda x, y: y
     ]  # Last value wins
-    
+
     # Step 2: Section-by-section analysis results (NEW)
     step2_analysis_result: Annotated[
         Optional[Dict[str, Any]], lambda x, y: y
     ]  # Last value wins
-    
+
     # Output
     analysis_results: Annotated[
         Dict[str, Any],

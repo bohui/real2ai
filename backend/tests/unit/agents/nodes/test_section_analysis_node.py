@@ -54,11 +54,11 @@ class TestSectionAnalysisNode:
             processing_time=None,
             progress=None,
             notify_progress=None,
-            entities_extraction_result={"property": {"address": "123 Test St"}},
+            entities_extraction={"property": {"address": "123 Test St"}},
             step2_analysis_result=None,
             analysis_results={},
             report_data=None,
-            final_recommendations=[]
+            final_recommendations=[],
         )
 
     def test_node_initialization(self, section_node):
@@ -72,16 +72,16 @@ class TestSectionAnalysisNode:
         """Test execution with missing contract text"""
         # Remove contract text
         sample_state["document_metadata"] = {}
-        
+
         # Mock the workflow execute to not be called
         section_node.step2_workflow.execute = AsyncMock()
-        
+
         result = await section_node.execute(sample_state)
-        
+
         # Should handle error gracefully
         assert result is not None
         assert "error_state" in result
-        
+
         # Workflow should not be called with missing text
         section_node.step2_workflow.execute.assert_not_called()
 
@@ -89,23 +89,23 @@ class TestSectionAnalysisNode:
     async def test_execute_with_missing_entities(self, section_node, sample_state):
         """Test execution with missing entity results"""
         # Remove entities
-        sample_state["entities_extraction_result"] = None
-        
+        sample_state["entities_extraction"] = None
+
         section_node.step2_workflow.execute = AsyncMock()
-        
+
         result = await section_node.execute(sample_state)
-        
+
         # Should handle error gracefully
         assert result is not None
         assert "error_state" in result
-        
+
         # Workflow should not be called with missing entities
         section_node.step2_workflow.execute.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_execute_successful_analysis(self, section_node, sample_state):
         """Test successful Step 2 analysis execution"""
-        
+
         # Mock successful workflow execution
         mock_step2_result = {
             "success": True,
@@ -116,28 +116,24 @@ class TestSectionAnalysisNode:
                     "analyzer": "parties_property",
                     "status": "completed",
                     "confidence_score": 0.9,
-                    "overall_risk_level": "low"
+                    "overall_risk_level": "low",
                 }
             },
             "cross_section_validation": {"status": "passed"},
             "workflow_metadata": {
-                "phases_completed": {
-                    "phase1": True,
-                    "phase2": True, 
-                    "phase3": True
-                },
+                "phases_completed": {"phase1": True, "phase2": True, "phase3": True},
                 "processing_errors": [],
-                "total_risk_flags": []
-            }
+                "total_risk_flags": [],
+            },
         }
-        
+
         section_node.step2_workflow.execute = AsyncMock(return_value=mock_step2_result)
-        
+
         result = await section_node.execute(sample_state)
-        
+
         # Verify execution
         section_node.step2_workflow.execute.assert_called_once()
-        
+
         # Check result structure
         assert result is not None
         assert result.get("step2_analysis_result") == mock_step2_result
@@ -146,43 +142,47 @@ class TestSectionAnalysisNode:
         assert "contract_terms" in result  # Backward compatibility
         assert result["confidence_scores"]["step2_analysis"] > 0
 
-    @pytest.mark.asyncio 
+    @pytest.mark.asyncio
     async def test_execute_workflow_failure(self, section_node, sample_state):
         """Test handling of Step 2 workflow failure"""
-        
+
         # Mock workflow failure
         mock_step2_result = {
             "success": False,
             "error": "Mock workflow failure",
             "error_type": "TestError",
-            "partial_results": {}
+            "partial_results": {},
         }
-        
+
         section_node.step2_workflow.execute = AsyncMock(return_value=mock_step2_result)
-        
+
         result = await section_node.execute(sample_state)
-        
+
         # Should handle workflow failure gracefully
         assert result is not None
         assert "error_state" in result
 
     @pytest.mark.asyncio
-    async def test_backward_compatibility_contract_terms(self, section_node, sample_state):
+    async def test_backward_compatibility_contract_terms(
+        self, section_node, sample_state
+    ):
         """Test backward compatibility with contract_terms structure"""
-        
+
         mock_step2_result = {
             "success": True,
             "section_results": {
                 "parties_property": {"findings": {"property_address": "123 Test St"}},
-                "financial_terms": {"findings": {"purchase_price": 800000}}
+                "financial_terms": {"findings": {"purchase_price": 800000}},
             },
-            "workflow_metadata": {"phases_completed": {"phase1": True, "phase2": True, "phase3": True}}
+            "workflow_metadata": {
+                "phases_completed": {"phase1": True, "phase2": True, "phase3": True}
+            },
         }
-        
+
         section_node.step2_workflow.execute = AsyncMock(return_value=mock_step2_result)
-        
+
         result = await section_node.execute(sample_state)
-        
+
         # Check backward compatibility
         assert "contract_terms" in result
         contract_terms = result["contract_terms"]
@@ -191,65 +191,67 @@ class TestSectionAnalysisNode:
 
     def test_calculate_overall_confidence(self, section_node):
         """Test overall confidence calculation"""
-        
+
         # Test successful completion
         step2_results = {
             "success": True,
             "section_results": {"parties_property": {"status": "completed"}},
             "workflow_metadata": {
                 "phases_completed": {"phase1": True, "phase2": True, "phase3": True},
-                "processing_errors": []
-            }
+                "processing_errors": [],
+            },
         }
-        
+
         confidence = section_node._calculate_overall_confidence(step2_results)
         assert 0.0 <= confidence <= 1.0
         assert confidence > 0.5  # Should be relatively high for successful completion
-        
+
         # Test with errors
         step2_results_with_errors = {
             "success": True,
             "section_results": {"parties_property": {"status": "completed"}},
             "workflow_metadata": {
                 "phases_completed": {"phase1": True, "phase2": False, "phase3": False},
-                "processing_errors": ["Error 1", "Error 2"]
-            }
+                "processing_errors": ["Error 1", "Error 2"],
+            },
         }
-        
-        confidence_with_errors = section_node._calculate_overall_confidence(step2_results_with_errors)
+
+        confidence_with_errors = section_node._calculate_overall_confidence(
+            step2_results_with_errors
+        )
         assert confidence_with_errors < confidence  # Should be lower with errors
 
     @pytest.mark.asyncio
     async def test_get_contract_text_from_metadata(self, section_node, sample_state):
         """Test getting contract text from document metadata"""
-        
+
         contract_text = await section_node._get_contract_text(sample_state)
         assert contract_text == "Sample contract text"
 
     @pytest.mark.asyncio
     async def test_get_contract_text_missing(self, section_node, sample_state):
         """Test handling missing contract text"""
-        
+
         # Remove text from metadata
         sample_state["document_metadata"] = {}
         sample_state["document_data"] = {}
-        
+
         contract_text = await section_node._get_contract_text(sample_state)
         assert contract_text is None
 
     def test_get_entities_result(self, section_node, sample_state):
         """Test getting entities extraction result"""
-        
+
         entities = section_node._get_entities_result(sample_state)
         assert entities == {"property": {"address": "123 Test St"}}
 
     def test_prepare_additional_context(self, section_node, sample_state):
         """Test preparing additional context for workflow"""
-        
+
         sample_state["legal_requirements"] = {"NSW": {"disclosure": True}}
-        
+
         context = section_node._prepare_additional_context(sample_state)
-        
+
         assert "legal_requirements_matrix" in context
         assert "execution_timestamp" in context
         assert context["legal_requirements_matrix"] == {"NSW": {"disclosure": True}}

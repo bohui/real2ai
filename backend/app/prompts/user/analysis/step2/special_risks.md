@@ -10,7 +10,7 @@ required_variables:
   - "australian_state"
   - "analysis_timestamp"
 optional_variables:
-  - "entities_extraction_result"
+  - "entities_extraction"
   - "all_section_results"
   - "legal_requirements_matrix"
   - "contract_type"
@@ -172,10 +172,10 @@ Integration with all previous section analyses:
 
 ## Additional Context
 
-{% if entities_extraction_result %}
+{% if entities_extraction %}
 ### Entity Extraction Results
 Previously extracted risk-related data:
-{{entities_extraction_result | tojsonpretty}}
+{{entities_extraction | tojsonpretty}}
 {% endif %}
 
 {% if legal_requirements_matrix %}

@@ -2,18 +2,19 @@
 type: "user"
 category: "instructions"
 name: "conditions_analysis"
-version: "1.0.0"
+version: "2.0.0"
 description: "Step 2.4 - Conditions Risk Assessment Analysis"
 fragment_orchestration: "step2_conditions"
 required_variables:
-  - "contract_text"
-  - "australian_state"
   - "analysis_timestamp"
 optional_variables:
-  - "entities_extraction_result"
+  - "entities_extraction"
   - "legal_requirements_matrix"
   - "contract_type"
-model_compatibility: ["gemini-2.5-flash", "gpt-4"]
+  - "australian_state"
+  - "retrieval_index_id"
+  - "seed_snippets"
+model_compatibility: ["qwen/qwen3-coder:free", "moonshotai/kimi-k2:free"]
 max_tokens: 8000
 temperature_range: [0.1, 0.3]
 output_parser: ConditionsAnalysisResult
@@ -25,8 +26,12 @@ tags: ["step2", "conditions", "risk-assessment", "timelines"]
 Perform comprehensive analysis of all contract conditions with systematic risk assessment, timeline mapping, and dependency analysis.
 
 ## Contract Context
-- **State**: {{australian_state}}
-- **Contract Type**: {{contract_type}}
+{% set meta = (entities_extraction or {}).get('metadata') or {} %}
+- **State**: {{ australian_state or meta.get('state') or 'unknown' }}
+- **Contract Type**: {{ contract_type or meta.get('contract_type') or 'unknown' }}
+- **Purchase Method**: {{ meta.get('purchase_method') or 'unknown' }}
+- **Use Category**: {{ meta.get('use_category') or 'unknown' }}
+- **Property Condition**: {{ meta.get('property_condition') or 'unknown' }}
 - **Analysis Date**: {{analysis_timestamp}}
 
 ## Analysis Requirements
@@ -148,18 +153,21 @@ Perform comprehensive analysis of all contract conditions with systematic risk a
 - Protection against market changes
 - Recourse for condition failures
 
-## Contract Text for Analysis
+## Seed Snippets (Primary Context)
 
-```
-{{contract_text}}
-```
+{% if seed_snippets %}
+Use these high-signal condition snippets as primary context:
+{{seed_snippets | tojsonpretty}}
+{% else %}
+No seed snippets provided.
+{% endif %}
 
 ## Additional Context
 
-{% if entities_extraction_result %}
-### Entity Extraction Results
-Previously extracted condition data:
-{{entities_extraction_result | tojsonpretty}}
+{% if entities_extraction %}
+### Entity Extraction Results (Baseline)
+Previously extracted condition data (use as baseline; verify and reconcile):
+{{entities_extraction | tojsonpretty}}
 {% endif %}
 
 {% if legal_requirements_matrix %}
@@ -168,16 +176,14 @@ Previously extracted condition data:
 {{legal_requirements_matrix | tojsonpretty}}
 {% endif %}
 
-## Analysis Instructions
+## Analysis Instructions (Seeds + Retrieval + Metadata Scoping)
 
-1. **Systematic Review**: Examine all contract sections for conditions (not just dedicated condition clauses)
-2. **Classification**: Categorize each condition by type, category, and timing requirements
-3. **Timeline Mapping**: Create chronological map of all deadlines with business day calculations
-4. **Risk Assessment**: Evaluate each condition for buyer protection and satisfaction probability
-5. **Dependency Analysis**: Identify relationships and potential conflicts between conditions
-6. **Market Context**: Apply {{australian_state}} market standards and typical timeframes
-7. **Evidence Documentation**: Reference specific contract clauses and calculation methods
-8. **Practical Focus**: Emphasize actionable insights for buyer decision-making
+1. Use `entities_extraction.conditions` and `metadata` as the baseline. Verify and enrich using `seed_snippets` as primary evidence.
+2. If baseline + seeds are insufficient, perform targeted retrieval from `retrieval_index_id` for specific condition types (finance, inspection, special conditions) and deadlines (business days vs calendar).
+3. Classify each condition (standard/special, precedent/subsequent), identify responsible parties, requirements, deadlines, and dependencies.
+4. Compute or verify deadlines (use business day calculations where applicable) and map dependencies chronologically.
+5. Assess buyer protection and risk levels (RED/AMBER/GREEN). Provide clause citations for all findings.
+6. Record whether retrieval was used and how many additional snippets were incorporated.
 
 ## Expected Output
 

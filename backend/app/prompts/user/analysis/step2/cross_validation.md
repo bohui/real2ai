@@ -11,7 +11,7 @@ required_variables:
   - "australian_state"
   - "analysis_timestamp"
 optional_variables:
-  - "entities_extraction_result"
+  - "entities_extraction"
   - "legal_requirements_matrix"
   - "contract_type"
 model_compatibility: ["gemini-2.5-flash", "gpt-4"]
@@ -199,10 +199,10 @@ All previous section analysis results for cross-validation:
 
 ## Additional Context
 
-{% if entities_extraction_result %}
+{% if entities_extraction %}
 ### Entity Extraction Results
 Original entity extraction for cross-validation:
-{{entities_extraction_result | tojsonpretty}}
+{{entities_extraction | tojsonpretty}}
 {% endif %}
 
 {% if legal_requirements_matrix %}
