@@ -53,7 +53,7 @@ class OpenAISettings(BaseSettings):
     # Standard OpenAI-style envs
     openai_api_key: Optional[str] = None
     openai_api_base: Optional[str] = None
-    # Default to a model known to work on OpenRouter; can be overridden via env
+    # Default model; can be overridden via env
     openai_model_name: str = DEFAULT_MODEL
     openai_organization: Optional[str] = None
 
@@ -78,14 +78,6 @@ class OpenAISettings(BaseSettings):
     openai_failure_threshold: int = 5
     openai_circuit_timeout: int = 300  # 5 minutes for AI services
 
-    # OpenRouter-compatible envs (optional). If present, they will be used.
-    # This makes configuration resilient when users export OPENROUTER_* vars.
-    openrouter_api_key: Optional[str] = None
-    openrouter_api_base: Optional[str] = None  # If not set, we will default below
-    openrouter_model_name: Optional[str] = None
-    openrouter_http_referer: Optional[str] = None
-    openrouter_x_title: Optional[str] = None
-
     # API key pool support (comma-separated string or JSON array)
     openai_api_keys: Optional[str] = None
 
@@ -96,12 +88,10 @@ class OpenAISettings(BaseSettings):
     }
 
     def to_client_config(self) -> OpenAIClientConfig:
-        """Convert to OpenAIClientConfig.
-        Always use OpenRouter-compatible configuration (base URL and headers).
-        """
-        # Resolve effective API key and base URL (prefer OPENAI_* keys, but base URL is OpenRouter)
-        effective_api_key = self.openai_api_key or self.openrouter_api_key
-        effective_api_base = self.openrouter_api_base or "https://openrouter.ai/api/v1"
+        """Convert to OpenAIClientConfig using standard OpenAI environment variables."""
+        # Resolve effective API key and base URL from OPENAI_* env vars
+        effective_api_key = self.openai_api_key or ""
+        effective_api_base = self.openai_api_base or "https://api.openai.com/v1"
         effective_model = self.openai_model_name or DEFAULT_MODEL
 
         # Parse API key pool from env (supports comma-separated or JSON array)
@@ -159,17 +149,7 @@ class OpenAISettings(BaseSettings):
         if effective_api_key and effective_api_key not in pool_keys:
             pool_keys = [effective_api_key] + pool_keys
 
-        # Prepare optional default headers for OpenRouter
-        default_headers: Dict[str, Any] = {}
-        if self.openrouter_http_referer:
-            default_headers["HTTP-Referer"] = self.openrouter_http_referer
-        if self.openrouter_x_title:
-            default_headers["X-Title"] = self.openrouter_x_title
-
         extra_config: Dict[str, Any] = {}
-        if default_headers:
-            extra_config["default_headers"] = default_headers
-        extra_config["is_openrouter"] = True
         # Initialization behavior controls
         extra_config["init_connection_test"] = self.openai_init_connection_test
         extra_config["init_test_timeout"] = self.openai_init_test_timeout
@@ -179,7 +159,7 @@ class OpenAISettings(BaseSettings):
 
         return OpenAIClientConfig(
             # API settings
-            api_key=effective_api_key or "",
+            api_key=effective_api_key,
             api_base=effective_api_base,
             model_name=effective_model,
             organization=self.openai_organization,
