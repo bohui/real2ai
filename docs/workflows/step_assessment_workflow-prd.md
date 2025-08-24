@@ -97,11 +97,12 @@ The Entity Extraction engine transforms unstructured contract documents into str
   - Building codes and standards
 
 #### Contract Conditions
-- **ContractCondition**: Terms and clauses
-  - Special conditions and standard terms
-  - Conditions precedent and subsequent
-  - Action requirements and deadlines
-  - Risk allocation provisions
+- **ContractCondition (extraction-only)**: Terms and clauses captured without risk analysis
+  - Special conditions and standard terms (classification if explicitly stated)
+  - Conditions precedent and subsequent (if explicit)
+  - Action requirements and explicit deadlines (text and normalized date when present)
+  - Parties responsible (if explicit)
+  - Clause identifiers and source spans (page and offsets)
 
 ### 4.1.1.2 Contract Metadata Detection
 
@@ -144,6 +145,8 @@ The Entity Extraction engine transforms unstructured contract documents into str
 - **JSON Export**: Machine-readable format for downstream processing
 - **Confidence Metrics**: Per-entity and overall extraction confidence
 - **Source References**: Page numbers and context for each extraction
+- **Section Seeds (NEW)**: Per-section high-signal snippet selections with clause ids, page/offset spans, snippet text, selection rationale, confidence, and a suggested retrieval query for Step 2 nodes
+- **Retrieval Index Handle (NEW)**: Identifier for a persisted paragraph/clause index to enable targeted retrieval in Step 2
 
 ---
 
@@ -151,6 +154,16 @@ The Entity Extraction engine transforms unstructured contract documents into str
 
 ### 4.1.2 Overview
 The Section-by-Section Analysis module performs specialized, expert-level review of 10 critical contract areas using AI-powered legal analysis engines. Each section operates as an independent specialist while maintaining cross-referential validation.
+
+#### Context Strategy (Seeds + Retrieval)
+- By default, Step 2 nodes consume Step 1 outputs (entities + section seeds) and a retrieval index handle.
+- Nodes analyze using seed snippets as primary context and expand via targeted retrieval when coverage/confidence is insufficient.
+- Full-document context is used only as a fallback for broad sweeps or low-confidence cases.
+
+#### Inputs to Step 2 Nodes
+- `entities_extraction_result` (includes entities, conditions, section_seeds)
+- `retrieval_index_id` (paragraph/clause index for retrieval)
+- `legal_requirements_matrix` and uploaded diagrams (where applicable)
 
 ### 4.1.2.1 Parties & Property Verification
 
@@ -682,6 +695,11 @@ Where:
 - **Professional Standards**: Legal and real estate industry requirements
 - **Audit Trails**: Complete analysis history and documentation
 - **Access Controls**: Role-based permissions and authentication
+
+### 5.4 Seeds and Retrieval Architecture (NEW)
+- **Paragraph/Clause Index**: Build a persisted, searchable index of contract paragraphs/clauses with section headers, clause ids, page numbers, and character offsets.
+- **Section Seeds**: Step 1 selects per-section high-signal snippets (with rationale and confidence) to guide Step 2.
+- **Node Behavior**: Step 2 nodes use seeds first, then targeted retrieval, and only then consider full-document context as fallback. This minimizes tokens and reduces duplication between Step 1 and Step 2.
 
 ---
 

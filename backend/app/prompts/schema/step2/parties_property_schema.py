@@ -168,6 +168,17 @@ class PartiesPropertyAnalysisResult(BaseModel):
         default_factory=list,
         description="References to supporting evidence in contract",
     )
+    seed_references: List[str] = Field(
+        default_factory=list,
+        description="Identifiers or brief references to seed snippets used (e.g., clause ids)",
+    )
+    retrieval_expanded: bool = Field(
+        default=False,
+        description="Whether targeted retrieval beyond seeds was used",
+    )
+    retrieved_snippets_count: int = Field(
+        default=0, ge=0, description="Number of additional snippets retrieved"
+    )
     analysis_notes: Optional[str] = Field(
         None, description="Additional analysis notes or observations"
     )

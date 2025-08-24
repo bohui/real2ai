@@ -417,6 +417,28 @@ class Step2AnalysisWorkflow:
         logger.info("Starting parties and property analysis")
 
         try:
+            # Short-circuit if persisted
+            from app.services.repositories.contracts_repository import (
+                ContractsRepository,
+            )
+
+            content_hash = (state.get("entities_extraction_result") or {}).get(
+                "content_hash"
+            ) or (state.get("entities_extraction_result") or {}).get(
+                "document", {}
+            ).get(
+                "content_hash"
+            )
+            if content_hash:
+                repo = ContractsRepository()
+                existing = await repo.get_contract_by_content_hash(content_hash)
+                persisted = (existing.parties_property or {}) if existing else None
+                if persisted:
+                    logger.info(
+                        "Short-circuiting parties_property: found persisted result"
+                    )
+                    return {"parties_property_result": persisted}
+
             from app.core.prompts import PromptContext, ContextType
             from app.services import get_llm_service
             from app.prompts.schema.step2.parties_property_schema import (
@@ -488,6 +510,18 @@ class Step2AnalysisWorkflow:
                     result_dict["timestamp"] = datetime.now(UTC).isoformat()
 
                     updates = {"parties_property_result": result_dict}
+
+                    # Persist result for idempotency
+                    if content_hash:
+                        try:
+                            await repo.update_section_analysis_key(
+                                content_hash,
+                                "parties_property",
+                                result_dict,
+                                updated_by="step2_parties_property",
+                            )
+                        except Exception as pe:
+                            logger.warning(f"Failed to persist parties_property: {pe}")
 
                     logger.info(
                         "Parties and property analysis completed successfully",
@@ -561,6 +595,28 @@ class Step2AnalysisWorkflow:
         logger.info("Starting financial terms analysis")
 
         try:
+            # Short-circuit if persisted
+            from app.services.repositories.contracts_repository import (
+                ContractsRepository,
+            )
+
+            content_hash = (state.get("entities_extraction_result") or {}).get(
+                "content_hash"
+            ) or (state.get("entities_extraction_result") or {}).get(
+                "document", {}
+            ).get(
+                "content_hash"
+            )
+            if content_hash:
+                repo = ContractsRepository()
+                existing = await repo.get_contract_by_content_hash(content_hash)
+                persisted = (existing.financial_terms or {}) if existing else None
+                if persisted:
+                    logger.info(
+                        "Short-circuiting financial_terms: found persisted result"
+                    )
+                    return {"financial_terms_result": persisted}
+
             from app.core.prompts import PromptContext, ContextType
             from app.services import get_llm_service
             from app.prompts.schema.step2.financial_terms_schema import (
@@ -632,6 +688,18 @@ class Step2AnalysisWorkflow:
 
                     updates = {"financial_terms_result": result_dict}
 
+                    # Persist result for idempotency
+                    if content_hash:
+                        try:
+                            await repo.update_section_analysis_key(
+                                content_hash,
+                                "financial_terms",
+                                result_dict,
+                                updated_by="step2_financial_terms",
+                            )
+                        except Exception as pe:
+                            logger.warning(f"Failed to persist financial_terms: {pe}")
+
                     logger.info(
                         "Financial terms analysis completed successfully",
                         extra={
@@ -655,6 +723,17 @@ class Step2AnalysisWorkflow:
                         self.PROGRESS_RANGES["analyze_financial_terms"][1],
                         "Financial terms analysis completed",
                     )
+                    # Persist for idempotency
+                    if content_hash:
+                        try:
+                            await repo.update_section_analysis_key(
+                                content_hash,
+                                "financial_terms",
+                                result_dict,
+                                updated_by="step2_financial_terms",
+                            )
+                        except Exception as pe:
+                            logger.warning(f"Failed to persist financial_terms: {pe}")
                 else:
                     # Fallback result on parsing failure
                     result = {
@@ -709,6 +788,26 @@ class Step2AnalysisWorkflow:
         logger.info("Starting conditions analysis")
 
         try:
+            # Short-circuit if persisted
+            from app.services.repositories.contracts_repository import (
+                ContractsRepository,
+            )
+
+            content_hash = (state.get("entities_extraction_result") or {}).get(
+                "content_hash"
+            ) or (state.get("entities_extraction_result") or {}).get(
+                "document", {}
+            ).get(
+                "content_hash"
+            )
+            if content_hash:
+                repo = ContractsRepository()
+                existing = await repo.get_contract_by_content_hash(content_hash)
+                persisted = (existing.conditions or {}) if existing else None
+                if persisted:
+                    logger.info("Short-circuiting conditions: found persisted result")
+                    return {"conditions_result": persisted}
+
             from app.core.prompts import PromptContext, ContextType
             from app.services import get_llm_service
             from app.prompts.schema.step2.conditions_schema import (
@@ -780,6 +879,19 @@ class Step2AnalysisWorkflow:
 
                     updates = {"conditions_result": result_dict}
 
+                    # Persist result for idempotency
+                    if content_hash:
+                        try:
+                            await repo.update_section_analysis_key(
+                                content_hash,
+                                "conditions",
+                                result_dict,
+                                updated_by="step2_conditions",
+                            )
+
+                        except Exception as pe:
+                            logger.warning(f"Failed to persist conditions: {pe}")
+
                     logger.info(
                         "Conditions analysis completed successfully",
                         extra={
@@ -801,6 +913,17 @@ class Step2AnalysisWorkflow:
                         self.PROGRESS_RANGES["analyze_conditions"][1],
                         "Conditions analysis completed",
                     )
+                    # Persist for idempotency
+                    if content_hash:
+                        try:
+                            await repo.update_section_analysis_key(
+                                content_hash,
+                                "conditions",
+                                result_dict,
+                                updated_by="step2_conditions",
+                            )
+                        except Exception as pe:
+                            logger.warning(f"Failed to persist conditions: {pe}")
                 else:
                     # Fallback result on parsing failure
                     result = {
@@ -853,6 +976,26 @@ class Step2AnalysisWorkflow:
         logger.info("Starting warranties analysis")
 
         try:
+            # Short-circuit if persisted
+            from app.services.repositories.contracts_repository import (
+                ContractsRepository,
+            )
+
+            content_hash = (state.get("entities_extraction_result") or {}).get(
+                "content_hash"
+            ) or (state.get("entities_extraction_result") or {}).get(
+                "document", {}
+            ).get(
+                "content_hash"
+            )
+            if content_hash:
+                repo = ContractsRepository()
+                existing = await repo.get_contract_by_content_hash(content_hash)
+                persisted = (existing.warranties or {}) if existing else None
+                if persisted:
+                    logger.info("Short-circuiting warranties: found persisted result")
+                    return {"warranties_result": persisted}
+
             # Placeholder implementation - will be completed in Story S5
             result = {
                 "analyzer": "warranties",
@@ -860,6 +1003,18 @@ class Step2AnalysisWorkflow:
                 "message": "Implementation pending Story S5",
                 "timestamp": datetime.now(UTC).isoformat(),
             }
+
+            # Persist placeholder as well to prevent repeated execution
+            if content_hash:
+                try:
+                    await repo.update_section_analysis_key(
+                        content_hash,
+                        "warranties",
+                        result,
+                        updated_by="step2_warranties",
+                    )
+                except Exception as pe:
+                    logger.warning(f"Failed to persist warranties: {pe}")
 
             logger.info("Warranties analysis completed (placeholder)")
 
@@ -877,6 +1032,28 @@ class Step2AnalysisWorkflow:
         logger.info("Starting default and termination analysis")
 
         try:
+            # Short-circuit if persisted
+            from app.services.repositories.contracts_repository import (
+                ContractsRepository,
+            )
+
+            content_hash = (state.get("entities_extraction_result") or {}).get(
+                "content_hash"
+            ) or (state.get("entities_extraction_result") or {}).get(
+                "document", {}
+            ).get(
+                "content_hash"
+            )
+            if content_hash:
+                repo = ContractsRepository()
+                existing = await repo.get_contract_by_content_hash(content_hash)
+                persisted = (existing.default_termination or {}) if existing else None
+                if persisted:
+                    logger.info(
+                        "Short-circuiting default_termination: found persisted result"
+                    )
+                    return {"default_termination_result": persisted}
+
             # Placeholder implementation - will be completed in Story S6
             result = {
                 "analyzer": "default_termination",
@@ -884,6 +1061,17 @@ class Step2AnalysisWorkflow:
                 "message": "Implementation pending Story S6",
                 "timestamp": datetime.now(UTC).isoformat(),
             }
+
+            if content_hash:
+                try:
+                    await repo.update_section_analysis_key(
+                        content_hash,
+                        "default_termination",
+                        result,
+                        updated_by="step2_default_termination",
+                    )
+                except Exception as pe:
+                    logger.warning(f"Failed to persist default_termination: {pe}")
 
             logger.info("Default and termination analysis completed (placeholder)")
 
@@ -935,6 +1123,31 @@ class Step2AnalysisWorkflow:
         logger.info("Starting settlement logistics analysis")
 
         try:
+            from app.services.repositories.contracts_repository import (
+                ContractsRepository,
+            )
+
+            content_hash = (state.get("entities_extraction_result") or {}).get(
+                "content_hash"
+            ) or (state.get("entities_extraction_result") or {}).get(
+                "document", {}
+            ).get(
+                "content_hash"
+            )
+            if content_hash:
+                repo = ContractsRepository()
+                existing = await repo.get_contract_by_content_hash(content_hash)
+                persisted = (
+                    (existing.section_analysis or {}).get("settlement_logistics")
+                    if existing
+                    else None
+                )
+                if persisted:
+                    logger.info(
+                        "Short-circuiting settlement_logistics: found persisted result"
+                    )
+                    return {"settlement_logistics_result": persisted}
+
             # Check dependencies
             conditions_result = state.get("conditions_result")
             financial_result = state.get("financial_terms_result")
@@ -957,6 +1170,18 @@ class Step2AnalysisWorkflow:
 
             logger.info("Settlement logistics analysis completed (placeholder)")
 
+            # Persist placeholder
+            if content_hash:
+                try:
+                    await repo.update_section_analysis_key(
+                        content_hash,
+                        "settlement_logistics",
+                        result,
+                        updated_by="step2_settlement_logistics",
+                    )
+                except Exception as pe:
+                    logger.warning(f"Failed to persist settlement_logistics: {pe}")
+
         except Exception as e:
             error_msg = f"Settlement logistics analysis failed: {str(e)}"
             logger.error(error_msg, exc_info=True)
@@ -971,6 +1196,31 @@ class Step2AnalysisWorkflow:
         logger.info("Starting title and encumbrances analysis")
 
         try:
+            from app.services.repositories.contracts_repository import (
+                ContractsRepository,
+            )
+
+            content_hash = (state.get("entities_extraction_result") or {}).get(
+                "content_hash"
+            ) or (state.get("entities_extraction_result") or {}).get(
+                "document", {}
+            ).get(
+                "content_hash"
+            )
+            if content_hash:
+                repo = ContractsRepository()
+                existing = await repo.get_contract_by_content_hash(content_hash)
+                persisted = (
+                    (existing.section_analysis or {}).get("title_encumbrances")
+                    if existing
+                    else None
+                )
+                if persisted:
+                    logger.info(
+                        "Short-circuiting title_encumbrances: found persisted result"
+                    )
+                    return {"title_encumbrances_result": persisted}
+
             # Check dependencies
             parties_result = state.get("parties_property_result")
             if not parties_result:
@@ -995,6 +1245,18 @@ class Step2AnalysisWorkflow:
             # Assume 90% success rate for placeholder
             diagram_processing_success_rate = 0.9 if diagrams else 1.0
             logger.info("Title and encumbrances analysis completed (placeholder)")
+
+            # Persist placeholder
+            if content_hash:
+                try:
+                    await repo.update_section_analysis_key(
+                        content_hash,
+                        "title_encumbrances",
+                        result,
+                        updated_by="step2_title_encumbrances",
+                    )
+                except Exception as pe:
+                    logger.warning(f"Failed to persist title_encumbrances: {pe}")
 
         except Exception as e:
             error_msg = f"Title and encumbrances analysis failed: {str(e)}"
@@ -1042,6 +1304,31 @@ class Step2AnalysisWorkflow:
         logger.info("Starting adjustments and outgoings calculation")
 
         try:
+            from app.services.repositories.contracts_repository import (
+                ContractsRepository,
+            )
+
+            content_hash = (state.get("entities_extraction_result") or {}).get(
+                "content_hash"
+            ) or (state.get("entities_extraction_result") or {}).get(
+                "document", {}
+            ).get(
+                "content_hash"
+            )
+            if content_hash:
+                repo = ContractsRepository()
+                existing = await repo.get_contract_by_content_hash(content_hash)
+                persisted = (
+                    (existing.section_analysis or {}).get("adjustments_outgoings")
+                    if existing
+                    else None
+                )
+                if persisted:
+                    logger.info(
+                        "Short-circuiting adjustments_outgoings: found persisted result"
+                    )
+                    return {"adjustments_outgoings_result": persisted}
+
             # Check dependencies
             financial_result = state.get("financial_terms_result")
             settlement_result = state.get("settlement_logistics_result")
@@ -1064,6 +1351,17 @@ class Step2AnalysisWorkflow:
 
             logger.info("Adjustments and outgoings calculation completed (placeholder)")
 
+            if content_hash:
+                try:
+                    await repo.update_section_analysis_key(
+                        content_hash,
+                        "adjustments_outgoings",
+                        result,
+                        updated_by="step2_adjustments_outgoings",
+                    )
+                except Exception as pe:
+                    logger.warning(f"Failed to persist adjustments_outgoings: {pe}")
+
         except Exception as e:
             error_msg = f"Adjustments and outgoings calculation failed: {str(e)}"
             logger.error(error_msg, exc_info=True)
@@ -1078,6 +1376,31 @@ class Step2AnalysisWorkflow:
         logger.info("Starting disclosure compliance check")
 
         try:
+            from app.services.repositories.contracts_repository import (
+                ContractsRepository,
+            )
+
+            content_hash = (state.get("entities_extraction_result") or {}).get(
+                "content_hash"
+            ) or (state.get("entities_extraction_result") or {}).get(
+                "document", {}
+            ).get(
+                "content_hash"
+            )
+            if content_hash:
+                repo = ContractsRepository()
+                existing = await repo.get_contract_by_content_hash(content_hash)
+                persisted = (
+                    (existing.section_analysis or {}).get("disclosure_compliance")
+                    if existing
+                    else None
+                )
+                if persisted:
+                    logger.info(
+                        "Short-circuiting disclosure_compliance: found persisted result"
+                    )
+                    return {"disclosure_compliance_result": persisted}
+
             # Placeholder implementation - will be completed in Story S10
             result = {
                 "analyzer": "disclosure_compliance",
@@ -1087,6 +1410,17 @@ class Step2AnalysisWorkflow:
             }
 
             logger.info("Disclosure compliance check completed (placeholder)")
+
+            if content_hash:
+                try:
+                    await repo.update_section_analysis_key(
+                        content_hash,
+                        "disclosure_compliance",
+                        result,
+                        updated_by="step2_disclosure_compliance",
+                    )
+                except Exception as pe:
+                    logger.warning(f"Failed to persist disclosure_compliance: {pe}")
 
         except Exception as e:
             error_msg = f"Disclosure compliance check failed: {str(e)}"
@@ -1102,6 +1436,31 @@ class Step2AnalysisWorkflow:
         logger.info("Starting special risks identification")
 
         try:
+            from app.services.repositories.contracts_repository import (
+                ContractsRepository,
+            )
+
+            content_hash = (state.get("entities_extraction_result") or {}).get(
+                "content_hash"
+            ) or (state.get("entities_extraction_result") or {}).get(
+                "document", {}
+            ).get(
+                "content_hash"
+            )
+            if content_hash:
+                repo = ContractsRepository()
+                existing = await repo.get_contract_by_content_hash(content_hash)
+                persisted = (
+                    (existing.section_analysis or {}).get("special_risks")
+                    if existing
+                    else None
+                )
+                if persisted:
+                    logger.info(
+                        "Short-circuiting special_risks: found persisted result"
+                    )
+                    return {"special_risks_result": persisted}
+
             # Placeholder implementation - will be completed in Story S11
             result = {
                 "analyzer": "special_risks",
@@ -1111,6 +1470,17 @@ class Step2AnalysisWorkflow:
             }
 
             logger.info("Special risks identification completed (placeholder)")
+
+            if content_hash:
+                try:
+                    await repo.update_section_analysis_key(
+                        content_hash,
+                        "special_risks",
+                        result,
+                        updated_by="step2_special_risks",
+                    )
+                except Exception as pe:
+                    logger.warning(f"Failed to persist special_risks: {pe}")
 
         except Exception as e:
             error_msg = f"Special risks identification failed: {str(e)}"

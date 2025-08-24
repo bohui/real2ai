@@ -2,17 +2,21 @@
 type: "user"
 category: "instructions"
 name: "parties_property_analysis"
-version: "1.0.0"
+version: "2.0.0"
 description: "Step 2.1 - Parties and Property Verification Analysis"
 fragment_orchestration: "step2_parties_property"
 required_variables:
-  - "contract_text"
-  - "australian_state"
   - "analysis_timestamp"
 optional_variables:
   - "entities_extraction_result"
   - "legal_requirements_matrix"
   - "contract_type"
+  - "retrieval_index_id"
+  - "seed_snippets"
+  - "australian_state"
+  - "use_category"
+  - "property_condition"
+  - "purchase_method"
 model_compatibility: ["gemini-2.5-flash", "gpt-4"]
 max_tokens: 6000
 temperature_range: [0.1, 0.3]
@@ -22,11 +26,15 @@ tags: ["step2", "parties", "property", "verification"]
 
 # Parties & Property Verification Analysis (Step 2.1)
 
-Perform systematic verification analysis of parties and property details in this Australian real estate contract, focusing on legal capacity assessment and property identification completeness.
+Perform systematic verification analysis of parties and property details using Step 1 outputs as baseline. Use provided seed snippets first; expand via targeted retrieval only if coverage or confidence is insufficient. Avoid using full contract text unless explicitly instructed or required to resolve ambiguities.
 
 ## Contract Context
-- **State**: {{australian_state}}
-- **Contract Type**: {{contract_type}}
+{% set meta = (entities_extraction_result or {}).get('metadata') or {} %}
+- **State**: {{ australian_state or meta.get('state') or 'unknown' }}
+- **Contract Type**: {{ contract_type or meta.get('contract_type') or 'unknown' }}
+- **Purchase Method**: {{ purchase_method or meta.get('purchase_method') or 'unknown' }}
+- **Use Category**: {{ use_category or meta.get('use_category') or 'unknown' }}
+- **Property Condition**: {{ property_condition or meta.get('property_condition') or 'unknown' }}
 - **Analysis Date**: {{analysis_timestamp}}
 
 ## Analysis Requirements
@@ -107,18 +115,25 @@ Examine all parties to the transaction and assess:
 - Clarifications needed for property description
 - Items requiring amendment or negotiation
 
-## Contract Text for Analysis
+## Seed Snippets (Primary Context)
 
-```
-{{contract_text}}
-```
+{% if seed_snippets %}
+Use these high-signal snippets as primary context:
+{{seed_snippets | tojsonpretty}}
+{% else %}
+No seed snippets provided.
+{% endif %}
 
 ## Additional Context
 
 {% if entities_extraction_result %}
-### Entity Extraction Results
-The following entities were previously extracted from this contract:
+### Entity Extraction Results (Baseline)
+Use these as the canonical baseline; verify and reconcile discrepancies found in seeds or retrieval:
 {{entities_extraction_result | tojsonpretty}}
+
+### Step 1 Metadata (Scoping)
+Use `metadata` to scope applicable checks and thresholds (state, contract_type, purchase_method, use_category, property_condition):
+{{ meta | tojsonpretty }}
 {% endif %}
 
 {% if legal_requirements_matrix %}
@@ -127,16 +142,14 @@ Relevant legal requirements for {{australian_state}} {{contract_type}}:
 {{legal_requirements_matrix | tojsonpretty}}
 {% endif %}
 
-## Analysis Instructions
+## Analysis Instructions (Seeds + Retrieval + Metadata Scoping)
 
-1. **Read through the entire contract** focusing on party and property details
-2. **Cross-reference information** between different contract sections
-3. **Apply {{australian_state}} specific requirements** for party and property verification
-4. **Identify gaps or concerns** that could affect transaction completion
-5. **Assess risk levels** using RED/AMBER/GREEN classification
-6. **Provide evidence references** for all findings with specific section/clause citations
-7. **Include confidence scores** for all major determinations
-8. **Focus on practical implications** for buyers and their legal advisors
+1. Use `entities_extraction_result` (and its `metadata`) as the baseline; scope checks per state/contract_type/purchase_method/use_category/property_condition.
+2. Use `seed_snippets` as primary evidence. Cite clause ids/sections where possible.
+3. If seed coverage/confidence is insufficient, perform targeted retrieval from `retrieval_index_id` using concise queries (e.g., names/roles, authority/witness requirements, legal description lot/plan/title). Limit retrieval to only what is necessary.
+4. Reconcile any discrepancies between seeds, retrieval snippets, and baseline entities; prefer explicit contract language.
+5. Assess risk levels using RED/AMBER/GREEN classification. Provide evidence citations for all findings.
+6. Report whether retrieval was used and how many additional snippets were incorporated.
 
 ## Expected Output
 

@@ -2,26 +2,26 @@
 type: "user"
 category: "instructions"
 name: "contract_entities_extraction"
-version: "2.0.0"
-description: "Base contract analysis template that works with fragments"
+version: "3.0.0"
+description: "Entity extraction and section seed selection for Step 2 analysis"
 fragment_orchestration: "contract_analysis"
 required_variables:
   - "contract_text"
 optional_variables: []
-model_compatibility: ["gemini-2.5-flash", "gpt-4"]
+model_compatibility: ["google/gemini-2.0-flash-exp:free", "google/gemini-2.5-flash"]
 max_tokens: 8000
 temperature_range: [0.1, 0.4]
 output_parser: ContractEntityExtraction
-tags: ["contract", "analysis", "fragment-based", "modular"]
+tags: ["contract", "extraction", "section-seeds", "modular"]
 ---
 
-# Contract Analysis Instructions
+# Step 1: Entity Extraction Instructions (Extraction-Only)
 
-Perform a comprehensive analysis of the provided Australian real estate contract using the following structured approach.
+Extract structured entities and high-signal section seeds from the provided Australian real estate contract. Do not perform risk assessment, adequacy judgments, timeline mapping, or recommendations. Populate the `ContractEntityExtraction` schema only.
 
-## Metadata Extraction
+## 1) Metadata Extraction
 
-Extract and classify the following metadata fields, recording specific evidence for each decision.
+Extract and classify the following metadata fields. For each, provide exact evidence in `metadata.sources` where applicable.
 
 ### Contract State (metadata.state)
 - Indicators:
@@ -77,55 +77,37 @@ Extract and classify the following metadata fields, recording specific evidence 
 - Evidence to capture:
   - Clauses showing strata, multi-lot arrangements, or complex special conditions
 
-### 2. Essential Terms Analysis
+## 2) Core Entities to Extract
 
-**Property Details:**
-- Legal description and title information
-- Physical address and property identification
-- Zoning and land use classification
-- Any strata or community title details
+Populate these root-level entities. For each item derived from `EntityBase`, include: `confidence` (0.0–1.0), `page_number` (>=1), and `context` when helpful.
 
-**Financial Terms:**
-- Purchase price or rental amount: {% if transaction_value %}{{ transaction_value | currency }}{% else %}[Extract from contract]{% endif %}
-- Deposit amount, timing, and holding arrangements
-- Balance payment terms and settlement arrangements
-- Any additional costs, fees, or outgoings
+- Property Address (`property_address`): full address; lot/plan/title; `property_type` if present.
+- Parties (`parties`): names, roles, contact details; solicitor info when present.
+- Dates (`dates`): normalize to YYYY-MM-DD in `date_value`; retain original `date_text`; set `is_business_days` where stated; set `date_type`.
+- Financial Amounts (`financial_amounts`): numeric `amount` (strip symbols/commas); `currency` default AUD; set `amount_type`.
+- Legal References (`legal_references`): include `act_name`, `section_number`, `state_specific` when present.
+- Conditions (`conditions`, extraction-only): `clause_id` if available; `condition_text` (verbatim excerpt), optional `condition_summary`; if explicitly stated, set `is_special_condition`/`is_standard_condition`, `requires_action`, `action_by_whom`; record `deadline_text` and normalized `action_deadline` when determinable.
+- Property Details (`property_details`): zoning, easements/encumbrances, bedrooms/bathrooms/parking; strata flags and identifiers; levies under `strata_fees` when present.
+- Additional Addresses (`additional_addresses`): mailing/service/registered office addresses.
+- Contact References (`contact_references`): raw phone/email strings.
 
-### 3. Conditions and Contingencies
+Rules:
+- Prefer verbatim excerpts for evidence fields (`date_text`, `metadata.sources`, `condition_text`).
+- Do not infer unstated facts; set null/empty with appropriately reduced `confidence`.
+- Maintain internal consistency (e.g., parties referenced in conditions appear in `parties`).
 
-**Standard Conditions:**
-- Finance approval requirements and deadlines
-- Building and pest inspection provisions
-- Legal and planning searches and approvals
-- Insurance requirements and responsibilities
+## 3) Section Seeds Planner (for Step 2)
 
-**Special Conditions:**
-- Customized terms specific to this transaction
-- Variations to standard contract provisions
-- Additional warranties or representations
-- Sunset clauses and time-sensitive provisions
+Produce high-signal snippet selections to guide Step 2 nodes. Use the `SectionKey` enum for `section_key` values: `parties_property`, `financial_terms`, `conditions`, `warranties`, `default_termination`, `settlement_logistics`, `title_encumbrances`, `adjustments_outgoings`, `disclosure_compliance`, `special_risks`, `cross_section_validation`.
 
+For each relevant section:
+- Select 1–5 concise snippets (avoid redundancy) capturing the core evidence for that section.
+- Each snippet must include: `section_key`, `clause_id` (if available), `page_number`, `start_offset`, `end_offset`, `snippet_text`, `selection_rationale`, and `confidence`.
+- If the same snippet is relevant to multiple sections, it may be duplicated across sections.
+- Provide `retrieval_instructions[section]` as a short query hint to expand context if needed (e.g., “find all finance approval deadlines and consequences”).
+- Set `section_seeds.retrieval_index_id` to null if unknown (the system may populate it later).
 
-**Analysis Standards:**
-- Support all conclusions with specific contract references
-- Quantify risks and provide likelihood assessments where possible
-- Include practical recommendations and next steps
-- Maintain professional tone while ensuring accessibility
-- Provide clear priority ranking for identified issues
-
-**Validation Requirements:**
-- Cross-reference all financial figures and dates
-- Verify consistency across contract provisions
-- Check compliance with state-specific requirements
-- Ensure all critical terms have been addressed
-
-**Source Documentation Requirements:**
-- For each classification decision (contract_type, purchase_method, use_category, property_condition, transaction_complexity), provide the specific text excerpt from the contract that supports your conclusion
-- Include relevant contract clauses, descriptions, or statements that justify each classification
-- Use the `sources` field to map each decision to its supporting evidence
-- Ensure all conclusions are traceable back to specific contract language
-
-Maintain clarity and accessibility while providing comprehensive legal analysis appropriate for the user's experience level.
+Do not perform any risk scoring, adequacy judgments, or timeline/dependency analysis in seeds—only selection and rationale.
 
 ## Text to process:
 ```

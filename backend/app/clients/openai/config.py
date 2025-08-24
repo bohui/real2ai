@@ -41,7 +41,7 @@ class OpenAIClientConfig(ClientConfig):
 
     # Request settings
     request_timeout: int = 60
-    max_retries: int = 3
+    max_retries: int = 0
 
     # Organization settings
     organization: Optional[str] = None
@@ -66,7 +66,7 @@ class OpenAISettings(BaseSettings):
 
     # Request settings
     openai_request_timeout: int = 60
-    openai_max_retries: int = 3
+    openai_max_retries: int = 0
 
     # Initialization behavior
     openai_init_connection_test: bool = True

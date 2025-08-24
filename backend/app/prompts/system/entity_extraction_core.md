@@ -2,8 +2,8 @@
 type: "system"
 category: "extraction"
 name: "entity_extraction_core"
-version: "1.0.0"
-description: "Standards for extracting structured entities from Australian real estate contracts"
+version: "2.0.0"
+description: "Standards for extracting structured entities and section seeds from Australian real estate contracts"
 dependencies: []
 inheritance: null
 model_compatibility: ["gemini-2.5-flash", "gpt-4", "claude-3-opus"]
@@ -13,11 +13,11 @@ priority: 110
 tags: ["core", "system", "entity-extraction"]
 ---
 
-# Entity Extraction Standards
+# Entity Extraction & Section Seeds Standards
 
 ## Quality Standards
 
-- Ensure outputs conform to the `ContractEntityExtraction` schema.
+- Ensure outputs conform to the `ContractEntityExtraction` schema (including `section_seeds`).
 - Populate enums using lowercase values where known; otherwise set null.
 - Normalize dates to YYYY-MM-DD while preserving original `date_text`.
 - Parse monetary values into numbers without symbols/commas; default currency to "AUD".
@@ -27,9 +27,9 @@ tags: ["core", "system", "entity-extraction"]
 - Set `metadata.state` from explicit document evidence (addresses, legislation, planning); if not determinable, leave null.
 - Populate `metadata.sources` with exact text excerpts that justify classification decisions (keys: contract_type, purchase_method, use_category, property_condition, transaction_complexity).
 
-## Operational Rules
+## Operational Rules (Extraction-Only)
 
-- Prefer verbatim excerpts over paraphrases for `sources` and `date_text`.
+- Prefer verbatim excerpts over paraphrases for `sources`, `date_text`, and `condition_text`.
 - Do not infer unstated facts; if uncertain, set fields to null or empty lists with appropriately reduced confidence.
 - Maintain internal consistency across entities (e.g., parties referenced in conditions should appear in `parties`).
 - Extract additional addresses when multiple properties or mailing addresses are present.
@@ -60,6 +60,7 @@ tags: ["core", "system", "entity-extraction"]
 - conditions:
   - Indicators: "Special Condition/SC", "Subject to" (finance/building & pest/valuation/DA), "Time is of the essence"
   - Guidance: Set `is_special_condition`/`is_standard_condition` and `requires_action`; include `action_by_whom` where named
+  - Deadlines: capture `deadline_text`; normalize `action_deadline` when determinable
 
 - property_details:
   - Indicators: Zoning/planning ("Zoning/LEP", codes like R2, B4), easements/encumbrances, bedrooms/bathrooms/parking counts, strata cues ("Strata Plan/SP", "Owners Corporation", "levies")
@@ -72,6 +73,15 @@ tags: ["core", "system", "entity-extraction"]
 - contact_references:
   - Indicators: Phone numbers (AU formats), email addresses
   - Guidance: Store raw strings as found
+
+## Section Seeds (Planner) Rules
+
+- Use `SectionKey` enum values for `section_key`.
+- Select 1–5 high-signal snippets per relevant section; avoid redundancy.
+- Each snippet includes: `section_key`, `clause_id` (if available), `page_number`, `start_offset`, `end_offset`, `snippet_text`, `selection_rationale`, `confidence`.
+- Provide concise `retrieval_instructions[section]` query hints.
+- Set `section_seeds.retrieval_index_id` to null if unknown (system may populate later).
+- No risk scoring, adequacy judgments, timelines, or dependency analysis.
 
 ## Australian-Specific Rules
 

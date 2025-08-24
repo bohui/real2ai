@@ -44,6 +44,9 @@ from .diagrams import DiagramType, ImageType
 # Entity Extraction Enums
 from .entities import EntityType, PartyRole, DateType, FinancialType
 
+# Section Enums
+from .sections import SectionKey
+
 # Condition Enums
 from .conditions import ConditionType, ConditionCategory, ConditionDependencyType
 
@@ -128,6 +131,8 @@ __all__ = [
     "PartyRole",
     "DateType",
     "FinancialType",
+    # Sections
+    "SectionKey",
     # Condition
     "ConditionType",
     "ConditionCategory",

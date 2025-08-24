@@ -18,6 +18,7 @@ from app.schema.enums import (
     UseCategory,
     PropertyCondition,
     TransactionComplexity,
+    SectionKey,
 )
 
 
@@ -136,29 +137,45 @@ class LegalReference(EntityBase):
 
 
 class ContractCondition(EntityBase):
-    """Contract conditions and clauses"""
+    """Contract conditions and clauses (extraction-only, no risk scoring)."""
 
-    condition_type: str = Field(..., description="Type of condition")
-    condition_text: str = Field(..., description="Full text of condition")
-    condition_summary: str = Field(..., description="Brief summary of condition")
+    clause_id: Optional[str] = Field(
+        None, description="Clause identifier or heading as written"
+    )
+    condition_type: Optional[str] = Field(
+        None, description="Type of condition if explicitly stated"
+    )
+    condition_text: str = Field(..., description="Full text of the condition excerpt")
+    condition_summary: Optional[str] = Field(
+        None, description="Brief summary of the condition"
+    )
 
-    # Classification
-    is_special_condition: bool = Field(
-        default=False, description="Whether this is a special condition"
+    # Classification (only when explicit)
+    is_special_condition: Optional[bool] = Field(
+        None, description="Whether this is a special condition (explicit)"
     )
-    is_standard_condition: bool = Field(
-        default=False, description="Whether this is a standard condition"
+    is_standard_condition: Optional[bool] = Field(
+        None, description="Whether this is a standard condition (explicit)"
     )
 
-    # Requirements
-    requires_action: bool = Field(
-        default=False, description="Whether condition requires action from parties"
-    )
-    action_required: Optional[str] = Field(None, description="What action is required")
+    # Parties and responsibilities (if explicit)
     action_by_whom: Optional[List[PartyRole]] = Field(
-        None, description="Who must take action"
+        None, description="Parties responsible (if stated)"
     )
-    action_deadline: Optional[date] = Field(None, description="Deadline for action")
+    requires_action: Optional[bool] = Field(
+        None, description="Whether condition requires action (explicit)"
+    )
+    action_required: Optional[str] = Field(
+        None, description="Action required (explicit)"
+    )
+
+    # Deadlines (if explicit)
+    deadline_text: Optional[str] = Field(
+        None, description="Deadline as written in the contract"
+    )
+    action_deadline: Optional[date] = Field(
+        None, description="Normalized deadline if determinable"
+    )
 
 
 class PropertyDetails(EntityBase):
@@ -269,6 +286,39 @@ class ContractMetadata(BaseModel):
 
 
 # Comprehensive extraction result
+class SectionSeedSnippet(BaseModel):
+    """High-signal snippet selected by Step 1 to seed Step 2 analysis for a section."""
+
+    section_key: SectionKey = Field(..., description="Section identifier (enum)")
+    clause_id: Optional[str] = Field(None, description="Clause id/heading if available")
+    page_number: Optional[int] = Field(None, description="Page number")
+    start_offset: Optional[int] = Field(None, description="Character start offset")
+    end_offset: Optional[int] = Field(None, description="Character end offset")
+    snippet_text: str = Field(..., description="Selected snippet text")
+    selection_rationale: Optional[str] = Field(
+        None, description="Why this snippet was selected"
+    )
+    confidence: Optional[float] = Field(
+        None, ge=0.0, le=1.0, description="Confidence for this selection"
+    )
+
+
+class SectionSeeds(BaseModel):
+    """Aggregated per-section seed snippets and retrieval guidance."""
+
+    retrieval_index_id: Optional[str] = Field(
+        None, description="Identifier/handle for paragraph/clause retrieval index"
+    )
+    retrieval_instructions: Dict[str, str] = Field(
+        default_factory=dict,
+        description="Per-section suggested retrieval queries keyed by section key",
+    )
+    snippets: Dict[str, List[SectionSeedSnippet]] = Field(
+        default_factory=dict,
+        description="Per-section list of seed snippets keyed by section key",
+    )
+
+
 class ContractEntityExtraction(BaseModel):
     """Complete entity extraction results for a contract"""
 
@@ -293,9 +343,9 @@ class ContractEntityExtraction(BaseModel):
     legal_references: List[LegalReference] = Field(
         default_factory=list, description="Legal references"
     )
-    # conditions: List[ContractCondition] = Field(
-    #     default_factory=list, description="Contract conditions"
-    # )
+    conditions: List[ContractCondition] = Field(
+        default_factory=list, description="Contract conditions (extraction-only)"
+    )
 
     # Property details
     property_details: Optional[PropertyDetails] = Field(
@@ -308,6 +358,11 @@ class ContractEntityExtraction(BaseModel):
     )
     contact_references: List[str] = Field(
         default_factory=list, description="Contact information found"
+    )
+
+    # Step 1 planner outputs for Step 2 (seeds + retrieval)
+    section_seeds: Optional[SectionSeeds] = Field(
+        default=None, description="Per-section seed snippets and retrieval guidance"
     )
 
     # # Extraction metadata
