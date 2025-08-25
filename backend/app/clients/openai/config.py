@@ -3,7 +3,9 @@ Configuration for OpenAI client.
 """
 
 from dataclasses import dataclass
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List, Tuple
+import os
+import json
 from pydantic_settings import BaseSettings
 
 from ..base.client import ClientConfig
@@ -15,6 +17,7 @@ AVAILABLE_MODELS = {
     "claude-3-5-sonnet": "anthropic/claude-3.5-sonnet",
     "llama-3-1-405b": "meta-llama/llama-3.1-405b-instruct",
     "llama-3-1-8b": "meta-llama/llama-3.1-8b-instruct",
+    "qwen3-coder": "qwen/qwen3-coder:free",
 }
 DEFAULT_MODEL = AVAILABLE_MODELS["deepseek-chat"]
 DEFAULT_REASON_MODEL = AVAILABLE_MODELS["deepseek-reasoner"]
@@ -38,7 +41,7 @@ class OpenAIClientConfig(ClientConfig):
 
     # Request settings
     request_timeout: int = 60
-    max_retries: int = 3
+    max_retries: int = 0
 
     # Organization settings
     organization: Optional[str] = None
@@ -50,7 +53,7 @@ class OpenAISettings(BaseSettings):
     # Standard OpenAI-style envs
     openai_api_key: Optional[str] = None
     openai_api_base: Optional[str] = None
-    # Default to a model known to work on OpenRouter; can be overridden via env
+    # Default model; can be overridden via env
     openai_model_name: str = DEFAULT_MODEL
     openai_organization: Optional[str] = None
 
@@ -63,7 +66,7 @@ class OpenAISettings(BaseSettings):
 
     # Request settings
     openai_request_timeout: int = 60
-    openai_max_retries: int = 3
+    openai_max_retries: int = 0
 
     # Initialization behavior
     openai_init_connection_test: bool = True
@@ -75,13 +78,8 @@ class OpenAISettings(BaseSettings):
     openai_failure_threshold: int = 5
     openai_circuit_timeout: int = 300  # 5 minutes for AI services
 
-    # OpenRouter-compatible envs (optional). If present, they will be used.
-    # This makes configuration resilient when users export OPENROUTER_* vars.
-    openrouter_api_key: Optional[str] = None
-    openrouter_api_base: Optional[str] = None  # If not set, we will default below
-    openrouter_model_name: Optional[str] = None
-    openrouter_http_referer: Optional[str] = None
-    openrouter_x_title: Optional[str] = None
+    # API key pool support (comma-separated string or JSON array)
+    openai_api_keys: Optional[str] = None
 
     model_config = {
         "env_file": [".env", ".env.local"],
@@ -90,56 +88,78 @@ class OpenAISettings(BaseSettings):
     }
 
     def to_client_config(self) -> OpenAIClientConfig:
-        """Convert to OpenAIClientConfig.
+        """Convert to OpenAIClientConfig using standard OpenAI environment variables."""
+        # Resolve effective API key and base URL from OPENAI_* env vars
+        effective_api_key = self.openai_api_key or ""
+        effective_api_base = self.openai_api_base or "https://api.openai.com/v1"
+        effective_model = self.openai_model_name or DEFAULT_MODEL
 
-        This method intelligently supports both standard OpenAI and OpenRouter
-        environment variables. If any OPENROUTER_* variables are present, or the
-        configured base URL refers to OpenRouter, we will prefer the OpenRouter
-        API key and defaults.
-        """
-        # Determine if we should use OpenRouter specific defaults
-        base_env = (self.openai_api_base or "").lower()
-        model_env = self.openai_model_name or ""
-        openrouter_env_present = bool(
-            self.openrouter_api_key or ("openrouter.ai" in base_env)
-        )
+        # Parse API key pool from env (supports comma-separated or JSON array)
+        def _parse_api_keys(raw: Optional[str]) -> List[str]:
+            if not raw:
+                return []
+            raw = raw.strip()
+            if not raw:
+                return []
+            # Try JSON first
+            if (raw.startswith("[") and raw.endswith("]")) or (
+                raw.startswith("\n[") and raw.rstrip().endswith("]")
+            ):
+                try:
+                    data = json.loads(raw)
+                    if isinstance(data, list):
+                        return [str(x).strip() for x in data if str(x).strip()]
+                except Exception:
+                    pass
+            # Fallback: comma-separated
+            return [part.strip() for part in raw.split(",") if part.strip()]
 
-        use_openrouter = openrouter_env_present or ("/" in model_env)
+        pool_keys = _parse_api_keys(self.openai_api_keys)
 
-        # Resolve effective API key and base URL
-        if use_openrouter:
-            effective_api_key = self.openrouter_api_key or self.openai_api_key
-            # Prefer OpenRouter base when using OpenRouter models/keys
-            effective_api_base = (
-                self.openrouter_api_base or "https://openrouter.ai/api/v1"
-            )
-            effective_model = (
-                self.openrouter_model_name or self.openai_model_name or DEFAULT_MODEL
-            )
-        else:
-            effective_api_key = self.openai_api_key
-            effective_api_base = self.openai_api_base
-            effective_model = self.openai_model_name or DEFAULT_MODEL
+        # If not explicitly provided, auto-assemble from numbered env vars
+        if not pool_keys:
+            prefix = "OPENAI_API_KEY"
 
-        # Prepare optional default headers for OpenRouter
-        default_headers: Dict[str, Any] = {}
-        if use_openrouter:
-            if self.openrouter_http_referer:
-                default_headers["HTTP-Referer"] = self.openrouter_http_referer
-            if self.openrouter_x_title:
-                default_headers["X-Title"] = self.openrouter_x_title
+            def _suffix_num(name: str) -> Tuple[int, str]:
+                # Return (sort_key, name) where base var (no number) sorts first as 0
+                suffix = name[len(prefix) :]
+                if suffix == "":
+                    return (0, name)
+                try:
+                    return (int(suffix), name)
+                except Exception:
+                    return (999999, name)
+
+            candidates: List[Tuple[int, str]] = []
+            for env_name, env_val in os.environ.items():
+                if not env_val or not isinstance(env_val, str):
+                    continue
+                env_upper = env_name.upper()
+                if env_upper == prefix or env_upper.startswith(prefix):
+                    candidates.append(_suffix_num(env_upper))
+
+            candidates.sort(key=lambda x: x[0])
+            resolved: List[str] = []
+            for _, name in candidates:
+                val = os.environ.get(name) or os.environ.get(name.lower())
+                if val and val.strip():
+                    resolved.append(val.strip())
+            pool_keys = resolved
+        # Ensure the effective key is present if defined
+        if effective_api_key and effective_api_key not in pool_keys:
+            pool_keys = [effective_api_key] + pool_keys
 
         extra_config: Dict[str, Any] = {}
-        if default_headers:
-            extra_config["default_headers"] = default_headers
-        extra_config["is_openrouter"] = use_openrouter
         # Initialization behavior controls
         extra_config["init_connection_test"] = self.openai_init_connection_test
         extra_config["init_test_timeout"] = self.openai_init_test_timeout
+        # Inject API key pool if provided
+        if pool_keys:
+            extra_config["api_keys"] = pool_keys
 
         return OpenAIClientConfig(
             # API settings
-            api_key=effective_api_key or "",
+            api_key=effective_api_key,
             api_base=effective_api_base,
             model_name=effective_model,
             organization=self.openai_organization,

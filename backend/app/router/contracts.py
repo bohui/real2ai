@@ -688,25 +688,23 @@ async def _create_contract_record_with_cache(
     try:
         contracts_repo = ContractsRepository()
 
-        # Extract property address from document if available
-        property_address = None
-        processing_results = document.get("processing_results", {})
-        if isinstance(processing_results, dict):
-            contract_terms = processing_results.get("contract_terms", {})
-            if isinstance(contract_terms, dict):
-                property_address = contract_terms.get("property_address")
+        # # Extract property address from document if available
+        # property_address = None
+        # processing_results = document.get("processing_results", {})
+        # if isinstance(processing_results, dict):
+        #     contract_terms = processing_results.get("contract_terms", {})
+        #     if isinstance(contract_terms, dict):
+        #         property_address = contract_terms.get("property_address")
 
         # Defer setting purchase_agreement until purchase_method is known to satisfy DB constraints
-        requested_type = document.get("contract_type", "purchase_agreement")
-        initial_contract_type = (
-            "unknown" if requested_type == "purchase_agreement" else requested_type
-        )
+        # Contract type is now optional - use as provided or None if not specified
+        # initial_contract_type = document.get("contract_type")
 
         contract = await contracts_repo.upsert_contract_by_content_hash(
             content_hash=content_hash,
-            contract_type=initial_contract_type,
-            state=user.australian_state,
-            property_address=property_address,
+            # contract_type=initial_contract_type,
+            # state=user.australian_state,
+            # property_address=property_address,
             updated_by="contracts_router_create",
         )
 

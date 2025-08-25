@@ -26,10 +26,10 @@ compositions:
         path: "system/ocr_processor.md"
         priority: 100
         required: true
-      - name: "legal_specialist"
-        path: "system/realestate_lawyer.md"
-        priority: 90
-        required: true
+      # - name: "legal_specialist"
+      #   path: "system/realestate_lawyer.md"
+      #   priority: 90
+      #   required: true
     user_prompts:
       - "ocr_text_diagram_insight"
 
@@ -85,6 +85,172 @@ compositions:
         required: true
     user_prompts:
       - "contract_entities_extraction"
+
+  # Step 2 Section Analysis Compositions
+  step2_parties_property:
+    description: "Step 2.1 - Parties and Property Verification Analysis"
+    version: "1.0.0"
+    system_prompts:
+      - name: "step2_section_analysis"
+        path: "system/step2_section_analysis.md"
+        priority: 100
+        required: true
+      - name: "australian_legal"
+        path: "system/conveyancer.md"
+        priority: 90
+        required: true
+    user_prompts:
+      - "step2_parties_property"
+
+  step2_financial_terms:
+    description: "Step 2.2 - Financial Terms Analysis and Verification"
+    version: "1.0.0"
+    system_prompts:
+      - name: "step2_section_analysis"
+        path: "system/step2_section_analysis.md"
+        priority: 100
+        required: true
+      - name: "australian_legal"
+        path: "system/conveyancer.md"
+        priority: 90
+        required: true
+    user_prompts:
+      - "step2_financial_terms"
+
+  step2_conditions:
+    description: "Step 2.4 - Conditions Risk Assessment Analysis"
+    version: "1.0.0"
+    system_prompts:
+      - name: "step2_section_analysis"
+        path: "system/step2_section_analysis.md"
+        priority: 100
+        required: true
+      - name: "australian_legal"
+        path: "system/conveyancer.md"
+        priority: 90
+        required: true
+    user_prompts:
+      - "step2_conditions"
+
+  step2_warranties:
+    description: "Step 2.5 - Warranties and Representations Analysis"
+    version: "1.0.0"
+    system_prompts:
+      - name: "step2_section_analysis"
+        path: "system/step2_section_analysis.md"
+        priority: 100
+        required: true
+      - name: "australian_legal"
+        path: "system/conveyancer.md"
+        priority: 90
+        required: true
+    user_prompts:
+      - "step2_warranties"
+
+  step2_default_termination:
+    description: "Step 2.6 - Default and Termination Analysis"
+    version: "1.0.0"
+    system_prompts:
+      - name: "step2_section_analysis"
+        path: "system/step2_section_analysis.md"
+        priority: 100
+        required: true
+      - name: "australian_legal"
+        path: "system/conveyancer.md"
+        priority: 90
+        required: true
+    user_prompts:
+      - "step2_default_termination"
+
+  step2_settlement:
+    description: "Step 2.7 - Settlement Logistics Analysis"
+    version: "1.0.0"
+    system_prompts:
+      - name: "step2_section_analysis"
+        path: "system/step2_section_analysis.md"
+        priority: 100
+        required: true
+      - name: "australian_legal"
+        path: "system/conveyancer.md"
+        priority: 90
+        required: true
+    user_prompts:
+      - "step2_settlement"
+
+  step2_title_encumbrances:
+    description: "Step 2.8 - Title and Encumbrances Analysis with Diagram Integration"
+    version: "1.0.0"
+    system_prompts:
+      - name: "step2_section_analysis"
+        path: "system/step2_section_analysis.md"
+        priority: 100
+        required: true
+      - name: "australian_legal"
+        path: "system/conveyancer.md"
+        priority: 90
+        required: true
+    user_prompts:
+      - "step2_title_encumbrances"
+
+  step2_adjustments:
+    description: "Step 2.9 - Adjustments and Outgoings Calculator"
+    version: "1.0.0"
+    system_prompts:
+      - name: "step2_section_analysis"
+        path: "system/step2_section_analysis.md"
+        priority: 100
+        required: true
+      - name: "australian_legal"
+        path: "system/conveyancer.md"
+        priority: 90
+        required: true
+    user_prompts:
+      - "step2_adjustments"
+
+  step2_disclosure:
+    description: "Step 2.10 - Disclosure Compliance Check"
+    version: "1.0.0"
+    system_prompts:
+      - name: "step2_section_analysis"
+        path: "system/step2_section_analysis.md"
+        priority: 100
+        required: true
+      - name: "australian_legal"
+        path: "system/conveyancer.md"
+        priority: 90
+        required: true
+    user_prompts:
+      - "step2_disclosure"
+
+  step2_special_risks:
+    description: "Step 2.11 - Special Risks Identification"
+    version: "1.0.0"
+    system_prompts:
+      - name: "step2_section_analysis"
+        path: "system/step2_section_analysis.md"
+        priority: 100
+        required: true
+      - name: "australian_legal"
+        path: "system/conveyancer.md"
+        priority: 90
+        required: true
+    user_prompts:
+      - "step2_special_risks"
+
+  step2_cross_validation:
+    description: "Step 2.12 - Cross-Section Validation and Consistency Checks"
+    version: "1.0.0"
+    system_prompts:
+      - name: "step2_section_analysis"
+        path: "system/step2_section_analysis.md"
+        priority: 100
+        required: true
+      - name: "australian_legal"
+        path: "system/conveyancer.md"
+        priority: 90
+        required: true
+    user_prompts:
+      - "step2_cross_validation"
 
   compliance_check_only:
     description: "Check legal compliance requirements"

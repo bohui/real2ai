@@ -45,15 +45,48 @@ class DateType(str, Enum):
 
 
 class FinancialType(str, Enum):
-    """Types of financial amounts"""
+    """Types of financial amounts in real estate contracts"""
 
+    # Purchase-related
     PURCHASE_PRICE = "purchase_price"
     DEPOSIT = "deposit"
+    STAMP_DUTY = "stamp_duty"
+    LAND_VALUE = "land_value"  # unimproved value for rates/tax
+    IMPROVEMENTS_VALUE = "improvements_value"  # building value if split
+    GST = "gst"
+    TRANSFER_FEES = "transfer_fees"  # title registration, transfer duty admin
+    MORTGAGE_REGISTRATION_FEES = "mortgage_registration_fees"
+    LENDER_MORTGAGE_INSURANCE = "lender_mortgage_insurance"
+    LOAN_AMOUNT = "loan_amount"
+
+    # Ongoing ownership costs
+    COUNCIL_RATES = "council_rates"
+    WATER_RATES = "water_rates"
+    STRATA_FEES = "strata_fees"  # aka body corporate fees
+    LAND_TAX = "land_tax"
+    INSURANCE_PREMIUMS = "insurance_premiums"
+    MAINTENANCE_FEES = "maintenance_fees"
+
+    # Rental / lease-related
     RENT_AMOUNT = "rent_amount"
     BOND = "bond"
-    STAMP_DUTY = "stamp_duty"
+    RENT_INCREASE = "rent_increase"
+    OUTGOINGS = "outgoings"  # commercial lease pass-through costs
+    UTILITY_COSTS = "utility_costs"
+
+    # Transaction / professional fees
     LEGAL_FEES = "legal_fees"
     AGENT_COMMISSION = "agent_commission"
-    BODY_CORPORATE_FEES = "body_corporate_fees"
-    COUNCIL_RATES = "council_rates"
+    CONVEYANCING_FEES = "conveyancing_fees"
+    VALUATION_FEES = "valuation_fees"
+    SURVEY_FEES = "survey_fees"
+    BUILDING_INSPECTION_FEES = "building_inspection_fees"
+    PEST_INSPECTION_FEES = "pest_inspection_fees"
+
+    # Developer / off-the-plan
+    DEVELOPMENT_LEVY = "development_levy"
+    INFRASTRUCTURE_CONTRIBUTION = "infrastructure_contribution"
+    REGISTRATION_FEES = "registration_fees"  # plan of subdivision, strata registration
+
+    # Miscellaneous
     OTHER_FEES = "other_fees"

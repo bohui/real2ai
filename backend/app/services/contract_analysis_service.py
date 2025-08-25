@@ -1017,16 +1017,11 @@ async def ensure_contract(
     contracts_repo = ContractsRepository()
 
     try:
-        # If caller labels as purchase_agreement but no purchase_method yet, start as 'unknown'
-        # to satisfy DB taxonomy constraints; workflow will upgrade later once inferred.
-        initial_contract_type = (
-            "unknown" if contract_type == "purchase_agreement" else contract_type
-        )
+        # Contract type is now optional - pass through as provided
+        # initial_contract_type = contract_type
 
         contract = await contracts_repo.upsert_contract_by_content_hash(
             content_hash=content_hash,
-            contract_type=initial_contract_type,
-            state=australian_state,
             updated_by="ensure_contract",
         )
         logger.info(f"Repository: Upserted contract record: {contract.id}")

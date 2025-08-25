@@ -53,13 +53,19 @@ ALTER TABLE documents ADD COLUMN IF NOT EXISTS artifact_text_id UUID;
 CREATE TABLE contracts (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     content_hash TEXT UNIQUE NOT NULL,
-    contract_type contract_type NOT NULL DEFAULT 'unknown',
-    state australian_state NOT NULL DEFAULT 'NSW',
+
+    contract_type contract_type,
+    state australian_state,
     purchase_method purchase_method,
     use_category use_category,
-    ocr_confidence JSONB DEFAULT '{}'::jsonb,
-    contract_terms JSONB DEFAULT '{}'::jsonb,
     extracted_entity JSONB DEFAULT '{}'::jsonb,
+
+    parties_property JSONB DEFAULT '{}'::jsonb,
+    financial_terms JSONB DEFAULT '{}'::jsonb,
+    conditions JSONB DEFAULT '{}'::jsonb,
+    warranties JSONB DEFAULT '{}'::jsonb,
+    default_termination JSONB DEFAULT '{}'::jsonb,
+
     raw_text TEXT,
     property_address TEXT,
     updated_by TEXT,
@@ -74,6 +80,11 @@ CREATE OR REPLACE FUNCTION validate_contract_taxonomy(
     p_use_category use_category
 ) RETURNS boolean AS $$
 BEGIN
+    -- NULL contract_type allows any combination (fully optional)
+    IF p_contract_type IS NULL THEN
+        RETURN TRUE;
+    END IF;
+
     -- Purchase agreements must have purchase_method; use_category optional
     IF p_contract_type = 'purchase_agreement' THEN
         IF p_purchase_method IS NULL THEN
@@ -111,14 +122,16 @@ ALTER TABLE contracts
 ADD CONSTRAINT contracts_purchase_method_dependency_check 
 CHECK (
     (contract_type = 'purchase_agreement' AND purchase_method IS NOT NULL) OR
-    (contract_type != 'purchase_agreement' AND purchase_method IS NULL)
+    (contract_type != 'purchase_agreement' AND purchase_method IS NULL) OR
+    (contract_type IS NULL)
 );
 
 ALTER TABLE contracts 
 ADD CONSTRAINT contracts_use_category_dependency_check 
 CHECK (
     (contract_type = 'option_to_purchase' AND use_category IS NULL) OR
-    (contract_type != 'option_to_purchase')
+    (contract_type != 'option_to_purchase') OR
+    (contract_type IS NULL)
 );
 
 ALTER TABLE contracts 
@@ -130,10 +143,11 @@ CREATE INDEX idx_contracts_purchase_method ON contracts(purchase_method);
 CREATE INDEX idx_contracts_use_category ON contracts(use_category);
 CREATE INDEX idx_contracts_taxonomy ON contracts(contract_type, purchase_method, use_category);
 
-COMMENT ON COLUMN contracts.contract_type IS 'Authoritative user-provided contract classification';
+COMMENT ON COLUMN contracts.contract_type IS 'Authoritative user-provided contract classification (optional)';
 COMMENT ON COLUMN contracts.purchase_method IS 'OCR-inferred purchase method, only when contract_type = purchase_agreement';
+COMMENT ON COLUMN contracts.state IS 'Australian state for the contract (optional)';
 COMMENT ON COLUMN contracts.use_category IS 'OCR-inferred property use category. Applied to purchase_agreement and lease_agreement types. Null for option_to_purchase.';
-COMMENT ON COLUMN contracts.ocr_confidence IS 'Confidence scores for OCR-inferred fields';
+-- removed ocr_confidence column; comment no longer applicable
 
 -- Create analyses table for tracking analysis operations
 -- This table stores analysis operations that can be shared across users
@@ -568,6 +582,17 @@ CREATE INDEX idx_documents_user_status ON documents(user_id, processing_status);
 
 CREATE INDEX idx_contracts_content_hash ON contracts(content_hash);
 CREATE INDEX idx_contracts_type_state ON contracts(contract_type, state);
+
+-- Ensure the new per-section columns exist (and remove deprecated ones) in upgrade scenarios
+ALTER TABLE contracts 
+    ADD COLUMN IF NOT EXISTS parties_property JSONB DEFAULT '{}'::jsonb,
+    ADD COLUMN IF NOT EXISTS financial_terms JSONB DEFAULT '{}'::jsonb,
+    ADD COLUMN IF NOT EXISTS conditions JSONB DEFAULT '{}'::jsonb,
+    ADD COLUMN IF NOT EXISTS warranties JSONB DEFAULT '{}'::jsonb,
+    ADD COLUMN IF NOT EXISTS default_termination JSONB DEFAULT '{}'::jsonb,
+    DROP COLUMN IF EXISTS section_analysis,
+    DROP COLUMN IF EXISTS contract_terms,
+    DROP COLUMN IF EXISTS ocr_confidence;
 
 -- Create indexes for better performance on analyses table
 CREATE INDEX idx_analyses_content_hash ON analyses(content_hash);

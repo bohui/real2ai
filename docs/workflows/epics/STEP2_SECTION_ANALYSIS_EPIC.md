@@ -34,7 +34,7 @@
 - **Diagram Integration**: Comprehensive processors over 20+ diagram types feeding Title analysis and cross-section constraints.
 
 #### Inputs
-- **Required**: `full_text`, `entities_extraction_result` (per Step 1), `australian_state`, `contract_type`, `purchase_method`, `use_category`, `property_condition` (if available), uploaded diagrams/context (if present), legal requirements matrix.
+- **Required**: `full_text`, `entities_extraction` (per Step 1), `australian_state`, `contract_type`, `purchase_method`, `use_category`, `property_condition` (if available), uploaded diagrams/context (if present), legal requirements matrix.
 
 #### Outputs
 - Per-section structured results with confidence and risk flags.

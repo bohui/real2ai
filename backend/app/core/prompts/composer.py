@@ -422,10 +422,37 @@ class PromptComposer:
         user_versions: Dict[str, str],
     ) -> Dict[str, Any]:
         """Create metadata for composed prompt"""
+        # Aggregate model compatibility from user prompts (in order, unique)
+        model_compatibility: List[str] = []
+        try:
+            for up_name in rule.user_prompts:
+                try:
+                    tmpl = self._load_template(up_name, "user")
+                    compat = getattr(tmpl.metadata, "model_compatibility", None) or []
+                    for model in compat:
+                        if model not in model_compatibility:
+                            model_compatibility.append(model)
+                except Exception:
+                    # Non-fatal: continue without compatibility from this template
+                    pass
+        except Exception:
+            pass
+
+        explicit_model: Optional[str] = getattr(rule, "model", None)
+        primary_model: Optional[str] = explicit_model or (
+            model_compatibility[0] if model_compatibility else None
+        )
+        fallback_models: List[str] = [
+            m for m in model_compatibility if m != primary_model
+        ]
+
         return {
             "composition_rule": rule.name,
             "composition_version": getattr(rule, "version", ""),
-            "model": rule.model,
+            "model": explicit_model,
+            "primary_model": primary_model,
+            "fallback_models": fallback_models,
+            "model_compatibility": model_compatibility,
             "system_prompts": rule.system_prompts,
             "user_prompts": rule.user_prompts,
             "system_prompt_versions": system_versions,

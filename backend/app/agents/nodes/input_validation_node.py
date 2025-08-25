@@ -76,8 +76,8 @@ class InputValidationNode(BaseNode):
                 "workflow_version": "2.0",
                 "start_time": datetime.now(UTC).isoformat(),
                 "node_execution_order": [],
-                "validation_enabled": self.enable_validation,
-                "quality_checks_enabled": self.enable_quality_checks,
+                "validation_enabled": self.workflow.enable_validation,
+                "quality_checks_enabled": self.workflow.enable_quality_checks,
             }
 
             if validation_errors:
@@ -127,7 +127,7 @@ class InputValidationNode(BaseNode):
         """Initialize progress tracking for the workflow."""
         # Calculate total steps based on configuration
         base_steps = 8  # Core processing steps
-        validation_steps = 3 if self.enable_validation else 0
+        validation_steps = 3 if self.workflow.enable_validation else 0
         total_steps = base_steps + validation_steps
 
         # CRITICAL FIX: Don't overwrite the entire state, just set the progress field

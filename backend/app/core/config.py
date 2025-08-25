@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     db_pool_eviction_policy: str = "LRU"
 
     # AI Services
-    openai_api_key: str
+    openai_api_key: Optional[str] = None
     openai_api_base: Optional[str] = None
     langsmith_api_key: Optional[str] = None
     langsmith_project: str = "real2ai-development"
@@ -127,6 +127,9 @@ class Settings(BaseSettings):
     # Monitoring
     sentry_dsn: Optional[str] = None
     log_level: str = "INFO"
+    log_format: str = (
+        "console"  # "json" or "console"; default console per user preference
+    )
 
     # OCR Monitoring
     ocr_performance_monitoring: bool = True

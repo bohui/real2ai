@@ -10,7 +10,8 @@ from .base import BaseNode
 # Individual node imports - each file contains one class
 from .document_processing_node import DocumentProcessingNode
 from .document_quality_validation_node import DocumentQualityValidationNode
-from .contract_terms_extraction_node import ContractTermsExtractionNode
+from .contract_terms_extraction_node_not_used import ContractTermsExtractionNode
+from .section_analysis_node import SectionAnalysisNode
 from .terms_validation_node import TermsValidationNode
 from .compliance_analysis_node import ComplianceAnalysisNode
 from .diagram_analysis_node import DiagramAnalysisNode
@@ -30,6 +31,7 @@ __all__ = [
     "DocumentQualityValidationNode",
     # Contract Analysis
     "ContractTermsExtractionNode",
+    "SectionAnalysisNode", 
     "TermsValidationNode",
     # Compliance Analysis
     "ComplianceAnalysisNode",

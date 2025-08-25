@@ -69,7 +69,7 @@ class BaseNode(ABC):
         _get_progress_update(): Calculate progress updates based on current state
     """
 
-    def __init__(self, workflow: "ContractAnalysisWorkflow", node_name: str):
+    def __init__(self, workflow: any, node_name: str):
         """
         Initialize base node with workflow reference and configuration.
 
@@ -80,18 +80,18 @@ class BaseNode(ABC):
         self.workflow = workflow
         self.node_name = node_name
 
-        # Access workflow configuration
-        self.extraction_config = workflow.extraction_config
-        self.use_llm_config = workflow.use_llm_config
-        self.enable_validation = workflow.enable_validation
-        self.enable_quality_checks = workflow.enable_quality_checks
-        self.enable_fallbacks = workflow.enable_fallbacks
+        # # Access workflow configuration
+        # self.extraction_config = workflow.extraction_config
+        # self.use_llm_config = workflow.use_llm_config
+        # self.enable_validation = workflow.enable_validation
+        # self.enable_quality_checks = workflow.enable_quality_checks
+        # self.enable_fallbacks = workflow.enable_fallbacks
 
         # Access workflow clients and managers
         self.openai_client = None  # Will be set during workflow initialization
         self.gemini_client = None  # Will be set during workflow initialization
         self.prompt_manager = workflow.prompt_manager
-        self.structured_parsers = workflow.structured_parsers
+        # self.structured_parsers = workflow.structured_parsers
 
         # Structured parsers configured at workflow level
 

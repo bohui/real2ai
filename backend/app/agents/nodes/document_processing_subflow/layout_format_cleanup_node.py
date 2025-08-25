@@ -46,6 +46,11 @@ class LayoutFormatCleanupNode(DocumentProcessingNodeBase):
 
             document_id = state.get("document_id")
             text_extraction_result = state.get("text_extraction_result")
+            content_hash = (
+                state.get("content_hash")
+                or ((state.get("_document_metadata") or {}).get("content_hash"))
+                or state.get("content_hmac")
+            )
 
             if not document_id:
                 return self._handle_error(
@@ -70,6 +75,48 @@ class LayoutFormatCleanupNode(DocumentProcessingNodeBase):
                         ),
                     },
                 )
+
+            # Idempotency: if we already saved formatted raw_text for this content, skip
+            if content_hash:
+                try:
+                    contracts_repo = ContractsRepository()
+                    existing_contract = (
+                        await contracts_repo.get_contract_by_content_hash(content_hash)
+                    )
+                    if existing_contract and (existing_contract.raw_text or "").strip():
+                        self._log_info(
+                            "Skipping layout formatting: raw_text already saved",
+                            extra={
+                                "document_id": document_id,
+                                "content_hash": content_hash,
+                                "reason": "idempotent_skip_existing_raw_text",
+                            },
+                        )
+
+                        font_to_layout_mapping: Dict[str, str] = {}
+                        layout_result = LayoutFormatResult(
+                            raw_text=text_extraction_result.full_text or "",
+                            formatted_text=existing_contract.raw_text,
+                            font_to_layout_mapping=font_to_layout_mapping,
+                        )
+
+                        updated_state = state.copy()
+                        updated_state["layout_format_result"] = layout_result
+                        # No new artifact created in skip path
+                        duration = (
+                            datetime.now(timezone.utc) - start_time
+                        ).total_seconds()
+                        self._record_success(duration)
+                        return updated_state
+                except Exception as e:
+                    # Non-fatal: continue with formatting if check fails
+                    self._log_warning(
+                        f"Idempotency check failed; proceeding with formatting: {e}",
+                        extra={
+                            "document_id": document_id,
+                            "content_hash": content_hash,
+                        },
+                    )
 
             full_text = text_extraction_result.full_text or ""
             if not full_text:
@@ -157,7 +204,12 @@ class LayoutFormatCleanupNode(DocumentProcessingNodeBase):
                     contracts_repo = ContractsRepository()
                     await contracts_repo.upsert_contract_by_content_hash(
                         content_hash=content_hash,
-                        contract_type=str(state.get("contract_type") or "unknown"),
+                        # contract_type=str(state.get("contract_type") or "unknown"),
+                        # state=(
+                        #     str(state.get("australian_state"))
+                        #     if state.get("australian_state") is not None
+                        #     else None
+                        # ),
                         raw_text=formatted_text,
                         updated_by=self.node_name,
                     )

@@ -135,7 +135,7 @@ class Contract(TimestampedBaseModel):
     content_hash: str = Field(
         ..., description="SHA-256 hash of document content for caching"
     )
-    contract_type: ContractType = ContractType.UNKNOWN
+    contract_type: Optional[ContractType] = None
     purchase_method: Optional[PurchaseMethod] = Field(
         None, description="OCR-inferred purchase method for purchase agreements"
     )
@@ -143,15 +143,16 @@ class Contract(TimestampedBaseModel):
         None,
         description="OCR-inferred property use category for purchase and lease agreements",
     )
-    ocr_confidence: Dict[str, float] = Field(
-        default_factory=dict, description="Confidence scores for OCR-inferred fields"
-    )
-    state: AustralianState = AustralianState.NSW
-    contract_terms: Dict[str, Any] = Field(default_factory=dict)
+    state: Optional[AustralianState] = None
     extracted_entity: Dict[str, Any] = Field(
         default_factory=dict,
         description="Complete ContractEntityExtraction payload (for reference)",
     )
+    parties_property: Dict[str, Any] = Field(default_factory=dict)
+    financial_terms: Dict[str, Any] = Field(default_factory=dict)
+    conditions: Dict[str, Any] = Field(default_factory=dict)
+    warranties: Dict[str, Any] = Field(default_factory=dict)
+    default_termination: Dict[str, Any] = Field(default_factory=dict)
     raw_text: Optional[str] = None
     property_address: Optional[str] = None
     updated_by: Optional[str] = Field(
