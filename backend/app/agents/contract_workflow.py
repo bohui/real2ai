@@ -530,6 +530,9 @@ class ContractAnalysisWorkflow:
                     "has_running_loop": True,
                     "user_id": AuthContext.get_user_id(),
                     "has_token": bool(AuthContext.get_user_token()),
+                    # Add coroutine identity to help diagnose reuse
+                    "coroutine_repr": repr(node_coroutine),
+                    "coroutine_id": id(node_coroutine),
                 },
             )
         except Exception:
@@ -609,7 +612,18 @@ class ContractAnalysisWorkflow:
             self._event_loop.call_soon_threadsafe(
                 lambda: current_context.run(_submit_to_loop)
             )
-            return future.result()
+            result = future.result()
+            try:
+                logger.debug(
+                    "[Workflow] _run_async_node post-exec",
+                    extra={
+                        "coroutine_id": id(node_coroutine),
+                        "coroutine_repr": repr(node_coroutine),
+                    },
+                )
+            except Exception:
+                pass
+            return result
         except (RuntimeError, AttributeError, ImportError) as loop_error:
             # No running loop, asyncio not available, or loop detection failed
             logger.debug(
@@ -698,6 +712,8 @@ class ContractAnalysisWorkflow:
                         "had_running_loop": False,
                         "user_id": AuthContext.get_user_id(),
                         "has_token": bool(AuthContext.get_user_token()),
+                        "coroutine_id": id(node_coroutine),
+                        "coroutine_repr": repr(node_coroutine),
                     },
                 )
             except Exception:
@@ -1046,6 +1062,19 @@ class ContractAnalysisWorkflow:
 
             # Execute workflow with proper async context to prevent event loop conflicts
             async with AsyncContextManager():
+                try:
+                    logger.debug(
+                        "[Workflow] About to invoke compiled graph",
+                        extra={
+                            "state_keys": (
+                                list(state.keys()) if isinstance(state, dict) else None
+                            ),
+                            "progress": (state or {}).get("progress"),
+                            "resume_from_step": (state or {}).get("resume_from_step"),
+                        },
+                    )
+                except Exception:
+                    pass
                 result = await self.workflow.ainvoke(state)
 
             # Update performance metrics

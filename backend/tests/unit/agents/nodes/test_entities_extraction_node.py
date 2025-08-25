@@ -115,7 +115,7 @@ async def test_short_circuit_skips_when_cached(mocker):
     }
 
     result = await node.execute(state)
-    assert result.get("entities_extraction_result") is not None
+    assert result.get("entities_extraction") is not None
     assert result["confidence_scores"]["entities_extraction"] == 0.9
     # Step should be marked as skipped
     assert result["progress"]["current_step"] == 1

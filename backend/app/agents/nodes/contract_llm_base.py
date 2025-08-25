@@ -3,7 +3,7 @@ ContractLLMNode: LLMNode specialization for contract-backed nodes.
 
 Parameters:
 - contract_attribute: the JSONB column on `contracts` to check/persist (e.g., 'extracted_entity')
-- state_field: the workflow state key to set on success/short-circuit (e.g., 'entities_extraction_result')
+- state_field: the workflow state key to set on success/short-circuit (e.g., 'entities_extraction')
 
 Subclasses can override `_build_updated_fields(parsed, state)` to supply additional
 repository fields (e.g., contract_type, property_address) while the base class

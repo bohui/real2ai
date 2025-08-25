@@ -687,22 +687,68 @@ async def comprehensive_document_analysis(
                 progress_callback=persist_progress,
             )
 
-            # Handle None response
+            # Unified error handling for None or unsuccessful responses
+            unified_error_msg = None
             if analysis_response is None:
-                error_msg = "Contract analysis service returned None"
-                logger.error(error_msg)
-                raise ValueError(f"Contract analysis failed: {error_msg}")
-
-            # Extract analysis results from service response
-            # StartAnalysisResponse object - access attributes directly
-            if not analysis_response.success:
-                # Ensure we have a non-empty error message even if the field exists but is None/empty
-                error_msg = (
+                unified_error_msg = "Contract analysis service returned None"
+            elif not getattr(analysis_response, "success", False):
+                unified_error_msg = (
                     getattr(analysis_response, "error", None)
                     or "Contract analysis failed"
                 )
-                logger.error(f"Contract analysis failed: {error_msg}")
-                raise ValueError(f"Contract analysis failed: {error_msg}")
+
+            if unified_error_msg:
+                # Enriched diagnostics for tracing root cause (single code path)
+                latest_snapshot = None
+                try:
+                    progress_repo = AnalysisProgressRepository()
+                    latest_snapshot = await progress_repo.get_latest_progress(
+                        content_hash,
+                        user_id,
+                        columns="current_step, progress_percent, updated_at",
+                    )
+                except Exception as _snap_err:
+                    latest_snapshot = {"error": str(_snap_err)}
+
+                logger.error(
+                    unified_error_msg,
+                    extra={
+                        "document_id": document_id,
+                        "analysis_id": analysis_id,
+                        "contract_id": contract_id,
+                        "user_id": user_id,
+                        "content_hash": content_hash,
+                        "analysis_options_keys": sorted(list(analysis_options.keys())),
+                        "workflow_initialized": getattr(
+                            contract_service, "_workflow_initialized", None
+                        ),
+                        "latest_progress": latest_snapshot,
+                        "service_enable_ws": getattr(
+                            contract_service, "enable_websocket_progress", None
+                        ),
+                        "response_type": (
+                            None
+                            if analysis_response is None
+                            else type(analysis_response).__name__
+                        ),
+                        "response_success": (
+                            None
+                            if analysis_response is None
+                            else getattr(analysis_response, "success", None)
+                        ),
+                        "response_error": (
+                            None
+                            if analysis_response is None
+                            else getattr(analysis_response, "error", None)
+                        ),
+                        "response_warnings": (
+                            None
+                            if analysis_response is None
+                            else getattr(analysis_response, "warnings", None)
+                        ),
+                    },
+                )
+                raise ValueError(f"Contract analysis failed: {unified_error_msg}")
 
             # Get analysis results from the service response
             analysis_result = getattr(analysis_response, "analysis_results", {})

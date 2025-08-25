@@ -69,7 +69,9 @@ class DocumentProcessingNode(BaseNode):
                 )
 
             # Use the document processing subflow directly (no Celery blocking)
-            use_llm = self.use_llm_config.get("document_processing", True)
+            # Safely access config without assuming BaseNode set attributes
+            _use_llm_cfg = self.workflow.use_llm_config or {}
+            use_llm = _use_llm_cfg.get("document_processing", True)
             from app.core.auth_context import AuthContext
 
             # Get current user ID for task context
@@ -182,9 +184,16 @@ class DocumentProcessingNode(BaseNode):
                 )
 
             # Assess text quality
+            _quality_checks_enabled = bool(
+                getattr(
+                    self,
+                    "enable_quality_checks",
+                    getattr(self.workflow, "enable_quality_checks", False),
+                )
+            )
             text_quality = (
                 self._assess_text_quality(extracted_text)
-                if self.enable_quality_checks
+                if _quality_checks_enabled
                 else {"score": 0.8, "issues": []}
             )
 

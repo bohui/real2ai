@@ -28,7 +28,7 @@ class EntitiesExtractionNode(ContractLLMNode):
             workflow=workflow,
             node_name="entities_extraction",
             contract_attribute="extracted_entity",
-            state_field="entities_extraction_result",
+            state_field="entities_extraction",
         )
 
     # Short-circuit provided by ContractLLMNode
@@ -157,7 +157,7 @@ class EntitiesExtractionNode(ContractLLMNode):
         parsed: ContractEntityExtraction,
         quality: Dict[str, Any],
     ) -> RealEstateAgentState:
-        state["entities_extraction_result"] = parsed.model_dump()
+        state["entities_extraction"] = parsed.model_dump()
         if parsed.metadata and parsed.metadata.overall_confidence is not None:
             state.setdefault("confidence_scores", {})[
                 "entities_extraction"
