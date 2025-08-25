@@ -2,11 +2,9 @@
 Unit tests for cache manager.
 """
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-from datetime import datetime
+from unittest.mock import AsyncMock, patch
 
 from app.core.cache_manager import CacheManager
-from app.services.cache.cache_service import CacheService
 
 
 @pytest.fixture

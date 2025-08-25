@@ -7,12 +7,12 @@ import asyncio
 import random
 import time
 import logging
-from typing import Any, Callable, Optional, Dict, Tuple, Union
+from typing import Any, Callable, Optional, Dict
 from dataclasses import dataclass
 from enum import Enum
 from functools import wraps
 
-from app.core.error_handler import ErrorCategory, ErrorSeverity
+from app.core.error_handler import ErrorCategory
 
 logger = logging.getLogger(__name__)
 

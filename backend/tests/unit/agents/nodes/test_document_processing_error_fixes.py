@@ -7,9 +7,8 @@ This module tests the fixes for:
 3. Connection pool management improvements
 """
 
-import asyncio
 import pytest
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
+from unittest.mock import Mock, AsyncMock, patch
 from uuid import uuid4
 from datetime import datetime, timezone
 

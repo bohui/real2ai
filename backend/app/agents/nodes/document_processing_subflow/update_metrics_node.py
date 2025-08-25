@@ -5,7 +5,6 @@ This node migrates the _update_document_metrics method from DocumentService
 to update the main document record with aggregated metrics from processing.
 """
 
-from typing import Dict, Any
 from datetime import datetime, timezone
 
 from app.agents.subflows.document_processing_workflow import DocumentProcessingState
@@ -27,9 +26,8 @@ class UpdateMetricsNode(DocumentProcessingNodeBase):
     - No state changes (database operation only)
     """
 
-    def __init__(self):
-        super().__init__("update_metrics")
-        self.runs_repo = None
+    runs_repo = None
+    # Inherit constructor from DocumentProcessingNodeBase
 
     async def initialize(self, user_id):
         """Initialize runs repository with user context"""

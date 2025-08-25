@@ -1,7 +1,6 @@
 from datetime import datetime, UTC
 from typing import Dict, Any, Optional
 
-from .base_node import Step2NodeBase  # kept for typing; not used after refactor
 from app.agents.subflows.step2_section_analysis_workflow import (
     Step2AnalysisState,
     Step2AnalysisWorkflow,
@@ -21,35 +20,6 @@ class PartiesPropertyNode(ContractLLMNode):
         )
         # Use BaseNode progress tracking if available in caller context
         self.progress_range = progress_range
-
-    async def emit_progress(self, state: Step2AnalysisState, percent: int, desc: str):
-        """Emit progress updates for Step 2 workflow"""
-        try:
-            notify = (state or {}).get("notify_progress")
-            if notify and callable(notify):
-                await notify(self.node_name, percent, desc)
-        except Exception as e:
-            self.logger.debug(f"Progress emit failed: {e}")
-
-    def _ensure_content_hash_on_state(self, state: Step2AnalysisState) -> None:
-        try:
-            if state.get("content_hash") or state.get("content_hmac"):
-                return
-            entities = state.get("entities_extraction", {}) or {}
-            content_hash = entities.get("content_hash") or (
-                entities.get("document", {}) or {}
-            ).get("content_hash")
-            if content_hash:
-                state["content_hash"] = content_hash
-        except Exception:
-            # Non-fatal: base class will simply skip if no content hash is available
-            pass
-
-    async def _short_circuit_check(
-        self, state: Step2AnalysisState
-    ) -> Optional[Step2AnalysisState]:
-        self._ensure_content_hash_on_state(state)
-        return await super()._short_circuit_check(state)
 
     async def _build_context_and_parser(self, state: Step2AnalysisState):
         from app.core.prompts import PromptContext, ContextType
@@ -126,10 +96,6 @@ class PartiesPropertyNode(ContractLLMNode):
             }
         except Exception:
             return {"ok": False}
-
-    async def _persist_results(self, state: Step2AnalysisState, parsed: Any) -> None:
-        self._ensure_content_hash_on_state(state)
-        await super()._persist_results(state, parsed)
 
     async def _update_state_success(
         self, state: Step2AnalysisState, parsed: Any, quality: Dict[str, Any]

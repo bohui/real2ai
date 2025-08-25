@@ -9,8 +9,8 @@ Tests the database operations for the contract type taxonomy system:
 """
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-from uuid import uuid4, UUID
+from unittest.mock import AsyncMock, patch
+from uuid import uuid4
 from datetime import datetime
 
 from app.services.repositories.contracts_repository import ContractsRepository

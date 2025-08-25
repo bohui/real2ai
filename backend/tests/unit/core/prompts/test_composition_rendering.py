@@ -4,13 +4,10 @@ Tests the new render_composed() method and validates the return schema
 """
 
 import pytest
-from pathlib import Path
-from typing import Dict, Any
 from unittest.mock import Mock, AsyncMock, patch
 from datetime import datetime
 
-from app.core.prompts.manager import PromptManager, PromptManagerConfig
-from app.core.prompts.context import PromptContext, ContextType
+from app.core.prompts.manager import PromptManager
 from app.core.prompts.service_mixin import PromptEnabledService
 from app.core.prompts.parsers import create_parser
 from pydantic import BaseModel, Field

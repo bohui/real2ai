@@ -5,9 +5,8 @@ Validates that all compositions resolve to existing templates and fragments
 
 import logging
 from pathlib import Path
-from typing import Dict, List, Any, Set
+from typing import Dict, List, Any
 import yaml
-from .exceptions import PromptCompositionError
 
 logger = logging.getLogger(__name__)
 

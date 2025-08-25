@@ -3,7 +3,7 @@ Tests for storage utilities
 """
 
 import pytest
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import Mock, patch
 from app.utils.storage_utils import ArtifactStorageService
 
 

@@ -8,7 +8,7 @@ from typing import Optional, Dict, Any, Callable
 from functools import wraps
 from contextlib import asynccontextmanager
 import inspect
-from langsmith import Client, traceable
+from langsmith import Client
 from langsmith.run_helpers import trace
 
 from .config import get_settings

@@ -6,9 +6,7 @@ import pytest
 import os
 import tempfile
 import json
-import base64
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
-from datetime import datetime, timezone
+from unittest.mock import Mock, AsyncMock, patch
 
 from app.agents.subflows.document_processing_external_ocr_workflow import (
     DocumentProcessingExternalOCRWorkflow,

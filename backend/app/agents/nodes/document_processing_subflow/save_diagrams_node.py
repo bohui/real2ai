@@ -6,7 +6,6 @@ content-addressed storage and user-scoped references.
 """
 
 import uuid
-from typing import Dict, Any
 from datetime import datetime, timezone
 
 from app.agents.subflows.document_processing_workflow import DocumentProcessingState
@@ -28,11 +27,9 @@ class SaveDiagramsNode(DocumentProcessingNodeBase):
     - No state changes (database operation only)
     """
 
-    def __init__(self, progress_range: tuple[int, int] = (36, 40)):
-        super().__init__("save_diagrams")
-        self.user_docs_repo = None
-        self.artifacts_repo = None
-        self.progress_range = progress_range
+    user_docs_repo = None
+    artifacts_repo = None
+    # Inherit constructor from DocumentProcessingNodeBase
 
     async def initialize(self, user_id):
         """Initialize repositories with user context"""
@@ -214,6 +211,7 @@ class SaveDiagramsNode(DocumentProcessingNodeBase):
             for idx, page_num in enumerate(sorted(diagram_pages)):
                 # Emit incremental progress for each diagram page
                 await self.emit_page_progress(
+                    state,
                     current_page=idx + 1,
                     total_pages=total_diagram_pages,
                     description="Saving diagram page",

@@ -9,7 +9,7 @@ import os
 import glob
 import re
 import logging
-from typing import Dict, Any, List
+from typing import Dict, Any
 from dataclasses import dataclass
 from datetime import datetime, timezone
 

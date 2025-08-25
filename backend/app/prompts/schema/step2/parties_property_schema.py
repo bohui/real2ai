@@ -34,7 +34,7 @@ class PropertyDescriptionCompleteness(str, Enum):
 class PartyDetails(BaseModel):
     """Individual party details and verification"""
 
-    name: str = Field(..., description="Full legal name of the party")
+    name: Optional[str] = Field(None, description="Full legal name of the party")
     role: PartyRole = Field(
         ..., description="Role in transaction (vendor, purchaser, guarantor, etc.)"
     )

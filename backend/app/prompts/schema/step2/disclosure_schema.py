@@ -5,7 +5,7 @@ This schema defines the structured output for mandatory disclosure compliance,
 vendor statement adequacy, and regulatory requirement verification.
 """
 
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
 from pydantic import BaseModel, Field, ConfigDict
 from enum import Enum
 from app.schema.enums import RiskLevel

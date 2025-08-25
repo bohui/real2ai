@@ -2,12 +2,11 @@
 Pydantic models for structured workflow outputs
 """
 
-from typing import List, Optional, Dict, Any, Union
+from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field, validator
 from enum import Enum
 from datetime import datetime
 
-from ...models.contract_state import RiskLevel, AustralianState
 from app.schema.enums.property import (
     ContractType,
     PurchaseMethod,

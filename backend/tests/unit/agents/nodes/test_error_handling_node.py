@@ -6,12 +6,10 @@ and failures in the contract analysis workflow.
 """
 
 import pytest
-from unittest.mock import Mock, AsyncMock, patch
-from datetime import datetime, UTC
-from typing import Dict, Any
+from unittest.mock import Mock, patch
 
 from app.agents.nodes.error_handling_node import ErrorHandlingNode
-from app.models.contract_state import RealEstateAgentState
+from app.agents.states.contract_state import RealEstateAgentState
 from app.schema.enums import ProcessingStatus
 
 

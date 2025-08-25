@@ -6,7 +6,7 @@ basic taxonomy and key terms using an LLM with a schema-driven output parser,
 and upserts the contract record by content hash.
 """
 
-from typing import Dict, Any, Optional
+from typing import Any
 import re
 from datetime import datetime, timezone
 

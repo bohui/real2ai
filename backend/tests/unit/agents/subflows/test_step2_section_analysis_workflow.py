@@ -4,14 +4,14 @@ Unit tests for Step 2 Section Analysis Workflow
 
 import pytest
 from datetime import datetime, UTC
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 from app.agents.subflows.step2_section_analysis_workflow import (
     Step2AnalysisWorkflow,
     Step2AnalysisState,
     create_step2_workflow,
 )
-from app.models.contract_state import RealEstateAgentState
+from app.agents.states.contract_state import RealEstateAgentState
 
 
 class TestStep2AnalysisWorkflow:

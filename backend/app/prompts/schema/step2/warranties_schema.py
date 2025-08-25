@@ -5,10 +5,9 @@ This schema defines the structured output for warranties, representations,
 vendor disclosures, and buyer acknowledgments analysis.
 """
 
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
 from pydantic import BaseModel, Field, ConfigDict
 from enum import Enum
-from datetime import date
 from app.schema.enums import RiskLevel
 
 
@@ -41,6 +40,7 @@ class DisclosureCategory(str, Enum):
     PLANNING = "planning"
     STRUCTURAL = "structural"
     SERVICES = "services"
+    COMPLIANCE = "compliance"
     OTHER = "other"
 
 

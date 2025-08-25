@@ -2,9 +2,8 @@
 Unit tests for VisualArtifactService
 """
 
-import hashlib
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 import time
 
 from app.services.visual_artifact_service import (

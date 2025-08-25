@@ -22,25 +22,6 @@ class DefaultTerminationNode(ContractLLMNode):
         )
         self.progress_range = progress_range
 
-    def _ensure_content_hash_on_state(self, state: Step2AnalysisState) -> None:
-        try:
-            if state.get("content_hash") or state.get("content_hmac"):
-                return
-            entities = state.get("entities_extraction", {}) or {}
-            content_hash = entities.get("content_hash") or (
-                (entities.get("document", {}) or {}).get("content_hash")
-            )
-            if content_hash:
-                state["content_hash"] = content_hash
-        except Exception:
-            pass
-
-    async def _short_circuit_check(
-        self, state: Step2AnalysisState
-    ) -> Optional[Step2AnalysisState]:
-        self._ensure_content_hash_on_state(state)
-        return await super()._short_circuit_check(state)
-
     async def _build_context_and_parser(self, state: Step2AnalysisState):
         from app.core.prompts import PromptContext, ContextType
         from app.prompts.schema.step2.default_termination_schema import (
@@ -109,10 +90,6 @@ class DefaultTerminationNode(ContractLLMNode):
             }
         except Exception:
             return {"ok": False}
-
-    async def _persist_results(self, state: Step2AnalysisState, parsed: Any) -> None:
-        self._ensure_content_hash_on_state(state)
-        await super()._persist_results(state, parsed)
 
     async def _update_state_success(
         self, state: Step2AnalysisState, parsed: Any, quality: Dict[str, Any]

@@ -6,7 +6,6 @@ indicating that basic document processing (text extraction, page analysis,
 diagram detection) has been completed successfully.
 """
 
-from typing import Dict, Any
 from datetime import datetime, timezone
 
 from app.models.supabase_models import DocumentStatus
@@ -29,9 +28,7 @@ class MarkBasicCompleteNode(DocumentProcessingNodeBase):
     - Updates database record only (no state changes)
     """
 
-    def __init__(self):
-        super().__init__("mark_basic_complete")
-        self.runs_repo = None
+    # Inherit constructor from DocumentProcessingNodeBase
 
     async def initialize(self, user_id):
         """Initialize runs repository with user context"""

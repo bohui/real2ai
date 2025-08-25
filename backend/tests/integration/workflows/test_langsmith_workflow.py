@@ -25,11 +25,10 @@ os.environ["OPENAI_API_KEY"] = "test-openai-key"
 from app.core.langsmith_config import (
     get_langsmith_config,
     langsmith_trace,
-    langsmith_session,
 )
 from app.core.langsmith_init import initialize_langsmith, get_langsmith_status
 from app.agents.contract_workflow import ContractAnalysisWorkflow
-from app.models.contract_state import RealEstateAgentState
+from app.agents.states.contract_state import RealEstateAgentState
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

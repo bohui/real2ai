@@ -5,16 +5,12 @@ This version properly uses context managers for connection management
 instead of storing connections, preventing pool misuse.
 """
 
-import asyncio
 import json
 from typing import Dict, List, Optional, Any
 from uuid import UUID
-import asyncpg
-from datetime import datetime
 
 from app.database.connection import get_service_role_connection
 from app.utils.content_utils import (
-    get_artifact_key,
     validate_content_hmac,
     validate_params_fingerprint,
 )

@@ -5,26 +5,20 @@ This module provides REST API endpoints for comprehensive property analysis
 combining Domain and CoreLogic data sources.
 """
 
-from typing import List, Optional, Dict, Any
-from fastapi import APIRouter, HTTPException, status, Depends, Query, Body
+from typing import Dict, Any
+from fastapi import APIRouter, HTTPException, status, Depends, Query
 import logging
 from datetime import datetime
 
 from app.schema.property import (
     PropertyProfileRequestModel,
     PropertyComparisonRequestModel,
-    PropertySearchRequest,
-    PropertyProfileResponse,
-    PropertyValuationRequest,
-    PropertyValuationResponse,
-    PropertyAPIHealthStatus
+    PropertySearchRequest
 )
 from app.clients.base.exceptions import (
     PropertyNotFoundError,
     PropertyValuationError,
-    PropertyDataIncompleteError,
-    PropertyRateLimitError,
-    ClientError
+    PropertyRateLimitError
 )
 
 logger = logging.getLogger(__name__)

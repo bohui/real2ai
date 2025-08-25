@@ -6,11 +6,9 @@ workflows to restart from the beginning instead of resuming from failed states.
 """
 
 import logging
-from typing import Dict, Any, Optional, List
-from uuid import UUID
+from typing import Dict, Any, Optional
 from datetime import datetime, timezone
 
-from app.core.task_recovery import CheckpointData
 from app.services.repositories.analysis_progress_repository import AnalysisProgressRepository
 
 logger = logging.getLogger(__name__)

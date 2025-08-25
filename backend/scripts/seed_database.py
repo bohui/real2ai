@@ -19,10 +19,9 @@ import asyncio
 import argparse
 import hashlib
 from datetime import datetime, timedelta
-from typing import List, Dict, Any
+from typing import List, Dict
 
 import asyncpg
-from supabase import create_client, Client
 import uuid
 
 # Add the app directory to the path so we can import from it

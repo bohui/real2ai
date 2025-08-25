@@ -2,9 +2,8 @@
 Settings management for CoreLogic API client.
 """
 
-import os
-from typing import Optional, Dict, Any
-from pydantic import BaseModel, Field, validator
+from typing import Dict, Any
+from pydantic import Field, validator
 
 try:
     from pydantic_settings import BaseSettings

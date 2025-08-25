@@ -3,7 +3,7 @@ Basic unit tests for database connection module.
 """
 
 import pytest
-from unittest.mock import Mock, AsyncMock, patch
+from unittest.mock import AsyncMock, patch
 import asyncpg
 
 from app.database.connection import _setup_user_session

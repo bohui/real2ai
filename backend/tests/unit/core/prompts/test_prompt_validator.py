@@ -3,7 +3,7 @@ Unit tests for PromptValidator with configurable limits
 """
 
 import pytest
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 from app.core.prompts.validator import PromptValidator, ValidationSeverity
 from app.core.prompts.template import PromptTemplate, TemplateMetadata
 from app.core.prompts.context import PromptContext, ContextType

@@ -12,20 +12,11 @@ from .config import DomainClientConfig
 from .cache import InMemoryCache, PropertyDataCache
 from ..base.exceptions import ClientError, PropertyNotFoundError
 from ...schema import (
-    PropertyAddress,
-    PropertyDetails,
-    PropertyValuation,
-    PropertyMarketData,
-    PropertyRiskAssessment,
-    ComparableSale,
-    PropertySalesHistory,
-    PropertyRentalHistory,
     PropertyProfile,
     PropertySearchRequest,
     PropertyProfileResponse,
     PropertyValuationRequest,
     PropertyValuationResponse,
-    PropertySearchResponse,
 )
 
 logger = logging.getLogger(__name__)

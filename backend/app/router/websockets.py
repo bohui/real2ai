@@ -747,7 +747,6 @@ async def handle_start_analysis_request(
 
     try:
         # Import here to avoid circular imports
-        from app.tasks.background_tasks import comprehensive_document_analysis
 
         # Get analysis options from client
         analysis_options = data.get(

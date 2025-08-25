@@ -1,12 +1,11 @@
 """Test file security validation functionality."""
 
 import pytest
-import asyncio
 from io import BytesIO
 from fastapi import UploadFile
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
-from app.core.file_security import FileSecurityValidator, SecurityValidationResult
+from app.core.file_security import FileSecurityValidator
 
 
 class TestFileSecurityValidator:

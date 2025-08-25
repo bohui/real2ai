@@ -11,7 +11,13 @@ module.exports = {
   ],
   ignorePatterns: ["dist", ".eslintrc.cjs"],
   parser: "@typescript-eslint/parser",
-  plugins: ["react-refresh", "@typescript-eslint", "react", "jsx-a11y"],
+  plugins: [
+    "react-refresh",
+    "@typescript-eslint",
+    "react",
+    "jsx-a11y",
+    "unused-imports",
+  ],
   rules: {
     "react-refresh/only-export-components": [
       "warn",
@@ -20,6 +26,7 @@ module.exports = {
     "react/react-in-jsx-scope": "off",
     "react/prop-types": "off",
     // "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_" }],
+    "unused-imports/no-unused-imports": "error",
     "@typescript-eslint/no-unused-vars": [
       "warn",
       { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },

@@ -2,8 +2,6 @@
 Unit tests for PromptContext with type validation
 """
 
-import pytest
-import logging
 from unittest.mock import patch
 from app.core.prompts.context import (
     PromptContext, 

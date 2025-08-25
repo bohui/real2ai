@@ -4,7 +4,6 @@ from typing import Dict, List, Any, Optional, Union
 from pydantic import BaseModel, Field
 from datetime import datetime
 
-from app.prompts.schema.image_semantics_schema import ImageType
 
 
 class SchemaBase(BaseModel):

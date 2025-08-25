@@ -5,8 +5,6 @@ Run this script to test the authentication flow and see where it's failing.
 """
 
 import requests
-import json
-import os
 from datetime import datetime
 
 

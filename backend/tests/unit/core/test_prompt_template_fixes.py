@@ -6,15 +6,11 @@ This module tests the fixes for undefined template variables that were causing
 """
 
 import pytest
-from unittest.mock import Mock, patch
 from pathlib import Path
 import tempfile
-import os
 from typing import Dict, Any
 
 from app.core.prompts.fragment_manager import FragmentManager
-from app.core.prompts.composer import PromptComposer
-from app.core.prompts.context import PromptContext, ContextType
 
 
 class TestPromptTemplateFixes:

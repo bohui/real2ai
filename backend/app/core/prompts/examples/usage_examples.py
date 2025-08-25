@@ -4,7 +4,6 @@ import asyncio
 from pathlib import Path
 from app.core.prompts.manager import PromptManager, PromptManagerConfig
 from app.core.prompts.context import PromptContext, ContextType
-from app.models.contract_state import AustralianState, ContractType
 
 
 async def basic_composition_example():

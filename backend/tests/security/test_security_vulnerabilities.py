@@ -1,17 +1,13 @@
 """
 Security vulnerability tests for Real2.AI backend.
 """
-import json
-import base64
-from datetime import datetime, timedelta
-from unittest.mock import patch, MagicMock
+from datetime import timedelta
+from unittest.mock import patch
 import pytest
-from fastapi.testclient import TestClient
 from httpx import AsyncClient
 
 from app.main import app
 # Token functions removed - need to implement or mock these for tests
-from app.core.auth import User
 
 
 class TestAuthenticationSecurity:

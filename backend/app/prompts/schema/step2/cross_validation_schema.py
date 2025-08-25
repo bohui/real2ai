@@ -5,7 +5,7 @@ This schema defines the structured output for cross-section validation,
 consistency checks, and comprehensive synthesis analysis.
 """
 
-from typing import List, Optional, Dict, Any
+from typing import List, Dict
 from pydantic import BaseModel, Field, ConfigDict
 from enum import Enum
 from app.schema.enums import RiskLevel

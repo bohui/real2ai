@@ -5,7 +5,7 @@ Centralizes essential RPC calls that must remain in the migration.
 These wrappers provide a clean interface while maintaining the RPC functionality.
 """
 
-from typing import Dict, List, Optional, Any
+from typing import Dict, Optional, Any
 from uuid import UUID
 import logging
 from datetime import datetime

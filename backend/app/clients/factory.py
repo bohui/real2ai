@@ -3,18 +3,18 @@ Client factory for dependency injection and client management.
 """
 
 import logging
-from typing import Dict, Any, Optional, Type, Callable
+from typing import Dict, Any, Optional, Type
 from functools import lru_cache
 
 from .base.client import BaseClient
 from .base.exceptions import ClientError
 
 # Import all client implementations
-from .supabase import SupabaseClient, SupabaseClientConfig, SupabaseSettings
-from .gemini import GeminiClient, GeminiClientConfig, GeminiSettings
-from .openai import OpenAIClient, OpenAIClientConfig, OpenAISettings
-from .domain import DomainClient, DomainClientConfig, DomainSettings
-from .corelogic import CoreLogicClient, CoreLogicClientConfig, CoreLogicSettings
+from .supabase import SupabaseClient, SupabaseSettings
+from .gemini import GeminiClient, GeminiSettings
+from .openai import OpenAIClient, OpenAISettings
+from .domain import DomainClient, DomainSettings
+from .corelogic import CoreLogicClient, CoreLogicSettings
 
 logger = logging.getLogger(__name__)
 

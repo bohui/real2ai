@@ -10,7 +10,6 @@ from uuid import UUID, uuid4
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import Enum
-import asyncpg
 
 from app.database.connection import get_user_connection
 

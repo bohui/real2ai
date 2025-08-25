@@ -10,7 +10,7 @@ from typing import Optional, Tuple
 import jwt
 from jwt.exceptions import InvalidTokenError
 
-from fastapi import Request, Response, HTTPException, status
+from fastapi import Request, Response, status
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.types import ASGIApp
 

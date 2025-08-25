@@ -6,7 +6,6 @@ get_processed_document_summary function. If a summary exists, it populates
 the processed_summary field to enable short-circuiting.
 """
 
-from typing import Dict, Any
 from datetime import datetime, timezone
 
 from app.agents.subflows.document_processing_workflow import DocumentProcessingState
@@ -27,8 +26,7 @@ class AlreadyProcessedCheckNode(DocumentProcessingNodeBase):
     - processed_summary: ProcessedDocumentSummary if already processed
     """
 
-    def __init__(self):
-        super().__init__("already_processed_check")
+    # Inherit constructor from DocumentProcessingNodeBase
 
     async def execute(self, state: DocumentProcessingState) -> DocumentProcessingState:
         """

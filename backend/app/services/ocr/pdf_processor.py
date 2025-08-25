@@ -2,9 +2,8 @@
 PDF processing for OCR operations.
 """
 
-import asyncio
 import pymupdf
-from typing import Dict, Any, List
+from typing import Dict, Any
 from datetime import datetime, timezone
 from google.genai.types import Content, Part
 

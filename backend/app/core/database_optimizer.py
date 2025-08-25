@@ -11,11 +11,9 @@ Key Optimizations:
 - Query result caching
 """
 
-import asyncio
 import logging
 import time
 from typing import Dict, List, Optional, Tuple, Any
-from uuid import UUID
 from dataclasses import dataclass
 from contextlib import asynccontextmanager
 

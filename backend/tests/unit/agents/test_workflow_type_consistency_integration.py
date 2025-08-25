@@ -6,8 +6,7 @@ to prevent "can only concatenate list (not dict) to list" errors.
 """
 
 import pytest
-from unittest.mock import Mock, AsyncMock, patch
-from datetime import datetime, UTC
+from unittest.mock import Mock, patch
 
 from app.agents.nodes.terms_validation_node import TermsValidationNode
 from app.agents.nodes.recommendations_generation_node import (
@@ -17,11 +16,7 @@ from app.agents.nodes.risk_assessment_node import RiskAssessmentNode
 from app.agents.nodes.compliance_analysis_node import ComplianceAnalysisNode
 from app.prompts.schema.workflow_outputs import (
     ContractTermsValidationOutput,
-    RecommendationsOutput,
-    RiskAnalysisOutput,
-    ComplianceAnalysisOutput,
 )
-from app.models.contract_state import RealEstateAgentState
 
 
 class TestWorkflowTypeConsistencyIntegration:
@@ -356,8 +351,8 @@ class TestWorkflowTypeConsistencyIntegration:
 
     def test_state_model_annotations_are_correct(self):
         """Test that the state model has correct Annotated types for concurrent updates."""
-        from app.models.contract_state import RealEstateAgentState
-        from typing import get_type_hints, get_origin, get_args
+        from app.agents.states.contract_state import RealEstateAgentState
+        from typing import get_type_hints, get_origin
 
         # Get type hints for the state model
         type_hints = get_type_hints(RealEstateAgentState)
@@ -386,7 +381,7 @@ class TestWorkflowTypeConsistencyIntegration:
     async def test_concurrent_updates_work_correctly(self, mock_workflow, sample_state):
         """Test that concurrent updates work correctly with the fixed type handling."""
         # Simulate concurrent updates to different fields
-        from app.models.contract_state import update_state_step
+        from app.agents.states.contract_state import update_state_step
 
         # Update recommendations (list field)
         state_with_recs = update_state_step(

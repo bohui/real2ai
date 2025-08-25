@@ -6,7 +6,7 @@ Application services
 
 import logging
 import os
-from typing import Optional, Dict, Any
+from typing import Dict, Any
 
 logger = logging.getLogger(__name__)
 

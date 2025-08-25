@@ -14,7 +14,7 @@ optional_variables:
   - "australian_state"
   - "retrieval_index_id"
   - "seed_snippets"
-model_compatibility: ["qwen/qwen3-coder:free", "moonshotai/kimi-k2:free"]
+model_compatibility: [ "moonshotai/kimi-k2:free"]
 max_tokens: 8000
 temperature_range: [0.1, 0.3]
 output_parser: ConditionsAnalysisResult
@@ -182,7 +182,7 @@ Previously extracted condition data (use as baseline; verify and reconcile):
 2. If baseline + seeds are insufficient, perform targeted retrieval from `retrieval_index_id` for specific condition types (finance, inspection, special conditions) and deadlines (business days vs calendar).
 3. Classify each condition (standard/special, precedent/subsequent), identify responsible parties, requirements, deadlines, and dependencies.
 4. Compute or verify deadlines (use business day calculations where applicable) and map dependencies chronologically.
-5. Assess buyer protection and risk levels (RED/AMBER/GREEN). Provide clause citations for all findings.
+5. Assess buyer protection and risk levels (high/medium/low). Provide clause citations for all findings.
 6. Record whether retrieval was used and how many additional snippets were incorporated.
 
 ## Expected Output

@@ -5,10 +5,9 @@ This node migrates the _extract_text_with_comprehensive_analysis method from Doc
 into a dedicated node for the document processing subflow.
 """
 
-from typing import Dict, Any, List, Optional, Tuple, Callable, Awaitable
+from typing import Dict, List, Optional, Tuple, Callable, Awaitable
 import os
 import tempfile
-import uuid
 from datetime import datetime, timezone
 
 from app.agents.subflows.document_processing_workflow import DocumentProcessingState
@@ -42,10 +41,12 @@ class ExtractTextNode(DocumentProcessingNodeBase):
     - text_extraction_result: Complete TextExtractionResult with pages and analysis
     """
 
-    def __init__(self, use_llm: bool = True, progress_range: tuple[int, int] = (7, 30)):
-        super().__init__("extract_text")
+    # Inherit constructor from DocumentProcessingNodeBase
+    def __init__(
+        self, workflow, use_llm: bool = True, progress_range: tuple[int, int] = (7, 30)
+    ):
+        super().__init__(workflow, "extract_text", progress_range)
         self.use_llm = use_llm
-        self.progress_range = progress_range
         self.storage_bucket = "documents"
         self.artifacts_repo = None
         self.storage_service = None
@@ -1007,7 +1008,6 @@ class ExtractTextNode(DocumentProcessingNodeBase):
 
         try:
             import pymupdf
-            from io import BytesIO
 
             # Lazy import to avoid hard dependency if not used
             gemini_service = None
@@ -1351,6 +1351,7 @@ class ExtractTextNode(DocumentProcessingNodeBase):
 
                 # Emit incremental page progress using base node method
                 await self.emit_page_progress(
+                    state,
                     current_page=idx + 1,
                     total_pages=total_pages,
                     description="Extract text & diagrams",

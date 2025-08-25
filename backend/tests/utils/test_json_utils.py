@@ -2,7 +2,6 @@
 Tests for JSON utility functions.
 """
 
-import pytest
 from app.utils.json_utils import safe_json_loads
 
 

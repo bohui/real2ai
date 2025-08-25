@@ -13,15 +13,15 @@ import asyncio
 import logging
 import time
 import uuid
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Tuple, Any
+from datetime import datetime
+from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
 from enum import Enum
 import json
 
 from app.clients.base.interfaces import AIOperations
 from app.clients.factory import get_openai_client, get_gemini_client
-from app.core.langsmith_config import langsmith_trace, langsmith_session, get_langsmith_config
+from app.core.langsmith_config import langsmith_trace, langsmith_session
 from app.core.config import get_settings
 from app.clients.factory import get_supabase_client
 
@@ -179,7 +179,6 @@ class MetricsCalculator:
         try:
             from sentence_transformers import SentenceTransformer
             from sklearn.metrics.pairwise import cosine_similarity
-            import numpy as np
             
             # Use a lightweight model for production
             model = SentenceTransformer('all-MiniLM-L6-v2')

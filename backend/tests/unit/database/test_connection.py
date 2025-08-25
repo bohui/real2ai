@@ -6,14 +6,11 @@ Tests cover JWT token validation, user session setup, and error handling.
 
 import pytest
 import time
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
-from datetime import datetime, timezone
+from unittest.mock import Mock, AsyncMock, patch
 
 import asyncpg
 
 from app.database.connection import _setup_user_session
-from app.core.auth_context import AuthContext
-from app.services.backend_token_service import BackendTokenService
 
 
 class TestDatabaseConnection:

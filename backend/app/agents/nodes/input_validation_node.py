@@ -5,12 +5,9 @@ This module contains the node responsible for validating input data before proce
 """
 
 import logging
-import json
 from datetime import datetime, UTC
-from typing import Dict, Any, Optional
 
-from app.models.contract_state import RealEstateAgentState
-from app.schema.enums import ProcessingStatus
+from app.agents.states.contract_state import RealEstateAgentState
 from .base import BaseNode
 
 logger = logging.getLogger(__name__)

@@ -5,8 +5,6 @@ Demonstrates how the migrated services use the new PromptManager system
 """
 
 import asyncio
-from typing import Dict, Any
-from datetime import datetime
 
 # Example usage of the enhanced services
 async def example_gemini_ocr_integration():

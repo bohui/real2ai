@@ -7,11 +7,11 @@ This module contains the node responsible for processing documents and extractin
 import re
 import logging
 from datetime import datetime, UTC
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
-from app.models.contract_state import RealEstateAgentState
+from app.agents.states.contract_state import RealEstateAgentState
 from app.schema.enums import ProcessingStatus
-from app.core.async_utils import AsyncContextManager, ensure_async_pool_initialization
+from app.core.async_utils import AsyncContextManager
 from .base import BaseNode
 from app.agents.subflows.document_processing_workflow import (
     DocumentProcessingWorkflow,

@@ -9,10 +9,9 @@ This script implements the solutions identified in the troubleshooting analysis:
 4. Update prompt templates with missing variables
 """
 
-import json
 import re
 import logging
-from typing import Dict, Any, Optional, Union
+from typing import Dict, Any
 from pathlib import Path
 
 # LangChain OutputParser integration

@@ -10,9 +10,7 @@ Usage:
 
 import sys
 import argparse
-import asyncio
 from pathlib import Path
-from typing import Optional
 
 # Add the backend directory to the Python path
 backend_dir = Path(__file__).parent.parent

@@ -5,8 +5,13 @@ from app.agents.subflows.step2_section_analysis_workflow import Step2AnalysisSta
 
 
 class FinalizeResultsNode(Step2NodeBase):
-    def __init__(self, progress_range: tuple[int, int] = (98, 100)):
-        super().__init__("finalize_results", progress_range)
+    def __init__(
+        self,
+        workflow,
+        node_name: str = "finalize_results",
+        progress_range: tuple[int, int] = (98, 100),
+    ):
+        super().__init__(workflow, node_name, progress_range)
 
     async def execute(self, state: Step2AnalysisState) -> Step2AnalysisState:
         total_duration = (

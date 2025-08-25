@@ -1,14 +1,10 @@
 from datetime import datetime, UTC
-from typing import Dict, Any
 
 from .base_node import Step2NodeBase
 from app.agents.subflows.step2_section_analysis_workflow import Step2AnalysisState
 
 
 class TitleEncumbrancesNode(Step2NodeBase):
-    def __init__(self, progress_range: tuple[int, int] = (60, 75)):
-        super().__init__("analyze_title_encumbrances", progress_range)
-
     async def execute(self, state: Step2AnalysisState) -> Step2AnalysisState:
         try:
             from app.services.repositories.contracts_repository import (

@@ -2,9 +2,8 @@
 
 import logging
 import yaml
-from typing import Dict, Any, List, Optional, Union
+from typing import Dict, Any, List, Optional
 from pathlib import Path
-import os
 from dataclasses import dataclass
 from datetime import datetime, UTC
 

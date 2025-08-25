@@ -5,9 +5,6 @@ from app.agents.subflows.step2_section_analysis_workflow import Step2AnalysisSta
 
 
 class AdjustmentsOutgoingsNode(Step2NodeBase):
-    def __init__(self, progress_range: tuple[int, int] = (77, 83)):
-        super().__init__("calculate_adjustments_outgoings", progress_range)
-
     async def execute(self, state: Step2AnalysisState) -> Step2AnalysisState:
         try:
             from app.services.repositories.contracts_repository import (

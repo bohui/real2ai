@@ -12,7 +12,7 @@ This script analyzes the existing fragment structure and provides:
 import yaml
 import re
 from pathlib import Path
-from typing import Dict, Any, List, Set, Optional
+from typing import Dict, Any, Optional
 from collections import defaultdict, Counter
 
 

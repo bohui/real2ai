@@ -2,7 +2,6 @@
 OCR prompt generation.
 """
 
-from typing import Optional, Dict, Any
 
 
 class PromptGenerator:

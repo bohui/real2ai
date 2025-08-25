@@ -3,7 +3,7 @@ Prompt Management System Exceptions
 Comprehensive error handling for the prompt management system
 """
 
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, List
 from enum import Enum
 
 

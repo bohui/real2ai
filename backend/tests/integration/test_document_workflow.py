@@ -3,7 +3,6 @@ Integration tests for document upload and analysis workflow
 """
 
 import pytest
-import json
 import io
 from fastapi.testclient import TestClient
 from unittest.mock import patch, MagicMock, AsyncMock

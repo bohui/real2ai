@@ -19,29 +19,16 @@ from app.core.config import get_settings
 from app.core.error_handler import handle_api_error, create_error_context, ErrorCategory
 from app.core.file_security import file_security_validator
 from app.core.rate_limiter import upload_rate_limiter
-from app.core.security_config import security_config, file_security_policy
+from app.core.security_config import file_security_policy
 from app.schema.enums import ContractType, AustralianState
 from app.services.document_service import DocumentService
 from app.services.communication.websocket_singleton import websocket_manager
-from app.services.communication.websocket_service import WebSocketEvents
 from app.services.repositories.analysis_progress_repository import (
     AnalysisProgressRepository,
 )
 from app.schema.document import (
     DocumentUploadResponse,
     UploadRecordResult,
-    ReportGenerationRequest,
-    ReportResponse,
-)
-from app.schema.ocr import (
-    OCRProcessingRequest,
-    OCRProcessingResponse,
-    BatchOCRRequest,
-    BatchOCRResponse,
-    OCRStatusResponse,
-    OCRCapabilitiesResponse,
-    EnhancedOCRCapabilities,
-    OCRQueueStatus,
 )
 
 logger = logging.getLogger(__name__)

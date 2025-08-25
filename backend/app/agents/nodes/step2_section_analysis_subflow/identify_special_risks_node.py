@@ -5,9 +5,6 @@ from app.agents.subflows.step2_section_analysis_workflow import Step2AnalysisSta
 
 
 class SpecialRisksNode(Step2NodeBase):
-    def __init__(self, progress_range: tuple[int, int] = (89, 94)):
-        super().__init__("identify_special_risks", progress_range)
-
     async def execute(self, state: Step2AnalysisState) -> Step2AnalysisState:
         try:
             from app.services.repositories.contracts_repository import (

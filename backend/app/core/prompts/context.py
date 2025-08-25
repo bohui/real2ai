@@ -1,13 +1,14 @@
 """Prompt context management with intelligent variable resolution"""
 
 import logging
-from typing import Dict, Any, Optional, List, Union
+from typing import Dict, Any, Optional, List
 from dataclasses import dataclass, field
 from datetime import datetime, UTC
 from enum import Enum
 
-from app.models.contract_state import AustralianState, ContractType
+from app.schema import AustralianState
 from app.schema.enums.property import (
+    ContractType,
     PropertyType,
     PurchaseMethod,
     UseCategory,

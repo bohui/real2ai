@@ -5,7 +5,6 @@ This tests the fix where 403 responses are now converted to 401 for proper front
 """
 
 import requests
-import json
 from datetime import datetime
 
 

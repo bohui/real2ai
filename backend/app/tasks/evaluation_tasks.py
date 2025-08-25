@@ -11,7 +11,6 @@ Production-ready Celery tasks for:
 
 import asyncio
 import logging
-import time
 from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional
 from celery import Celery
@@ -24,7 +23,6 @@ from app.services.evaluation_service import (
     EvaluationStatus,
 )
 from app.clients.factory import get_supabase_client
-from app.core.langsmith_config import langsmith_trace
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)

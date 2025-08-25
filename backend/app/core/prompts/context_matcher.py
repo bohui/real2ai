@@ -99,7 +99,7 @@ class ContextMatcher:
 """Generic context matching system for fragment selection"""
 
 import logging
-from typing import Dict, Any, List, Union
+from typing import Dict, Any, List
 
 logger = logging.getLogger(__name__)
 

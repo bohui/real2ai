@@ -4,13 +4,11 @@ Tests for SaveDiagramsNode - Persist diagram detection results with artifact ref
 
 import uuid
 import pytest
-from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.agents.nodes.document_processing_subflow.save_diagrams_node import SaveDiagramsNode
 from app.agents.subflows.document_processing_workflow import DocumentProcessingState
 from app.schema.document import DiagramProcessingResult
-from app.prompts.schema.diagram_detection_schema import DiagramDetectionItem
 from app.schema.enums import DiagramType
 
 

@@ -3,21 +3,18 @@ Unit tests for repository classes
 """
 
 import pytest
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, patch
 from uuid import uuid4, UUID
 from datetime import datetime
-import json
 
 from app.services.repositories.artifacts_repository import (
     ArtifactsRepository,
     FullTextArtifact,
     PageArtifact,
-    DiagramArtifact,
 )
 from app.services.repositories.user_docs_repository import (
     UserDocsRepository,
     DocumentPage,
-    DocumentDiagram,
 )
 from app.services.repositories.runs_repository import (
     RunsRepository,
@@ -28,7 +25,6 @@ from app.services.repositories.runs_repository import (
 )
 from app.services.repositories.analysis_progress_repository import (
     AnalysisProgressRepository,
-    AnalysisProgress,
 )
 from app.services.repositories.documents_repository import (
     DocumentsRepository,

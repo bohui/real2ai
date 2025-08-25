@@ -10,7 +10,7 @@ import re
 import base64
 import hashlib
 import logging
-from typing import Dict, Any, List, Tuple, Optional
+from typing import Dict, Any, List
 from datetime import datetime, timezone
 
 from .base_node import DocumentProcessingNodeBase

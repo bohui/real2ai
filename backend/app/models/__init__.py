@@ -9,23 +9,19 @@ All models use Supabase with automatic created_at/updated_at handling.
 from .supabase_models import (
     # Core Models
     Profile,
-    Document, 
+    Document,
     Contract,
     Analysis,
-    
     # Artifact Models
     FullTextArtifact,
     ArtifactPage,
     ArtifactDiagram,
-    
     # User Document Models
     UserDocumentPage,
     UserDocumentDiagram,
-    
     # User Tracking Models
     UserContractView,
     UserPropertyView,
-    
     # Property Models
     Property,
     PropertyValuation,
@@ -39,24 +35,28 @@ from .supabase_models import (
     PropertyReport,
     PropertyAPIUsage,
     MarketInsight,
-    
     # Supporting Models
     SubscriptionPlan,
     UserSubscription,
     UsageLog,
     AnalysisProgress,
     AnalysisProgressDetailed,
-    
     # Task Management Models
     TaskRegistry,
     TaskCheckpoint,
     RecoveryQueue,
-    
-    # History Models  
+    # History Models
     UserContractHistory,
     UserPropertyHistory,
-    
-    # Enums
+    # Base Classes and Helpers
+    TimestampedBaseModel,
+    SupabaseModelManager,
+    create_model_with_timestamps,
+    update_model_with_timestamps,
+)
+
+# Import enums from central enums package (source of truth)
+from app.schema.enums import (
     AustralianState,
     UserType,
     SubscriptionStatus,
@@ -65,12 +65,6 @@ from .supabase_models import (
     ContentType,
     DiagramType,
     EntityType,
-    
-    # Base Classes and Helpers
-    TimestampedBaseModel,
-    SupabaseModelManager,
-    create_model_with_timestamps,
-    update_model_with_timestamps,
 )
 
 # Legacy aliases for backward compatibility
@@ -80,52 +74,44 @@ __all__ = [
     # Core Models
     "Profile",
     "Document",
-    "Contract", 
+    "Contract",
     "Analysis",
-    
     # Artifact Models
     "FullTextArtifact",
     "ArtifactPage",
     "ArtifactDiagram",
-    
     # User Document Models
     "UserDocumentPage",
     "UserDocumentDiagram",
-    
     # User Tracking Models
     "UserContractView",
     "UserPropertyView",
-    
     # Property Models
     "Property",
     "PropertyValuation",
     "PropertyMarketData",
     "PropertyRiskAssessment",
     "ComparableSale",
-    "PropertySalesHistory", 
+    "PropertySalesHistory",
     "PropertyRentalHistory",
     "UserSavedProperty",
     "PropertySearch",
     "PropertyReport",
     "PropertyAPIUsage",
     "MarketInsight",
-    
     # Supporting Models
     "SubscriptionPlan",
-    "UserSubscription", 
+    "UserSubscription",
     "UsageLog",
     "AnalysisProgress",
     "AnalysisProgressDetailed",
-    
     # Task Management Models
     "TaskRegistry",
-    "TaskCheckpoint", 
+    "TaskCheckpoint",
     "RecoveryQueue",
-    
     # History Models
     "UserContractHistory",
     "UserPropertyHistory",
-    
     # Enums
     "AustralianState",
     "UserType",
@@ -134,9 +120,8 @@ __all__ = [
     "DocumentStatus",
     "ProcessingStatus",  # Legacy alias
     "ContentType",
-    "DiagramType", 
+    "DiagramType",
     "EntityType",
-    
     # Base Classes and Helpers
     "TimestampedBaseModel",
     "SupabaseModelManager",

@@ -17,17 +17,15 @@ from .base_node import DocumentProcessingNodeBase
 from app.utils.font_layout_mapper import FontLayoutMapper
 from app.utils.storage_utils import ArtifactStorageService
 from app.services.repositories.artifacts_repository import ArtifactsRepository
-from app.utils.content_utils import compute_content_hmac, compute_params_fingerprint
+from app.utils.content_utils import compute_params_fingerprint
 from app.services.repositories.contracts_repository import ContractsRepository
 
 
 class LayoutFormatCleanupNode(DocumentProcessingNodeBase):
-    def __init__(self, progress_range: tuple[int, int] = (43, 48)):
-        super().__init__("layout_format_cleanup")
-        self.font_mapper = FontLayoutMapper()
-        self.progress_range = progress_range
-        self.storage_service = None
-        self.artifacts_repo = None
+    font_mapper = FontLayoutMapper()
+    storage_service = None
+    artifacts_repo = None
+    # Inherit constructor from DocumentProcessingNodeBase
 
     async def initialize(self):
         """Initialize storage service and artifacts repository"""
@@ -158,7 +156,7 @@ class LayoutFormatCleanupNode(DocumentProcessingNodeBase):
             )
 
             formatted_text = await self._format_text_with_layout_mapping(
-                full_text, font_to_layout_mapping
+                state, full_text, font_to_layout_mapping
             )
 
             # STEP 3: Save formatted text as artifacts and build result
@@ -295,7 +293,7 @@ class LayoutFormatCleanupNode(DocumentProcessingNodeBase):
             )
 
     async def _format_text_with_layout_mapping(
-        self, text: str, font_mapping: Dict[str, str]
+        self, state: DocumentProcessingState, text: str, font_mapping: Dict[str, str]
     ) -> str:
         """
         Format text using font-to-layout mapping to create clean markdown.
@@ -376,6 +374,7 @@ class LayoutFormatCleanupNode(DocumentProcessingNodeBase):
                 if hasattr(self, "progress_callback") and self.progress_callback:
                     try:
                         await self.emit_page_progress(
+                            state,
                             current_page=processed_pages,
                             total_pages=total_pages,
                             description="Formatting page layout",
@@ -390,6 +389,7 @@ class LayoutFormatCleanupNode(DocumentProcessingNodeBase):
                 if hasattr(self, "progress_callback") and self.progress_callback:
                     try:
                         await self.emit_page_progress(
+                            state,
                             current_page=processed_pages,
                             total_pages=total_pages or 1,
                             description="Formatting page layout",
@@ -416,6 +416,7 @@ class LayoutFormatCleanupNode(DocumentProcessingNodeBase):
                 if hasattr(self, "progress_callback") and self.progress_callback:
                     try:
                         await self.emit_page_progress(
+                            state,
                             current_page=processed_pages,
                             total_pages=total_pages,
                             description="Formatting page layout",
@@ -633,14 +634,14 @@ class LayoutFormatCleanupNode(DocumentProcessingNodeBase):
 
     def _record_execution(self):
         """Record that this node has been executed."""
-        self._metrics["executions"] += 1
+        self._doc_metrics["executions"] += 1
 
     def _record_success(self, duration: float):
         """Record successful execution with duration."""
-        self._metrics["successes"] += 1
-        self._metrics["total_duration"] += duration
-        self._metrics["average_duration"] = (
-            self._metrics["total_duration"] / self._metrics["successes"]
+        self._doc_metrics["successes"] += 1
+        self._doc_metrics["total_duration"] += duration
+        self._doc_metrics["average_duration"] = (
+            self._doc_metrics["total_duration"] / self._doc_metrics["successes"]
         )
 
     def _log_info(self, message: str, extra: Optional[Dict[str, Any]] = None):
@@ -672,7 +673,7 @@ class LayoutFormatCleanupNode(DocumentProcessingNodeBase):
         error_context: Dict[str, Any],
     ) -> DocumentProcessingState:
         """Handle errors during execution."""
-        self._metrics["failures"] += 1
+        self._doc_metrics["failures"] += 1
         self.logger.error(
             f"Error in {self.node_name}: {error_message}",
             extra={"error": str(error), "context": error_context},

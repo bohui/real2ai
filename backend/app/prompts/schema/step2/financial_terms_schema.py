@@ -5,7 +5,7 @@ This schema defines the structured output for purchase price verification,
 deposit analysis, payment schedule review, and GST implications assessment.
 """
 
-from typing import List, Optional, Dict, Any, Union
+from typing import List, Optional, Union
 from pydantic import BaseModel, Field, ConfigDict
 from enum import Enum
 from app.schema.enums import RiskLevel

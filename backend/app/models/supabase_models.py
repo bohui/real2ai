@@ -5,9 +5,7 @@ Automatic created_at/updated_at handled by database triggers
 """
 
 from typing import Dict, List, Any, Optional
-from decimal import Decimal
 from datetime import datetime
-from enum import Enum
 from pydantic import BaseModel, Field
 from uuid import UUID
 
@@ -28,9 +26,6 @@ from app.schema.enums import (
     MarketOutlook,
     InsightType,
     ViewSource,
-    ContentType,
-    DiagramType,
-    EntityType,
 )
 
 

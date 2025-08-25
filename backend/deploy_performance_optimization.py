@@ -20,12 +20,11 @@ Usage:
 import asyncio
 import argparse
 import logging
-import os
 import sys
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
 # Add backend to path for imports
 sys.path.append(str(Path(__file__).parent))

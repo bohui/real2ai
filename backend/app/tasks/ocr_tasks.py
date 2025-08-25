@@ -10,7 +10,6 @@ import asyncio
 import logging
 from typing import Dict, Any, Optional
 from datetime import datetime, timezone
-from celery.exceptions import Retry, MaxRetriesExceededError
 
 from app.core.celery import celery_app
 from app.core.task_context import user_aware_task

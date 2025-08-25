@@ -4,7 +4,6 @@ Test the improved client fallback after our fix.
 
 import asyncio
 import logging
-from app.agents.nodes.document_quality_validation_node import DocumentQualityValidationNode
 from app.agents.contract_workflow import ContractAnalysisWorkflow
 
 async def test_fallback():

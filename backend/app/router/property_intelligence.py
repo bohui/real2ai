@@ -23,14 +23,8 @@ from io import StringIO
 import csv
 
 from app.schema import (
-    PropertySearchFilters,
-    PropertyProfileResponse,
-    PropertyAnalysisDepth,
-    MarketInsightRequest,
     PropertySearchRequest,
     PropertyProfile,
-    AustralianState,
-    RiskLevel,
 )
 
 logger = logging.getLogger(__name__)

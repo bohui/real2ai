@@ -2,7 +2,7 @@
 Document quality validation tools
 """
 
-from typing import Dict, List, Any, Optional
+from typing import Dict, Any
 from langchain.tools import tool
 import re
 

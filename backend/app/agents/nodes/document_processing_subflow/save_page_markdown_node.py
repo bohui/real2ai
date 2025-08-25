@@ -7,7 +7,7 @@ with content_type="markdown", ensuring proper type discrimination.
 
 import os
 import logging
-from typing import Dict, Any, List
+from typing import Dict, Any
 from datetime import datetime, timezone
 
 from .base_node import DocumentProcessingNodeBase

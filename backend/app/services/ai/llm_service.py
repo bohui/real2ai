@@ -12,7 +12,7 @@ from app.services.base.user_aware_service import UserAwareService
 from app.clients import get_openai_client, get_gemini_client
 from app.clients.openai.client import OpenAIClient
 from app.clients.gemini.client import GeminiClient
-from app.core.langsmith_config import langsmith_trace, log_trace_info
+from app.core.langsmith_config import log_trace_info
 from app.clients.base.exceptions import (
     ClientError,
     ClientQuotaExceededError,

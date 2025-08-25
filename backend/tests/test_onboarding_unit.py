@@ -5,7 +5,6 @@ Unit tests for onboarding functionality
 import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import MagicMock
-from datetime import datetime, timezone
 
 
 @pytest.mark.unit

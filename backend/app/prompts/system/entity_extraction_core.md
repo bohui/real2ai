@@ -36,10 +36,10 @@ tags: ["core", "system", "entity-extraction"]
 - For relative dates (e.g., "42nd day after contract date"), set `date_value` to `null`
 
 ### Financial Amount Handling  
-- **NEVER** use `null` values in `amount` fields when the field is required
-- If an amount cannot be determined, use `0.0` as a default value
-- For unspecified amounts, set `amount` to `0.0` and note the uncertainty in `amount_text`
-- Always provide a numeric value for required `amount` fields
+- **NEVER** use placeholder values like "TBD" or "UNSPECIFIED" in `amount` fields
+- If an amount cannot be determined, set `amount` to `null` and provide context in `amount_text`
+- For unspecified amounts, set `amount` to `null` and note the uncertainty in `amount_text`
+- Always provide a numeric value when the amount is known, or `null` when it cannot be determined
 
 ### State-Specific Legislation
 - **NEVER** use "Cth" or "Commonwealth" in `state_specific` fields
@@ -73,7 +73,8 @@ tags: ["core", "system", "entity-extraction"]
 - financial_amounts:
   - Indicators: "$", "AUD", "deposit", "balance", "price", "%", "GST", "duty", "adjustments"
   - Guidance: Strip symbols/commas for `amount`; default `currency` to "AUD" unless specified; set `amount_type` via cues
-  - **CRITICAL**: Use `0.0` for `amount` if value cannot be determined; never use `null`
+  - **CRITICAL**: Use `null` for `amount` if value cannot be determined; never use placeholders
+  - **CRITICAL**: Use valid `amount_type` enum values: purchase_price, deposit, balance, stamp_duty, land_value, gst, transfer_fees, strata_fees, land_tax, legal_fees, agent_commission, conveyancing_fees, other_fees, etc.
 
 - legal_references:
   - Indicators: "Act", "Regulation", sections (e.g., "s 66W", "s. 27"), clause references, state names

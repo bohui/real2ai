@@ -3,7 +3,7 @@ Tests for authentication middleware.
 """
 
 import pytest
-from unittest.mock import Mock, AsyncMock, patch
+from unittest.mock import Mock, AsyncMock
 from starlette.requests import Request
 from starlette.responses import Response
 from starlette.datastructures import Headers

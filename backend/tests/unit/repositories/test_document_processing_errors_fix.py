@@ -1,7 +1,7 @@
 """Test that processing_errors field is properly parsed from JSON in Document models."""
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 from uuid import uuid4
 from datetime import datetime, timezone
 from app.models.supabase_models import Document

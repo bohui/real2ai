@@ -3,7 +3,7 @@
 import logging
 import re
 import yaml
-from typing import Dict, Any, List, Optional, Set
+from typing import Dict, Any, List, Optional
 from pathlib import Path
 
 logger = logging.getLogger(__name__)

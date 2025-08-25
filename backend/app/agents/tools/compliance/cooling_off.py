@@ -2,11 +2,10 @@
 Cooling-off period compliance validation for Australian property contracts
 """
 
-from typing import Dict, List, Any, Optional
+from typing import Dict, Any
 from langchain.tools import tool
 import re
 
-from app.schema.enums import AustralianState
 
 
 @tool

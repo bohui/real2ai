@@ -8,7 +8,6 @@ to the new folder-structure-driven system according to the PRD requirements.
 
 import argparse
 import logging
-import shutil
 import yaml
 from pathlib import Path
 from typing import Dict, Any, Optional

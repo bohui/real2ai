@@ -13,13 +13,12 @@ from typing import (
     Optional,
     TypedDict,
     NotRequired,
-    Literal,
     TYPE_CHECKING,
     Union,
     cast,
 )
 
-from app.models.contract_state import RealEstateAgentState
+from app.agents.states.contract_state import RealEstateAgentState
 from app.schema.enums import ProcessingStatus
 from .base import BaseNode
 

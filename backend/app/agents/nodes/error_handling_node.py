@@ -6,9 +6,9 @@ This module contains the node responsible for handling workflow errors and failu
 
 import logging
 from datetime import datetime, UTC
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, List
 
-from app.models.contract_state import RealEstateAgentState
+from app.agents.states.contract_state import RealEstateAgentState
 from app.schema.enums import ProcessingStatus
 from .base import BaseNode
 

@@ -3,11 +3,11 @@ Test examples demonstrating the improved testability of the decoupled client arc
 """
 
 import pytest
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock
 from datetime import datetime, UTC
 
 # Test file needs to be updated to work with new architecture
-from app.core.auth import AuthService, TokenData, User
+from app.core.auth import AuthService, TokenData
 from app.clients.base.exceptions import ClientError
 from app.clients.factory import get_supabase_client
 

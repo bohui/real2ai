@@ -6,7 +6,6 @@ This script tests the contract_analysis_base template with the updated context v
 
 import asyncio
 import sys
-import os
 from pathlib import Path
 
 # Add the backend directory to the Python path

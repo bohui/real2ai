@@ -3,14 +3,11 @@ Task Recovery System - Core Components
 Provides automatic task recovery, checkpointing, and state management for Celery tasks.
 """
 
-import asyncio
 import json
 import logging
 import traceback
-import hashlib
-from datetime import datetime, timezone, timedelta
-from functools import wraps
-from typing import Dict, Any, List, Optional, Union
+from datetime import datetime
+from typing import Dict, Any, Optional
 from enum import Enum
 from dataclasses import dataclass
 from celery import current_task

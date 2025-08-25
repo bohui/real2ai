@@ -4,20 +4,15 @@ Integration tests for the full document analysis workflow.
 
 import asyncio
 import tempfile
-import json
 from datetime import datetime
-from pathlib import Path
 from typing import Dict, Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 import pytest
-from fastapi.testclient import TestClient
 from httpx import AsyncClient
 
 from app.main import app
 from app.core.auth_context import AuthContext
 from app.core.auth import User
-from app.schema.contract_analysis import ContractAnalysisRequest
-from app.schema.enums import AustralianState, ProcessingStatus
 
 
 @pytest.fixture

@@ -4,9 +4,6 @@ Tests the actual composition logic and data structure handling
 """
 
 import pytest
-from pathlib import Path
-from unittest.mock import Mock, patch
-from datetime import datetime
 
 from app.core.prompts.composer import PromptComposer
 from app.core.prompts.config_manager import CompositionRule

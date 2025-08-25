@@ -7,7 +7,6 @@ used in the document processing artifacts system.
 
 import hashlib
 import hmac
-import json
 import pytest
 from unittest.mock import Mock, patch
 

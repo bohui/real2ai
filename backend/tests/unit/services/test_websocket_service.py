@@ -3,14 +3,10 @@ Test WebSocket service functionality
 """
 
 import pytest
-import json
-import asyncio
 from unittest.mock import Mock, AsyncMock, patch, MagicMock
-from datetime import datetime, UTC
-from typing import Dict, Any
+from datetime import datetime
 
-from fastapi import WebSocket, WebSocketDisconnect
-from fastapi.websockets import WebSocketState
+from fastapi import WebSocket
 
 from app.services.communication.websocket_service import (
     ConnectionManager,

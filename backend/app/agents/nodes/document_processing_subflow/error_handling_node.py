@@ -5,7 +5,6 @@ This node provides uniform error handling for document processing failures,
 updating the document status to FAILED and storing error details.
 """
 
-from typing import Dict, Any
 from datetime import datetime, timezone
 
 from app.models import ProcessingStatus
@@ -26,8 +25,7 @@ class ErrorHandlingNode(DocumentProcessingNodeBase):
     - Ensures error fields are properly set in state
     """
 
-    def __init__(self):
-        super().__init__("error_handling")
+    # Inherit constructor from DocumentProcessingNodeBase
 
     async def execute(self, state: DocumentProcessingState) -> DocumentProcessingState:
         """
@@ -177,7 +175,7 @@ class ErrorHandlingNode(DocumentProcessingNodeBase):
                 )
 
                 # Return a minimal error state since we can't copy None
-                from app.models.contract_state import DocumentProcessingState
+                from app.agents.states.contract_state import DocumentProcessingState
 
                 return DocumentProcessingState(
                     error=f"Error handling failed: {str(e)}",

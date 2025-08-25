@@ -18,7 +18,6 @@ backend_dir = Path(__file__).parent
 sys.path.insert(0, str(backend_dir))
 
 from app.clients.factory import get_openai_client, get_gemini_client
-from app.core.config import get_settings
 
 
 async def test_openai_call(prompt: str):

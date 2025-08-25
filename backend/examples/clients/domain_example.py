@@ -8,7 +8,6 @@ Run with a valid Domain API key for testing.
 import asyncio
 import logging
 import os
-from typing import Dict, Any
 
 from .client import DomainClient
 from .enhanced_client import EnhancedDomainClient
@@ -17,8 +16,6 @@ from .settings import DomainSettings
 from ..base.exceptions import (
     PropertyNotFoundError,
     PropertyValuationError,
-    ClientRateLimitError,
-    DomainAPIError,
 )
 from ...schema import PropertySearchRequest
 

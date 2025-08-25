@@ -6,11 +6,9 @@ This module tests the fixes for state type consistency issues that were causing
 """
 
 import pytest
-from unittest.mock import Mock, patch
 from typing import Dict, Any, List
 
-from app.models.contract_state import (
-    RealEstateAgentState,
+from app.agents.states.contract_state import (
     create_initial_state,
     update_state_step,
     get_current_step,
@@ -259,17 +257,15 @@ class TestStateTypeConsistency:
 
     def test_state_model_annotation_validation(self):
         """Test that the state model has proper Annotated types for concurrent updates."""
-        from app.models.contract_state import RealEstateAgentState
+        from app.agents.states.contract_state import RealEstateAgentState
 
         # Import the typing module to check annotations
-        import typing
         from typing import get_type_hints
 
         # Get type hints for the state model
         type_hints = get_type_hints(RealEstateAgentState)
 
         # Check that list fields use Annotated with add reducer
-        from operator import add
 
         # Note: In Python 3.12+, Annotated types may not have __metadata__ attribute
         # Instead, check if the types are what we expect

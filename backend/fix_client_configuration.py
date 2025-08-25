@@ -7,7 +7,6 @@ This script provides several solutions to fix the authentication issue.
 """
 
 import os
-import sys
 
 def main():
     print("🔍 Client Configuration Diagnosis")

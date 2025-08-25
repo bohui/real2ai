@@ -6,19 +6,13 @@ to the base ContractLLMNode while maintaining Step 2 state compatibility.
 """
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 from datetime import datetime, UTC
 
 from app.agents.nodes.step2_section_analysis_subflow.analyze_parties_property_node import (
     PartiesPropertyNode,
 )
-from app.agents.subflows.step2_section_analysis_workflow import Step2AnalysisState
 from app.prompts.schema.step2.parties_property_schema import (
-    PartiesPropertyAnalysisResult,
-    PartyDetails,
-    PropertyIdentification,
-    InclusionsExclusionsAnalysis,
-    RiskIndicator,
     RiskLevel,
 )
 

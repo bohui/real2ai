@@ -5,7 +5,7 @@ Rate limiting for CoreLogic API client.
 import asyncio
 import time
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from collections import deque
 from dataclasses import dataclass, field
 

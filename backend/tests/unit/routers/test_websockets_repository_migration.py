@@ -8,7 +8,6 @@ and maintain the same functionality as before the migration.
 import pytest
 from unittest.mock import AsyncMock, Mock, patch
 from uuid import uuid4, UUID
-from datetime import datetime
 
 from app.router.websockets import (
     handle_status_request,
@@ -17,10 +16,8 @@ from app.router.websockets import (
     replay_last_progress_on_reconnect,
     CacheStatus,
 )
-from app.services.repositories.documents_repository import DocumentsRepository
 from app.models.supabase_models import Document
 from app.services.repositories.contracts_repository import Contract
-from app.services.repositories.analyses_repository import Analysis
 
 
 class TestWebSocketsRepositoryMigration:

@@ -5,7 +5,6 @@ Tests for authentication context management.
 import pytest
 import asyncio
 from unittest.mock import Mock, AsyncMock, patch
-from contextvars import copy_context
 
 from app.core.auth_context import AuthContext, with_auth_context
 from app.clients.supabase.client import SupabaseClient

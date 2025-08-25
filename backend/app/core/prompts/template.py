@@ -2,7 +2,7 @@
 
 import logging
 import re
-from typing import Dict, Any, Optional, List, Callable, Union
+from typing import Dict, Any, Optional, List, Union
 from datetime import datetime, UTC
 from pathlib import Path
 from dataclasses import dataclass

@@ -2,8 +2,8 @@
 Settings for Domain API client using Pydantic.
 """
 
-from typing import Dict, Any, List, Optional
-from pydantic import BaseModel, Field, validator
+from typing import Optional
+from pydantic import Field, validator
 try:
     from pydantic_settings import BaseSettings
 except ImportError:

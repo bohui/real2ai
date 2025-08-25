@@ -9,13 +9,12 @@ Provides analytics and tracking for the contract type taxonomy system:
 """
 
 import logging
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, List, Any, Optional
 from datetime import datetime, timedelta
 from collections import defaultdict
 
 from app.services.repositories.contracts_repository import ContractsRepository
 from app.database.connection import get_service_role_connection
-from app.schema.enums import ContractType, PurchaseMethod, UseCategory, AustralianState
 
 
 logger = logging.getLogger(__name__)

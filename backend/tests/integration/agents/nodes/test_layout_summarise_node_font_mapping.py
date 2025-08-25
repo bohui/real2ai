@@ -7,13 +7,11 @@ across document chunks.
 
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
-from datetime import datetime, timezone
 
 from app.agents.nodes.document_processing_subflow.layout_summarise_node_too_slow import (
     LayoutSummariseNode,
 )
 from app.agents.subflows.document_processing_workflow import DocumentProcessingState
-from app.prompts.schema.contract_layout_summary_schema import ContractLayoutSummary
 from app.schema.enums import ContractType, AustralianState
 
 

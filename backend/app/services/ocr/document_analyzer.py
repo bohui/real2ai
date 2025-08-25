@@ -2,7 +2,7 @@
 Document analysis for extracted OCR text.
 """
 
-from typing import Dict, Any, List
+from typing import Dict, Any
 
 # Constants
 CONTENT_QUALITY_THRESHOLD = 100

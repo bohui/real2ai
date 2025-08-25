@@ -2,10 +2,7 @@
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.testclient import TestClient
-import os
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.types import ASGIApp
 from app.router.auth import router as auth_router
 from app.router.documents import router as documents_router
 from app.router.contracts import router as contracts_router

@@ -3,9 +3,9 @@ Entity Extraction Schemas for Contract Analysis
 Pydantic models for structured entity extraction from legal documents
 """
 
-from typing import Dict, List, Optional, Any, Union
+from typing import Dict, List, Optional
 from pydantic import BaseModel, Field, validator
-from datetime import datetime, date
+from datetime import date
 from decimal import Decimal
 from app.schema.enums import (
     AustralianState,
@@ -55,7 +55,9 @@ class PropertyAddress(EntityBase):
 class ContractParty(EntityBase):
     """Party to the contract"""
 
-    name: str = Field(..., description="Full name of party")
+    name: Optional[str] = Field(
+        None, description="Full name of party (null if unspecified)"
+    )
     role: PartyRole = Field(..., description="Role in the contract")
 
     # Contact information
@@ -71,6 +73,13 @@ class ContractParty(EntityBase):
     solicitor_contact: Optional[str] = Field(
         None, description="Solicitor contact details"
     )
+
+    @validator("name")
+    def validate_name_when_null(cls, v, values):
+        """Ensure context provides information when name is null"""
+        if v is None and not values.get("context"):
+            raise ValueError("context must be provided when name is null")
+        return v
 
 
 class ContractDate(EntityBase):

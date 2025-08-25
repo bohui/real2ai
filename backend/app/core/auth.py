@@ -15,10 +15,9 @@ from fastapi import HTTPException, status, Depends, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from app.clients.factory import get_supabase_client
-from app.core.auth_context import AuthContext
 from app.core.config import get_settings
 from app.services.backend_token_service import BackendTokenService
-from app.clients.base.interfaces import AuthOperations, DatabaseOperations
+from app.clients.base.interfaces import AuthOperations
 from app.services.repositories.profiles_repository import ProfilesRepository
 from app.clients.base.exceptions import ClientError
 
@@ -448,7 +447,6 @@ def _get_jwt_secret_and_alg() -> tuple[str, str]:
     - Never use anon key as JWT secret (authentication bypass vulnerability)
     """
     import secrets
-    import os
 
     settings = get_settings()
     secret = settings.jwt_secret_key

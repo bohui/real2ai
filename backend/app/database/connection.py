@@ -7,7 +7,7 @@ import asyncpg
 import json
 import time
 from collections import OrderedDict
-from typing import Dict, Optional, Any, AsyncContextManager, AsyncGenerator
+from typing import Dict, Optional, Any, AsyncGenerator
 from uuid import UUID
 from contextlib import asynccontextmanager
 import logging

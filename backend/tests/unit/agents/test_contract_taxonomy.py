@@ -8,8 +8,6 @@ Tests the contract classification system from contract-type-taxonomy-story.md:
 """
 
 import pytest
-from unittest.mock import Mock, patch
-from typing import Dict, Any
 
 from app.schema.enums import ContractType, PurchaseMethod, UseCategory, AustralianState
 from app.schema.contract_analysis import ContractTaxonomy, ContractAnalysisContext

@@ -3,13 +3,11 @@ User Notification System for Real2.AI
 Provides user-friendly notifications, progress updates, and feedback mechanisms
 """
 
-import asyncio
 import logging
-from typing import Dict, Any, Optional, List, Union
+from typing import Dict, Any, Optional, List
 from datetime import datetime, UTC
 from enum import Enum
 from dataclasses import dataclass, asdict
-from fastapi import WebSocket
 
 from app.services.communication.websocket_service import WebSocketManager
 from app.services.communication.redis_pubsub import redis_pubsub_service

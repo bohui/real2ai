@@ -9,10 +9,9 @@ integration code to eliminate the "Invalid JSON. Error: Expecting value: line 1 
 
 import json
 import logging
-import re
-from typing import Dict, Any, Optional, List, Union
+from typing import Dict, Any, Optional, List
 
-from app.core.prompts.parsers import create_parser, ParsingResult
+from app.core.prompts.parsers import create_parser
 from app.prompts.schema.workflow_outputs import (
     RiskAnalysisOutput,
     RecommendationsOutput,

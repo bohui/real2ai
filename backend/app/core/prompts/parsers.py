@@ -133,7 +133,7 @@ class RetryingPydanticOutputParser(LCPydanticOutputParser):
             if not candidates:
                 result.parsing_errors.append("No valid JSON found in output")
             else:
-                for json_data in candidates:
+                for idx, json_data in enumerate(candidates):
                     try:
                         parsed_model = self._model(**json_data)
                         result.success = True
@@ -144,6 +144,11 @@ class RetryingPydanticOutputParser(LCPydanticOutputParser):
                         return result
                     except ValidationError as ve:
                         result.validation_errors = [str(error) for error in ve.errors()]
+                        # Log warning for first 5 validation failures
+                        if idx < 5:
+                            logger.warning(
+                                f"Validation failed for model {self._model.__name__} on candidate {idx + 1}/{len(candidates)}: {ve.errors()}"
+                            )
                         if not self.strict_mode:
                             partial = self._attempt_partial_parsing(json_data)
                             if partial is not None:

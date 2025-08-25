@@ -6,8 +6,8 @@ mappings between font sizes and layout elements (headings, body text, etc.).
 """
 
 import re
-from typing import Dict, List, Tuple, Optional
-from collections import defaultdict, Counter
+from typing import Dict, List, Tuple
+from collections import Counter
 import logging
 
 logger = logging.getLogger(__name__)

@@ -13,18 +13,15 @@ Key Features:
 - Automated evaluation pipeline with continuous monitoring
 """
 
-import asyncio
 import time
 import statistics
-from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Any, Optional
-from unittest.mock import AsyncMock, MagicMock, patch
+from datetime import datetime, timedelta
+from typing import Dict, List, Any
+from unittest.mock import AsyncMock
 import pytest
-import json
 import uuid
 
 from app.core.langsmith_config import (
-    get_langsmith_config,
     langsmith_trace,
     langsmith_session,
     log_trace_info,
@@ -32,11 +29,8 @@ from app.core.langsmith_config import (
 from app.evaluation.langsmith_integration import (
     LangSmithEvaluationIntegration,
     LangSmithDatasetConfig,
-    LangSmithEvaluationConfig,
 )
-from app.services.evaluation_service import EvaluationOrchestrator, EvaluationConfig, EvaluationStatus, MetricType
-from app.services.contract_analysis_service import ContractAnalysisService
-from app.schema.evaluation import EvaluationJobCreate as EvaluationRequest
+from app.services.evaluation_service import EvaluationOrchestrator
 
 
 class TestPhase2AdvancedFeatures:

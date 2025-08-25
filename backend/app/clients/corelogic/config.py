@@ -3,7 +3,7 @@ Configuration for CoreLogic API client.
 """
 
 from dataclasses import dataclass, field
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from ..base.client import ClientConfig
 
 

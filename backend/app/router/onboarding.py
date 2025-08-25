@@ -6,10 +6,8 @@ from uuid import UUID
 import logging
 
 from app.core.auth import get_current_user, User
-from app.core.auth_context import AuthContext
 from app.services.repositories.profiles_repository import ProfilesRepository
 import json
-from app.core.error_handler import handle_api_error, create_error_context, ErrorCategory
 from app.schema.onboarding import (
     OnboardingStatusResponse,
     OnboardingPreferencesRequest,

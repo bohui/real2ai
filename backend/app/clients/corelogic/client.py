@@ -4,10 +4,9 @@ Specializes in property valuations, market analytics, and risk assessment.
 """
 
 import asyncio
-import json
 import logging
 import time
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 from datetime import datetime, timezone, timedelta
 import aiohttp
 
@@ -19,35 +18,11 @@ from ..base.exceptions import (
     ClientError,
     ClientRateLimitError,
     PropertyNotFoundError,
-    PropertyDataIncompleteError,
     PropertyValuationError,
     InvalidPropertyAddressError,
-    PropertyDataValidationError,
 )
 from .config import CoreLogicClientConfig
 from .rate_limiter import CoreLogicRateLimitManager
-from ...schema import (
-    PropertyAddress,
-    PropertyDetails,
-    PropertyValuation,
-    PropertyMarketData,
-    PropertyRiskAssessment,
-    ComparableSale,
-    PropertySalesHistory,
-    PropertyRentalHistory,
-    PropertyProfile,
-    PropertySearchRequest,
-    PropertyProfileResponse,
-    PropertyValuationRequest,
-    PropertyValuationResponse,
-    PropertySearchFilter,
-    PropertyListing,
-    PropertySearchResponse,
-    PropertyAPIHealthStatus,
-    PropertyDataValidationResult,
-    AustralianState,
-    RiskLevel,
-)
 
 logger = logging.getLogger(__name__)
 

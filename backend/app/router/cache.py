@@ -1,7 +1,7 @@
 """Cache router with history endpoints for frontend integration."""
 
 import logging
-from typing import Dict, Any, List
+from typing import Dict, Any
 from fastapi import APIRouter, Depends, Query, HTTPException, Body, status
 from app.core.auth import get_current_user
 from app.core.auth import User

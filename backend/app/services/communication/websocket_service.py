@@ -3,16 +3,15 @@ WebSocket service for Real2.AI real-time updates with PromptManager integration
 """
 
 import json
-import asyncio
 import logging
-from typing import Dict, List, Any, Optional, Iterable
+from typing import Dict, List, Any, Optional
 from datetime import datetime, date, timezone
 from decimal import Decimal
 from uuid import UUID
-from fastapi import WebSocket, WebSocketDisconnect
+from fastapi import WebSocket
 
 from app.core.prompts.service_mixin import PromptEnabledService
-from app.models.contract_state import AustralianState, ContractType
+from app.schema.enums import AustralianState, ContractType
 
 logger = logging.getLogger(__name__)
 

@@ -14,106 +14,21 @@ Architecture:
 """
 
 import logging
-from typing import Dict, Any, Optional, TypedDict, Callable, Awaitable
+from typing import Dict, Any, Optional, Callable, Awaitable
 from datetime import datetime, timezone
 from langgraph.graph import StateGraph
-from pydantic import BaseModel
 
-from app.core.auth_context import AuthContext
 from app.schema.document import (
     ProcessedDocumentSummary,
     ProcessingErrorResponse,
-    TextExtractionResult,
-    DiagramProcessingResult,
 )
 from app.core.langsmith_config import langsmith_trace
+from app.agents.states.document_processing_state import DocumentProcessingState
+from app.core.prompts.manager import get_prompt_manager
 
 # ContractLayoutSummary no longer needed - using LayoutFormatCleanupNode instead
 
 logger = logging.getLogger(__name__)
-
-
-class ErrorDetails(BaseModel):
-    """Schema for error details in document processing state."""
-
-    node: str
-    error_type: str
-    error_message: str
-    timestamp: str
-    context: Optional[Dict[str, Any]] = None
-    root_cause_type: Optional[str] = None
-    root_cause_message: Optional[str] = None
-    exception_chain: Optional[str] = None
-    node_location: Optional[str] = None
-    error_category: Optional[str] = None
-
-
-class DocumentProcessingState(TypedDict):
-    """
-    State schema for the document processing subflow.
-
-    Required fields:
-    - document_id: ID of document to process
-    - use_llm: Whether to use LLM for advanced OCR/analysis
-
-    Working fields (populated during flow):
-    - storage_path: Path to document in storage
-    - file_type: Detected file type
-    - content_hash: Content hash for deduplication
-    - content_hmac: HMAC for artifact key generation
-    - algorithm_version: Version of processing algorithm
-    - params_fingerprint: Fingerprint of processing parameters
-    - text_extraction_result: Results from text extraction
-    - local_tmp_path: Local temp file path for the document (to avoid re-downloads)
-    - diagram_processing_result: Results from diagram processing
-
-    Output fields:
-    - processed_summary: Final ProcessedDocumentSummary result
-
-    Error fields:
-    - error: Error message if processing fails
-    - error_details: Detailed error information
-
-    Progress fields:
-    - notify_progress: Optional callback for per-page progress updates
-    - contract_id: Optional contract ID for progress routing
-    """
-
-    # Required input
-    document_id: str
-    use_llm: bool
-
-    # Optional input overrides
-    content_hash: Optional[str]
-    australian_state: Optional[str]
-    contract_type: Optional[str]
-    document_type: Optional[str]
-
-    # Working state
-    storage_path: Optional[str]
-    file_type: Optional[str]
-    content_hmac: Optional[str]
-    algorithm_version: Optional[int]
-    params_fingerprint: Optional[str]
-    local_tmp_path: Optional[str]
-    text_extraction_result: Optional[TextExtractionResult]
-    diagram_processing_result: Optional[DiagramProcessingResult]
-    layout_format_result: Optional[
-        Any
-    ]  # LayoutFormatResult from LayoutFormatCleanupNode
-
-    # Output
-    processed_summary: Optional[ProcessedDocumentSummary]
-
-    # Error handling
-    error: Optional[str]
-    error_details: Optional[ErrorDetails]
-
-    # Progress callback for per-page progress updates
-    notify_progress: Optional[Callable[[str, int, str], Awaitable[None]]]
-
-    # Contract ID if nodes need it for progress routing
-    contract_id: Optional[str]
 
 
 class DocumentProcessingWorkflow:
@@ -166,6 +81,9 @@ class DocumentProcessingWorkflow:
         # Initialize nodes (will be created in _create_nodes)
         self.nodes = {}
 
+        # Initialize prompt manager before creating nodes to avoid attribute errors
+        self.prompt_manager = get_prompt_manager()
+
         # Create workflow
         self.workflow = self._create_workflow()
 
@@ -184,7 +102,6 @@ class DocumentProcessingWorkflow:
             MarkProcessingStartedNode,
             ExtractTextNode,
             LayoutFormatCleanupNode,
-            SavePagesNode,
             SaveDiagramsNode,
             UpdateMetricsNode,
             MarkBasicCompleteNode,
@@ -193,26 +110,61 @@ class DocumentProcessingWorkflow:
         )
 
         # Initialize nodes
-        self.fetch_document_node = FetchDocumentRecordNode()
-        self.already_processed_check_node = AlreadyProcessedCheckNode()
-        self.mark_processing_started_node = MarkProcessingStartedNode()
+        self.fetch_document_node = FetchDocumentRecordNode(
+            self,
+            "fetch_document_record",
+            progress_range=self.PROGRESS_RANGES["fetch_document_record"],
+        )
+        self.already_processed_check_node = AlreadyProcessedCheckNode(
+            self,
+            "already_processed_check",
+            progress_range=self.PROGRESS_RANGES["already_processed_check"],
+        )
+        self.mark_processing_started_node = MarkProcessingStartedNode(
+            self,
+            "mark_processing_started",
+            progress_range=self.PROGRESS_RANGES["mark_processing_started"],
+        )
         self.extract_text_node = ExtractTextNode(
+            self,
             use_llm=self.use_llm_document_processing,
             progress_range=self.PROGRESS_RANGES["extract_text"],
         )
         self.layout_format_cleanup_node = LayoutFormatCleanupNode(
-            progress_range=self.PROGRESS_RANGES["layout_format_cleanup"]
+            self,
+            "layout_format_cleanup",
+            progress_range=self.PROGRESS_RANGES["layout_format_cleanup"],
         )
         # self.save_pages_node = SavePagesNode(
+        #     self,
+        #     "save_pages",
         #     progress_range=self.PROGRESS_RANGES["save_pages"]
         # )
         self.save_diagrams_node = SaveDiagramsNode(
-            progress_range=self.PROGRESS_RANGES["save_diagrams"]
+            self,
+            "save_diagrams",
+            progress_range=self.PROGRESS_RANGES["save_diagrams"],
         )
-        self.update_metrics_node = UpdateMetricsNode()
-        self.mark_basic_complete_node = MarkBasicCompleteNode()
-        self.build_summary_node = BuildSummaryNode()
-        self.error_handling_node = ErrorHandlingNode()
+        self.update_metrics_node = UpdateMetricsNode(
+            self,
+            "update_metrics",
+            progress_range=self.PROGRESS_RANGES["update_metrics"],
+        )
+        self.mark_basic_complete_node = MarkBasicCompleteNode(
+            self,
+            "mark_basic_complete",
+            progress_range=self.PROGRESS_RANGES["mark_basic_complete"],
+        )
+        self.build_summary_node = BuildSummaryNode(
+            self,
+            "build_summary",
+            progress_range=self.PROGRESS_RANGES["build_summary"],
+        )
+        self.error_handling_node = ErrorHandlingNode(
+            self,
+            "error_handling",
+            progress_range=(49, 50),
+        )
 
         # Store nodes for access
         self.nodes = {
@@ -498,11 +450,11 @@ class DocumentProcessingWorkflow:
                 error_details=None,
             )
 
-            # Wire progress callback to extract_text_node if provided
-            if notify_progress:
-                self.extract_text_node.set_progress_callback(notify_progress)
-                # self.save_pages_node.set_progress_callback(notify_progress)
-                self.save_diagrams_node.set_progress_callback(notify_progress)
+            # # Wire progress callback to extract_text_node if provided
+            # if notify_progress:
+            #     self.extract_text_node.set_progress_callback(notify_progress)
+            #     # self.save_pages_node.set_progress_callback(notify_progress)
+            #     self.save_diagrams_node.set_progress_callback(notify_progress)
 
             # Execute workflow
             result_state = await self.workflow.ainvoke(initial_state)

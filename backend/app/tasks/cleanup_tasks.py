@@ -2,7 +2,6 @@
 
 import asyncio
 import logging
-from typing import List, Dict, Any
 from datetime import datetime, timedelta, UTC
 
 from app.core.celery import celery_app

@@ -8,8 +8,6 @@ This test ensures that:
 4. No direct database access is used in production code
 """
 
-import pytest
-import os
 import re
 from pathlib import Path
 

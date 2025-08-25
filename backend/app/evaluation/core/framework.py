@@ -9,7 +9,7 @@ import asyncio
 import logging
 import time
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Any, Union, Callable
+from typing import Dict, List, Optional, Any, Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from uuid import uuid4, UUID
@@ -28,7 +28,6 @@ from ..clients.evaluation_client import EvaluationClient
 from .evaluation_storage import EvaluationStorage
 from ..metrics.registry import MetricRegistry
 from ...core.langsmith_config import langsmith_trace, langsmith_session
-from ...clients.factory import get_client_factory
 
 logger = logging.getLogger(__name__)
 

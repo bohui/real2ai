@@ -8,19 +8,11 @@ and storage operations. Tests the integration between multiple document services
 
 import pytest
 import asyncio
-import json
-import tempfile
-import io
-import os
-from typing import Dict, Any, List, Optional, BinaryIO
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock, patch, mock_open
-from pathlib import Path
+from unittest.mock import AsyncMock, patch
 
 from app.services.document_service import DocumentService
-from app.services.ai.gemini_ocr_service import GeminiOCRService
 from app.core.auth import User
-from app.models.supabase_models import Document
 from app.schema.enums import ProcessingStatus
 from app.prompts.schema.entity_extraction_schema import AustralianState, ContractType
 from app.clients.supabase.client import SupabaseClient

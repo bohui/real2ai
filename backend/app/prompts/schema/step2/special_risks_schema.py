@@ -5,7 +5,7 @@ This schema defines the structured output for special risk identification,
 unusual terms assessment, and buyer protection evaluation.
 """
 
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict
 from pydantic import BaseModel, Field, ConfigDict
 from enum import Enum
 from app.schema.enums import RiskLevel

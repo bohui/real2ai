@@ -13,11 +13,9 @@ services were referencing non-existent compositions. It ensures that:
 import pytest
 import asyncio
 from pathlib import Path
-from unittest.mock import Mock, patch
 
 from app.core.prompts.config_manager import ConfigurationManager
 from app.core.prompts.manager import PromptManager, PromptManagerConfig
-from app.core.prompts.exceptions import PromptCompositionError
 
 
 class TestConfigurationValidation:

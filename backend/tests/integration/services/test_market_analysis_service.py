@@ -5,7 +5,6 @@ Test script for Market Analysis Service.
 
 import sys
 import os
-from datetime import datetime, timezone
 
 # Add the backend directory to Python path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -16,8 +15,6 @@ def test_market_metrics_combination():
     try:
         from app.services.market_analysis_service import (
             MarketAnalysisService,
-            MarketTrend,
-            MarketSegment,
         )
         from app.clients.domain.client import DomainClient
         from app.clients.corelogic.client import CoreLogicClient

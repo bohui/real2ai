@@ -5,10 +5,9 @@ Tests for DocumentProcessingNode with user-aware background task integration.
 import pytest
 from unittest.mock import Mock, AsyncMock, patch
 from datetime import datetime, UTC
-from typing import Dict, Any
 
 from app.agents.nodes.document_processing_node import DocumentProcessingNode
-from app.models.contract_state import RealEstateAgentState
+from app.agents.states.contract_state import RealEstateAgentState
 from app.schema.enums import ProcessingStatus
 from app.core.auth_context import AuthContext
 

@@ -20,6 +20,14 @@ tags: ["contract", "extraction", "section-seeds", "modular"]
 
 Extract structured entities and high-signal section seeds from the provided Australian real estate contract. Do not perform risk assessment, adequacy judgments, timeline mapping, or recommendations. Populate the `ContractEntityExtraction` schema only.
 
+## CRITICAL VALIDATION RULES
+
+- **Dates**: Never use "XXXX-XX-XX" in `date_value`; use `null` if undetermined
+- **Amounts**: Use `null` for `amount` when value cannot be determined; never use placeholders
+- **Amount Types**: Use valid enum values: purchase_price, deposit, balance, stamp_duty, land_value, gst, other_fees, etc.
+- **States**: Never use "Cth" in `state_specific`; use `null` for Commonwealth legislation
+- **States**: Only use: NSW, VIC, QLD, SA, WA, TAS, ACT, NT
+
 ## 1) Metadata Extraction
 
 Extract and classify the following metadata fields. For each, provide exact evidence in `metadata.sources` where applicable.

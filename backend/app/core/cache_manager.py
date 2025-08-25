@@ -6,7 +6,7 @@ Command-line tools for cache administration and monitoring
 import asyncio
 import logging
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Dict, Any, Optional, List
 import argparse
 

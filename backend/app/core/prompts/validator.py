@@ -9,7 +9,6 @@ from datetime import datetime, UTC
 
 from .template import PromptTemplate
 from .context import PromptContext
-from .exceptions import PromptValidationError
 
 logger = logging.getLogger(__name__)
 

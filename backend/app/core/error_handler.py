@@ -10,7 +10,6 @@ from datetime import datetime, UTC
 from enum import Enum
 from dataclasses import dataclass
 from fastapi import HTTPException
-from fastapi.responses import JSONResponse
 
 logger = logging.getLogger(__name__)
 

@@ -9,8 +9,6 @@ Tests the database schema changes and constraints for the contract type taxonomy
 
 import pytest
 import asyncpg
-from typing import Dict, Any
-from unittest.mock import patch
 
 from app.database.connection import get_service_role_connection
 

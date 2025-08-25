@@ -17,22 +17,18 @@ import asyncio
 import functools
 import time
 import statistics
-from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Any, Optional, Callable, Union
+from datetime import datetime, timedelta
+from typing import Dict, List, Any, Optional, Callable
 import logging
-import json
 import uuid
 
 from app.core.langsmith_config import (
-    get_langsmith_config,
-    langsmith_trace,
     langsmith_session,
     log_trace_info,
 )
 from app.evaluation.langsmith_integration import (
     LangSmithEvaluationIntegration,
     LangSmithDatasetConfig,
-    LangSmithEvaluationConfig,
 )
 
 logger = logging.getLogger(__name__)

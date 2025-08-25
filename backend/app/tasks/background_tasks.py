@@ -12,16 +12,8 @@ from uuid import UUID
 import datetime as dt
 
 from app.core.celery import celery_app
-from app.core.task_context import user_aware_task, task_manager
+from app.core.task_context import user_aware_task
 from app.core.auth_context import AuthContext
-from app.core.langsmith_config import langsmith_session, log_trace_info
-from app.core.config import get_settings
-from app.clients.factory import get_service_supabase_client
-from app.agents.contract_workflow import ContractAnalysisWorkflow
-from app.models.contract_state import (
-    AustralianState,
-    create_initial_state,
-)
 from app.services.contract_analysis_service import ContractAnalysisService
 from app.services.document_service import DocumentService
 from app.services.communication.websocket_service import WebSocketEvents

@@ -10,8 +10,6 @@ Comprehensive monitoring including:
 """
 
 import time
-import logging
-import asyncio
 from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
@@ -22,7 +20,6 @@ from contextlib import asynccontextmanager
 from prometheus_client import Counter, Histogram, Gauge, Info, start_http_server
 import structlog
 from opentelemetry import trace, metrics
-from opentelemetry.exporter.prometheus import PrometheusMetricReader
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.trace import TracerProvider
 

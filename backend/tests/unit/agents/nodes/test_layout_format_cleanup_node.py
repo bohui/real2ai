@@ -5,8 +5,7 @@ Tests the layout format cleanup functionality without LLM processing.
 """
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-from datetime import datetime, timezone
+from unittest.mock import MagicMock, patch
 
 from app.agents.nodes.document_processing_subflow.layout_format_cleanup_node import (
     LayoutFormatCleanupNode,

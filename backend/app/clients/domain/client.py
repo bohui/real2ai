@@ -6,7 +6,7 @@ import asyncio
 import json
 import logging
 import time
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 from datetime import datetime, timezone
 import aiohttp
 
@@ -22,32 +22,9 @@ from ..base.exceptions import (
     PropertyDataIncompleteError,
     PropertyValuationError,
     InvalidPropertyAddressError,
-    PropertyDataValidationError,
 )
 from .config import DomainClientConfig
 from .rate_limiter import RateLimitManager
-from ...schema import (
-    PropertyAddress,
-    PropertyDetails,
-    PropertyValuation,
-    PropertyMarketData,
-    PropertyRiskAssessment,
-    ComparableSale,
-    PropertySalesHistory,
-    PropertyRentalHistory,
-    PropertyProfile,
-    PropertySearchRequest,
-    PropertyProfileResponse,
-    PropertyValuationRequest,
-    PropertyValuationResponse,
-    PropertySearchFilter,
-    PropertyListing,
-    PropertySearchResponse,
-    PropertyAPIHealthStatus,
-    PropertyDataValidationResult,
-    AustralianState,
-    RiskLevel,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -1298,8 +1275,7 @@ class DomainClient(BaseClient, RealEstateAPIOperations):
         self, sales_data: List[Dict[str, Any]], lookback_months: int
     ) -> Dict[str, Any]:
         """Calculate market trends from sales data."""
-        from datetime import datetime, timedelta
-        import calendar
+        from datetime import datetime
 
         # Group sales by month for trend analysis
         monthly_data = {}

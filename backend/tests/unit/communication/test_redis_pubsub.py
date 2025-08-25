@@ -8,8 +8,6 @@ and verifies they can be received by WebSocket clients.
 
 import asyncio
 import json
-import time
-from typing import Dict, Any
 
 # Simple test without full app dependencies
 async def test_redis_pubsub():

@@ -2,15 +2,15 @@
 LangGraph State Models for Real2.AI Contract Analysis
 """
 
-from typing import TypedDict, Optional, Dict, List, Any, Annotated, Callable, Awaitable
-from datetime import datetime
+from typing import TypedDict, Optional, Dict, List, Any, Annotated
 import uuid
 from operator import add
 
-from app.schema.enums import AustralianState, ContractType, ProcessingStatus, RiskLevel
+from app.schema.enums import AustralianState, ProcessingStatus, RiskLevel
+from app.agents.states.base import LangGraphBaseState
 
 
-class RealEstateAgentState(TypedDict):
+class RealEstateAgentState(LangGraphBaseState):
     """Central state for all Real2.AI agents"""
 
     # Session Management
@@ -72,11 +72,6 @@ class RealEstateAgentState(TypedDict):
     confidence_scores: Annotated[Dict[str, float], lambda x, y: y]  # Last value wins
     processing_time: Annotated[Optional[float], lambda x, y: y]  # Last value wins
     progress: Annotated[Optional[Dict[str, Any]], lambda x, y: y]  # Last value wins
-    # Optional callback to emit progress from subflow nodes (step, percent, description)
-    notify_progress: Annotated[
-        Optional[Callable[[str, int, str], Awaitable[None]]],
-        lambda x, y: y,
-    ]
 
     # Analysis Results Structure
     # Step 1: Entity extraction results

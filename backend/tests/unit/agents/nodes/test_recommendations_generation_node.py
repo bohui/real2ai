@@ -1,12 +1,12 @@
 """Test cases for RecommendationsGenerationNode."""
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 from app.agents.nodes.recommendations_generation_node import (
     RecommendationsGenerationNode,
 )
-from app.models.contract_state import RealEstateAgentState
+from app.agents.states.contract_state import RealEstateAgentState
 
 
 class TestRecommendationsGenerationNode:

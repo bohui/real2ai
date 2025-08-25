@@ -4,7 +4,6 @@ Unit tests for DetectDiagramsWithOCRNode
 
 import pytest
 from unittest.mock import AsyncMock, Mock, MagicMock, patch
-from typing import Dict, Any
 
 from app.agents.nodes.document_processing_subflow.detect_diagrams_with_ocr_node import DetectDiagramsWithOCRNode
 from app.prompts.schema.diagram_detection_schema import DiagramDetectionItem

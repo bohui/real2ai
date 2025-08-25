@@ -5,7 +5,6 @@ Integration tests for nodes using VisualArtifactService
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 import uuid
-from datetime import datetime, timezone
 
 from app.agents.nodes.document_processing_subflow.extract_text_node import ExtractTextNode
 from app.agents.nodes.document_processing_subflow.detect_diagrams_with_ocr_node import DetectDiagramsWithOCRNode

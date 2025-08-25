@@ -6,14 +6,12 @@ and maintains the same functionality as before the migration.
 """
 
 import pytest
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, patch
 from uuid import uuid4, UUID
-from datetime import datetime
 
 from app.agents.nodes.document_processing_subflow.fetch_document_node import (
     FetchDocumentRecordNode,
 )
-from app.services.repositories.documents_repository import DocumentsRepository
 from app.models.supabase_models import Document
 
 

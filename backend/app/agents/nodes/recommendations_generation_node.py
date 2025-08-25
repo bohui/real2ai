@@ -8,7 +8,7 @@ import logging
 from datetime import datetime, UTC
 from typing import Dict, Any, Optional, List
 
-from app.models.contract_state import RealEstateAgentState
+from app.agents.states.contract_state import RealEstateAgentState
 from .base import BaseNode
 
 logger = logging.getLogger(__name__)

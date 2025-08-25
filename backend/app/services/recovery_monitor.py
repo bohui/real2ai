@@ -5,10 +5,8 @@ Recovery Monitor Service - Monitors task recovery system health and performance
 import asyncio
 import logging
 from datetime import datetime, timezone, timedelta
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any
 
-from app.core.auth_context import AuthContext
-from app.clients.factory import get_service_supabase_client
 from app.services.repositories.recovery_repository import RecoveryRepository
 from app.core.task_recovery import TaskState
 from app.core.config import get_settings

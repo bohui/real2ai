@@ -6,7 +6,6 @@ This script tests the structure_analysis_only composition that was failing.
 
 import asyncio
 import sys
-import os
 import yaml
 from pathlib import Path
 

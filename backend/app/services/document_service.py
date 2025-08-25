@@ -81,11 +81,7 @@ except ImportError:
     partition = None
 
 from app.models.supabase_models import (
-    Document,
     DocumentStatus as ProcessingStatus,
-    ContentType,
-    DiagramType,
-    EntityType,
 )
 from app.services.ai.gemini_ocr_service import GeminiOCRService
 from app.services.base.user_aware_service import (

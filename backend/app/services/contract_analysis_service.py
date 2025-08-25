@@ -2,7 +2,6 @@
 Unified Contract Analysis Service with WebSocket Integration and Enhanced Features
 """
 
-import asyncio
 import logging
 from typing import Dict, Any, Optional, List, Callable, Awaitable
 from datetime import datetime, timezone
@@ -14,7 +13,7 @@ from app.core.config import (
     EnhancedWorkflowConfig,
 )
 from app.core.prompts import PromptManager
-from app.models.contract_state import RealEstateAgentState
+from app.agents.states.contract_state import RealEstateAgentState
 from app.schema.enums import AustralianState, ProcessingStatus
 from app.schema import (
     ContractAnalysisServiceResponse,

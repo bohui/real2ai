@@ -3,7 +3,6 @@ Unit tests for ExtractTextNode
 """
 
 import pytest
-from unittest.mock import AsyncMock, Mock, patch
 
 from app.agents.nodes.document_processing_subflow.extract_text_node import ExtractTextNode
 

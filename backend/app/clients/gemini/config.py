@@ -3,7 +3,7 @@ Configuration for Google Gemini client.
 """
 
 from dataclasses import dataclass
-from typing import Optional, Dict, Any
+from typing import Optional
 from pydantic_settings import BaseSettings
 
 from ..base.client import ClientConfig

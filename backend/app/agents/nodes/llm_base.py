@@ -13,16 +13,16 @@ Concrete nodes implement small hooks only, avoiding magic numbers and reusing co
 """
 
 import logging
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from typing import Any, Dict, Optional, Tuple, List
 
-from app.models.contract_state import RealEstateAgentState
+from app.agents.states.contract_state import RealEstateAgentState
 from .base import BaseNode
 
 logger = logging.getLogger(__name__)
 
 
-class LLMNode(BaseNode, ABC):
+class LLMNode(BaseNode):
     """
     Abstract base for LLM-driven nodes. Subclasses provide domain-specific hooks.
     """

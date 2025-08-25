@@ -4,11 +4,9 @@ Test runner for LangGraph Contract Analysis Workflow
 
 import asyncio
 import os
-import json
-from typing import Dict, Any
 
 from app.agents.contract_workflow import ContractAnalysisWorkflow
-from app.models.contract_state import create_initial_state
+from app.agents.states.contract_state import create_initial_state
 from app.schema.enums import AustralianState
 
 

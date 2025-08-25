@@ -476,5 +476,36 @@ class AnalysesRepository:
                 )
                 return result if result else None
             except Exception as e:
-                logger.error(f"Failed to retry contract analysis: {e}")
-                return None
+                # If the RPC is missing, emulate a retry by ensuring an analyses row exists
+                logger.error(
+                    f"Failed to retry contract analysis via RPC: {e}. Falling back to upsert.",
+                    exc_info=True,
+                )
+
+                try:
+                    # Create or reset a pending analysis for the latest agent_version
+                    # We use the same upsert mechanism as upsert_analysis but minimal fields
+                    upsert_sql = """
+                        INSERT INTO analyses (content_hash, agent_version, status, result, error_details)
+                        VALUES ($1, $2, 'pending', '{}'::jsonb, NULL)
+                        ON CONFLICT (content_hash, agent_version) DO UPDATE SET
+                            status = 'pending',
+                            result = '{}'::jsonb,
+                            error_details = NULL,
+                            started_at = NULL,
+                            completed_at = NULL,
+                            updated_at = now()
+                        RETURNING id
+                        """
+                    analysis_id = await conn.fetchval(
+                        upsert_sql,
+                        content_hash,
+                        "1.0",
+                    )
+                    return analysis_id
+                except Exception as fallback_error:
+                    logger.error(
+                        f"Fallback analysis upsert failed: {fallback_error}",
+                        exc_info=True,
+                    )
+                    return None

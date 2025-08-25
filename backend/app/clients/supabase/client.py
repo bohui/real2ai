@@ -14,7 +14,6 @@ from postgrest import APIError
 from ..base.client import BaseClient, with_retry
 from ..base.exceptions import (
     ClientConnectionError,
-    ClientAuthenticationError,
     ClientError,
 )
 from .config import SupabaseClientConfig
@@ -241,7 +240,6 @@ class SupabaseClient(BaseClient):
                 except AttributeError:
                     # If _set_auth doesn't exist, try the session approach
                     try:
-                        import time
 
                         # The set_session method expects positional arguments: (access_token, refresh_token)
                         self._supabase_client.auth.set_session(

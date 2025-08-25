@@ -2,15 +2,14 @@
 
 import logging
 import asyncio
-from typing import Dict, Any, Optional, List, Callable
+from typing import Dict, Any, Optional, List
 from pathlib import Path
-from datetime import datetime, UTC, timedelta
+from datetime import datetime, UTC
 from dataclasses import dataclass, field
 from threading import Lock
 import hashlib
-import json
 
-from .template import PromptTemplate, TemplateLibrary, TemplateMetadata
+from .template import PromptTemplate, TemplateLibrary
 from .context import PromptContext
 from .exceptions import PromptNotFoundError, PromptLoadError
 

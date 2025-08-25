@@ -7,7 +7,6 @@ import logging
 from app.core.auth import get_current_user, User
 from app.core.auth_context import AuthContext
 from app.services.repositories.profiles_repository import ProfilesRepository
-from app.core.error_handler import handle_api_error, create_error_context, ErrorCategory
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/users", tags=["users"])

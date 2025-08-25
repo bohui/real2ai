@@ -5,12 +5,10 @@ This module tests the fixes for the AttributeError when handling Pydantic models
 """
 
 import pytest
-from unittest.mock import Mock, AsyncMock, patch
-from datetime import datetime, UTC
+from unittest.mock import Mock, patch
 
 from app.agents.nodes.terms_validation_node import TermsValidationNode
 from app.prompts.schema.workflow_outputs import ContractTermsValidationOutput
-from app.models.contract_state import RealEstateAgentState
 
 
 class TestTermsValidationNodeFixes:

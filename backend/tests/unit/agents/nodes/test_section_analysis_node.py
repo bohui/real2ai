@@ -3,11 +3,10 @@ Unit tests for Section Analysis Node (Step 2 Integration)
 """
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-from datetime import datetime
+from unittest.mock import AsyncMock, MagicMock
 
 from app.agents.nodes.section_analysis_node import SectionAnalysisNode
-from app.models.contract_state import RealEstateAgentState
+from app.agents.states.contract_state import RealEstateAgentState
 
 
 class TestSectionAnalysisNode:

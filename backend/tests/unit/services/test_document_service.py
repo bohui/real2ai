@@ -3,18 +3,15 @@ Comprehensive unit tests for DocumentService
 """
 
 import pytest
-import pytest_asyncio
-from unittest.mock import AsyncMock, MagicMock, patch, mock_open
+from unittest.mock import AsyncMock, MagicMock, patch
 from io import BytesIO
 from fastapi import UploadFile
 from pathlib import Path
 import tempfile
-import os
 
 from app.services.document_service import DocumentService, create_document_service
 from app.services.interfaces import IDocumentProcessor
-from app.clients.base.exceptions import ClientConnectionError, ClientError
-from app.models.supabase_models import DocumentStatus as ProcessingStatus
+from app.clients.base.exceptions import ClientConnectionError
 
 
 class TestDocumentServiceInitialization:

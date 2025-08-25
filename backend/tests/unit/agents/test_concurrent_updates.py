@@ -5,13 +5,10 @@ This test ensures that the workflow can handle concurrent state updates
 without throwing LangGraph's InvalidUpdateError.
 """
 
-import asyncio
 import pytest
-from unittest.mock import Mock, patch
-from typing import Dict, Any
+from unittest.mock import patch
 
-from app.models.contract_state import (
-    RealEstateAgentState,
+from app.agents.states.contract_state import (
     create_initial_state,
     update_state_step,
 )
@@ -170,7 +167,7 @@ class TestConcurrentUpdates:
         # and all fields that can be updated concurrently are annotated
 
         # Import the state model to check its structure
-        from app.models.contract_state import RealEstateAgentState
+        from app.agents.states.contract_state import RealEstateAgentState
 
         # Get the annotations from the state model
         annotations = RealEstateAgentState.__annotations__

@@ -8,7 +8,6 @@ import asyncio
 import time
 import logging
 import sys
-import json
 from pathlib import Path
 from typing import Dict, Any, List
 from datetime import datetime, UTC

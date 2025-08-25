@@ -7,9 +7,9 @@ This module contains the node responsible for analyzing contract diagrams and vi
 import re
 import logging
 from datetime import datetime, UTC
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
-from app.models.contract_state import RealEstateAgentState
+from app.agents.states.contract_state import RealEstateAgentState
 from .base import BaseNode
 
 logger = logging.getLogger(__name__)
@@ -49,7 +49,7 @@ class DiagramAnalysisNode(BaseNode):
             # Get document data
             document_data = state.get("document_data", {})
             document_metadata = state.get("document_metadata", {})
-            
+
             if not document_data and not document_metadata:
                 # No diagram data available - return empty analysis
                 diagram_result = {
@@ -59,19 +59,19 @@ class DiagramAnalysisNode(BaseNode):
                     "analysis_notes": ["No diagram data available for analysis"],
                     "confidence": 0.0,
                 }
-                
+
                 state["diagram_analysis"] = diagram_result
                 state["confidence_scores"]["diagram_analysis"] = 0.0
 
                 return self.update_state_step(
-                    state, 
+                    state,
                     "diagram_analysis_skipped",
-                    data={"diagram_result": diagram_result}
+                    data={"diagram_result": diagram_result},
                 )
 
             # Check for visual elements or diagram indicators
             has_diagrams = self._detect_diagrams(document_data, document_metadata)
-            
+
             if not has_diagrams:
                 # No diagrams detected
                 diagram_result = {
@@ -103,7 +103,7 @@ class DiagramAnalysisNode(BaseNode):
             self._log_step_debug(
                 f"Diagram analysis completed (found: {diagram_result.get('diagrams_found', False)}, confidence: {diagram_confidence:.2f})",
                 state,
-                {"diagram_count": diagram_result.get("diagram_count", 0)}
+                {"diagram_count": diagram_result.get("diagram_count", 0)},
             )
 
             return self.update_state_step(
@@ -115,7 +115,7 @@ class DiagramAnalysisNode(BaseNode):
                 state,
                 e,
                 f"Diagram analysis failed: {str(e)}",
-                {"has_document_data": bool(state.get("document_data"))}
+                {"has_document_data": bool(state.get("document_data"))},
             )
 
     def _detect_diagrams(
@@ -125,7 +125,7 @@ class DiagramAnalysisNode(BaseNode):
         try:
             # Ensure document_metadata is a dict to prevent AttributeError
             document_metadata = document_metadata or {}
-            
+
             # Check for image data
             if document_data.get("images") or document_data.get("figures"):
                 return True
@@ -134,16 +134,26 @@ class DiagramAnalysisNode(BaseNode):
             full_text = document_metadata.get("full_text", "")
             if full_text:
                 diagram_keywords = [
-                    "diagram", "figure", "chart", "map", "plan", "sketch",
-                    "illustration", "drawing", "layout", "blueprint"
+                    "diagram",
+                    "figure",
+                    "chart",
+                    "map",
+                    "plan",
+                    "sketch",
+                    "illustration",
+                    "drawing",
+                    "layout",
+                    "blueprint",
                 ]
-                
+
                 text_lower = full_text.lower()
                 if any(keyword in text_lower for keyword in diagram_keywords):
                     return True
 
             # Check metadata for visual elements
-            if document_metadata.get("has_images") or document_metadata.get("visual_elements"):
+            if document_metadata.get("has_images") or document_metadata.get(
+                "visual_elements"
+            ):
                 return True
 
             return False
@@ -166,11 +176,11 @@ class DiagramAnalysisNode(BaseNode):
             if images:
                 diagram_count += len(images)
                 analysis_notes.append(f"Found {len(images)} image(s) in document")
-                
+
                 # Basic image analysis (placeholder for future enhancement)
                 extracted_info["images"] = {
                     "count": len(images),
-                    "analysis": "Image content analysis not implemented"
+                    "analysis": "Image content analysis not implemented",
                 }
 
             # Analyze text references to diagrams
@@ -179,7 +189,9 @@ class DiagramAnalysisNode(BaseNode):
                 diagram_references = self._extract_diagram_references(full_text)
                 if diagram_references:
                     extracted_info["text_references"] = diagram_references
-                    analysis_notes.append(f"Found {len(diagram_references)} diagram references in text")
+                    analysis_notes.append(
+                        f"Found {len(diagram_references)} diagram references in text"
+                    )
 
             # Determine confidence based on available data
             if diagram_count > 0:
@@ -190,7 +202,8 @@ class DiagramAnalysisNode(BaseNode):
                 confidence = 0.3
 
             return {
-                "diagrams_found": diagram_count > 0 or bool(extracted_info.get("text_references")),
+                "diagrams_found": diagram_count > 0
+                or bool(extracted_info.get("text_references")),
                 "diagram_count": diagram_count,
                 "extracted_information": extracted_info,
                 "analysis_notes": analysis_notes,
@@ -213,7 +226,7 @@ class DiagramAnalysisNode(BaseNode):
         """Extract references to diagrams from text content."""
         try:
             references = []
-            
+
             # Pattern to match diagram references
             patterns = [
                 r"see\s+(diagram|figure|chart|map|plan)\s+(\w+)",
@@ -221,20 +234,24 @@ class DiagramAnalysisNode(BaseNode):
                 r"refer\s+to\s+(diagram|figure|chart|map|plan)",
                 r"as\s+shown\s+in\s+(diagram|figure|chart|map|plan)",
             ]
-            
+
             text_lower = text.lower()
-            
+
             for pattern in patterns:
                 matches = re.finditer(pattern, text_lower)
                 for match in matches:
-                    references.append({
-                        "reference": match.group(0),
-                        "type": match.group(1),
-                        "context": text[max(0, match.start()-50):match.end()+50]
-                    })
-            
+                    references.append(
+                        {
+                            "reference": match.group(0),
+                            "type": match.group(1),
+                            "context": text[
+                                max(0, match.start() - 50) : match.end() + 50
+                            ],
+                        }
+                    )
+
             return references
-            
+
         except Exception as e:
             self._log_exception(e, context={"extraction_method": "diagram_references"})
             return []

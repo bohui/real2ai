@@ -6,7 +6,6 @@ This script tests the actual prompt composition functionality that was failing.
 
 import asyncio
 import sys
-import os
 from pathlib import Path
 
 # Add the backend directory to the Python path

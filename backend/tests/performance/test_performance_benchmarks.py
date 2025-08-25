@@ -8,8 +8,8 @@ and analytics as part of Phase 2 and 3 implementations.
 import asyncio
 import time
 from datetime import datetime
-from typing import List, Dict, Any
-from unittest.mock import AsyncMock, MagicMock
+from typing import Dict, Any
+from unittest.mock import AsyncMock
 import pytest
 import statistics
 
@@ -17,9 +17,7 @@ from app.services.contract_analysis_service import ContractAnalysisService
 from app.services.document_service import DocumentService
 from app.services.ai.gemini_ocr_service import GeminiOCRService
 from app.core.cache_manager import CacheManager
-from app.schema.contract_analysis import ContractAnalysisRequest
 from app.core.langsmith_config import (
-    get_langsmith_config,
     langsmith_trace,
     langsmith_session,
     log_trace_info,

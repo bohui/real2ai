@@ -9,7 +9,7 @@ import logging
 from datetime import datetime, UTC
 from typing import Dict, Any, Optional
 
-from app.models.contract_state import RealEstateAgentState
+from app.agents.states.contract_state import RealEstateAgentState
 from app.prompts.schema.entity_extraction_schema import ContractEntityExtraction
 from app.core.prompts.parsers import create_parser
 from app.schema.enums.property import ContractType
@@ -40,14 +40,6 @@ class EntitiesExtractionNode(ContractLLMNode):
 
     async def _build_context_and_parser(self, state: RealEstateAgentState):
         from app.core.prompts import PromptContext, ContextType
-        from app.services.repositories.documents_repository import (
-            DocumentsRepository,
-        )
-        from app.services.repositories.artifacts_repository import (
-            ArtifactsRepository,
-        )
-        from app.utils.storage_utils import ArtifactStorageService
-        from app.core.auth_context import AuthContext
 
         # Use shared helper on base class
         full_text = await self.get_full_text(state)

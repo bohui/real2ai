@@ -8,7 +8,6 @@ timing coordination, and completion obligations analysis.
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field, ConfigDict
 from enum import Enum
-from datetime import date
 from app.schema.enums import RiskLevel
 
 

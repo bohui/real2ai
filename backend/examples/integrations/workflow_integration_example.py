@@ -8,8 +8,8 @@ identified in the troubleshooting analysis.
 """
 
 import logging
-from typing import Dict, Any, Optional, List
-from app.core.prompts.parsers import create_parser, ParsingResult
+from typing import Dict, Any
+from app.core.prompts.parsers import create_parser
 from app.prompts.schema.workflow_outputs import (
     RiskAnalysisOutput,
     RecommendationsOutput,

@@ -7,7 +7,6 @@ import io
 import logging
 from typing import Any, Dict, Optional
 from PIL import Image
-from google import genai
 from google.genai.types import Content, Part, GenerateContentConfig
 
 from ..base.client import with_retry

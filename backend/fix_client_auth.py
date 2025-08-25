@@ -7,7 +7,7 @@ causing authentication failures. This leads to the "No valid response from avail
 
 import asyncio
 import logging
-from app.clients.openai.config import OpenAISettings, OpenAIClientConfig
+from app.clients.openai.config import OpenAISettings
 
 async def main():
     settings = OpenAISettings()

@@ -3,7 +3,6 @@ Storage utilities for document processing artifacts
 """
 
 import hashlib
-import io
 from typing import Tuple, Optional
 from uuid import uuid4
 

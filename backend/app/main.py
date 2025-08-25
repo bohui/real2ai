@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 import uvicorn
 import os
 import logging
-from typing import Dict, Optional, Any
+from typing import Dict, Any
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 from app.core.config import get_settings
@@ -57,7 +57,6 @@ from app.router.property_intelligence import router as property_intelligence_rou
 from app.router.cache import router as cache_router
 from app.router.evaluation import router as evaluation_router
 from app.middleware.auth_middleware import setup_auth_middleware
-from app.clients.factory import get_supabase_client
 
 # Simple rate limiting middleware (IP + path windowed)
 import time
@@ -301,13 +300,6 @@ app.include_router(evaluation_router)
 
 
 # Import background tasks
-from app.tasks.background_tasks import (
-    # process_document_background,
-    # analyze_contract_background,
-    enhanced_reprocess_document_with_ocr_background,
-    batch_ocr_processing_background,
-    generate_pdf_report,
-)
 
 
 if __name__ == "__main__":

@@ -12,9 +12,9 @@ This module provides comprehensive security validation for file uploads includin
 import logging
 import re
 import hashlib
-from typing import Dict, List, Optional, Tuple, Set
+from typing import Dict, List, Optional, Tuple
 from pathlib import Path
-from fastapi import UploadFile, HTTPException
+from fastapi import UploadFile
 import structlog
 
 # Optional magic import with fallback

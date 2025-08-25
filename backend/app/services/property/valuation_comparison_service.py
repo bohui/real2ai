@@ -3,7 +3,7 @@ Valuation Comparison Service - Provides detailed comparison and analysis of prop
 """
 
 import logging
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional
 from datetime import datetime, timezone
 from dataclasses import dataclass
 from enum import Enum

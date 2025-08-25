@@ -7,10 +7,9 @@ without dependencies on the existing codebase.
 """
 
 import tempfile
-import shutil
 import yaml
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 
 
 class ContextMatcher:

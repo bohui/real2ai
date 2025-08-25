@@ -8,7 +8,7 @@ from typing import List, Optional, Dict, Any
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import field_validator, model_validator
 from dataclasses import dataclass
-from app.models.contract_state import AustralianState
+from app.schema.enums import AustralianState
 
 
 class Settings(BaseSettings):

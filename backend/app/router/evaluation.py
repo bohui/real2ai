@@ -18,22 +18,19 @@ from fastapi import (
     UploadFile,
     File,
     Query,
-    BackgroundTasks,
 )
 from fastapi.responses import StreamingResponse
 from typing import List, Optional, Dict, Any
-from datetime import datetime, timedelta
+from datetime import datetime
 from pydantic import BaseModel, Field
 import json
 import csv
 import io
-import uuid
 
 from app.core.auth import get_admin_user
 from app.schema.auth import UserResponse as User
 from app.services.evaluation_service import (
     get_evaluation_orchestrator,
-    EvaluationStatus,
 )
 from app.clients.factory import get_supabase_client
 

@@ -6,17 +6,18 @@ It includes common functionality like user authentication, error handling, and m
 """
 
 import logging
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timezone
 
 from app.core.auth_context import AuthContext
 from app.agents.subflows.document_processing_workflow import DocumentProcessingState
+from app.agents.nodes.base import BaseNode
 
 logger = logging.getLogger(__name__)
 
 
-class DocumentProcessingNodeBase(ABC):
+class DocumentProcessingNodeBase(BaseNode):
     """
     Base class for all document processing subflow nodes.
 
@@ -27,27 +28,25 @@ class DocumentProcessingNodeBase(ABC):
     - Logging and debugging utilities
     """
 
-    def __init__(self, node_name: str):
+    def __init__(self, workflow: any, node_name: str, progress_range: tuple[int, int]):
         """
         Initialize the base node.
 
         Args:
+            workflow: Parent workflow instance
             node_name: Name of the node for logging and metrics
+            progress_range: Progress range tuple (start, end)
         """
-        self.node_name = node_name
-        self.logger = logging.getLogger(f"{__name__}.{node_name}")
+        super().__init__(workflow, node_name, progress_range)
 
-        # Performance metrics
-        self._metrics = {
+        # Document processing specific metrics (separate from BaseNode metrics)
+        self._doc_metrics = {
             "executions": 0,
             "successes": 0,
             "failures": 0,
             "total_duration": 0.0,
             "average_duration": 0.0,
         }
-
-        # Progress tracking
-        self.progress_callback = None
 
     @abstractmethod
     async def execute(self, state: DocumentProcessingState) -> DocumentProcessingState:
@@ -139,7 +138,7 @@ class DocumentProcessingNodeBase(ABC):
         Returns:
             Updated state with error information
         """
-        self._metrics["failures"] += 1
+        self._doc_metrics["failures"] += 1
 
         error_details = {
             "node": self.node_name,
@@ -211,22 +210,22 @@ class DocumentProcessingNodeBase(ABC):
 
     def _record_success(self, duration: float = 0.0):
         """Record successful execution metrics."""
-        self._metrics["executions"] += 1
-        self._metrics["successes"] += 1
-        self._metrics["total_duration"] += duration
+        self._doc_metrics["executions"] += 1
+        self._doc_metrics["successes"] += 1
+        self._doc_metrics["total_duration"] += duration
 
-        if self._metrics["executions"] > 0:
-            self._metrics["average_duration"] = (
-                self._metrics["total_duration"] / self._metrics["executions"]
+        if self._doc_metrics["executions"] > 0:
+            self._doc_metrics["average_duration"] = (
+                self._doc_metrics["total_duration"] / self._doc_metrics["executions"]
             )
 
     def _record_execution(self):
         """Record node execution attempt."""
-        self._metrics["executions"] += 1
+        self._doc_metrics["executions"] += 1
 
     def get_metrics(self) -> Dict[str, Any]:
         """Get node performance metrics."""
-        metrics = self._metrics.copy()
+        metrics = self._doc_metrics.copy()
 
         if metrics["executions"] > 0:
             metrics["success_rate"] = metrics["successes"] / metrics["executions"]
@@ -237,7 +236,7 @@ class DocumentProcessingNodeBase(ABC):
 
     def reset_metrics(self):
         """Reset performance metrics."""
-        self._metrics = {
+        self._doc_metrics = {
             "executions": 0,
             "successes": 0,
             "failures": 0,
@@ -528,12 +527,9 @@ class DocumentProcessingNodeBase(ABC):
 
         return chain
 
-    def set_progress_callback(self, callback):
-        """Set progress callback for emitting incremental progress updates."""
-        self.progress_callback = callback
-
     async def emit_page_progress(
         self,
+        state: DocumentProcessingState,
         current_page: int,
         total_pages: int,
         description: str = "Processing pages",
@@ -549,9 +545,6 @@ class DocumentProcessingNodeBase(ABC):
             description: Description of the processing step
             progress_range: Tuple of (start_percent, end_percent) for progress mapping
         """
-        if not self.progress_callback:
-            return
-
         try:
             start_progress, end_progress = progress_range
             progress_range_size = end_progress - start_progress
@@ -564,8 +557,8 @@ class DocumentProcessingNodeBase(ABC):
                 final_progress = start_progress
 
             # Emit progress directly via contract analysis service broadcasting
-            await self.progress_callback(
-                "document_processing",
+            await self.emit_progress(
+                state,
                 final_progress,
                 f"{description} (page {current_page}/{total_pages})",
             )

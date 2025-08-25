@@ -3,18 +3,16 @@ Advanced OCR Performance Optimization Service for Real2.AI
 Intelligent caching, quality assessment, and performance monitoring for Gemini OCR
 """
 
-import asyncio
 import hashlib
 import logging
 import time
 from typing import Dict, Any, Optional, List, Tuple
-from datetime import datetime, timedelta, UTC
-from dataclasses import dataclass, asdict
+from datetime import datetime, timedelta
+from dataclasses import dataclass
 from enum import Enum
 import json
 
 from app.core.config import get_settings
-from app.clients.factory import get_supabase_client
 
 logger = logging.getLogger(__name__)
 

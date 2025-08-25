@@ -5,9 +5,8 @@ This module tests the fixes for error handling in the LangSmith tracing decorato
 """
 
 import pytest
-from unittest.mock import Mock, patch, AsyncMock
+from unittest.mock import Mock, patch
 import asyncio
-from functools import wraps
 
 from app.core.langsmith_config import (
     langsmith_trace,

@@ -4,7 +4,7 @@ Documents Repository - User-scoped document operations
 This repository handles document operations with user context and RLS enforcement.
 """
 
-from typing import Dict, List, Optional, Any, Union
+from typing import Dict, List, Optional, Any
 import json
 import logging
 from uuid import UUID

@@ -7,14 +7,13 @@ comprehensive property analysis and valuation services.
 
 import asyncio
 import logging
-from typing import Dict, List, Any, Optional, Union
+from typing import Dict, List, Any, Optional
 from datetime import datetime, timezone
 from dataclasses import dataclass
 
 from app.clients.factory import get_domain_client, get_corelogic_client
 from app.clients.base.exceptions import (
-    PropertyNotFoundError, PropertyValuationError, ClientError,
-    PropertyDataIncompleteError
+    PropertyNotFoundError, PropertyValuationError, PropertyDataIncompleteError
 )
 
 logger = logging.getLogger(__name__)

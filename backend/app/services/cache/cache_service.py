@@ -6,7 +6,6 @@ Handles document processing cache operations with hash-based lookups
 import hashlib
 import logging
 from typing import Dict, List, Optional, Any, Tuple
-from datetime import datetime
 
 from app.clients.supabase.client import SupabaseClient
 from app.core.auth_context import AuthContext

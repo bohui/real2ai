@@ -8,7 +8,6 @@ documents are extracting insufficient text content (< 100 characters).
 
 import asyncio
 import logging
-import os
 import sys
 from pathlib import Path
 

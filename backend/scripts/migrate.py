@@ -6,10 +6,8 @@ Handles database migrations, rollbacks, and schema management
 
 import os
 import sys
-import json
 import logging
 import argparse
-import subprocess
 from pathlib import Path
 from datetime import datetime
 from typing import List, Dict, Optional

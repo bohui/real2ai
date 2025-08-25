@@ -5,7 +5,7 @@ This schema defines the structured output for title analysis, encumbrance assess
 and comprehensive diagram integration covering 20+ diagram types.
 """
 
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict
 from pydantic import BaseModel, Field, ConfigDict
 from enum import Enum
 from app.schema.enums import RiskLevel

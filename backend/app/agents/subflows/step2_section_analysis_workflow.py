@@ -11,76 +11,18 @@ Replaces ContractTermsExtractionNode with specialized section analyzers.
 
 import logging
 from datetime import datetime, UTC
-from typing import Dict, Any, Optional, List, TypedDict, Annotated, Callable, Awaitable
-from operator import add
+from typing import Dict, Any
+
 
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.state import CompiledStateGraph
 
-from app.models.contract_state import RealEstateAgentState
+from app.agents.states.contract_state import RealEstateAgentState
 from app.core.langsmith_config import langsmith_trace
+from app.agents.states.section_analysis_state import Step2AnalysisState
+from app.core.prompts import get_prompt_manager
 
 logger = logging.getLogger(__name__)
-
-
-class Step2AnalysisState(TypedDict):
-    """LangGraph state schema for Step 2 section-by-section analysis"""
-
-    # Input data
-    contract_text: str
-    entities_extraction: Dict[str, Any]
-    legal_requirements_matrix: Optional[Dict[str, Any]]
-    uploaded_diagrams: Optional[Dict[str, bytes]]
-
-    # Context from parent state
-    australian_state: Optional[str]
-    contract_type: Optional[str]
-    purchase_method: Optional[str]
-    use_category: Optional[str]
-    property_condition: Optional[str]
-
-    # Phase 1 Foundation Results (Parallel)
-    parties_property_result: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
-    financial_terms_result: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
-    conditions_result: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
-    warranties_result: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
-    default_termination_result: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
-
-    # Phase 2 Dependent Results (Sequential)
-    settlement_logistics_result: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
-    title_encumbrances_result: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
-
-    # Phase 3 Synthesis Results (Sequential)
-    adjustments_outgoings_result: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
-    disclosure_compliance_result: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
-    special_risks_result: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
-
-    # Cross-section validation
-    cross_section_validation_result: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
-
-    # Workflow control
-    phase1_complete: Annotated[bool, lambda x, y: y]
-    phase2_complete: Annotated[bool, lambda x, y: y]
-    phase3_complete: Annotated[bool, lambda x, y: y]
-
-    # Error and monitoring
-    processing_errors: Annotated[List[str], add]
-    skipped_analyzers: Annotated[List[str], add]
-    total_risk_flags: Annotated[List[str], add]
-
-    # Performance tracking
-    start_time: Annotated[Optional[datetime], lambda x, y: y]
-    phase_completion_times: Annotated[
-        Dict[str, datetime], lambda x, y: {**(x or {}), **(y or {})}
-    ]
-    total_diagrams_processed: Annotated[int, lambda x, y: y]
-    diagram_processing_success_rate: Annotated[float, lambda x, y: y]
-
-    # Progress notification callback
-    notify_progress: Annotated[
-        Optional[Callable[[str, int, str], Awaitable[None]]],
-        lambda x, y: y,
-    ]
 
 
 class Step2AnalysisWorkflow:
@@ -97,27 +39,25 @@ class Step2AnalysisWorkflow:
 
     def __init__(self):
         # Initialize prompt manager (will be properly configured in Story S13)
-        from app.core.prompts import get_prompt_manager
-
         self.prompt_manager = get_prompt_manager()
 
         # Progress tracking ranges for each phase
         self.PROGRESS_RANGES = {
-            "initialize_workflow": (0, 2),
-            "analyze_parties_property": (2, 12),
-            "analyze_financial_terms": (12, 22),
-            "analyze_conditions": (22, 32),
-            "analyze_warranties": (32, 40),
-            "analyze_default_termination": (40, 48),
-            "check_phase1_completion": (48, 50),
-            "analyze_settlement_logistics": (50, 60),
-            "analyze_title_encumbrances": (60, 75),
-            "check_phase2_completion": (75, 77),
-            "calculate_adjustments_outgoings": (77, 83),
-            "check_disclosure_compliance": (83, 89),
-            "identify_special_risks": (89, 94),
-            "validate_cross_sections": (94, 98),
-            "finalize_results": (98, 100),
+            "initialize_workflow": (50, 52),
+            "analyze_parties_property": (52, 58),
+            "analyze_financial_terms": (58, 64),
+            "analyze_conditions": (64, 70),
+            "analyze_warranties": (70, 76),
+            "analyze_default_termination": (76, 82),
+            "check_phase1_completion": (82, 84),
+            "analyze_settlement_logistics": (84, 88),
+            "analyze_title_encumbrances": (88, 92),
+            "check_phase2_completion": (92, 94),
+            "calculate_adjustments_outgoings": (94, 96),
+            "check_disclosure_compliance": (96, 97),
+            "identify_special_risks": (97, 98),
+            "validate_cross_sections": (98, 99),
+            "finalize_results": (99, 100),
         }
 
         # Initialize node instances for delegation
@@ -148,7 +88,9 @@ class Step2AnalysisWorkflow:
 
         # Instantiate nodes with progress ranges
         self.initialize_workflow_node = InitializeWorkflowNode(
-            progress_range=self.PROGRESS_RANGES["initialize_workflow"]
+            self,
+            "initialize_workflow",
+            progress_range=self.PROGRESS_RANGES["initialize_workflow"],
         )
         self.parties_property_node = PartiesPropertyNode(
             self, progress_range=self.PROGRESS_RANGES["analyze_parties_property"]
@@ -166,31 +108,49 @@ class Step2AnalysisWorkflow:
             self, progress_range=self.PROGRESS_RANGES["analyze_default_termination"]
         )
         self.check_phase1_completion_node = CheckPhase1CompletionNode(
-            progress_range=self.PROGRESS_RANGES["check_phase1_completion"]
+            self,
+            "check_phase1_completion",
+            progress_range=self.PROGRESS_RANGES["check_phase1_completion"],
         )
         self.settlement_logistics_node = SettlementLogisticsNode(
-            progress_range=self.PROGRESS_RANGES["analyze_settlement_logistics"]
+            self,
+            "analyze_settlement_logistics",
+            progress_range=self.PROGRESS_RANGES["analyze_settlement_logistics"],
         )
         self.title_encumbrances_node = TitleEncumbrancesNode(
-            progress_range=self.PROGRESS_RANGES["analyze_title_encumbrances"]
+            self,
+            "analyze_title_encumbrances",
+            progress_range=self.PROGRESS_RANGES["analyze_title_encumbrances"],
         )
         self.check_phase2_completion_node = CheckPhase2CompletionNode(
-            progress_range=self.PROGRESS_RANGES["check_phase2_completion"]
+            self,
+            "check_phase2_completion",
+            progress_range=self.PROGRESS_RANGES["check_phase2_completion"],
         )
         self.adjustments_outgoings_node = AdjustmentsOutgoingsNode(
-            progress_range=self.PROGRESS_RANGES["calculate_adjustments_outgoings"]
+            self,
+            "calculate_adjustments_outgoings",
+            progress_range=self.PROGRESS_RANGES["calculate_adjustments_outgoings"],
         )
         self.disclosure_compliance_node = DisclosureComplianceNode(
-            progress_range=self.PROGRESS_RANGES["check_disclosure_compliance"]
+            self,
+            "check_disclosure_compliance",
+            progress_range=self.PROGRESS_RANGES["check_disclosure_compliance"],
         )
         self.special_risks_node = SpecialRisksNode(
-            progress_range=self.PROGRESS_RANGES["identify_special_risks"]
+            self,
+            "identify_special_risks",
+            progress_range=self.PROGRESS_RANGES["identify_special_risks"],
         )
         self.cross_section_validation_node = CrossSectionValidationNode(
-            progress_range=self.PROGRESS_RANGES["validate_cross_sections"]
+            self,
+            "validate_cross_sections",
+            progress_range=self.PROGRESS_RANGES["validate_cross_sections"],
         )
         self.finalize_results_node = FinalizeResultsNode(
-            progress_range=self.PROGRESS_RANGES["finalize_results"]
+            self,
+            "finalize_results",
+            progress_range=self.PROGRESS_RANGES["finalize_results"],
         )
 
         # Optional: registry

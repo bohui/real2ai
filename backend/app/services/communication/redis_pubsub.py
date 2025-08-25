@@ -206,7 +206,6 @@ def publish_progress_sync(contract_id: str, message: Dict[str, Any]):
 
     This creates a new event loop if needed, suitable for use in Celery workers.
     """
-    import asyncio
     import redis
 
     try:

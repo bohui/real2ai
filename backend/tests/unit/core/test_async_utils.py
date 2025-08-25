@@ -7,8 +7,7 @@ in Celery workers and prevention of event loop conflicts.
 
 import asyncio
 import pytest
-from unittest.mock import Mock, patch, AsyncMock
-from concurrent.futures import ThreadPoolExecutor
+from unittest.mock import patch
 
 from app.core.async_utils import (
     ensure_single_event_loop,

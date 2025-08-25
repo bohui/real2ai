@@ -5,7 +5,6 @@ Test script for Valuation Comparison Service.
 
 import sys
 import os
-from datetime import datetime, timezone
 
 # Add the backend directory to Python path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -13,7 +12,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 def test_valuation_comparison_basic():
     """Test basic valuation comparison functionality."""
     try:
-        from app.services.valuation_comparison_service import ValuationComparisonService, ValuationSource, VarianceLevel
+        from app.services.valuation_comparison_service import ValuationComparisonService, VarianceLevel
         
         service = ValuationComparisonService()
         
@@ -212,7 +211,7 @@ def test_outlier_detection():
 def test_reliability_analysis():
     """Test reliability analysis of different sources."""
     try:
-        from app.services.valuation_comparison_service import ValuationComparisonService, ReliabilityRating
+        from app.services.valuation_comparison_service import ValuationComparisonService
         
         service = ValuationComparisonService()
         

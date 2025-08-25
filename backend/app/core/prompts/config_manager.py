@@ -5,7 +5,7 @@ Handles service mappings, composition rules, and dynamic configuration
 
 import yaml
 import logging
-from typing import Dict, Any, List, Optional, Union
+from typing import Dict, Any, List, Optional
 from pathlib import Path
 from dataclasses import dataclass, field
 from datetime import datetime, UTC

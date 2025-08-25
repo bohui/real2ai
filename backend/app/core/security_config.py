@@ -4,8 +4,7 @@ This module centralizes security settings and provides configuration
 management for file security, authentication, and other security features.
 """
 
-from typing import Dict, List, Set, Optional
-from pydantic import Field
+from typing import Dict, List, Optional
 from pydantic_settings import BaseSettings
 import logging
 

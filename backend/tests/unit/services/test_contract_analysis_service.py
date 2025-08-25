@@ -3,10 +3,8 @@ Comprehensive unit tests for ContractAnalysisService
 """
 
 import pytest
-import pytest_asyncio
-from unittest.mock import AsyncMock, MagicMock, patch, Mock
+from unittest.mock import AsyncMock, patch, Mock
 from datetime import datetime, UTC
-from typing import Dict, Any
 
 from app.services.contract_analysis_service import (
     ContractAnalysisService,
@@ -14,10 +12,7 @@ from app.services.contract_analysis_service import (
 )
 from app.services.interfaces import IContractAnalyzer
 from app.schema.enums import AustralianState, ProcessingStatus
-from app.models.contract_state import RealEstateAgentState
 from app.core.config import EnhancedWorkflowConfig
-from app.clients.base.exceptions import ClientError
-from app.schema.contract_analysis import ContractAnalysisRequest
 
 
 class TestContractAnalysisServiceInitialization:

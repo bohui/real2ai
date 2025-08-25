@@ -7,7 +7,6 @@ This script helps diagnose why JWT tokens are expiring immediately after refresh
 import json
 import base64
 from datetime import datetime, timezone
-import time
 
 def decode_jwt_payload(token):
     """Decode JWT payload to check expiration times"""

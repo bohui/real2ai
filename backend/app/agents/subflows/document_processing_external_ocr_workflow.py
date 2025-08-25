@@ -14,12 +14,10 @@ Architecture:
 """
 
 import logging
-from typing import Dict, Any, Optional, TypedDict
+from typing import Dict, Any, Optional
 from datetime import datetime, timezone
 from langgraph.graph import StateGraph
-from pydantic import BaseModel
 
-from app.core.auth_context import AuthContext
 from app.schema.document import ProcessedDocumentSummary, ProcessingErrorResponse
 from app.core.langsmith_config import langsmith_trace
 from app.agents.subflows.document_processing_workflow import DocumentProcessingState

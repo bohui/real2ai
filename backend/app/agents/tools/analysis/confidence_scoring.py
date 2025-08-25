@@ -2,7 +2,7 @@
 Confidence scoring tools for workflow analysis
 """
 
-from typing import Dict, List, Any, Optional
+from typing import Dict, Any, Optional
 from langchain.tools import tool
 
 

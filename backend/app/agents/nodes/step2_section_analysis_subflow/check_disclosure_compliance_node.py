@@ -5,8 +5,13 @@ from app.agents.subflows.step2_section_analysis_workflow import Step2AnalysisSta
 
 
 class DisclosureComplianceNode(Step2NodeBase):
-    def __init__(self, progress_range: tuple[int, int] = (83, 89)):
-        super().__init__("check_disclosure_compliance", progress_range)
+    def __init__(
+        self,
+        workflow,
+        node_name: str = "check_disclosure_compliance",
+        progress_range: tuple[int, int] = (83, 89),
+    ):
+        super().__init__(workflow, node_name, progress_range)
 
     async def execute(self, state: Step2AnalysisState) -> Step2AnalysisState:
         try:

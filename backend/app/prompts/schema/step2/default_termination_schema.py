@@ -5,10 +5,9 @@ This schema defines the structured output for default events, termination rights
 remedy provisions, and enforcement mechanisms analysis.
 """
 
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
 from pydantic import BaseModel, Field, ConfigDict
 from enum import Enum
-from datetime import date
 from app.schema.enums import RiskLevel, PartyRole
 
 

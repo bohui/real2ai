@@ -6,12 +6,10 @@ Discovers interrupted tasks, validates their state, and executes recovery strate
 import asyncio
 import json
 import logging
-from datetime import datetime, timezone, timedelta
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
 
-from app.core.auth_context import AuthContext
 from app.clients.factory import get_service_supabase_client
 from app.services.repositories.recovery_repository import RecoveryRepository
 from app.core.task_recovery import TaskState, RecoveryMethod, RecoverableTask

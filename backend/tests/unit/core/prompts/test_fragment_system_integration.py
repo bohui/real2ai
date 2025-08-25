@@ -1,6 +1,5 @@
 """Integration tests for the complete fragment system redesign"""
 
-import pytest
 import tempfile
 import shutil
 from pathlib import Path
@@ -270,7 +269,6 @@ class TestFragmentSystemIntegration:
 
         # Use the composer method directly
         from app.core.prompts.composer import PromptComposer
-        from pathlib import Path
 
         composer = PromptComposer(
             prompts_dir=self.temp_dir.parent, config_dir=self.temp_dir.parent / "config"

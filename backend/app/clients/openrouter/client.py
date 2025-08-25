@@ -18,7 +18,7 @@ from ..base.exceptions import (
     ClientQuotaExceededError,
     ClientRateLimitError,
 )
-from .config import OpenAIClientConfig, DEFAULT_MODEL
+from .config import OpenAIClientConfig
 from ...core.langsmith_config import langsmith_trace, log_trace_info
 import time
 import hashlib

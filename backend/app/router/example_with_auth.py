@@ -6,7 +6,7 @@ system with Supabase RLS in FastAPI endpoints.
 """
 
 from fastapi import APIRouter, HTTPException, Depends, status
-from typing import Dict, Any, List
+from typing import Dict, Any
 import logging
 
 from app.core.auth import get_current_user, User

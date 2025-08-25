@@ -5,8 +5,7 @@ Tests the integration between Domain API, CoreLogic API, and the PropertyProfile
 """
 
 import pytest
-import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 from datetime import datetime, timezone
 
 from app.services.property.property_profile_service import (
@@ -14,7 +13,6 @@ from app.services.property.property_profile_service import (
     PropertyProfileRequest,
     get_property_profile_service,
 )
-from app.clients.factory import get_client_factory
 
 
 class TestPropertyProfileIntegration:

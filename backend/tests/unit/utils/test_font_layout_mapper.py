@@ -5,7 +5,7 @@ Tests font size extraction, analysis, and layout mapping generation.
 """
 
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from app.utils.font_layout_mapper import FontLayoutMapper, FontLayoutConstants
 
 

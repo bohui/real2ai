@@ -50,6 +50,7 @@ class FinancialType(str, Enum):
     # Purchase-related
     PURCHASE_PRICE = "purchase_price"
     DEPOSIT = "deposit"
+    BALANCE = "balance"  # remaining amount after deposit
     STAMP_DUTY = "stamp_duty"
     LAND_VALUE = "land_value"  # unimproved value for rates/tax
     IMPROVEMENTS_VALUE = "improvements_value"  # building value if split

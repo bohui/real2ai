@@ -11,7 +11,7 @@ from typing import Dict, Any
 from .factory import PromptManagerFactory, create_prompt_manager_for_app
 from .service_mixin import PromptEnabledService
 from .context import PromptContext, ContextType
-from .exceptions import PromptServiceError, PromptCompositionError
+from .exceptions import PromptServiceError
 
 logger = logging.getLogger(__name__)
 

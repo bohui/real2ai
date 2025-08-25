@@ -2,11 +2,10 @@
 Australian contract template identification tools
 """
 
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any
 from langchain.tools import tool
 import re
 
-from app.schema.enums import AustralianState
 
 
 @tool

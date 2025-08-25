@@ -10,10 +10,7 @@ from datetime import datetime, timezone
 from app.clients.domain.client import DomainClient
 from app.clients.corelogic.client import CoreLogicClient
 from app.clients.base.exceptions import (
-    ClientError,
-    PropertyNotFoundError,
     PropertyValuationError,
-    ClientRateLimitError,
     InvalidPropertyAddressError,
 )
 from app.schema import RiskLevel

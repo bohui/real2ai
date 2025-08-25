@@ -7,7 +7,7 @@ Tests use fixtures for Supabase client interactions and mock external dependenci
 
 import pytest
 import uuid
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, patch
 from datetime import datetime, timezone
 from uuid import UUID
 
@@ -15,12 +15,10 @@ from app.agents.subflows.document_processing_workflow import DocumentProcessingS
 from app.agents.nodes.document_processing_subflow import (
     FetchDocumentRecordNode,
     AlreadyProcessedCheckNode,
-    MarkProcessingStartedNode,
     BuildSummaryNode,
     ErrorHandlingNode,
 )
 from app.schema.document import ProcessedDocumentSummary
-from app.services.repositories.documents_repository import DocumentsRepository
 from app.models.supabase_models import Document
 
 

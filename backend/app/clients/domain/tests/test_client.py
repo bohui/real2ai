@@ -3,16 +3,13 @@ Unit tests for Domain API client.
 """
 
 import pytest
-import asyncio
-from unittest.mock import Mock, AsyncMock, patch
-from datetime import datetime, timezone
+from unittest.mock import AsyncMock, patch
 
 from ..client import DomainClient
 from ..config import DomainClientConfig
 from ...base.exceptions import (
     ClientConnectionError,
     ClientAuthenticationError,
-    DomainAPIError,
     PropertyNotFoundError,
     PropertyValuationError,
 )

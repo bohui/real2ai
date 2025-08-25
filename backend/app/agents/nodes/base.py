@@ -6,18 +6,22 @@ containing common functionality, logging, error handling, and state management.
 """
 
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional, TYPE_CHECKING
+from typing import Awaitable, Callable, Dict, Any, Optional, TYPE_CHECKING
 import json
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 
-from app.models.contract_state import RealEstateAgentState, update_state_step
+from app.agents.states.base import LangGraphBaseState
+from app.agents.states.contract_state import (
+    RealEstateAgentState,
+    update_state_step,
+)
 from app.core.config import get_settings
 from app.clients.base.exceptions import ClientError
 
 if TYPE_CHECKING:
     # Avoid circular imports during type checking
-    from app.agents.contract_workflow import ContractAnalysisWorkflow
+    pass
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +73,9 @@ class BaseNode(ABC):
         _get_progress_update(): Calculate progress updates based on current state
     """
 
-    def __init__(self, workflow: any, node_name: str):
+    def __init__(
+        self, workflow: any, node_name: str, progress_range: tuple[int, int] = (0, 100)
+    ):
         """
         Initialize base node with workflow reference and configuration.
 
@@ -120,6 +126,12 @@ class BaseNode(ABC):
         # Avoids KeyError/AttributeError in nodes when state is not a plain dict
         self.workflow_state_safe_get = (
             lambda s, k, d=None: (s.get(k) if isinstance(s, dict) else d) or d
+        )
+
+        self.logger = logging.getLogger(f"{__name__}.{node_name}")
+        self.progress_range = progress_range or (0, 100)
+        self.progress_callback: Optional[Callable[[str, int, str], Awaitable[None]]] = (
+            None
         )
 
     def get_parser(self, parser_type: str) -> Any:
@@ -326,7 +338,7 @@ class BaseNode(ABC):
                 extra={"error": str(error), "context": context},
             )
             # Create a minimal error state since we can't update None
-            from app.models.contract_state import create_initial_state
+            from app.agents.states.contract_state import create_initial_state
 
             minimal_state = create_initial_state(
                 user_id="unknown",
@@ -587,6 +599,20 @@ class BaseNode(ABC):
         except json.JSONDecodeError as e:
             logger.warning(f"JSON parsing failed in {self.node_name}: {e}")
             return None
+
+    async def emit_progress(self, state: LangGraphBaseState, percent: int, desc: str):
+        try:
+            notify = (state or {}).get("notify_progress")
+            if notify and callable(notify):
+                await notify(self.node_name, percent, desc)
+        except Exception as e:
+            self.logger.debug(f"Progress emit failed: {e}")
+
+    def _now_iso(self) -> str:
+        return datetime.now(UTC).isoformat()
+
+    def _error_update(self, message: str) -> Dict[str, Any]:
+        return {"processing_errors": [message]}
 
     def __repr__(self) -> str:
         """String representation of the node."""

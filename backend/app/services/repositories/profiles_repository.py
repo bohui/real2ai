@@ -4,7 +4,7 @@ Profiles Repository - User profile operations
 This repository handles user profile operations with proper RLS enforcement.
 """
 
-from typing import Dict, List, Optional, Any
+from typing import Dict, Optional, Any
 import json
 from uuid import UUID
 from datetime import datetime

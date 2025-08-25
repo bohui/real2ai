@@ -5,9 +5,6 @@ from app.agents.subflows.step2_section_analysis_workflow import Step2AnalysisSta
 
 
 class CheckPhase2CompletionNode(Step2NodeBase):
-    def __init__(self, progress_range: tuple[int, int] = (75, 77)):
-        super().__init__("check_phase2_completion", progress_range)
-
     async def execute(self, state: Step2AnalysisState) -> Step2AnalysisState:
         required_results = ["settlement_logistics_result", "title_encumbrances_result"]
         completed_count = sum(

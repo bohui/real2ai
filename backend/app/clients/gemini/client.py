@@ -15,7 +15,6 @@ from google.genai.types import (
     GenerateContentConfig,
 )
 from google.auth import default
-from google.auth.credentials import Credentials
 
 from ..base.client import BaseClient, with_retry
 from ..base.exceptions import (
@@ -26,7 +25,7 @@ from ..base.exceptions import (
 )
 from .config import GeminiClientConfig
 from .ocr_client import GeminiOCRClient
-from ...core.langsmith_config import langsmith_trace, log_trace_info
+from ...core.langsmith_config import langsmith_trace
 
 logger = logging.getLogger(__name__)
 

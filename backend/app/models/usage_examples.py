@@ -9,10 +9,9 @@ from typing import Dict, Any, List
 
 from supabase import create_client, Client
 from app.models.supabase_models import (
-    Profile, Document, Contract, Analysis,
-    DocumentPage, DocumentEntity, DocumentDiagram,
-    SupabaseModelManager, AustralianState, UserType,
-    DocumentStatus, ContractType
+    Profile, Document, Analysis,
+    DocumentPage, DocumentEntity, SupabaseModelManager, AustralianState, UserType,
+    DocumentStatus
 )
 
 # Initialize Supabase client
@@ -511,7 +510,6 @@ async def direct_sql_examples(supabase_client: Client):
 
 if __name__ == "__main__":
     # Example usage
-    import asyncio
     import os
     
     async def main():

@@ -4,8 +4,7 @@ Integration tests for PromptManager + Output Parser system
 
 import json
 import pytest
-from pathlib import Path
-from typing import List, Optional
+from typing import List
 from datetime import datetime
 from pydantic import BaseModel, Field
 
@@ -13,7 +12,6 @@ from app.core.prompts.manager import PromptManager, PromptManagerConfig
 from app.core.prompts.template import PromptTemplate, TemplateMetadata
 from app.core.prompts.context import PromptContext, ContextType
 from app.core.prompts.parsers import (
-    RetryingPydanticOutputParser as PydanticOutputParser,
     create_parser,
 )
 from app.core.prompts.service_mixin import PromptEnabledService

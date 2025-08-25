@@ -1,6 +1,5 @@
 """Tests for context matching functionality"""
 
-import pytest
 from app.core.prompts.context_matcher import ContextMatcher
 
 

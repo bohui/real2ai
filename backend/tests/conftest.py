@@ -6,7 +6,7 @@ Provides environment setup, database fixtures, and common test utilities.
 import asyncio
 import os
 from typing import AsyncGenerator, Generator
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import pytest_asyncio
@@ -50,7 +50,6 @@ def client(
         get_service_supabase_client,
     )
     from app.core.config import get_settings
-    from app.services.document_service import DocumentService
     from unittest.mock import patch
     import app.main
 
@@ -78,7 +77,6 @@ def client(
 
     # Mock global db_client used in main module and router modules
     import app.main
-    from app.clients.factory import get_supabase_client as real_get_supabase_client
 
     # Also mock AuthContext to bypass authentication
     from app.core.auth_context import AuthContext

@@ -511,8 +511,13 @@ class ContractsRepository:
             row = await conn.fetchrow(
                 """
                 SELECT id, content_hash, contract_type, purchase_method, use_category,
-                       state, extracted_entity, parties_property, financial_terms,
-                       conditions, warranties, default_termination,
+                       state,
+                       COALESCE(extracted_entity, '{}'::jsonb) as extracted_entity,
+                       COALESCE(parties_property, '{}'::jsonb) as parties_property,
+                       COALESCE(financial_terms, '{}'::jsonb) as financial_terms,
+                       COALESCE(conditions, '{}'::jsonb) as conditions,
+                       COALESCE(warranties, '{}'::jsonb) as warranties,
+                       COALESCE(default_termination, '{}'::jsonb) as default_termination,
                        raw_text, property_address, updated_by, created_at, updated_at
                 FROM contracts
                 WHERE id = $1
@@ -523,6 +528,24 @@ class ContractsRepository:
             if not row:
                 return None
 
+            # Normalize JSON fields in case the driver returns strings instead of dicts
+            def _normalize_json(value: Optional[Any]) -> Dict[str, Any]:
+                if value is None:
+                    return {}
+                if isinstance(value, dict):
+                    return value
+                if isinstance(value, str):
+                    try:
+                        parsed = json.loads(value)
+                        return parsed if isinstance(parsed, dict) else {}
+                    except Exception:
+                        logger.warning(
+                            "Failed to parse JSON string from DB; defaulting to empty object",
+                            extra={"contract_id": str(contract_id)},
+                        )
+                        return {}
+                return {}
+
             return Contract(
                 id=row["id"],
                 content_hash=row["content_hash"],
@@ -530,12 +553,12 @@ class ContractsRepository:
                 purchase_method=row.get("purchase_method"),
                 use_category=row.get("use_category"),
                 state=row.get("state") or row.get("australian_state"),
-                extracted_entity=row.get("extracted_entity", {}),
-                parties_property=row.get("parties_property", {}),
-                financial_terms=row.get("financial_terms", {}),
-                conditions=row.get("conditions", {}),
-                warranties=row.get("warranties", {}),
-                default_termination=row.get("default_termination", {}),
+                extracted_entity=_normalize_json(row.get("extracted_entity")),
+                parties_property=_normalize_json(row.get("parties_property")),
+                financial_terms=_normalize_json(row.get("financial_terms")),
+                conditions=_normalize_json(row.get("conditions")),
+                warranties=_normalize_json(row.get("warranties")),
+                default_termination=_normalize_json(row.get("default_termination")),
                 raw_text=row.get("raw_text"),
                 property_address=row.get("property_address"),
                 updated_by=row.get("updated_by"),
@@ -759,8 +782,13 @@ class ContractsRepository:
 
         query = f"""
             SELECT id, content_hash, contract_type, purchase_method, use_category,
-                   state, extracted_entity,
-                   parties_property, financial_terms, conditions, warranties, default_termination,
+                   state,
+                   COALESCE(extracted_entity, '{{}}'::jsonb) as extracted_entity,
+                   COALESCE(parties_property, '{{}}'::jsonb) as parties_property,
+                   COALESCE(financial_terms, '{{}}'::jsonb) as financial_terms,
+                   COALESCE(conditions, '{{}}'::jsonb) as conditions,
+                   COALESCE(warranties, '{{}}'::jsonb) as warranties,
+                   COALESCE(default_termination, '{{}}'::jsonb) as default_termination,
                    raw_text, property_address, updated_by, created_at, updated_at
             FROM contracts
             {where_clause}
@@ -771,6 +799,19 @@ class ContractsRepository:
         async with get_service_role_connection() as conn:
             rows = await conn.fetch(query, *params)
 
+            def _normalize_json(value: Optional[Any]) -> Dict[str, Any]:
+                if value is None:
+                    return {}
+                if isinstance(value, dict):
+                    return value
+                if isinstance(value, str):
+                    try:
+                        parsed = json.loads(value)
+                        return parsed if isinstance(parsed, dict) else {}
+                    except Exception:
+                        return {}
+                return {}
+
             return [
                 Contract(
                     id=row["id"],
@@ -779,12 +820,12 @@ class ContractsRepository:
                     purchase_method=row.get("purchase_method"),
                     use_category=row.get("use_category"),
                     state=row.get("state") or row.get("australian_state"),
-                    extracted_entity=row.get("extracted_entity", {}),
-                    parties_property=row.get("parties_property", {}),
-                    financial_terms=row.get("financial_terms", {}),
-                    conditions=row.get("conditions", {}),
-                    warranties=row.get("warranties", {}),
-                    default_termination=row.get("default_termination", {}),
+                    extracted_entity=_normalize_json(row.get("extracted_entity")),
+                    parties_property=_normalize_json(row.get("parties_property")),
+                    financial_terms=_normalize_json(row.get("financial_terms")),
+                    conditions=_normalize_json(row.get("conditions")),
+                    warranties=_normalize_json(row.get("warranties")),
+                    default_termination=_normalize_json(row.get("default_termination")),
                     raw_text=row.get("raw_text"),
                     property_address=row.get("property_address"),
                     updated_by=row.get("updated_by"),

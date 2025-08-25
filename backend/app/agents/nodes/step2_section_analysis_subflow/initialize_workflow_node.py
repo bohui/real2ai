@@ -1,4 +1,3 @@
-import logging
 from typing import Dict, Any
 from datetime import datetime, UTC
 
@@ -7,9 +6,6 @@ from app.agents.subflows.step2_section_analysis_workflow import Step2AnalysisSta
 
 
 class InitializeWorkflowNode(Step2NodeBase):
-    def __init__(self, progress_range: tuple[int, int] = (0, 2)):
-        super().__init__("initialize_workflow", progress_range)
-
     async def execute(self, state: Step2AnalysisState) -> Step2AnalysisState:
         self.logger.info("Initializing Step 2 section analysis workflow")
 

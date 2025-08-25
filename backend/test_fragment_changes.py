@@ -4,11 +4,9 @@ Focused tests for fragment system changes without external dependencies.
 """
 
 import tempfile
-import shutil
 import yaml
 import logging
 from pathlib import Path
-from typing import Dict, Any
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG, format="%(levelname)s: %(message)s")

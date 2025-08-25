@@ -5,9 +5,6 @@ from app.agents.subflows.step2_section_analysis_workflow import Step2AnalysisSta
 
 
 class CrossSectionValidationNode(Step2NodeBase):
-    def __init__(self, progress_range: tuple[int, int] = (94, 98)):
-        super().__init__("validate_cross_sections", progress_range)
-
     async def execute(self, state: Step2AnalysisState) -> Step2AnalysisState:
         result = {
             "validator": "cross_section_validation",

@@ -7,8 +7,6 @@ from langchain.tools import tool
 import re
 
 from app.schema.enums import (
-    AustralianState,
-    RiskLevel,
     ContractType,
     PurchaseMethod,
     UseCategory,

@@ -13,7 +13,7 @@ handles short-circuiting and state updates generically.
 import logging
 from typing import Any, Dict, Optional
 
-from app.models.contract_state import RealEstateAgentState
+from app.agents.states.contract_state import RealEstateAgentState
 from .llm_base import LLMNode
 
 logger = logging.getLogger(__name__)
@@ -27,8 +27,9 @@ class ContractLLMNode(LLMNode):
         *,
         contract_attribute: str,
         state_field: str,
+        progress_range: tuple[int, int] = (0, 100),
     ):
-        super().__init__(workflow, node_name)
+        super().__init__(workflow, node_name, progress_range)
         self.contract_attribute = contract_attribute
         self.state_field = state_field
 

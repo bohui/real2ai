@@ -9,7 +9,6 @@ from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field, ConfigDict
 from enum import Enum
 from app.schema.enums import RiskLevel
-from datetime import date
 
 
 class AdjustmentType(str, Enum):

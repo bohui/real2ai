@@ -4,8 +4,6 @@ that calls `output_parser.parse_with_retry(response)`.
 """
 
 import json
-import asyncio
-from types import SimpleNamespace
 from typing import Any
 
 import pytest

@@ -4,8 +4,8 @@ Market Analysis Service - Provides comprehensive market analysis and insights fo
 
 import asyncio
 import logging
-from typing import Dict, Any, List, Optional, Tuple
-from datetime import datetime, timedelta, timezone
+from typing import Dict, Any, List, Optional
+from datetime import datetime, timezone
 from dataclasses import dataclass
 from enum import Enum
 import statistics
@@ -14,8 +14,6 @@ from app.clients.domain.client import DomainClient
 from app.clients.corelogic.client import CoreLogicClient
 from app.clients.base.exceptions import (
     ClientError,
-    PropertyNotFoundError,
-    InvalidPropertyAddressError,
 )
 from app.schema import RiskLevel
 

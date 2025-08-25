@@ -8,10 +8,8 @@ and maintains the same functionality as before the migration.
 import pytest
 from unittest.mock import AsyncMock, Mock, patch
 from uuid import uuid4, UUID
-from datetime import datetime
 
 from app.router.contracts import _get_user_document
-from app.services.repositories.documents_repository import DocumentsRepository
 from app.models.supabase_models import Document
 
 

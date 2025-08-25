@@ -13,7 +13,6 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "app"))
 
 from app.services.backend_token_service import BackendTokenService
-from app.core.config import get_settings
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)

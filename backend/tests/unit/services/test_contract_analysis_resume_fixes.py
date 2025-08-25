@@ -9,14 +9,11 @@ Tests validate the fixes implemented for:
 """
 
 import pytest
-import asyncio
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
-from datetime import datetime, timezone
+from unittest.mock import Mock, AsyncMock
 
 from app.services.contract_analysis_service import ContractAnalysisService
 from app.agents.nodes.diagram_analysis_node import DiagramAnalysisNode
 from app.core.prompts.context import ContextType
-from app.core.prompts.parsers import create_parser as real_create_parser
 from app.schema.enums import AustralianState
 
 

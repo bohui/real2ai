@@ -21,7 +21,7 @@ async def test_gemini_ocr_service():
     """Test GeminiOCRService with PromptManager integration"""
     try:
         from app.services.gemini_ocr_service import GeminiOCRService
-        from app.models.contract_state import AustralianState, ContractType
+        from app.agents.states.contract_state import AustralianState, ContractType
 
         # Initialize service
         ocr_service = GeminiOCRService()
@@ -97,7 +97,7 @@ async def test_prompt_engineering_service():
     """Test PromptEngineeringService migration"""
     try:
         from app.services.prompt_engineering_service import PromptEngineeringService
-        from app.models.contract_state import AustralianState, ContractType
+        from app.agents.states.contract_state import AustralianState, ContractType
 
         # Initialize service
         prompt_service = PromptEngineeringService()

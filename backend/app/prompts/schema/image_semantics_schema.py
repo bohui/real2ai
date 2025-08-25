@@ -1,6 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Any, Union
-from datetime import datetime
+from typing import List, Optional, Dict, Any
 from app.schema.enums import ImageType, ConfidenceLevel
 
 class LocationReference(BaseModel):

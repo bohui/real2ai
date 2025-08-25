@@ -6,13 +6,12 @@ tracking with RLS enforcement.
 """
 
 import pytest
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, patch
 from uuid import uuid4, UUID
 from datetime import datetime
 
 from app.services.repositories.user_property_views_repository import (
-    UserPropertyViewsRepository,
-    UserPropertyView
+    UserPropertyViewsRepository
 )
 
 

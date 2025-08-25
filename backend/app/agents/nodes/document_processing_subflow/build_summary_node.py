@@ -5,13 +5,11 @@ This node builds the final ProcessedDocumentSummary from the processing results,
 whether from fresh processing or from already-processed document data.
 """
 
-from typing import Dict, Any
 from datetime import datetime, timezone
 
 from app.agents.subflows.document_processing_workflow import DocumentProcessingState
 from app.schema.document import ProcessedDocumentSummary
 from app.prompts.schema.contract_layout_summary_schema import (
-    ContractLayoutSummary,
     LayoutFormatResult,
 )
 from .base_node import DocumentProcessingNodeBase
@@ -30,8 +28,7 @@ class BuildSummaryNode(DocumentProcessingNodeBase):
     - processed_summary: Final ProcessedDocumentSummary result
     """
 
-    def __init__(self):
-        super().__init__("build_summary")
+    # Inherit constructor from DocumentProcessingNodeBase
 
     async def execute(self, state: DocumentProcessingState) -> DocumentProcessingState:
         """

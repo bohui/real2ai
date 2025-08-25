@@ -6,7 +6,7 @@ diagrams in document pages using individual page JPGs, not the full document.
 """
 
 import asyncio
-from typing import Dict, Any, Optional, List, Set
+from typing import Dict, Any, List, Set
 
 from app.agents.nodes.document_processing_subflow.base_node import (
     DocumentProcessingNodeBase,
@@ -15,7 +15,6 @@ from app.agents.subflows.document_processing_workflow import DocumentProcessingS
 from app.core.langsmith_config import langsmith_trace
 from app.services.ai.gemini_ocr_service import GeminiOCRService
 from app.prompts.schema.diagram_detection_schema import DiagramDetectionItem
-from app.models.supabase_models import DiagramType
 from app.services.visual_artifact_service import VisualArtifactService
 
 

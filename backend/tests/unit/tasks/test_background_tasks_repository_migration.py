@@ -6,18 +6,15 @@ and maintain the same functionality as before the migration.
 """
 
 import pytest
-from unittest.mock import AsyncMock, Mock, patch, MagicMock
+from unittest.mock import AsyncMock, Mock, patch
 from uuid import uuid4, UUID
 from datetime import datetime
-from typing import Dict, Any
 import time
 
 from app.tasks.background_tasks import (
     update_analysis_progress,
     comprehensive_document_analysis,
 )
-from app.services.repositories.analysis_progress_repository import AnalysisProgress
-from app.services.repositories.documents_repository import DocumentsRepository
 from app.models.supabase_models import Document
 
 

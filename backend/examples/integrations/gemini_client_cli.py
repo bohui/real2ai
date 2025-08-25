@@ -45,7 +45,6 @@ import os
 import sys
 from dataclasses import asdict, is_dataclass
 from typing import Any, Dict, Optional
-from google import genai
 from google.genai.types import GenerateContentConfig, SafetySetting, Part, Content
 
 # Ensure `app` package is importable when running from repo root

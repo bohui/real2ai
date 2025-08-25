@@ -7,7 +7,7 @@ with artifact_type="image_jpg", eliminating the need for separate tables.
 
 import os
 import logging
-from typing import Dict, Any, List
+from typing import Dict, Any
 from datetime import datetime, timezone
 
 from .base_node import DocumentProcessingNodeBase

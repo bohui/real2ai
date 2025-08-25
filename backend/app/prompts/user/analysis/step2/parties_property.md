@@ -148,7 +148,7 @@ Relevant legal requirements for {{australian_state}} {{contract_type}}:
 2. Use `seed_snippets` as primary evidence. Cite clause ids/sections where possible.
 3. If seed coverage/confidence is insufficient, perform targeted retrieval from `retrieval_index_id` using concise queries (e.g., names/roles, authority/witness requirements, legal description lot/plan/title). Limit retrieval to only what is necessary.
 4. Reconcile any discrepancies between seeds, retrieval snippets, and baseline entities; prefer explicit contract language.
-5. Assess risk levels using RED/AMBER/GREEN classification. Provide evidence citations for all findings.
+5. Assess risk levels using high/medium/low classification. Provide evidence citations for all findings.
 6. Report whether retrieval was used and how many additional snippets were incorporated.
 
 ## Expected Output

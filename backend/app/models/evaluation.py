@@ -3,7 +3,7 @@ Core evaluation models for the LLM evaluation framework.
 """
 
 from enum import Enum
-from typing import Dict, List, Optional, Any, Union
+from typing import Dict, List, Optional, Any
 from datetime import datetime
 from uuid import UUID, uuid4
 from pydantic import BaseModel, Field

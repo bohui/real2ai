@@ -4,10 +4,8 @@ Tests for user-aware background tasks with authentication context management.
 
 import pytest
 from unittest.mock import Mock, AsyncMock, patch
-from typing import Dict, Any
 import time
 
-from app.tasks.user_aware_tasks import run_document_processing_subflow
 from app.core.auth_context import AuthContext
 from app.core.task_context import task_manager
 from app.services.document_service import DocumentService
