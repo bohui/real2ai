@@ -82,7 +82,7 @@ class ExtractTextNode(DocumentProcessingNodeBase):
         ]
         # Threshold for identifying header/footer regions as a percentage of page height
         # Avoid magic numbers per project convention
-        self._header_footer_height_ratio = 0.05
+        self._header_footer_height_ratio = 0.1
 
     async def initialize(self):
         """Initialize artifacts repository and storage service"""
@@ -1604,7 +1604,7 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                 y_bottom = 0.0
 
             # Skip headers (top region) and footers (bottom region)
-            if y_top < header_threshold or y_bottom > footer_threshold:
+            if y_bottom < header_threshold or y_top > footer_threshold:
                 continue
 
             for line in block.get("lines") or []:
