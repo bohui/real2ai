@@ -1,63 +1,127 @@
 from datetime import datetime, UTC
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
-from .base_node import Step2NodeBase
-from app.agents.subflows.step2_section_analysis_workflow import Step2AnalysisState
+from app.agents.subflows.step2_section_analysis_workflow import (
+    Step2AnalysisState,
+    Step2AnalysisWorkflow,
+)
+from app.agents.nodes.contract_llm_base import ContractLLMNode
 
 
-class DefaultTerminationNode(Step2NodeBase):
-    def __init__(self, progress_range: tuple[int, int] = (40, 48)):
-        super().__init__("analyze_default_termination", progress_range)
+class DefaultTerminationNode(ContractLLMNode):
+    def __init__(
+        self,
+        workflow: Step2AnalysisWorkflow,
+        progress_range: tuple[int, int] = (40, 48),
+    ):
+        super().__init__(
+            workflow=workflow,
+            node_name="analyze_default_termination",
+            contract_attribute="default_termination",
+            state_field="default_termination_result",
+        )
+        self.progress_range = progress_range
 
-    async def execute(self, state: Step2AnalysisState) -> Step2AnalysisState:
-        self.logger.info("Starting default and termination analysis")
+    def _ensure_content_hash_on_state(self, state: Step2AnalysisState) -> None:
         try:
-            from app.services.repositories.contracts_repository import (
-                ContractsRepository,
+            if state.get("content_hash") or state.get("content_hmac"):
+                return
+            entities = state.get("entities_extraction", {}) or {}
+            content_hash = entities.get("content_hash") or (
+                (entities.get("document", {}) or {}).get("content_hash")
             )
-
-            content_hash = (state.get("entities_extraction") or {}).get(
-                "content_hash"
-            ) or (state.get("entities_extraction") or {}).get("document", {}).get(
-                "content_hash"
-            )
-            repo = None
             if content_hash:
-                repo = ContractsRepository()
-                existing = await repo.get_contract_by_content_hash(content_hash)
-                persisted = (existing.default_termination or {}) if existing else None
-                if persisted:
-                    self.logger.info(
-                        "Short-circuiting default_termination: found persisted result"
-                    )
-                    return {"default_termination_result": persisted}
+                state["content_hash"] = content_hash
+        except Exception:
+            pass
 
-            result = {
-                "analyzer": "default_termination",
-                "status": "placeholder",
-                "message": "Implementation pending Story S6",
-                "timestamp": datetime.now(UTC).isoformat(),
-            }
+    async def _short_circuit_check(
+        self, state: Step2AnalysisState
+    ) -> Optional[Step2AnalysisState]:
+        self._ensure_content_hash_on_state(state)
+        return await super()._short_circuit_check(state)
 
-            if content_hash and repo:
-                try:
-                    await repo.update_section_analysis_key(
-                        content_hash,
-                        "default_termination",
-                        result,
-                        updated_by="step2_default_termination",
-                    )
-                except Exception as pe:
-                    self.logger.warning(f"Failed to persist default_termination: {pe}")
+    async def _build_context_and_parser(self, state: Step2AnalysisState):
+        from app.core.prompts import PromptContext, ContextType
+        from app.prompts.schema.step2.default_termination_schema import (
+            DefaultTerminationAnalysisResult,
+        )
+        from app.core.prompts.parsers import create_parser
 
-            await self.emit_progress(
-                state,
-                self.progress_range[1],
-                "Default and termination analysis completed",
+        entities = state.get("entities_extraction", {}) or {}
+        meta = (entities or {}).get("metadata") or {}
+
+        context = PromptContext(
+            context_type=ContextType.ANALYSIS,
+            variables={
+                "analysis_timestamp": datetime.now(UTC).isoformat(),
+                "entities_extraction": entities,
+                "australian_state": state.get("australian_state")
+                or meta.get("state")
+                or "NSW",
+                "contract_type": state.get("contract_type")
+                or meta.get("contract_type")
+                or "purchase_agreement",
+                "legal_requirements_matrix": state.get("legal_requirements_matrix", {}),
+                "retrieval_index_id": state.get("retrieval_index_id"),
+                "seed_snippets": (state.get("section_seeds", {}) or {})
+                .get("snippets", {})
+                .get("default_termination"),
+            },
+        )
+
+        parser = create_parser(
+            DefaultTerminationAnalysisResult, strict_mode=False, retry_on_failure=True
+        )
+        return context, parser, "step2_default_termination"
+
+    def _coerce_to_model(self, data: Any) -> Optional[Any]:
+        try:
+            from app.prompts.schema.step2.default_termination_schema import (
+                DefaultTerminationAnalysisResult,
             )
-            return {"default_termination_result": result}
 
-        except Exception as e:
-            error_msg = f"Default and termination analysis failed: {str(e)}"
-            self.logger.error(error_msg, exc_info=True)
-            return {"processing_errors": [error_msg]}
+            if isinstance(data, DefaultTerminationAnalysisResult):
+                return data
+            if hasattr(data, "model_validate"):
+                return DefaultTerminationAnalysisResult.model_validate(data)
+        except Exception:
+            return None
+        return None
+
+    def _evaluate_quality(
+        self, result: Optional[Any], state: Step2AnalysisState
+    ) -> Dict[str, Any]:
+        if result is None:
+            return {"ok": False}
+        try:
+            has_default_termination = bool(
+                getattr(result, "default_termination", []) or []
+            )
+            conf = float(getattr(result, "confidence_score", 0.0) or 0.0)
+            completeness = float(getattr(result, "completeness_score", 0.0) or 0.0)
+            ok = (conf >= 0.75 and completeness >= 0.6) or has_default_termination
+            return {
+                "ok": ok,
+                "confidence_score": conf,
+                "completeness_score": completeness,
+                "has_default_termination": has_default_termination,
+            }
+        except Exception:
+            return {"ok": False}
+
+    async def _persist_results(self, state: Step2AnalysisState, parsed: Any) -> None:
+        self._ensure_content_hash_on_state(state)
+        await super()._persist_results(state, parsed)
+
+    async def _update_state_success(
+        self, state: Step2AnalysisState, parsed: Any, quality: Dict[str, Any]
+    ) -> Step2AnalysisState:
+        value = parsed.model_dump() if hasattr(parsed, "model_dump") else parsed
+        state["default_termination_result"] = value
+
+        await self.emit_progress(
+            state, self.progress_range[1], "Default and termination analysis completed"
+        )
+
+        return {"default_termination_result": value}

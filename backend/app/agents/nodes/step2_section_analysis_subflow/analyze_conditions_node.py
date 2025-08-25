@@ -1,14 +1,21 @@
 from datetime import datetime, UTC
 from typing import Dict, Any, Optional
 
-from app.agents.subflows.step2_section_analysis_workflow import Step2AnalysisState
+from app.agents.subflows.step2_section_analysis_workflow import (
+    Step2AnalysisState,
+    Step2AnalysisWorkflow,
+)
 from app.agents.nodes.contract_llm_base import ContractLLMNode
 
 
 class ConditionsNode(ContractLLMNode):
-    def __init__(self, progress_range: tuple[int, int] = (22, 32)):
+    def __init__(
+        self,
+        workflow: Step2AnalysisWorkflow,
+        progress_range: tuple[int, int] = (22, 32),
+    ):
         super().__init__(
-            workflow=None,
+            workflow=workflow,
             node_name="analyze_conditions",
             contract_attribute="conditions",
             state_field="conditions_result",

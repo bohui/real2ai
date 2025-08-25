@@ -2,12 +2,17 @@ from datetime import datetime, UTC
 from typing import Dict, Any, Optional
 
 from .base_node import Step2NodeBase  # kept for typing; not used after refactor
-from app.agents.subflows.step2_section_analysis_workflow import Step2AnalysisState
+from app.agents.subflows.step2_section_analysis_workflow import (
+    Step2AnalysisState,
+    Step2AnalysisWorkflow,
+)
 from app.agents.nodes.contract_llm_base import ContractLLMNode
 
 
 class PartiesPropertyNode(ContractLLMNode):
-    def __init__(self, workflow=None, progress_range: tuple[int, int] = (2, 12)):
+    def __init__(
+        self, workflow: Step2AnalysisWorkflow, progress_range: tuple[int, int] = (2, 12)
+    ):
         super().__init__(
             workflow=workflow,  # will be set by caller if needed; BaseNode doesn't require it
             node_name="analyze_parties_property",

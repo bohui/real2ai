@@ -151,19 +151,19 @@ class Step2AnalysisWorkflow:
             progress_range=self.PROGRESS_RANGES["initialize_workflow"]
         )
         self.parties_property_node = PartiesPropertyNode(
-            progress_range=self.PROGRESS_RANGES["analyze_parties_property"]
+            self, progress_range=self.PROGRESS_RANGES["analyze_parties_property"]
         )
         self.financial_terms_node = FinancialTermsNode(
-            progress_range=self.PROGRESS_RANGES["analyze_financial_terms"]
+            self, progress_range=self.PROGRESS_RANGES["analyze_financial_terms"]
         )
         self.conditions_node = ConditionsNode(
-            progress_range=self.PROGRESS_RANGES["analyze_conditions"]
+            self, progress_range=self.PROGRESS_RANGES["analyze_conditions"]
         )
         self.warranties_node = WarrantiesNode(
-            progress_range=self.PROGRESS_RANGES["analyze_warranties"]
+            self, progress_range=self.PROGRESS_RANGES["analyze_warranties"]
         )
         self.default_termination_node = DefaultTerminationNode(
-            progress_range=self.PROGRESS_RANGES["analyze_default_termination"]
+            self, progress_range=self.PROGRESS_RANGES["analyze_default_termination"]
         )
         self.check_phase1_completion_node = CheckPhase1CompletionNode(
             progress_range=self.PROGRESS_RANGES["check_phase1_completion"]
@@ -229,7 +229,7 @@ class Step2AnalysisWorkflow:
         graph.add_node("analyze_default_termination", self.analyze_default_termination)
 
         # Phase 1 completion check
-        graph.add_node("check_phase1_completion", self.check_phase1_completion)
+        graph.add_node("check_phase1_completion", self._check_phase1_completion)
 
         # Phase 2: Dependent Analysis Nodes (Sequential)
         graph.add_node(

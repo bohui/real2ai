@@ -25,8 +25,8 @@ class EntitiesExtractionNode(ContractLLMNode):
 
     def __init__(self, workflow):
         super().__init__(
-            workflow,
-            "entities_extraction",
+            workflow=workflow,
+            node_name="entities_extraction",
             contract_attribute="extracted_entity",
             state_field="entities_extraction_result",
         )
