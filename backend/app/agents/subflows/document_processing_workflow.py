@@ -403,8 +403,8 @@ class DocumentProcessingWorkflow:
     async def process_document(
         self,
         document_id: str,
+        content_hash: str,
         use_llm: bool = None,
-        content_hash: Optional[str] = None,
         australian_state: Optional[str] = None,
         contract_type: Optional[str] = None,
         document_type: Optional[str] = None,
@@ -429,6 +429,7 @@ class DocumentProcessingWorkflow:
         """
         try:
             # Create initial state
+            # Ensure base state's required content_hash is present
             initial_state = DocumentProcessingState(
                 document_id=document_id,
                 use_llm=(

@@ -29,6 +29,24 @@ class ContractsRepository:
     def __init__(self, user_id: Optional[UUID] = None):
         self.user_id = user_id
 
+    async def check_taxonomy(
+        self, contract_type: Optional[str], purchase_method: Optional[str]
+    ) -> bool:
+        """Validate basic taxonomy consistency.
+
+        - If contract_type is None: accept (cannot validate yet)
+        - If contract_type != 'purchase_agreement': purchase_method must be None
+        - If contract_type == 'purchase_agreement': purchase_method can be provided or None
+        """
+        try:
+            if contract_type is None:
+                return True
+            if contract_type != "purchase_agreement" and purchase_method is not None:
+                return False
+            return True
+        except Exception:
+            return False
+
     async def upsert_contract_by_content_hash(
         self,
         content_hash: str,
@@ -78,6 +96,12 @@ class ContractsRepository:
                 "user_scoped": self.user_id is not None,
             },
         )
+        # TODO: Add a check to ensure that the contract_type and purchase_method are valid
+        taxonomy_check = await self.check_taxonomy(contract_type, purchase_method)
+        if not taxonomy_check:
+            raise ValueError(
+                "Invalid contract_type or purchase_method; please use a valid contract_type and purchase_method"
+            )
 
         # Sanitize inputs to satisfy DB taxonomy constraints conservatively
         # Allow NULL values for optional fields
@@ -95,8 +119,9 @@ class ContractsRepository:
                 return value.isoformat()
             return str(value)
 
-        # Build the upsert query and params. State and contract_type are now optional
-        # and can be NULL
+        # Build the upsert query and params. If a field is None, we skip updating it on conflict
+        # by relying on COALESCE in the UPDATE assignments. For JSONB columns, we avoid
+        # defaulting to '{}' in VALUES so that EXCLUDED can be NULL to signal skip.
         insert_query = """
             INSERT INTO contracts (
                 content_hash, contract_type, purchase_method, use_category,
@@ -106,31 +131,23 @@ class ContractsRepository:
             ) VALUES (
                 $1, $2, $3, $4,
                 $5,
-                COALESCE($6::jsonb, '{}'::jsonb),
-                COALESCE($7::jsonb, '{}'::jsonb),
-                COALESCE($8::jsonb, '{}'::jsonb),
-                COALESCE($9::jsonb, '{}'::jsonb),
-                COALESCE($10::jsonb, '{}'::jsonb),
-                COALESCE($11::jsonb, '{}'::jsonb),
+                $6::jsonb,
+                $7::jsonb,
+                $8::jsonb,
+                $9::jsonb,
+                $10::jsonb,
+                $11::jsonb,
                 $12,
                 $13,
                 $14
             )
             ON CONFLICT (content_hash) DO UPDATE SET
-                -- Handle optional contract_type (allow NULL values)
-                contract_type = EXCLUDED.contract_type,
-                -- Enforce taxonomy rules in upsert to satisfy DB CHECK constraints
-                purchase_method = CASE
-                    WHEN EXCLUDED.contract_type = 'purchase_agreement'
-                        THEN COALESCE(EXCLUDED.purchase_method, contracts.purchase_method)
-                    ELSE NULL
-                END,
-                use_category = CASE
-                    WHEN EXCLUDED.contract_type = 'option_to_purchase'
-                        THEN NULL
-                    ELSE COALESCE(EXCLUDED.use_category, contracts.use_category)
-                END,
-                state = EXCLUDED.state,
+                -- If NULL, skip updating (keep existing)
+                contract_type = COALESCE(EXCLUDED.contract_type, contracts.contract_type),
+                -- Enforce taxonomy rules based on effective contract_type
+                purchase_method = COALESCE(EXCLUDED.purchase_method, contracts.purchase_method),
+                use_category = COALESCE(EXCLUDED.use_category, contracts.use_category),
+                state = COALESCE(EXCLUDED.state, contracts.state),
                 extracted_entity = COALESCE(EXCLUDED.extracted_entity, contracts.extracted_entity),
                 parties_property = COALESCE(EXCLUDED.parties_property, contracts.parties_property),
                 financial_terms = COALESCE(EXCLUDED.financial_terms, contracts.financial_terms),

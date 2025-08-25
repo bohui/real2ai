@@ -92,8 +92,8 @@ class TerminationRight(BaseModel):
     termination_trigger: str = Field(
         ..., description="Event or condition triggering termination right"
     )
-    party_exercising: PartyRole = Field(
-        ..., description="Party who can exercise termination"
+    party_exercising: List[PartyRole] = Field(
+        default_factory=list, description="Parties who can exercise termination"
     )
 
     # Exercise conditions
@@ -387,7 +387,7 @@ class DefaultTerminationAnalysisResult(BaseModel):
                 "termination_rights": [
                     {
                         "termination_trigger": "Purchaser default in deposit payment",
-                        "party_exercising": "vendor",
+                        "party_exercising": ["vendor"],
                         "notice_period": "2 business days",
                         "deposit_treatment": "Forfeited to vendor",
                         "fairness_to_buyer": "Standard market terms",

@@ -8,3 +8,4 @@ class LangGraphBaseState(TypedDict):
         Optional[Callable[[str, int, str], Awaitable[None]]],
         lambda x, y: y,
     ]
+    content_hash: str

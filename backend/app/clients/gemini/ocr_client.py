@@ -26,7 +26,7 @@ class GeminiOCRClient:
     def __init__(self, gemini_client, config: GeminiClientConfig):
         """
         Initialize thin OCR client.
-        
+
         Args:
             gemini_client: The underlying Gemini API client
             config: Client configuration
@@ -89,50 +89,48 @@ class GeminiOCRClient:
             )
 
     @with_retry(max_retries=3, backoff_factor=2.0)
-    async def generate_content(self, content: Content, config: Optional[GenerateContentConfig] = None) -> Dict[str, Any]:
+    async def generate_content(
+        self, content: Content, config: Optional[GenerateContentConfig] = None
+    ) -> Dict[str, Any]:
         """
         Send content to Gemini API for processing.
-        
+
         This is the ONLY method that should interact with the Gemini API.
         All business logic should be in the service layer.
-        
+
         Args:
             content: The content to send to Gemini
             config: Optional generation configuration
-            
+
         Returns:
             Response from Gemini API
         """
         try:
             if config is None:
                 config = GenerateContentConfig(temperature=0.1)
-                
+
             response = await asyncio.get_event_loop().run_in_executor(
                 None,
                 lambda: self.client.models.generate_content(
-                    model=self.config.model_name, 
-                    contents=[content], 
-                    config=config
+                    model=self.config.model_name, contents=[content], config=config
                 ),
             )
-            
-            if not response.candidates or not response.candidates[0].content:
+
+            if not getattr(response, "candidates", None):
                 raise ClientError(
-                    "No response received from Gemini",
-                    client_name=self.client_name
+                    "No response candidates received from Gemini",
+                    client_name=self.client_name,
                 )
-                
-            # Extract text from response
-            text = ""
-            if response.candidates[0].content.parts:
-                text = response.candidates[0].content.parts[0].text or ""
-                
+
+            # Extract text from response safely
+            text = self._extract_text_from_response(response)
+
             return {
                 "text": text,
                 "raw_response": response,
                 "model": self.config.model_name,
             }
-            
+
         except Exception as e:
             self.logger.error(f"Gemini API call failed: {e}")
             raise ClientError(
@@ -140,6 +138,43 @@ class GeminiOCRClient:
                 client_name=self.client_name,
                 original_error=e,
             )
+
+    def _extract_text_from_response(self, response: Any) -> str:
+        """Safely extract text from a Gemini response for OCR flows."""
+        try:
+            # Fast path if SDK provides a text attribute
+            text_attr = getattr(response, "text", None)
+            if isinstance(text_attr, str) and text_attr.strip():
+                return text_attr
+
+            candidates = getattr(response, "candidates", None) or []
+            for candidate in candidates:
+                content_obj = getattr(candidate, "content", None)
+                if not content_obj:
+                    continue
+                parts = getattr(content_obj, "parts", None) or []
+                texts: list[str] = []
+                for part in parts:
+                    t = getattr(part, "text", None)
+                    if isinstance(t, str) and t:
+                        texts.append(t)
+                if texts:
+                    return "\n".join(texts)
+
+            # As a last resort, attempt str() preview for diagnostics
+            preview = str(response)
+            self.logger.error(
+                "OCR: Failed to extract text from Gemini response",
+                extra={
+                    "candidates_count": len(candidates),
+                    "response_preview": preview[:1000],
+                },
+            )
+            return ""
+        except Exception as e:
+            # Do not raise here — OCR service may still proceed with empty text fallback
+            self.logger.error(f"OCR: Exception while extracting text: {e}")
+            return ""
 
     async def health_check(self) -> Dict[str, Any]:
         """Check OCR client health."""

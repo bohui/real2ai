@@ -59,7 +59,6 @@ class DocumentProcessingState(LangGraphBaseState):
     use_llm: bool
 
     # Optional input overrides
-    content_hash: Optional[str]
     australian_state: Optional[str]
     contract_type: Optional[str]
     document_type: Optional[str]

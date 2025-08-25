@@ -160,6 +160,7 @@ class StampDutyCalculation(TypedDict):
 
 def create_initial_state(
     user_id: str,
+    content_hash: str,
     australian_state: AustralianState,
     user_type: str = "buyer",
     user_preferences: Optional[Dict[str, Any]] = None,
@@ -174,6 +175,8 @@ def create_initial_state(
         session_id=str(uuid.uuid4()),
         agent_version="1.0",
         contract_id=None,
+        # Base required field for LangGraph state
+        content_hash=content_hash,
         # Document Processing
         document_data=None,
         document_metadata=None,

@@ -290,6 +290,8 @@ class Step2AnalysisWorkflow:
             "entities_extraction": entities_extraction,
             "legal_requirements_matrix": kwargs.get("legal_requirements_matrix"),
             "uploaded_diagrams": kwargs.get("uploaded_diagrams"),
+            # Required base field propagated from parent
+            "content_hash": parent_state.get("content_hash"),
             # Context from parent state
             "australian_state": parent_state.get("australian_state"),
             "contract_type": parent_state.get("contract_type"),

@@ -206,13 +206,13 @@ class GeminiClient(BaseClient):
                 ),
             )
 
-            if not response.candidates or not response.candidates[0].content:
+            if not getattr(response, "candidates", None):
                 raise ClientConnectionError(
-                    "Gemini API test failed: No response received",
+                    "Gemini API test failed: No response candidates",
                     client_name=self.client_name,
                 )
 
-            response_text = response.candidates[0].content.parts[0].text
+            response_text = self._extract_text_from_response(response)
             self.logger.debug(
                 f"Gemini API connection test successful. Response: {response_text[:RESPONSE_PREVIEW_LENGTH]}..."
             )
@@ -372,7 +372,9 @@ class GeminiClient(BaseClient):
         """
         try:
             # Create content for the prompt
-            content = genai.types.Content(role="user", parts=[genai.types.Part(text=prompt)])
+            content = genai.types.Content(
+                role="user", parts=[genai.types.Part(text=prompt)]
+            )
 
             # Create generation config
             generation_config = GenerateContentConfig(
@@ -395,12 +397,21 @@ class GeminiClient(BaseClient):
                 ),
             )
 
-            if not response.candidates or not response.candidates[0].content:
+            if not getattr(response, "candidates", None):
+                # Add more diagnostics to logs to help root-cause
+                self.logger.error(
+                    "Gemini returned no candidates",
+                    extra={
+                        "operation": "generate_content",
+                        "model": kwargs.get("model", self.config.model_name),
+                    },
+                )
                 raise ClientError(
-                    "No content generated from Gemini", client_name=self.client_name
+                    "No content generated from Gemini (no candidates)",
+                    client_name=self.client_name,
                 )
 
-            response_text = response.candidates[0].content.parts[0].text
+            response_text = self._extract_text_from_response(response)
             return response_text
 
         except Exception as e:
@@ -464,14 +475,15 @@ class GeminiClient(BaseClient):
             content_obj = Content(role="user", parts=parts)
 
             # Create generation config with optional system instruction
-            config_kwargs = {
-                "safety_settings": self._get_safety_settings()
-            }
-            
+            config_kwargs = {"safety_settings": self._get_safety_settings()}
+
             # Add system instruction if provided
-            if "system_prompt" in analysis_context and analysis_context["system_prompt"]:
+            if (
+                "system_prompt" in analysis_context
+                and analysis_context["system_prompt"]
+            ):
                 config_kwargs["system_instruction"] = analysis_context["system_prompt"]
-            
+
             generate_config = GenerateContentConfig(**config_kwargs)
 
             # Generate analysis
@@ -486,17 +498,76 @@ class GeminiClient(BaseClient):
                 ),
             )
 
-            if not response.candidates or not response.candidates[0].content:
-                raise ClientError("No analysis generated", client_name=self.client_name)
+            if not getattr(response, "candidates", None):
+                raise ClientError(
+                    "No analysis candidates returned", client_name=self.client_name
+                )
 
             return {
-                "content": response.candidates[0].content.parts[0].text,
+                "content": self._extract_text_from_response(response),
                 "analysis_type": "image_semantics",
             }
 
         except Exception as e:
             raise ClientError(
                 f"Image analysis failed: {str(e)}",
+                client_name=self.client_name,
+                original_error=e,
+            )
+
+    # ------------------------
+    # Internal helpers
+    # ------------------------
+    def _extract_text_from_response(self, response: Any) -> str:
+        """Safely extract text from a Gemini response.
+
+        This handles cases where content/parts may be None or the first part does not
+        contain text. It attempts sensible fallbacks and raises a ClientError with
+        helpful diagnostics if no text can be found.
+        """
+        try:
+            # Some SDK versions expose a convenient text field
+            text_attr = getattr(response, "text", None)
+            if isinstance(text_attr, str) and text_attr.strip():
+                return text_attr
+
+            candidates = getattr(response, "candidates", None) or []
+            for idx, candidate in enumerate(candidates):
+                content_obj = getattr(candidate, "content", None)
+                if not content_obj:
+                    continue
+                parts = getattr(content_obj, "parts", None) or []
+                texts: list[str] = []
+                for p in parts:
+                    # Parts can be text or other modalities
+                    t = getattr(p, "text", None)
+                    if isinstance(t, str) and t:
+                        texts.append(t)
+                if texts:
+                    return "\n".join(texts)
+
+            # If we reach here, we couldn't extract any text. Log diagnostics.
+            preview = str(response)
+            if len(preview) > CONTENT_PREVIEW_LENGTH:
+                preview = preview[:CONTENT_PREVIEW_LENGTH] + "…"
+            self.logger.error(
+                "Failed to extract text from Gemini response",
+                extra={
+                    "operation": "_extract_text_from_response",
+                    "candidates_count": len(getattr(response, "candidates", []) or []),
+                    "response_preview": preview,
+                },
+            )
+            raise ClientError(
+                "Gemini returned candidates but no textual parts were found",
+                client_name=self.client_name,
+            )
+        except ClientError:
+            raise
+        except Exception as e:
+            # Wrap any unexpected errors
+            raise ClientError(
+                f"Failed to parse Gemini response: {str(e)}",
                 client_name=self.client_name,
                 original_error=e,
             )

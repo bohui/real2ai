@@ -819,14 +819,30 @@ Focus on accuracy and completeness. Extract all visible text content."""
                     ),
                 )
 
-            ai_text = (
-                response.candidates[0].content.parts[0].text
-                if response
-                and response.candidates
-                and response.candidates[0].content
-                and response.candidates[0].content.parts
-                else ""
-            )
+            # Safely extract text from response; avoid direct indexing
+            def _safe_extract_text(resp: Any) -> str:
+                try:
+                    text_attr = getattr(resp, "text", None)
+                    if isinstance(text_attr, str) and text_attr.strip():
+                        return text_attr
+                    candidates = getattr(resp, "candidates", None) or []
+                    for cand in candidates:
+                        content_obj = getattr(cand, "content", None)
+                        if not content_obj:
+                            continue
+                        parts = getattr(content_obj, "parts", None) or []
+                        texts: list[str] = []
+                        for p in parts:
+                            t = getattr(p, "text", None)
+                            if isinstance(t, str) and t:
+                                texts.append(t)
+                        if texts:
+                            return "\n".join(texts)
+                    return ""
+                except Exception:
+                    return ""
+
+            ai_text = _safe_extract_text(response)
 
             # Parse structured output
             parsing_result = await self.parse_ai_response(

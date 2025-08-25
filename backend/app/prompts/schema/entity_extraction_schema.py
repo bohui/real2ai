@@ -133,13 +133,6 @@ class FinancialAmount(EntityBase):
         None, description="What the percentage is calculated on"
     )
 
-    @validator("amount_text")
-    def validate_amount_text_when_null(cls, v, values):
-        """Ensure amount_text provides context when amount is null"""
-        if values.get("amount") is None and not v:
-            raise ValueError("amount_text must be provided when amount is null")
-        return v
-
 
 class LegalReference(EntityBase):
     """Legal references and compliance information"""

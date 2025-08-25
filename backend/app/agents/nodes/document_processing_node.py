@@ -114,15 +114,15 @@ class DocumentProcessingNode(BaseNode):
                     subflow = DocumentProcessingWorkflow(
                         use_llm_document_processing=use_llm, storage_bucket="documents"
                     )
-                    content_hash = document_data.get("content_hash")
+                    content_hash = state.get("content_hash")
                     # Extract australian_state properly handling enum type
                     australian_state = state.get("australian_state", "NSW")
                     australian_state = australian_state.value
 
                     result = await subflow.process_document(
                         document_id=document_id,
-                        use_llm=use_llm,
                         content_hash=content_hash,
+                        use_llm=use_llm,
                         australian_state=australian_state,
                         contract_type=state.get("contract_type", "purchase_agreement"),
                         document_type=state.get("document_type", "contract"),

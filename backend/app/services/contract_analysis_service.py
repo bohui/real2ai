@@ -4,6 +4,7 @@ Unified Contract Analysis Service with WebSocket Integration and Enhanced Featur
 
 import logging
 from typing import Dict, Any, Optional, List, Callable, Awaitable
+import hashlib
 from datetime import datetime, timezone
 
 from app.agents.contract_workflow import ProgressTrackingWorkflow
@@ -553,6 +554,26 @@ class ContractAnalysisService:
         document_type: str = "contract",
     ) -> RealEstateAgentState:
         """Create initial state for workflow"""
+        # Derive a robust content_hash for required LangGraph state
+        raw_hash: Optional[str] = None
+        try:
+            raw_hash = (document_data or {}).get("content_hash") or (
+                document_data or {}
+            ).get("content_hmac")
+            if not raw_hash:
+                content: Optional[str] = (document_data or {}).get("content")
+                if isinstance(content, str) and content:
+                    raw_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
+                else:
+                    # Fallback: deterministically derive from document id or session
+                    doc_id = (document_data or {}).get("document_id")
+                    basis = str(doc_id or session_id)
+                    raw_hash = hashlib.sha256(basis.encode("utf-8")).hexdigest()
+        except Exception as e:
+            logger.warning(
+                f"Failed to derive content_hash; falling back to session hash: {e}"
+            )
+            raw_hash = hashlib.sha256(str(session_id).encode("utf-8")).hexdigest()
 
         return {
             "session_id": session_id,
@@ -592,6 +613,8 @@ class ContractAnalysisService:
             "analysis_results": {},
             "report_data": None,
             "final_recommendations": [],
+            # Required by LangGraph base state
+            "content_hash": raw_hash or "unknown_content_hash",
         }
 
     def _create_analysis_response(
