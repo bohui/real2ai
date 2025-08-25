@@ -13,9 +13,8 @@ from app.schema.enums import (
     PurchaseMethod,
     UseCategory,
     PropertyCondition,
-    LegalRequirement,
 )
-
+from app.schema.enums.compliance import LegalRequirement
 
 # Integration mapping for legal requirements
 LEGAL_REQUIREMENTS_MATRIX: Dict[

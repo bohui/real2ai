@@ -1,53 +1,75 @@
-## Document Processing Workflow (LangGraph)
+## Step 2 Section Analysis Workflow (LangGraph)
 
-This diagram reflects the control flow defined in `backend/app/agents/subflows/document_processing_workflow.py`.
+This diagram reflects the control flow defined in `backend/app/agents/subflows/step2_section_analysis_workflow.py`.
 
 ```mermaid
 graph TD
   START([Start])
   END([End])
 
-  START --> A[fetch_document_record]
-  A --> B{already_processed_check}
+  %% Initialization
+  START --> I[initialize_workflow]
+  I --> P[prepare_context]
 
-  B -->|already_processed| L[build_summary]
-  B -->|needs_processing| C[mark_processing_started]
-  B -->|error| Z[error_handling]
+  %% Phase 1: Foundation Analysis (parallel)
+  P --> F1A[analyze_parties_property]
+  P --> F1B[analyze_financial_terms]
+  P --> F1C[analyze_conditions]
+  P --> F1D[analyze_warranties]
+  P --> F1E[analyze_default_termination]
 
-  C --> D{extract_text}
-  D -->|success| E{detect_diagrams_with_ocr}
-  D -->|error| Z
+  F1A --> C1{check_phase1_completion}
+  F1B --> C1
+  F1C --> C1
+  F1D --> C1
+  F1E --> C1
 
-  E -->|success| F[save_pages]
-  E -->|error| Z
+  %% Phase 2: Dependent Analysis
+  C1 --> S2A[analyze_settlement_logistics]
+  C1 --> S2B[analyze_title_encumbrances]
 
-  F --> G[save_diagrams]
-  G --> H[update_metrics]
-  H --> I[mark_basic_complete]
-  I --> L
+  S2A --> C2{check_phase2_completion}
+  S2B --> C2
 
-  L --> END
-  Z --> END
+  %% Phase 3: Synthesis Analysis
+  C2 --> S3A[calculate_adjustments_outgoings]
+  C2 --> S3B[check_disclosure_compliance]
+  C2 --> S3C[identify_special_risks]
+
+  S3A --> X[validate_cross_sections]
+  S3B --> X
+  S3C --> X
+
+  X --> F[finalize_results]
+  F --> END
 ```
 
-### Node Key
-- **fetch_document_record**: Fetch metadata and validate access
-- **already_processed_check**: Short-circuit if already processed
-- **mark_processing_started**: Persist processing start state
-- **extract_text**: Hybrid MuPDF + selective OCR (Gemini/Tesseract) with per-page analysis; computes `content_hmac`/`algorithm_version`/`params_fingerprint` and stores full-text + per-page text artifacts when enabled
-- **detect_diagrams_with_ocr**: Use Gemini OCR per-page to detect/classify diagrams; renders page JPGs on the fly and may persist them as `artifact_type="image_jpg"` if artifact metadata is available
-- **save_pages**: Map stored page artifacts to user document pages (idempotent upserts); does not store JPGs
-- **save_diagrams**: Persist OCR-detected diagrams as artifacts with deterministic keys and map them to user document diagrams
-- **update_metrics**: Update aggregated metrics on the document
-- **mark_basic_complete**: Mark processing status as complete
-- **build_summary**: Construct final `ProcessedDocumentSummary`
-- **error_handling**: Capture error details and finalize
+### Phases
+- **Foundation Analysis (parallel)**: Parties/Property, Financial Terms, Conditions, Warranties, Default & Termination
+- **Dependent Analysis (sequential)**: Settlement Logistics, Title & Encumbrances
+- **Synthesis Analysis (sequential)**: Adjustments & Outgoings, Disclosure Compliance, Special Risks → Cross-section Validation → Finalization
 
-### Workflow Changes
-This workflow has been updated to use the new schema design without paragraphs:
-- **Removed**: `paragraph_segmentation`, `save_paragraphs`, `aggregate_diagrams` nodes
-- **Added**: `detect_diagrams_with_ocr` node that uses Gemini OCR with a diagram-only prompt, respecting `max_diagram_pages` and retries/backoff from config
-- **Modified**: `extract_text` performs hybrid extraction (PyMuPDF first, then selective OCR via Gemini or Tesseract) and stores full-text + per-page text artifacts in the artifact system
-- **Modified**: `save_pages` maps existing page artifacts to user document pages; JPGs (when persisted) are handled during diagram detection, not here
+### Node Key
+- **initialize_workflow**: Validate inputs, set `start_time`, and emit initial progress; records missing `contract_text` or `entities_extraction` into `processing_errors`.
+- **prepare_context**: Hoists `section_seeds` and `retrieval_index_id` from Step 1 `entities_extraction`; derives `legal_requirements_matrix` from contract metadata when not provided (via `derive_legal_requirements`).
+- **analyze_parties_property**: Analyze parties and property description; writes `parties_property_result`.
+- **analyze_financial_terms**: Analyze price, deposit, payment schedule; writes `financial_terms_result`.
+- **analyze_conditions**: Analyze preconditions/conditions precedent (e.g., finance, inspections); writes `conditions_result`.
+- **analyze_warranties**: Analyze vendor/buyer warranties; writes `warranties_result`.
+- **analyze_default_termination**: Analyze events of default and termination rights; writes `default_termination_result`.
+- **check_phase1_completion**: Confirms all Foundation results are present; marks `phase1_complete` and timestamps completion.
+- **analyze_settlement_logistics**: Analyze settlement timing, deliverables, and logistics; writes `settlement_logistics_result`.
+- **analyze_title_encumbrances**: Analyze title, encumbrances, and related diagrams/artifacts when provided; writes `title_encumbrances_result`.
+- **check_phase2_completion**: Confirms Settlement and Title analyses completed.
+- **calculate_adjustments_outgoings**: Compute adjustments and outgoings; writes `adjustments_outgoings_result`.
+- **check_disclosure_compliance**: Check statutory/contractual disclosure obligations; writes `disclosure_compliance_result`.
+- **identify_special_risks**: Surface special risks and unusual clauses; writes `special_risks_result`.
+- **validate_cross_sections**: Cross-validate outputs to detect inconsistencies; writes `cross_section_validation_result`.
+- **finalize_results**: Structure final response with `section_results`, `cross_section_validation`, and `workflow_metadata` (phase statuses, completion times, errors, risk flags, diagram metrics).
+
+### Outputs
+- **section_results**: Results per section (parties_property, financial_terms, conditions, warranties, default_termination, settlement_logistics, title_encumbrances, adjustments_outgoings, disclosure_compliance, special_risks)
+- **cross_section_validation**: Cross-check summary and issues
+- **workflow_metadata**: `{ phases_completed, phase_completion_times, processing_errors, skipped_analyzers, total_risk_flags, diagrams_processed, diagram_success_rate }`
 
 

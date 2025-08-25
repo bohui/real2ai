@@ -30,6 +30,17 @@ _STANDARD_LOG_RECORD_ATTRS = {
 }
 
 
+def _simplify_logger_name(logger_name: str) -> str:
+    """Return a friendlier logger name for known noisy categories.
+
+    This avoids confusion like seeing "uvicorn.error" on INFO logs by
+    collapsing it to just "uvicorn".
+    """
+    if logger_name == "uvicorn.error":
+        return "uvicorn"
+    return logger_name
+
+
 class JSONExtraFormatter(logging.Formatter):
     """Formatter that emits JSON and includes any extra LogRecord attributes.
 
@@ -44,7 +55,7 @@ class JSONExtraFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         log_obj: Dict[str, Any] = {
             "level": record.levelname,
-            "logger": record.name,
+            "logger": _simplify_logger_name(record.name),
             "message": record.getMessage(),
         }
 
@@ -92,9 +103,9 @@ class ConsoleExtraFormatter(logging.Formatter):
         # Timestamp in UTC similar to JSON formatter for consistency
         if self.include_time:
             ts = datetime.utcfromtimestamp(record.created).isoformat() + "Z"
-            header = f"{ts} {record.levelname} {record.name}: "
+            header = f"{ts} {record.levelname} {_simplify_logger_name(record.name)}: "
         else:
-            header = f"{record.levelname} {record.name}: "
+            header = f"{record.levelname} {_simplify_logger_name(record.name)}: "
 
         message = record.getMessage()
         is_exception = bool(record.exc_info or record.stack_info)
@@ -175,6 +186,7 @@ def configure_logging(level: int | str | None = None, *, use_json: bool = True) 
     child_logger_names: Iterable[str] = (
         "app",
         "uvicorn",
+        "uvicorn.error",
         "uvicorn.access",
         "celery",
         "celery.app.trace",

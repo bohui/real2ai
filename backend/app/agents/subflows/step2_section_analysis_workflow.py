@@ -44,6 +44,7 @@ class Step2AnalysisWorkflow:
         # Progress tracking ranges for each phase
         self.PROGRESS_RANGES = {
             "initialize_workflow": (50, 52),
+            "prepare_context": (52, 54),
             "analyze_parties_property": (52, 58),
             "analyze_financial_terms": (58, 64),
             "analyze_conditions": (64, 70),
@@ -70,6 +71,7 @@ class Step2AnalysisWorkflow:
         """Create node instances for Step 2 subflow."""
         from app.agents.nodes.step2_section_analysis_subflow import (
             InitializeWorkflowNode,
+            PrepareContextNode,
             PartiesPropertyNode,
             FinancialTermsNode,
             ConditionsNode,
@@ -91,6 +93,11 @@ class Step2AnalysisWorkflow:
             self,
             "initialize_workflow",
             progress_range=self.PROGRESS_RANGES["initialize_workflow"],
+        )
+        self.prepare_context_node = PrepareContextNode(
+            self,
+            "prepare_context",
+            progress_range=self.PROGRESS_RANGES["prepare_context"],
         )
         self.parties_property_node = PartiesPropertyNode(
             self, progress_range=self.PROGRESS_RANGES["analyze_parties_property"]
@@ -156,6 +163,7 @@ class Step2AnalysisWorkflow:
         # Optional: registry
         self.nodes = {
             "initialize_workflow": self.initialize_workflow_node,
+            "prepare_context": self.prepare_context_node,
             "analyze_parties_property": self.parties_property_node,
             "analyze_financial_terms": self.financial_terms_node,
             "analyze_conditions": self.conditions_node,
@@ -180,6 +188,7 @@ class Step2AnalysisWorkflow:
 
         # Add workflow initialization
         graph.add_node("initialize_workflow", self.initialize_workflow)
+        graph.add_node("prepare_context", self.prepare_context)
 
         # Phase 1: Foundation Analysis Nodes (Parallel)
         graph.add_node("analyze_parties_property", self.analyze_parties_property)
@@ -220,10 +229,11 @@ class Step2AnalysisWorkflow:
     def _define_workflow_edges(self, graph: StateGraph):
         """Define the workflow execution edges with dependency management"""
 
-        # Start with initialization
+        # Start with initialization -> prepare
         graph.add_edge(START, "initialize_workflow")
+        graph.add_edge("initialize_workflow", "prepare_context")
 
-        # Phase 1: All foundation nodes start after initialization
+        # Phase 1: All foundation nodes start after preparation
         foundation_nodes = [
             "analyze_parties_property",
             "analyze_financial_terms",
@@ -233,7 +243,7 @@ class Step2AnalysisWorkflow:
         ]
 
         for node in foundation_nodes:
-            graph.add_edge("initialize_workflow", node)
+            graph.add_edge("prepare_context", node)
             graph.add_edge(node, "check_phase1_completion")
 
         # Phase 2: Dependent analysis after Phase 1 completion
@@ -423,6 +433,10 @@ class Step2AnalysisWorkflow:
         self, state: Step2AnalysisState
     ) -> Step2AnalysisState:
         return await self.initialize_workflow_node.execute(state)
+
+    @langsmith_trace(name="prepare_context", run_type="tool")
+    async def prepare_context(self, state: Step2AnalysisState) -> Step2AnalysisState:
+        return await self.prepare_context_node.execute(state)
 
     @langsmith_trace(name="analyze_parties_property", run_type="tool")
     async def analyze_parties_property(

@@ -14,7 +14,7 @@ optional_variables:
   - "australian_state"
   - "retrieval_index_id"
   - "seed_snippets"
-model_compatibility: [ "moonshotai/kimi-k2:free"]
+model_compatibility: ["gemini-2.5-flash", "gpt-4"]
 max_tokens: 8000
 temperature_range: [0.1, 0.3]
 output_parser: ConditionsAnalysisResult

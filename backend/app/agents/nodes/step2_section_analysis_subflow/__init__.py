@@ -20,6 +20,7 @@ from .check_disclosure_compliance_node import DisclosureComplianceNode
 from .identify_special_risks_node import SpecialRisksNode
 from .validate_cross_sections_node import CrossSectionValidationNode
 from .finalize_results_node import FinalizeResultsNode
+from .prepare_context_node import PrepareContextNode
 
 __all__ = [
     "Step2NodeBase",
@@ -38,4 +39,5 @@ __all__ = [
     "SpecialRisksNode",
     "CrossSectionValidationNode",
     "FinalizeResultsNode",
+    "PrepareContextNode",
 ]

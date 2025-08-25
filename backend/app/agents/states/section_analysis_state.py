@@ -21,6 +21,10 @@ class Step2AnalysisState(LangGraphBaseState):
     use_category: Optional[str]
     property_condition: Optional[str]
 
+    # Seeds / retrieval context
+    section_seeds: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
+    retrieval_index_id: Annotated[Optional[str], lambda x, y: y]
+
     # Phase 1 Foundation Results (Parallel)
     parties_property_result: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
     financial_terms_result: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
