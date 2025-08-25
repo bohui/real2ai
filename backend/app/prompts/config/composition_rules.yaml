@@ -26,10 +26,10 @@ compositions:
         path: "system/ocr_processor.md"
         priority: 100
         required: true
-      - name: "legal_specialist"
-        path: "system/realestate_lawyer.md"
-        priority: 90
-        required: true
+      # - name: "legal_specialist"
+      #   path: "system/realestate_lawyer.md"
+      #   priority: 90
+      #   required: true
     user_prompts:
       - "ocr_text_diagram_insight"
 

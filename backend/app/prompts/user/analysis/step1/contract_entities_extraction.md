@@ -8,7 +8,7 @@ fragment_orchestration: "contract_analysis"
 required_variables:
   - "contract_text"
 optional_variables: []
-model_compatibility: ["google/gemini-2.0-flash-exp:free", "google/gemini-2.5-flash"]
+model_compatibility: ["qwen/qwen3-coder:free", "openai/gpt-oss-20b:free", "google/gemini-2.5-flash"]
 max_tokens: 8000
 temperature_range: [0.1, 0.4]
 output_parser: ContractEntityExtraction

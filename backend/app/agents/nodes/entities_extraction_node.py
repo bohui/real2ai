@@ -11,6 +11,7 @@ from typing import Dict, Any, Optional
 
 from app.models.contract_state import RealEstateAgentState
 from app.prompts.schema.entity_extraction_schema import ContractEntityExtraction
+from app.core.prompts.parsers import create_parser
 from app.schema.enums.property import ContractType
 from .contract_llm_base import ContractLLMNode
 
@@ -29,6 +30,10 @@ class EntitiesExtractionNode(ContractLLMNode):
             node_name="entities_extraction",
             contract_attribute="extracted_entity",
             state_field="entities_extraction",
+        )
+        # Local parser instance; do not rely on workflow-managed parsers
+        self._parser = create_parser(
+            ContractEntityExtraction, strict_mode=False, retry_on_failure=True
         )
 
     # Short-circuit provided by ContractLLMNode
@@ -68,25 +73,29 @@ class EntitiesExtractionNode(ContractLLMNode):
                 "analysis_timestamp": datetime.now(UTC).isoformat(),
             },
         )
-        parser = self.get_parser("entities_extraction")
+        # Use local parser specific to this node
+        parser = self._parser
         return context, parser, "contract_entities_extraction"
 
     def _coerce_to_model(self, data: Any) -> Optional[ContractEntityExtraction]:
+        # Accept already-correct type
         if isinstance(data, ContractEntityExtraction):
             return data
-        if hasattr(data, "model_validate"):
-            try:
+        # Try to validate dict-like payloads or objects exposing model_dump
+        try:
+            if hasattr(data, "model_dump"):
+                return ContractEntityExtraction.model_validate(data.model_dump())
+            if isinstance(data, dict):
                 return ContractEntityExtraction.model_validate(data)
-            except Exception:
-                return None
+        except Exception:
+            return None
         return None
 
     def _evaluate_quality(
         self, result: Optional[ContractEntityExtraction], state: RealEstateAgentState
     ) -> Dict[str, Any]:
-        min_confidence: float = float(
-            self.extraction_config.get("min_confidence", 0.75)
-        )
+
+        min_confidence: float = float(self.CONFIG_KEYS["min_confidence"])
         if result is None:
             return {"ok": False}
         try:

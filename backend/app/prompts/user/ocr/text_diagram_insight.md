@@ -43,6 +43,7 @@ Identify from these property diagram types:
 
 ## Critical Instructions
 - **JSON ONLY**: No explanations, comments, or additional text
+- **text field rule**:: text field must contain ONLY the raw, extracted text from the image, with no additional commentary, analysis, or summary of the OCR process.
 - **Empty Lists**: Use `[]` for diagrams if no property diagrams detected
 - **Confidence Scores**: Range 0.0-1.0 based on clarity and certainty
 - **Text Preservation**: Maintain original structure, spacing, and formatting where possible

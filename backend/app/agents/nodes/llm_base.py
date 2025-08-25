@@ -73,11 +73,8 @@ class LLMNode(BaseNode, ABC):
 
             # 4) LLM call with retries for parsing
             llm_service = await self._get_llm_service()
-            max_retries = int(
-                self.extraction_config.get(
-                    "max_retries", self.CONFIG_KEYS["max_retries"]
-                )
-            )
+            # Use static defaults; do not depend on workflow/node extraction_config
+            max_retries = int(self.CONFIG_KEYS["max_retries"])
 
             parsing_result = await llm_service.generate_content(
                 prompt=rendered_prompt,
