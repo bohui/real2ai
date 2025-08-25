@@ -8,7 +8,8 @@ fragment_orchestration: "contract_analysis"
 required_variables:
   - "contract_text"
 optional_variables: []
-model_compatibility: ["qwen/qwen3-coder:free", "openai/gpt-oss-20b:free", "google/gemini-2.5-flash"]
+# model_compatibility: ["qwen/qwen3-coder:free", "openai/gpt-oss-20b:free", "google/gemini-2.5-flash"]
+model_compatibility: ["gemini-2.5-flash"]
 max_tokens: 8000
 temperature_range: [0.1, 0.4]
 output_parser: ContractEntityExtraction
@@ -101,7 +102,7 @@ Rules:
 Produce high-signal snippet selections to guide Step 2 nodes. Use the `SectionKey` enum for `section_key` values: `parties_property`, `financial_terms`, `conditions`, `warranties`, `default_termination`, `settlement_logistics`, `title_encumbrances`, `adjustments_outgoings`, `disclosure_compliance`, `special_risks`, `cross_section_validation`.
 
 For each relevant section:
-- Select 1–5 concise snippets (avoid redundancy) capturing the core evidence for that section.
+- Select 1–20 concise snippets (avoid redundancy) capturing the core evidence for that section.
 - Each snippet must include: `section_key`, `clause_id` (if available), `page_number`, `start_offset`, `end_offset`, `snippet_text`, `selection_rationale`, and `confidence`.
 - If the same snippet is relevant to multiple sections, it may be duplicated across sections.
 - Provide `retrieval_instructions[section]` as a short query hint to expand context if needed (e.g., “find all finance approval deadlines and consequences”).

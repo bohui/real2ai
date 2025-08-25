@@ -27,6 +27,26 @@ tags: ["core", "system", "entity-extraction"]
 - Set `metadata.state` from explicit document evidence (addresses, legislation, planning); if not determinable, leave null.
 - Populate `metadata.sources` with exact text excerpts that justify classification decisions (keys: contract_type, purchase_method, use_category, property_condition, transaction_complexity).
 
+## Critical Validation Rules
+
+### Date Handling
+- **NEVER** use placeholder values like "XXXX-XX-XX" in `date_value` fields
+- If a date cannot be determined, set `date_value` to `null` and keep the descriptive text in `date_text`
+- Only populate `date_value` with valid YYYY-MM-DD format dates
+- For relative dates (e.g., "42nd day after contract date"), set `date_value` to `null`
+
+### Financial Amount Handling  
+- **NEVER** use `null` values in `amount` fields when the field is required
+- If an amount cannot be determined, use `0.0` as a default value
+- For unspecified amounts, set `amount` to `0.0` and note the uncertainty in `amount_text`
+- Always provide a numeric value for required `amount` fields
+
+### State-Specific Legislation
+- **NEVER** use "Cth" or "Commonwealth" in `state_specific` fields
+- For Commonwealth legislation, set `state_specific` to `null`
+- Only use valid Australian state/territory values: NSW, VIC, QLD, SA, WA, TAS, ACT, NT
+- If legislation applies nationally (Commonwealth), leave `state_specific` as `null`
+
 ## Operational Rules (Extraction-Only)
 
 - Prefer verbatim excerpts over paraphrases for `sources`, `date_text`, and `condition_text`.
@@ -48,14 +68,17 @@ tags: ["core", "system", "entity-extraction"]
 - dates:
   - Indicators: "Exchange", "Settlement/Completion", "Cooling-off", "Sunset", "Notice", "On or before", "Business days"
   - Guidance: Normalize to YYYY-MM-DD in `date_value`, retain original in `date_text`, set `is_business_days` when stated; set `date_type` enum accordingly
+  - **CRITICAL**: Use `null` for `date_value` if date cannot be determined; never use placeholders
 
 - financial_amounts:
   - Indicators: "$", "AUD", "deposit", "balance", "price", "%", "GST", "duty", "adjustments"
   - Guidance: Strip symbols/commas for `amount`; default `currency` to "AUD" unless specified; set `amount_type` via cues
+  - **CRITICAL**: Use `0.0` for `amount` if value cannot be determined; never use `null`
 
 - legal_references:
   - Indicators: "Act", "Regulation", sections (e.g., "s 66W", "s. 27"), clause references, state names
   - Guidance: Populate `act_name`, `section_number`, and `state_specific` where available
+  - **CRITICAL**: Set `state_specific` to `null` for Commonwealth legislation; never use "Cth"
 
 - conditions:
   - Indicators: "Special Condition/SC", "Subject to" (finance/building & pest/valuation/DA), "Time is of the essence"
@@ -88,11 +111,13 @@ tags: ["core", "system", "entity-extraction"]
 - Use `AUD` for currency unless the document explicitly specifies another currency.
 - Recognize Australian states and territories for `metadata.state` and address `state` fields.
 - Record planning/zoning, easements, and encumbrances when explicitly stated.
+- **Commonwealth Legislation**: Set `state_specific` to `null` for national legislation (e.g., Personal Property Securities Act, Foreign Acquisitions and Takeovers Act).
 
 ## Risk and Ambiguity Handling
 
 - When conflicting information is found, select the better-supported value, lower `confidence`, and include both excerpts in `metadata.sources` where relevant.
 - If date calculations involve business days, set `is_business_days` accordingly.
+- **Data Quality**: If required fields cannot be populated with valid data, use appropriate defaults (0.0 for amounts, null for dates) rather than invalid placeholders.
 
 ## Limitations and Disclaimers
 

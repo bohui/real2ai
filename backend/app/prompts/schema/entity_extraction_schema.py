@@ -76,7 +76,9 @@ class ContractParty(EntityBase):
 class ContractDate(EntityBase):
     """Important dates in contract"""
 
-    date_value: date = Field(..., description="The actual date")
+    date_value: Optional[date] = Field(
+        None, description="The actual date (null if cannot be determined)"
+    )
     date_type: DateType = Field(..., description="Type/purpose of this date")
     date_text: str = Field(..., description="Date as it appears in document")
 
@@ -89,11 +91,20 @@ class ContractDate(EntityBase):
         None, description="Conditions attached to this date"
     )
 
+    @validator("date_text")
+    def validate_date_text_when_null(cls, v, values):
+        """Ensure date_text provides context when date_value is null"""
+        if values.get("date_value") is None and not v:
+            raise ValueError("date_text must be provided when date_value is null")
+        return v
+
 
 class FinancialAmount(EntityBase):
     """Financial amounts and terms"""
 
-    amount: Decimal = Field(..., description="Monetary amount")
+    amount: Optional[Decimal] = Field(
+        None, description="Monetary amount (null if cannot be determined)"
+    )
     currency: str = Field(default="AUD", description="Currency code")
     amount_type: FinancialType = Field(..., description="Type of financial amount")
     amount_text: str = Field(..., description="Amount as written in document")
@@ -112,6 +123,13 @@ class FinancialAmount(EntityBase):
     percentage_of: Optional[str] = Field(
         None, description="What the percentage is calculated on"
     )
+
+    @validator("amount_text")
+    def validate_amount_text_when_null(cls, v, values):
+        """Ensure amount_text provides context when amount is null"""
+        if values.get("amount") is None and not v:
+            raise ValueError("amount_text must be provided when amount is null")
+        return v
 
 
 class LegalReference(EntityBase):
