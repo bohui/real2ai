@@ -246,6 +246,35 @@ registry:
       description: "Step 2.12 - Cross-Section Validation and Consistency Checks"
       estimated_tokens: 10000
 
+    # Step 3 Synthesis Prompts
+    step3_risk_aggregation:
+      path: "user/analysis/step3/risk_aggregation.md"
+      category: "analysis"
+      system_requirements: ["australian_legal"]
+      description: "Step 3 - Risk Aggregation and Prioritization"
+      estimated_tokens: 6000
+
+    step3_action_plan:
+      path: "user/analysis/step3/action_plan.md"
+      category: "analysis"
+      system_requirements: ["australian_legal"]
+      description: "Step 3 - Recommended Actions & Timeline"
+      estimated_tokens: 7000
+
+    step3_compliance_score:
+      path: "user/analysis/step3/compliance_score.md"
+      category: "analysis"
+      system_requirements: ["australian_legal"]
+      description: "Step 3 - Compliance Readiness Score"
+      estimated_tokens: 6000
+
+    step3_buyer_report:
+      path: "user/analysis/step3/buyer_report.md"
+      category: "analysis"
+      system_requirements: ["australian_legal"]
+      description: "Step 3 - Buyer Report Synthesis"
+      estimated_tokens: 8000
+
     image_semantics:
       path: "user/analysis/image_semantics.md"
       category: "analysis"

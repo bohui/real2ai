@@ -60,6 +60,7 @@ from app.agents.nodes import (
     ErrorHandlingNode,
     RetryProcessingNode,
 )
+from app.agents.nodes.step3_synthesis_node import Step3SynthesisNode
 
 logger = logging.getLogger(__name__)
 
@@ -246,6 +247,8 @@ class ContractAnalysisWorkflow:
         # Risk Assessment Nodes
         self.risk_assessment_node = RiskAssessmentNode(self)
         self.recommendations_generation_node = RecommendationsGenerationNode(self)
+        # Step 3 Synthesis Node
+        self.step3_synthesis_node = Step3SynthesisNode(self)
 
         # Validation Nodes
         self.final_validation_node = FinalValidationNode(self)
@@ -264,6 +267,7 @@ class ContractAnalysisWorkflow:
             "entities_extraction": self.entities_extraction_node,
             "section_analysis": self.section_analysis_node,
             "terms_validation": self.terms_validation_node,
+            "step3_synthesis": self.step3_synthesis_node,
             "compliance_analysis": self.compliance_analysis_node,
             "diagram_analysis": self.diagram_analysis_node,
             "risk_assessment": self.risk_assessment_node,
@@ -337,6 +341,7 @@ class ContractAnalysisWorkflow:
         workflow.add_node("process_document", self.process_document)
         workflow.add_node("extract_entities", self.extract_entities)
         workflow.add_node("extract_terms", self.extract_section_analysis)
+        workflow.add_node("synthesize_step3", self.synthesize_step3)
         workflow.add_node("analyze_compliance", self.analyze_australian_compliance)
         workflow.add_node("analyze_contract_diagrams", self.analyze_contract_diagrams)
         workflow.add_node("assess_risks", self.assess_contract_risks)
@@ -756,6 +761,10 @@ class ContractAnalysisWorkflow:
     ) -> RealEstateAgentState:
         """Execute terms validation node."""
         return self._run_async_node(lambda: self.terms_validation_node.execute(state))
+
+    def synthesize_step3(self, state: RealEstateAgentState) -> RealEstateAgentState:
+        """Execute Step 3 synthesis node."""
+        return self._run_async_node(lambda: self.step3_synthesis_node.execute(state))
 
     def analyze_australian_compliance(
         self, state: RealEstateAgentState
@@ -1277,6 +1286,23 @@ class ProgressTrackingWorkflow(ContractAnalysisWorkflow):
             "Performing Step 2 section-by-section analysis",
         )
         return super().extract_section_analysis(state)
+
+    async def synthesize_step3(self, state):
+        if self._should_skip("synthesize_step3", state):
+            return state
+        self._ws_progress(
+            state,
+            "synthesize_step3",
+            60,
+            "Synthesizing analysis results for actionable recommendations",
+        )
+        await self._notify_status(
+            state,
+            "synthesize_step3",
+            60,
+            "Synthesizing analysis results for actionable recommendations",
+        )
+        return super().synthesize_step3(state)
 
     async def analyze_australian_compliance(self, state):
         if self._should_skip("analyze_compliance", state):

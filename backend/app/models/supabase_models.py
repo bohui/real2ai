@@ -156,6 +156,11 @@ class Contract(TimestampedBaseModel):
     special_risks: Dict[str, Any] = Field(default_factory=dict)
     cross_section_validation: Dict[str, Any] = Field(default_factory=dict)
     image_semantics: Dict[str, Any] = Field(default_factory=dict)
+    # Step 3 synthesis outputs
+    risk_summary: Dict[str, Any] = Field(default_factory=dict)
+    action_plan: Dict[str, Any] = Field(default_factory=dict)
+    compliance_summary: Dict[str, Any] = Field(default_factory=dict)
+    buyer_report: Dict[str, Any] = Field(default_factory=dict)
     raw_text: Optional[str] = None
     property_address: Optional[str] = None
     updated_by: Optional[str] = Field(

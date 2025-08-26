@@ -23,6 +23,10 @@ from .final_validation_node import FinalValidationNode
 from .report_compilation_node import ReportCompilationNode
 from .error_handling_node import ErrorHandlingNode
 from .retry_processing_node import RetryProcessingNode
+from app.agents.nodes.step3_synthesis_subflow.risk_aggregator_node import RiskAggregatorNode
+from app.agents.nodes.step3_synthesis_subflow.action_plan_node import ActionPlanNode
+from app.agents.nodes.step3_synthesis_subflow.compliance_score_node import ComplianceScoreNode
+from app.agents.nodes.step3_synthesis_subflow.buyer_report_node import BuyerReportNode
 
 __all__ = [
     "BaseNode",
@@ -47,4 +51,11 @@ __all__ = [
     "ReportCompilationNode",
     "ErrorHandlingNode",
     "RetryProcessingNode",
+]
+
+__all__ += [
+    "RiskAggregatorNode",
+    "ActionPlanNode",
+    "ComplianceScoreNode",
+    "BuyerReportNode",
 ]
