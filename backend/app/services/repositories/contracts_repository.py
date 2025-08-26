@@ -129,6 +129,7 @@ class ContractsRepository:
                 state, extracted_entity,
                 parties_property, financial_terms, conditions, warranties, default_termination, image_semantics,
                 settlement_logistics, title_encumbrances, adjustments_outgoings, disclosure_compliance, special_risks,
+                risk_summary, action_plan, compliance_summary, buyer_report,
                 raw_text, property_address, updated_by
             ) VALUES (
                 $1, $2, $3, $4,
@@ -144,9 +145,13 @@ class ContractsRepository:
                 $14::jsonb,
                 $15::jsonb,
                 $16::jsonb,
-                $17,
-                $18,
-                $19
+                $17::jsonb,
+                $18::jsonb,
+                $19::jsonb,
+                $20::jsonb,
+                $21,
+                $22,
+                $23
             )
             ON CONFLICT (content_hash) DO UPDATE SET
                 -- If NULL, skip updating (keep existing)
@@ -168,6 +173,10 @@ class ContractsRepository:
                 disclosure_compliance = COALESCE(EXCLUDED.disclosure_compliance, contracts.disclosure_compliance),
                 special_risks = COALESCE(EXCLUDED.special_risks, contracts.special_risks),
                 cross_section_validation = COALESCE(EXCLUDED.cross_section_validation, contracts.cross_section_validation),
+                risk_summary = COALESCE(EXCLUDED.risk_summary, contracts.risk_summary),
+                action_plan = COALESCE(EXCLUDED.action_plan, contracts.action_plan),
+                compliance_summary = COALESCE(EXCLUDED.compliance_summary, contracts.compliance_summary),
+                buyer_report = COALESCE(EXCLUDED.buyer_report, contracts.buyer_report),
                 raw_text = COALESCE(EXCLUDED.raw_text, contracts.raw_text),
                 property_address = COALESCE(EXCLUDED.property_address, contracts.property_address),
                 updated_by = COALESCE(EXCLUDED.updated_by, contracts.updated_by),
@@ -187,6 +196,10 @@ class ContractsRepository:
                          COALESCE(disclosure_compliance, '{}'::jsonb) as disclosure_compliance,
                          COALESCE(special_risks, '{}'::jsonb) as special_risks,
                          COALESCE(cross_section_validation, '{}'::jsonb) as cross_section_validation,
+                         COALESCE(risk_summary, '{}'::jsonb) as risk_summary,
+                         COALESCE(action_plan, '{}'::jsonb) as action_plan,
+                         COALESCE(compliance_summary, '{}'::jsonb) as compliance_summary,
+                         COALESCE(buyer_report, '{}'::jsonb) as buyer_report,
                          raw_text,
                          property_address,
                          updated_by,
@@ -233,6 +246,10 @@ class ContractsRepository:
                 if image_semantics is not None
                 else None
             ),
+            None,
+            None,
+            None,
+            None,
             None,
             None,
             None,
@@ -392,6 +409,12 @@ class ContractsRepository:
                     "adjustments_outgoings",
                     "disclosure_compliance",
                     "special_risks",
+                    "cross_section_validation",
+                    # Step 3 synthesis keys
+                    "risk_summary",
+                    "action_plan",
+                    "compliance_summary",
+                    "buyer_report",
                 }
                 if key not in allowed:
                     raise ValueError(f"Unsupported section key: {key}")
@@ -475,6 +498,10 @@ class ContractsRepository:
                                COALESCE(disclosure_compliance, '{}'::jsonb) as disclosure_compliance,
                                COALESCE(special_risks, '{}'::jsonb) as special_risks,
                                COALESCE(cross_section_validation, '{}'::jsonb) as cross_section_validation,
+                               COALESCE(risk_summary, '{}'::jsonb) as risk_summary,
+                               COALESCE(action_plan, '{}'::jsonb) as action_plan,
+                               COALESCE(compliance_summary, '{}'::jsonb) as compliance_summary,
+                               COALESCE(buyer_report, '{}'::jsonb) as buyer_report,
                                raw_text, 
                                property_address, updated_by, created_at, updated_at
                         FROM contracts
@@ -503,6 +530,10 @@ class ContractsRepository:
                        COALESCE(disclosure_compliance, '{}'::jsonb) as disclosure_compliance,
                        COALESCE(special_risks, '{}'::jsonb) as special_risks,
                        COALESCE(cross_section_validation, '{}'::jsonb) as cross_section_validation,
+                       COALESCE(risk_summary, '{}'::jsonb) as risk_summary,
+                       COALESCE(action_plan, '{}'::jsonb) as action_plan,
+                       COALESCE(compliance_summary, '{}'::jsonb) as compliance_summary,
+                       COALESCE(buyer_report, '{}'::jsonb) as buyer_report,
                        raw_text, 
                        property_address, updated_by, created_at, updated_at
                 FROM contracts

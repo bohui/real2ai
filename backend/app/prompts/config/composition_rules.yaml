@@ -177,6 +177,67 @@ compositions:
     user_prompts:
       - "image_semantics"
 
+  # Step 3 Synthesis Compositions
+  step3_risk_aggregation:
+    description: "Step 3 - Risk Aggregation and Prioritization"
+    version: "1.0.0"
+    system_prompts:
+      - name: "step3_synthesis_system"
+        path: "system/step3_synthesis.md"
+        priority: 100
+        required: true
+      - name: "australian_legal"
+        path: "system/conveyancer.md"
+        priority: 90
+        required: true
+    user_prompts:
+      - "step3_risk_aggregation"
+
+  step3_action_plan:
+    description: "Step 3 - Recommended Actions & Timeline"
+    version: "1.0.0"
+    system_prompts:
+      - name: "step3_synthesis_system"
+        path: "system/step3_synthesis.md"
+        priority: 100
+        required: true
+      - name: "australian_legal"
+        path: "system/conveyancer.md"
+        priority: 90
+        required: true
+    user_prompts:
+      - "step3_action_plan"
+
+  step3_compliance_score:
+    description: "Step 3 - Compliance Readiness Score"
+    version: "1.0.0"
+    system_prompts:
+      - name: "step3_synthesis_system"
+        path: "system/step3_synthesis.md"
+        priority: 100
+        required: true
+      - name: "australian_legal"
+        path: "system/conveyancer.md"
+        priority: 90
+        required: true
+    user_prompts:
+      - "step3_compliance_score"
+
+  step3_buyer_report:
+    description: "Step 3 - Buyer Report Synthesis"
+    version: "1.0.0"
+    system_prompts:
+      - name: "step3_synthesis_system"
+        path: "system/step3_synthesis.md"
+        priority: 100
+        required: true
+      - name: "australian_legal"
+        path: "system/conveyancer.md"
+        priority: 90
+        required: true
+    user_prompts:
+      - "step3_buyer_report"
+
   step2_settlement:
     description: "Step 2.7 - Settlement Logistics Analysis"
     version: "1.0.0"

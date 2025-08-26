@@ -73,6 +73,11 @@ CREATE TABLE contracts (
     disclosure_compliance JSONB DEFAULT '{}'::jsonb,
     special_risks JSONB DEFAULT '{}'::jsonb,
     cross_section_validation JSONB DEFAULT '{}'::jsonb,
+    -- Step 3 synthesis outputs
+    risk_summary JSONB DEFAULT '{}'::jsonb,
+    action_plan JSONB DEFAULT '{}'::jsonb,
+    compliance_summary JSONB DEFAULT '{}'::jsonb,
+    buyer_report JSONB DEFAULT '{}'::jsonb,
 
     raw_text TEXT,
     property_address TEXT,
@@ -605,6 +610,10 @@ ALTER TABLE contracts
     ADD COLUMN IF NOT EXISTS disclosure_compliance JSONB DEFAULT '{}'::jsonb,
     ADD COLUMN IF NOT EXISTS special_risks JSONB DEFAULT '{}'::jsonb,
     ADD COLUMN IF NOT EXISTS cross_section_validation JSONB DEFAULT '{}'::jsonb,
+    ADD COLUMN IF NOT EXISTS risk_summary JSONB DEFAULT '{}'::jsonb,
+    ADD COLUMN IF NOT EXISTS action_plan JSONB DEFAULT '{}'::jsonb,
+    ADD COLUMN IF NOT EXISTS compliance_summary JSONB DEFAULT '{}'::jsonb,
+    ADD COLUMN IF NOT EXISTS buyer_report JSONB DEFAULT '{}'::jsonb,
     DROP COLUMN IF EXISTS section_analysis,
     DROP COLUMN IF EXISTS contract_terms,
     DROP COLUMN IF EXISTS ocr_confidence;
