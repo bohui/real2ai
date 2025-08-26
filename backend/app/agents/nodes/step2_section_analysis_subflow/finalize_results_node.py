@@ -19,13 +19,27 @@ class FinalizeResultsNode(Step2NodeBase):
             if state.get("start_time")
             else 0
         )
+        # Summarize presence of section results (DAG-based; no phase flags)
+        section_keys = [
+            "parties_property_result",
+            "financial_terms_result",
+            "conditions_result",
+            "warranties_result",
+            "default_termination_result",
+            "settlement_logistics_result",
+            "title_encumbrances_result",
+            "adjustments_outgoings_result",
+            "disclosure_compliance_result",
+            "special_risks_result",
+            "cross_section_validation_result",
+        ]
+        results_present = sum(1 for k in section_keys if state.get(k) is not None)
+
         self.logger.info(
             "Step 2 workflow completed",
             extra={
                 "total_duration_seconds": total_duration,
-                "phase1_complete": state.get("phase1_complete", False),
-                "phase2_complete": state.get("phase2_complete", False),
-                "phase3_complete": state.get("phase3_complete", False),
+                "results_present": results_present,
                 "processing_errors": len(state.get("processing_errors", [])),
                 "skipped_analyzers": len(state.get("skipped_analyzers", [])),
                 "total_risk_flags": len(state.get("total_risk_flags", [])),
