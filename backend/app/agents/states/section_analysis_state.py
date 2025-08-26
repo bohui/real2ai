@@ -31,6 +31,7 @@ class Step2AnalysisState(LangGraphBaseState):
     conditions_result: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
     warranties_result: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
     default_termination_result: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
+    image_semantics_result: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
 
     # Phase 2 Dependent Results (Sequential)
     settlement_logistics_result: Annotated[Optional[Dict[str, Any]], lambda x, y: y]

@@ -5,7 +5,7 @@ Unit tests for Section Analysis Node (Step 2 Integration)
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from app.agents.nodes.section_analysis_node import SectionAnalysisNode
+from backend.app.agents.nodes.step2_section_analysis_subflow.mainflow_entry import SectionAnalysisNode
 from app.agents.states.contract_state import RealEstateAgentState
 
 

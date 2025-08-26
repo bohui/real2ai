@@ -12,7 +12,7 @@ from typing import Dict, Any
 from app.agents.states.contract_state import RealEstateAgentState
 from app.schema.enums import ProcessingStatus
 from app.core.async_utils import AsyncContextManager
-from .base import BaseNode
+from ..base import BaseNode
 from app.agents.subflows.document_processing_workflow import (
     DocumentProcessingWorkflow,
 )

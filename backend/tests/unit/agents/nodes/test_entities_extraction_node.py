@@ -3,7 +3,7 @@ import pytest
 
 @pytest.mark.asyncio
 async def test_model_selection_uses_metadata_primary_and_fallbacks(mocker):
-    from app.agents.nodes.entities_extraction_node import EntitiesExtractionNode
+    from backend.app.agents.nodes.step1_entities_extraction.entities_extraction_node import EntitiesExtractionNode
 
     # Mock workflow with configs (no magic numbers hard-coded)
     class MockWorkflow:
@@ -79,7 +79,7 @@ async def test_model_selection_uses_metadata_primary_and_fallbacks(mocker):
 
 @pytest.mark.asyncio
 async def test_short_circuit_skips_when_cached(mocker):
-    from app.agents.nodes.entities_extraction_node import EntitiesExtractionNode
+    from backend.app.agents.nodes.step1_entities_extraction.entities_extraction_node import EntitiesExtractionNode
 
     class MockWorkflow:
         extraction_config = {"max_retries": 2, "min_confidence": 0.75}

@@ -99,15 +99,31 @@ def langsmith_trace(name: Optional[str] = None, run_type: str = "llm", **trace_k
         trace_name = name or f"{func.__module__}.{func.__qualname__}"
 
         # Helpers to capture and sanitize inputs/outputs so they appear in LangSmith
-        MAX_STRING_LENGTH = 4000
-        MAX_LIST_ITEMS = 50
-        MAX_DICT_ITEMS = 50
+        # Respect settings to disable truncation entirely
+        settings = config.settings
+        MAX_STRING_LENGTH = (
+            None
+            if not settings.langsmith_truncation_enabled
+            else settings.langsmith_max_string_length
+        )
+        MAX_LIST_ITEMS = (
+            None
+            if not settings.langsmith_truncation_enabled
+            else settings.langsmith_max_list_items
+        )
+        MAX_DICT_ITEMS = (
+            None
+            if not settings.langsmith_truncation_enabled
+            else settings.langsmith_max_dict_items
+        )
 
         def _sanitize_value(value: Any) -> Any:
             try:
                 if value is None or isinstance(value, (int, float, bool)):
                     return value
                 if isinstance(value, str):
+                    if MAX_STRING_LENGTH is None:
+                        return value
                     return (
                         value
                         if len(value) <= MAX_STRING_LENGTH
@@ -118,7 +134,7 @@ def langsmith_trace(name: Optional[str] = None, run_type: str = "llm", **trace_k
                 if isinstance(value, dict):
                     sanitized_items: Dict[str, Any] = {}
                     for idx, (k, v) in enumerate(value.items()):
-                        if idx >= MAX_DICT_ITEMS:
+                        if MAX_DICT_ITEMS is not None and idx >= MAX_DICT_ITEMS:
                             sanitized_items["__truncated__"] = True
                             break
                         sanitized_items[str(k)] = _sanitize_value(v)
@@ -126,7 +142,7 @@ def langsmith_trace(name: Optional[str] = None, run_type: str = "llm", **trace_k
                 if isinstance(value, (list, tuple, set)):
                     sanitized_list = []
                     for idx, item in enumerate(list(value)):
-                        if idx >= MAX_LIST_ITEMS:
+                        if MAX_LIST_ITEMS is not None and idx >= MAX_LIST_ITEMS:
                             sanitized_list.append({"__truncated__": True})
                             break
                         sanitized_list.append(_sanitize_value(item))
@@ -138,6 +154,8 @@ def langsmith_trace(name: Optional[str] = None, run_type: str = "llm", **trace_k
                 ):
                     return _sanitize_value(value.model_dump())
                 string_value = str(value)
+                if MAX_STRING_LENGTH is None:
+                    return string_value
                 return (
                     string_value
                     if len(string_value) <= MAX_STRING_LENGTH
@@ -187,15 +205,17 @@ def langsmith_trace(name: Optional[str] = None, run_type: str = "llm", **trace_k
             if args and hasattr(args[0], "client_name"):
                 metadata["client_name"] = args[0].client_name
 
+            # Capture sanitized inputs BEFORE starting the run so they are visible while pending
+            captured_inputs = _build_inputs_dict(func, args, kwargs)
+
             # Use LangSmith's trace context manager
             with trace(
                 name=trace_name,
                 run_type=run_type,
                 project_name=config.project_name,
+                inputs=captured_inputs,
                 metadata=metadata,
             ) as run:
-                # Record inputs up front
-                run.inputs = _build_inputs_dict(func, args, kwargs)
                 try:
                     result = await func(*args, **kwargs)
                     # Record outputs generically
@@ -222,13 +242,16 @@ def langsmith_trace(name: Optional[str] = None, run_type: str = "llm", **trace_k
                 **trace_kwargs,
             }
 
+            # Capture sanitized inputs BEFORE starting the run so they are visible while pending
+            captured_inputs = _build_inputs_dict(func, args, kwargs)
+
             with trace(
                 name=trace_name,
                 run_type=run_type,
                 project_name=config.project_name,
+                inputs=captured_inputs,
                 metadata=metadata,
             ) as run:
-                run.inputs = _build_inputs_dict(func, args, kwargs)
                 try:
                     result = func(*args, **kwargs)
                     if isinstance(result, dict):

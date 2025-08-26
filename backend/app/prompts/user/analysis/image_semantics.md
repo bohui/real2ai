@@ -15,8 +15,16 @@ optional_variables:
   - "specific_elements"
   - "comparison_basis"
   - "output_format"
+  - "use_category"
+  - "purchase_method"
+  - "property_condition"
+  - "legal_requirements_matrix"
+  - "retrieval_index_id"
+  - "seed_snippets"
+  - "diagram_filenames"
+  - "entities_extraction"
 model_compatibility: ["gemini-2.5-flash", "gpt-4-vision"]
-max_tokens: 12000
+max_tokens: 65536
 temperature_range: [0.1, 0.4]
 output_parser: ImageSemanticsOutput
 tags: ["image", "semantics", "analysis", "property", "diagrams"]
@@ -32,6 +40,39 @@ You are an expert property analyst specializing in extracting semantic meaning f
 - **Image Type**: {{ image_type }}
 {% if property_type %}
 - **Property Type**: {{ property_type }}
+{% endif %}
+{% if use_category %}
+- **Use Category**: {{ use_category }}
+{% endif %}
+{% if purchase_method %}
+- **Purchase Method**: {{ purchase_method }}
+{% endif %}
+{% if property_condition %}
+- **Property Condition**: {{ property_condition }}
+{% endif %}
+
+{% if entities_extraction %}
+## Contract Entities (Context)
+- Use extracted entities to anchor interpretation (parties, addresses, lot/plan, dates).
+- Key entities: {{ entities_extraction | tojson }}
+{% endif %}
+
+{% if seed_snippets %}
+## Seeded Cues (Targeted Focus)
+- Prioritize checking and extracting semantics related to these cues:
+{{ seed_snippets | tojson }}
+{% endif %}
+
+{% if legal_requirements_matrix %}
+## Regulatory Focus (Legal Requirements Matrix)
+- Prioritize elements explicitly required by the matrix (e.g., easements, overlays, flood/bushfire constraints, service connections).
+- Flag any missing or ambiguous information required for compliance.
+{% endif %}
+
+{% if diagram_filenames %}
+## Diagram Files
+- Available diagram(s): {{ diagram_filenames | join(", ") }}
+- If multiple diagrams are implied, label findings with the relevant filename where possible.
 {% endif %}
 
 ## Core Analysis Objectives
@@ -180,13 +221,16 @@ Return a comprehensive JSON structure following the ImageSemantics schema includ
 
 4. **Risk Analysis**
    - Identified risks with severity levels
-   - Evidence supporting each risk assessment
+   - Evidence supporting each risk assessment (cite labels/legend, measurements, or seeded cues where applicable)
    - Recommended actions for risk mitigation
 
 5. **Summary Assessment**
    - Key findings and their property impact
    - Areas requiring further investigation
    - Overall confidence in analysis
+
+### Citations and Traceability
+- Where conclusions rely on seeded cues or specific labels, include brief references (e.g., legend key term, label text, or seed snippet key).
 
 ### Analysis Standards
 - **Accuracy**: Every visible element must be identified and located

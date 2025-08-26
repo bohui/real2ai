@@ -7,6 +7,7 @@ from app.agents.subflows.step2_section_analysis_workflow import Step2AnalysisSta
 class CheckPhase1CompletionNode(Step2NodeBase):
     async def execute(self, state: Step2AnalysisState) -> Step2AnalysisState:
         required_results = [
+            "image_semantics_result",
             "parties_property_result",
             "financial_terms_result",
             "conditions_result",

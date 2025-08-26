@@ -162,6 +162,21 @@ compositions:
     user_prompts:
       - "step2_default_termination"
 
+  step2_diagram_semantics:
+    description: "Step 2.3 - Diagram/Image Semantics Analysis"
+    version: "1.0.0"
+    system_prompts:
+      - name: "step2_image_semantics"
+        path: "system/step2_image_semantics.md"
+        priority: 105
+        required: true
+      - name: "australian_legal"
+        path: "system/conveyancer.md"
+        priority: 90
+        required: true
+    user_prompts:
+      - "image_semantics"
+
   step2_settlement:
     description: "Step 2.7 - Settlement Logistics Analysis"
     version: "1.0.0"

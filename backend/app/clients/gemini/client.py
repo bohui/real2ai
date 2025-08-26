@@ -383,6 +383,8 @@ class GeminiClient(BaseClient):
                 top_p=kwargs.get("top_p", 1.0),
                 max_output_tokens=kwargs.get("max_tokens"),
                 system_instruction=kwargs.get("system_prompt"),
+                response_mime_type="application/json",
+                response_schema=kwargs.get("response_schema"),
             )
 
             # Execute in thread pool to avoid blocking

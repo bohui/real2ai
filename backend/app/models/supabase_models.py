@@ -148,6 +148,13 @@ class Contract(TimestampedBaseModel):
     conditions: Dict[str, Any] = Field(default_factory=dict)
     warranties: Dict[str, Any] = Field(default_factory=dict)
     default_termination: Dict[str, Any] = Field(default_factory=dict)
+    # Step 2 section-by-section analysis columns
+    settlement_logistics: Dict[str, Any] = Field(default_factory=dict)
+    title_encumbrances: Dict[str, Any] = Field(default_factory=dict)
+    adjustments_outgoings: Dict[str, Any] = Field(default_factory=dict)
+    disclosure_compliance: Dict[str, Any] = Field(default_factory=dict)
+    special_risks: Dict[str, Any] = Field(default_factory=dict)
+    image_semantics: Dict[str, Any] = Field(default_factory=dict)
     raw_text: Optional[str] = None
     property_address: Optional[str] = None
     updated_by: Optional[str] = Field(

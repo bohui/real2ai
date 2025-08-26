@@ -35,7 +35,7 @@ Democratize access to professional-grade real estate contract analysis by provid
 
 ### 3.2 Key Differentiators
 - **State-specific compliance**: Deep understanding of Australian property law variations
-- **Risk prioritization**: Clear red/amber/green flagging system
+- **Risk prioritization**: Clear high/medium/low flagging system
 - **Actionable recommendations**: Specific negotiation points and next steps
 - **Speed**: Analysis complete within 5 minutes of upload
 - **Accuracy**: 95%+ accuracy on critical risk identification

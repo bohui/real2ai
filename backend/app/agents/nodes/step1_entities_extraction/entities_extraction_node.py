@@ -13,7 +13,7 @@ from app.agents.states.contract_state import RealEstateAgentState
 from app.prompts.schema.entity_extraction_schema import ContractEntityExtraction
 from app.core.prompts.parsers import create_parser
 from app.schema.enums.property import ContractType
-from .contract_llm_base import ContractLLMNode
+from ..contract_llm_base import ContractLLMNode
 
 logger = logging.getLogger(__name__)
 

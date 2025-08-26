@@ -200,6 +200,43 @@ class LLMService(UserAwareService):
                 extra_kwargs=kwargs,
             )
 
+            # For Gemini with structured output, pass response_schema and strip
+            # prompt-end format instructions (they are provided via schema instead)
+            prompt_to_send = prompt
+            if output_parser is not None and client_key == "gemini":
+                try:
+                    # Provide Pydantic model directly as response_schema
+                    pyd_model = getattr(output_parser, "pydantic_model", None)
+                    if pyd_model is not None:
+                        client_kwargs["response_schema"] = pyd_model
+
+                    # Strip trailing format instructions if they were appended to the prompt
+                    try:
+                        format_instructions = output_parser.get_format_instructions()
+                    except Exception:
+                        format_instructions = None
+                    if format_instructions:
+                        # Remove optional header + instructions at the end of the prompt
+                        header = "Format And Field Description Instructions:\n\n"
+                        # Pattern removes either the exact instructions or header+instructions if present at end
+                        pattern = (
+                            r"(?:\n\n)?(?:"
+                            + re.escape(header)
+                            + r")?"
+                            + re.escape(format_instructions)
+                            + r"\s*$"
+                        )
+                        cleaned = re.sub(pattern, "", prompt_to_send, flags=re.DOTALL)
+                        if cleaned != prompt_to_send:
+                            logger.debug(
+                                "Stripped output parser format instructions from prompt for Gemini"
+                            )
+                            prompt_to_send = cleaned
+                except Exception as strip_error:
+                    logger.warning(
+                        f"Failed Gemini structured-output preparation; proceeding with raw prompt: {strip_error}"
+                    )
+
             # If no parser, single shot call
             if output_parser is None:
                 response = await client.generate_content(prompt=prompt, **client_kwargs)
@@ -211,7 +248,10 @@ class LLMService(UserAwareService):
             attempts = max(1, parse_generation_max_attempts + 1)
 
             for attempt in range(1, attempts + 1):
-                response = await client.generate_content(prompt=prompt, **client_kwargs)
+                response = await client.generate_content(
+                    prompt=(prompt_to_send if client_key == "gemini" else prompt),
+                    **client_kwargs,
+                )
                 logger.debug(
                     f"Attempt {attempt}: generated {len(response)} characters; parsing..."
                 )

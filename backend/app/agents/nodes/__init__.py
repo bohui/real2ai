@@ -8,16 +8,16 @@ Each node inherits from BaseNode and implements specific contract processing log
 from .base import BaseNode
 
 # Individual node imports - each file contains one class
-from .document_processing_node import DocumentProcessingNode
+from .document_processing_subflow.mainflow_entry import DocumentProcessingNode
 from .document_quality_validation_node import DocumentQualityValidationNode
 from .contract_terms_extraction_node_not_used import ContractTermsExtractionNode
-from .section_analysis_node import SectionAnalysisNode
+from .step2_section_analysis_subflow.mainflow_entry import SectionAnalysisNode
 from .terms_validation_node import TermsValidationNode
 from .compliance_analysis_node import ComplianceAnalysisNode
 from .diagram_analysis_node import DiagramAnalysisNode
 from .risk_assessment_node import RiskAssessmentNode
 from .recommendations_generation_node import RecommendationsGenerationNode
-from .entities_extraction_node import EntitiesExtractionNode
+from .step1_entities_extraction.entities_extraction_node import EntitiesExtractionNode
 from .input_validation_node import InputValidationNode
 from .final_validation_node import FinalValidationNode
 from .report_compilation_node import ReportCompilationNode
@@ -31,7 +31,7 @@ __all__ = [
     "DocumentQualityValidationNode",
     # Contract Analysis
     "ContractTermsExtractionNode",
-    "SectionAnalysisNode", 
+    "SectionAnalysisNode",
     "TermsValidationNode",
     # Compliance Analysis
     "ComplianceAnalysisNode",

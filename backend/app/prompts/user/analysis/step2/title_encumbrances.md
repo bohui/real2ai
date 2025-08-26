@@ -2,7 +2,7 @@
 type: "user"
 category: "instructions"
 name: "title_encumbrances_analysis"
-version: "1.0.0"
+version: "2.0.0"
 description: "Step 2.8 - Title and Encumbrances Analysis with Diagram Integration"
 fragment_orchestration: "step2_title_encumbrances"
 required_variables:
@@ -14,6 +14,9 @@ optional_variables:
   - "uploaded_diagrams"
   - "legal_requirements_matrix"
   - "contract_type"
+  - "retrieval_index_id"
+  - "seed_snippets"
+  - "image_semantics_result"
 model_compatibility: ["gemini-2.5-flash", "gpt-4"]
 max_tokens: 10000
 temperature_range: [0.1, 0.3]
@@ -26,8 +29,8 @@ tags: ["step2", "title", "encumbrances", "diagrams", "integration"]
 Perform comprehensive analysis of title quality, encumbrances, and integrated diagram analysis covering 20+ diagram types in this Australian real estate contract, focusing on verification requirements and risk assessment.
 
 ## Contract Context
-- **State**: {{australian_state}}
-- **Contract Type**: {{contract_type}}
+- **State**: {{ australian_state or 'unknown' }}
+- **Contract Type**: {{ contract_type or 'unknown' }}
 - **Analysis Date**: {{analysis_timestamp}}
 
 ## Analysis Requirements
@@ -199,18 +202,21 @@ Perform comprehensive analysis of title quality, encumbrances, and integrated di
 
 ## Diagram Integration Requirements
 
-{% if uploaded_diagrams %}
+{% if image_semantics_result %}
+### Diagram Semantics (Phase 1 Output)
+Use the extracted diagram semantics as primary context for integration:
+{{image_semantics_result | tojsonpretty}}
+{% elif uploaded_diagrams %}
 ### Available Diagrams for Analysis
 The following diagrams have been uploaded for integrated analysis:
 {{uploaded_diagrams | tojsonpretty}}
+{% endif %}
 
 **Integration Instructions:**
-- Cross-reference all uploaded diagrams with contract terms
+- Cross-reference diagram semantics with contract terms and title particulars
 - Verify consistency between different diagram types
-- Identify any conflicts or discrepancies
-- Assess quality and reliability of each diagram
-- Evaluate legal status and enforceability
-{% endif %}
+- Identify conflicts or discrepancies; cite diagram references
+- Assess quality, legal status, and approval/compliance information
 
 ## Contract Text for Analysis
 
@@ -220,28 +226,29 @@ The following diagrams have been uploaded for integrated analysis:
 
 ## Additional Context
 
-{% if entities_extraction %}
-### Entity Extraction Results
-Previously extracted title and encumbrance data:
-{{entities_extraction | tojsonpretty}}
-{% endif %}
-
 {% if legal_requirements_matrix %}
 ### Legal Requirements
 {{australian_state}} {{contract_type}} title and encumbrance requirements:
 {{legal_requirements_matrix | tojsonpretty}}
 {% endif %}
 
-## Analysis Instructions
+## Seed Snippets (Primary Context)
 
-1. **Comprehensive Review**: Examine all contract sections and attached diagrams for title and encumbrance information
-2. **Diagram Integration**: Systematically analyze all 20+ diagram types and their legal implications
-3. **Cross-Verification**: Verify consistency between contract terms, title details, and diagram content
-4. **Risk Assessment**: Evaluate all title, encumbrance, and diagram-related risks
-5. **State Compliance**: Apply {{australian_state}} title registration and diagram approval requirements
-6. **Professional Standards**: Assess compliance with professional surveying and architectural standards
-7. **Practical Focus**: Emphasize actionable insights for title verification and risk management
-8. **Evidence Documentation**: Reference specific contract clauses, diagram details, and legal requirements
+{% if seed_snippets %}
+Use these high-signal title/encumbrance snippets as primary context:
+{{seed_snippets | tojsonpretty}}
+{% else %}
+No seed snippets provided.
+{% endif %}
+
+## Analysis Instructions (Seeds + Retrieval + Diagram Semantics)
+
+1. Use `entities_extraction` and `image_semantics_result` as baseline context; verify and enrich using `seed_snippets` as primary evidence.
+2. If baseline + seeds are insufficient, retrieve targeted clauses (title particulars, encumbrance schedules, easements/rights, services, overlays, surveys) from `retrieval_index_id` with concise queries. Record what was retrieved.
+3. Cross-verify: ensure consistency between title/contract text and diagram semantics; document discrepancies and their implications.
+4. Assess risks across title defects, encumbrance impacts, diagram reliance, and boundary issues; provide mitigation actions and verification steps.
+5. Apply state-specific title registration and diagram approval requirements; assess professional standards.
+6. Provide evidence citations (clauses, diagram references, registry references) for all material findings.
 
 ## Expected Output
 

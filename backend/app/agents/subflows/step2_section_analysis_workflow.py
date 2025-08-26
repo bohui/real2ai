@@ -41,19 +41,18 @@ class Step2AnalysisWorkflow:
         # Initialize prompt manager (will be properly configured in Story S13)
         self.prompt_manager = get_prompt_manager()
 
-        # Progress tracking ranges for each phase
+        # Progress tracking ranges per node (DAG-based sequencing)
         self.PROGRESS_RANGES = {
             "initialize_workflow": (50, 52),
             "prepare_context": (52, 54),
+            "analyze_diagram": (52, 58),
             "analyze_parties_property": (52, 58),
             "analyze_financial_terms": (58, 64),
             "analyze_conditions": (64, 70),
             "analyze_warranties": (70, 76),
             "analyze_default_termination": (76, 82),
-            "check_phase1_completion": (82, 84),
             "analyze_settlement_logistics": (84, 88),
             "analyze_title_encumbrances": (88, 92),
-            "check_phase2_completion": (92, 94),
             "calculate_adjustments_outgoings": (94, 96),
             "check_disclosure_compliance": (96, 97),
             "identify_special_risks": (97, 98),
@@ -72,15 +71,14 @@ class Step2AnalysisWorkflow:
         from app.agents.nodes.step2_section_analysis_subflow import (
             InitializeWorkflowNode,
             PrepareContextNode,
+            AnalyzeDiagramNode,
             PartiesPropertyNode,
             FinancialTermsNode,
             ConditionsNode,
             WarrantiesNode,
             DefaultTerminationNode,
-            CheckPhase1CompletionNode,
             SettlementLogisticsNode,
             TitleEncumbrancesNode,
-            CheckPhase2CompletionNode,
             AdjustmentsOutgoingsNode,
             DisclosureComplianceNode,
             SpecialRisksNode,
@@ -99,6 +97,9 @@ class Step2AnalysisWorkflow:
             "prepare_context",
             progress_range=self.PROGRESS_RANGES["prepare_context"],
         )
+        self.analyze_diagram_node = AnalyzeDiagramNode(
+            self, progress_range=self.PROGRESS_RANGES["analyze_diagram"]
+        )
         self.parties_property_node = PartiesPropertyNode(
             self, progress_range=self.PROGRESS_RANGES["analyze_parties_property"]
         )
@@ -114,11 +115,6 @@ class Step2AnalysisWorkflow:
         self.default_termination_node = DefaultTerminationNode(
             self, progress_range=self.PROGRESS_RANGES["analyze_default_termination"]
         )
-        self.check_phase1_completion_node = CheckPhase1CompletionNode(
-            self,
-            "check_phase1_completion",
-            progress_range=self.PROGRESS_RANGES["check_phase1_completion"],
-        )
         self.settlement_logistics_node = SettlementLogisticsNode(
             self,
             "analyze_settlement_logistics",
@@ -128,11 +124,6 @@ class Step2AnalysisWorkflow:
             self,
             "analyze_title_encumbrances",
             progress_range=self.PROGRESS_RANGES["analyze_title_encumbrances"],
-        )
-        self.check_phase2_completion_node = CheckPhase2CompletionNode(
-            self,
-            "check_phase2_completion",
-            progress_range=self.PROGRESS_RANGES["check_phase2_completion"],
         )
         self.adjustments_outgoings_node = AdjustmentsOutgoingsNode(
             self,
@@ -164,15 +155,14 @@ class Step2AnalysisWorkflow:
         self.nodes = {
             "initialize_workflow": self.initialize_workflow_node,
             "prepare_context": self.prepare_context_node,
+            "analyze_diagram": self.analyze_diagram_node,
             "analyze_parties_property": self.parties_property_node,
             "analyze_financial_terms": self.financial_terms_node,
             "analyze_conditions": self.conditions_node,
             "analyze_warranties": self.warranties_node,
             "analyze_default_termination": self.default_termination_node,
-            "check_phase1_completion": self.check_phase1_completion_node,
             "analyze_settlement_logistics": self.settlement_logistics_node,
             "analyze_title_encumbrances": self.title_encumbrances_node,
-            "check_phase2_completion": self.check_phase2_completion_node,
             "calculate_adjustments_outgoings": self.adjustments_outgoings_node,
             "check_disclosure_compliance": self.disclosure_compliance_node,
             "identify_special_risks": self.special_risks_node,
@@ -197,19 +187,13 @@ class Step2AnalysisWorkflow:
         graph.add_node("analyze_warranties", self.analyze_warranties)
         graph.add_node("analyze_default_termination", self.analyze_default_termination)
 
-        # Phase 1 completion check
-        graph.add_node("check_phase1_completion", self._check_phase1_completion)
-
-        # Phase 2: Dependent Analysis Nodes (Sequential)
+        # Dependent Analysis Nodes (DAG sequencing)
         graph.add_node(
             "analyze_settlement_logistics", self.analyze_settlement_logistics
         )
         graph.add_node("analyze_title_encumbrances", self.analyze_title_encumbrances)
 
-        # Phase 2 completion check
-        graph.add_node("check_phase2_completion", self.check_phase2_completion)
-
-        # Phase 3: Synthesis Analysis Nodes (Sequential)
+        # Synthesis Analysis Nodes (depend on prior nodes per DAG)
         graph.add_node(
             "calculate_adjustments_outgoings", self.calculate_adjustments_outgoings
         )
@@ -233,33 +217,42 @@ class Step2AnalysisWorkflow:
         graph.add_edge(START, "initialize_workflow")
         graph.add_edge("initialize_workflow", "prepare_context")
 
-        # Phase 1: All foundation nodes start after preparation
+        # Foundation nodes start after preparation (parallel-capable)
         foundation_nodes = [
             "analyze_parties_property",
             "analyze_financial_terms",
             "analyze_conditions",
             "analyze_warranties",
             "analyze_default_termination",
+            "analyze_diagram",
         ]
 
         for node in foundation_nodes:
             graph.add_edge("prepare_context", node)
-            graph.add_edge(node, "check_phase1_completion")
 
-        # Phase 2: Dependent analysis after Phase 1 completion
-        graph.add_edge("check_phase1_completion", "analyze_settlement_logistics")
-        graph.add_edge("check_phase1_completion", "analyze_title_encumbrances")
+        # DAG dependencies for dependent nodes
+        # Settlement logistics depends on financial terms and conditions
+        graph.add_edge("analyze_financial_terms", "analyze_settlement_logistics")
+        graph.add_edge("analyze_conditions", "analyze_settlement_logistics")
 
-        # Phase 2 completion check
-        graph.add_edge("analyze_settlement_logistics", "check_phase2_completion")
-        graph.add_edge("analyze_title_encumbrances", "check_phase2_completion")
+        # Title & encumbrances depends on diagram semantics and parties/property
+        graph.add_edge("analyze_diagram", "analyze_title_encumbrances")
+        graph.add_edge("analyze_parties_property", "analyze_title_encumbrances")
 
-        # Phase 3: Synthesis analysis after Phase 2 completion
-        graph.add_edge("check_phase2_completion", "calculate_adjustments_outgoings")
-        graph.add_edge("check_phase2_completion", "check_disclosure_compliance")
-        graph.add_edge("check_phase2_completion", "identify_special_risks")
+        # Synthesis nodes depend on settlement and title outputs
+        # Adjustments requires settlement + financial terms
+        graph.add_edge(
+            "analyze_settlement_logistics", "calculate_adjustments_outgoings"
+        )
+        graph.add_edge("analyze_financial_terms", "calculate_adjustments_outgoings")
 
-        # Cross-section validation after Phase 3
+        # Disclosure and special risks depend on settlement and title readiness
+        graph.add_edge("analyze_settlement_logistics", "check_disclosure_compliance")
+        graph.add_edge("analyze_title_encumbrances", "check_disclosure_compliance")
+        graph.add_edge("analyze_settlement_logistics", "identify_special_risks")
+        graph.add_edge("analyze_title_encumbrances", "identify_special_risks")
+
+        # Cross-section validation after synthesis nodes complete
         synthesis_nodes = [
             "calculate_adjustments_outgoings",
             "check_disclosure_compliance",
@@ -470,32 +463,8 @@ class Step2AnalysisWorkflow:
         """Check Phase 1 completion and manage dependencies"""
         logger.info("Checking Phase 1 completion")
 
-        # Check if all Phase 1 analyzers completed
-        required_results = [
-            "parties_property_result",
-            "financial_terms_result",
-            "conditions_result",
-            "warranties_result",
-            "default_termination_result",
-        ]
-
-        completed_count = sum(
-            1 for key in required_results if state.get(key) is not None
-        )
-        total_count = len(required_results)
-
-        if completed_count == total_count:
-            logger.info(
-                f"Phase 1 completed successfully: {completed_count}/{total_count} analyzers"
-            )
-            return {
-                "phase1_complete": True,
-                "phase_completion_times": {"phase1": datetime.now(UTC)},
-            }
-        else:
-            logger.warning(
-                f"Phase 1 incomplete: {completed_count}/{total_count} analyzers completed"
-            )
+        # Deprecated with DAG-based sequencing; retained for backward compatibility if called
+        logger.info("Phase checks deprecated; DAG sequencing in effect")
         return {}
 
     @langsmith_trace(name="analyze_settlement_logistics", run_type="tool")
@@ -510,11 +479,7 @@ class Step2AnalysisWorkflow:
     ) -> Step2AnalysisState:
         return await self.title_encumbrances_node.execute(state)
 
-    @langsmith_trace(name="check_phase2_completion", run_type="tool")
-    async def check_phase2_completion(
-        self, state: Step2AnalysisState
-    ) -> Step2AnalysisState:
-        return await self.check_phase2_completion_node.execute(state)
+    # Removed: check_phase2_completion; DAG sequencing handles dependencies
 
     @langsmith_trace(name="calculate_adjustments_outgoings", run_type="tool")
     async def calculate_adjustments_outgoings(

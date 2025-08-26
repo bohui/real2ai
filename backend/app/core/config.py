@@ -46,6 +46,11 @@ class Settings(BaseSettings):
     openai_api_base: Optional[str] = None
     langsmith_api_key: Optional[str] = None
     langsmith_project: str = "real2ai-development"
+    # LangSmith tracing behavior
+    langsmith_truncation_enabled: bool = True
+    langsmith_max_string_length: int = 4000
+    langsmith_max_list_items: int = 50
+    langsmith_max_dict_items: int = 50
 
     # External APIs
     stripe_secret_key: Optional[str] = None

@@ -2,19 +2,19 @@
 type: "user"
 category: "instructions"
 name: "adjustments_analysis"
-version: "1.0.0"
+version: "2.0.0"
 description: "Step 2.9 - Adjustments and Outgoings Calculator"
 fragment_orchestration: "step2_adjustments"
 required_variables:
-  - "contract_text"
   - "australian_state"
   - "analysis_timestamp"
 optional_variables:
-  - "entities_extraction"
   - "financial_terms_result"
-  - "settlement_result"
+  - "settlement_logistics_result"
   - "legal_requirements_matrix"
   - "contract_type"
+  - "retrieval_index_id"
+  - "seed_snippets"
 model_compatibility: ["gemini-2.5-flash", "gpt-4"]
 max_tokens: 8000
 temperature_range: [0.1, 0.3]
@@ -168,25 +168,16 @@ Adjustments must align with financial obligations:
 {{financial_terms_result | tojsonpretty}}
 {% endif %}
 
-{% if settlement_result %}
+{% if settlement_logistics_result %}
 ### Settlement Logistics Integration
 Adjustment preparation must coordinate with settlement logistics:
-{{settlement_result | tojsonpretty}}
+{{settlement_logistics_result | tojsonpretty}}
 {% endif %}
 
 ## Contract Text for Analysis
-
-```
-{{contract_text}}
-```
+Not required; rely on Phase 1/2 outputs and targeted retrieval.
 
 ## Additional Context
-
-{% if entities_extraction %}
-### Entity Extraction Results
-Previously extracted adjustment data:
-{{entities_extraction | tojsonpretty}}
-{% endif %}
 
 {% if legal_requirements_matrix %}
 ### Legal Requirements
@@ -194,7 +185,7 @@ Previously extracted adjustment data:
 {{legal_requirements_matrix | tojsonpretty}}
 {% endif %}
 
-## Analysis Instructions
+## Analysis Instructions (Seeds + Retrieval + Phase Outputs)
 
 1. **Comprehensive Identification**: Examine all contract sections for adjustment and outgoings provisions
 2. **Accurate Calculations**: Apply correct calculation methods and apportionment rules

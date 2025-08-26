@@ -2,7 +2,7 @@
 type: "user"
 category: "instructions"
 name: "settlement_analysis"
-version: "1.0.0"
+version: "2.0.0"
 description: "Step 2.7 - Settlement Logistics Analysis"
 fragment_orchestration: "step2_settlement"
 required_variables:
@@ -15,6 +15,9 @@ optional_variables:
   - "conditions_result"
   - "legal_requirements_matrix"
   - "contract_type"
+  - "retrieval_index_id"
+  - "seed_snippets"
+  - "image_semantics_result"
 model_compatibility: ["gemini-2.5-flash", "gpt-4"]
 max_tokens: 8000
 temperature_range: [0.1, 0.3]
@@ -27,8 +30,8 @@ tags: ["step2", "settlement", "logistics", "dependent"]
 Perform comprehensive analysis of settlement procedures, document requirements, timing coordination, and completion obligations in this Australian real estate contract, focusing on practical logistics and risk assessment.
 
 ## Contract Context
-- **State**: {{australian_state}}
-- **Contract Type**: {{contract_type}}
+- **State**: {{ australian_state or 'unknown' }}
+- **Contract Type**: {{ contract_type or 'unknown' }}
 - **Analysis Date**: {{analysis_timestamp}}
 
 ## Analysis Requirements
@@ -157,6 +160,15 @@ Perform comprehensive analysis of settlement procedures, document requirements, 
 - Supporting documentation requirements
 - Dispute resolution mechanisms
 
+## Seed Snippets (Primary Context)
+
+{% if seed_snippets %}
+Use these high-signal settlement snippets as primary context:
+{{seed_snippets | tojsonpretty}}
+{% else %}
+No seed snippets provided.
+{% endif %}
+
 ### 7. Post-Settlement Obligations
 
 **Immediate post-settlement requirements:**
@@ -185,6 +197,12 @@ Settlement timing must account for condition satisfaction:
 {{conditions_result | tojsonpretty}}
 {% endif %}
 
+{% if image_semantics_result %}
+### Diagram Semantics Integration
+Use relevant diagram semantics that affect practical settlement logistics (services, access, boundary constraints):
+{{ image_semantics_result | tojsonpretty }}
+{% endif %}
+
 ## Contract Text for Analysis
 
 ```
@@ -193,28 +211,22 @@ Settlement timing must account for condition satisfaction:
 
 ## Additional Context
 
-{% if entities_extraction %}
-### Entity Extraction Results
-Previously extracted settlement data:
-{{entities_extraction | tojsonpretty}}
-{% endif %}
-
 {% if legal_requirements_matrix %}
 ### Legal Requirements
 {{australian_state}} {{contract_type}} settlement requirements:
 {{legal_requirements_matrix | tojsonpretty}}
 {% endif %}
 
-## Analysis Instructions
+## Analysis Instructions (Seeds + Retrieval + Phase 1 Outputs)
 
-1. **Integrated Analysis**: Consider financial terms and conditions results when analyzing settlement logistics
-2. **Practical Focus**: Emphasize practical implementation and logistical feasibility
-3. **Risk Identification**: Identify all potential sources of settlement delays or failures
-4. **State Compliance**: Apply {{australian_state}} settlement procedures and requirements
-5. **Electronic Settlement**: Consider electronic settlement options and requirements
-6. **Coordination Planning**: Develop comprehensive coordination strategies
-7. **Evidence Documentation**: Reference specific contract clauses and procedural requirements
-8. **Timeline Integration**: Ensure settlement timeline aligns with all contract requirements
+1. Use Phase 1 outputs (dependencies above) as baseline. Verify and enrich using `seed_snippets` as primary evidence.
+2. If baseline + seeds are insufficient, retrieve targeted settlement clauses (timing, location/method, required documents, funds, possession, statements/adjustments) from `retrieval_index_id` with concise queries. Record what was retrieved.
+3. Integrate dependencies: incorporate `financial_terms_result` and `conditions_result` when assessing logistics and timing.
+4. Emphasize practical feasibility: identify real-world coordination requirements and bottlenecks.
+5. Apply state-specific procedures and electronic settlement requirements; define fallback procedures if electronic settlement fails.
+6. Map the critical path and dependencies; include contingency buffers and escalation plans.
+7. Cite specific clauses/schedules as evidence for every material finding.
+8. Ensure the final timeline aligns with all condition deadlines and funding availability.
 
 ## Expected Output
 

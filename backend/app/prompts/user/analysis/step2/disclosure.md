@@ -2,17 +2,21 @@
 type: "user"
 category: "instructions"
 name: "disclosure_analysis"
-version: "1.0.0"
+version: "2.0.0"
 description: "Step 2.10 - Disclosure Compliance Check"
 fragment_orchestration: "step2_disclosure"
 required_variables:
-  - "contract_text"
   - "australian_state"
   - "analysis_timestamp"
 optional_variables:
-  - "entities_extraction"
   - "legal_requirements_matrix"
   - "contract_type"
+  - "retrieval_index_id"
+  - "seed_snippets"
+  - "settlement_logistics_result"
+  - "title_encumbrances_result"
+  - "warranties_result"
+  - "default_termination_result"
 model_compatibility: ["gemini-2.5-flash", "gpt-4"]
 max_tokens: 8000
 temperature_range: [0.1, 0.3]
@@ -181,18 +185,9 @@ Perform comprehensive analysis of mandatory disclosure compliance, vendor statem
 - Cost implications of compliance
 
 ## Contract Text for Analysis
-
-```
-{{contract_text}}
-```
+Not required; rely on Phase 1/2 outputs and targeted retrieval.
 
 ## Additional Context
-
-{% if entities_extraction %}
-### Entity Extraction Results
-Previously extracted disclosure data:
-{{entities_extraction | tojsonpretty}}
-{% endif %}
 
 {% if legal_requirements_matrix %}
 ### Legal Requirements

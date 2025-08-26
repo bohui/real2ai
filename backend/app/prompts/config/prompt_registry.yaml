@@ -68,6 +68,13 @@ registry:
       dependencies: ["legal_specialist", "australian_legal"]
       description: "Step 2 section-by-section analysis framework and guidelines"
 
+    step2_image_semantics:
+      path: "system/step2_image_semantics.md"
+      category: "analysis"
+      priority: 95
+      dependencies: ["legal_specialist", "australian_legal"]
+      description: "Diagram/image semantics framework and risk focus for Step 2"
+
   user_prompts:
     contract_analysis_base:
       path: "user/analysis/contract_analysis_full.md"
@@ -238,6 +245,13 @@ registry:
       system_requirements: ["legal_specialist", "australian_legal"]
       description: "Step 2.12 - Cross-Section Validation and Consistency Checks"
       estimated_tokens: 10000
+
+    image_semantics:
+      path: "user/analysis/image_semantics.md"
+      category: "analysis"
+      system_requirements: ["step2_image_semantics", "australian_legal"]
+      description: "Semantic analysis of property diagrams and images"
+      estimated_tokens: 12000
       
     # clarification_prompts:
     #   path: "interactions/clarification.md"

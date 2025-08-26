@@ -151,7 +151,12 @@ class RemedyProvision(BaseModel):
 
     # Scope and limitations
     monetary_cap: Optional[float] = Field(
-        None, description="Monetary cap on remedy if applicable"
+        None,
+        description=(
+            "Monetary cap amount as a numeric value. Use decimal fraction for percent-based caps "
+            "(e.g., 0.10 for 10%) and plain numbers for fixed amounts (e.g., 330.0). Do not include "
+            "currency symbols or units; use null if no cap applies."
+        ),
     )
     scope_limitations: List[str] = Field(
         default_factory=list, description="Limitations on remedy scope"
@@ -174,6 +179,8 @@ class RemedyProvision(BaseModel):
     cost_considerations: List[str] = Field(
         default_factory=list, description="Cost considerations for enforcement"
     )
+
+    # Note: Numeric formatting is enforced via prompts; schema expects already-normalized values.
 
 
 class DepositForfeiture(BaseModel):

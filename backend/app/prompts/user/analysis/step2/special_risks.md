@@ -2,18 +2,18 @@
 type: "user"
 category: "instructions"
 name: "special_risks_analysis"
-version: "1.0.0"
+version: "2.0.0"
 description: "Step 2.11 - Special Risks Identification"
 fragment_orchestration: "step2_special_risks"
 required_variables:
-  - "contract_text"
   - "australian_state"
   - "analysis_timestamp"
 optional_variables:
-  - "entities_extraction"
   - "all_section_results"
   - "legal_requirements_matrix"
   - "contract_type"
+  - "retrieval_index_id"
+  - "seed_snippets"
 model_compatibility: ["gemini-2.5-flash", "gpt-4"]
 max_tokens: 8000
 temperature_range: [0.1, 0.3]
@@ -165,18 +165,9 @@ Integration with all previous section analyses:
 {% endif %}
 
 ## Contract Text for Analysis
-
-```
-{{contract_text}}
-```
+Not required; rely on Phase outputs and targeted retrieval.
 
 ## Additional Context
-
-{% if entities_extraction %}
-### Entity Extraction Results
-Previously extracted risk-related data:
-{{entities_extraction | tojsonpretty}}
-{% endif %}
 
 {% if legal_requirements_matrix %}
 ### Legal Requirements

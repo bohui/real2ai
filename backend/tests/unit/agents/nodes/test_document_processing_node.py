@@ -6,7 +6,7 @@ import pytest
 from unittest.mock import Mock, AsyncMock, patch
 from datetime import datetime, UTC
 
-from app.agents.nodes.document_processing_node import DocumentProcessingNode
+from backend.app.agents.nodes.document_processing_subflow.mainflow_entry import DocumentProcessingNode
 from app.agents.states.contract_state import RealEstateAgentState
 from app.schema.enums import ProcessingStatus
 from app.core.auth_context import AuthContext

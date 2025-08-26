@@ -65,6 +65,13 @@ CREATE TABLE contracts (
     conditions JSONB DEFAULT '{}'::jsonb,
     warranties JSONB DEFAULT '{}'::jsonb,
     default_termination JSONB DEFAULT '{}'::jsonb,
+    image_semantics JSONB DEFAULT '{}'::jsonb,
+    -- Step 2 per-section outputs
+    settlement_logistics JSONB DEFAULT '{}'::jsonb,
+    title_encumbrances JSONB DEFAULT '{}'::jsonb,
+    adjustments_outgoings JSONB DEFAULT '{}'::jsonb,
+    disclosure_compliance JSONB DEFAULT '{}'::jsonb,
+    special_risks JSONB DEFAULT '{}'::jsonb,
 
     raw_text TEXT,
     property_address TEXT,
@@ -590,6 +597,12 @@ ALTER TABLE contracts
     ADD COLUMN IF NOT EXISTS conditions JSONB DEFAULT '{}'::jsonb,
     ADD COLUMN IF NOT EXISTS warranties JSONB DEFAULT '{}'::jsonb,
     ADD COLUMN IF NOT EXISTS default_termination JSONB DEFAULT '{}'::jsonb,
+    ADD COLUMN IF NOT EXISTS image_semantics JSONB DEFAULT '{}'::jsonb,
+    ADD COLUMN IF NOT EXISTS settlement_logistics JSONB DEFAULT '{}'::jsonb,
+    ADD COLUMN IF NOT EXISTS title_encumbrances JSONB DEFAULT '{}'::jsonb,
+    ADD COLUMN IF NOT EXISTS adjustments_outgoings JSONB DEFAULT '{}'::jsonb,
+    ADD COLUMN IF NOT EXISTS disclosure_compliance JSONB DEFAULT '{}'::jsonb,
+    ADD COLUMN IF NOT EXISTS special_risks JSONB DEFAULT '{}'::jsonb,
     DROP COLUMN IF EXISTS section_analysis,
     DROP COLUMN IF EXISTS contract_terms,
     DROP COLUMN IF EXISTS ocr_confidence;

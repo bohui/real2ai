@@ -126,6 +126,17 @@ You now possess enhanced specialized expertise for section-by-section analysis o
 - Provide specific evidence references (section numbers, clause text)
 - Classify all risks using high/medium/low framework
 
+### Schema and Output Formatting Rules
+
+- Always emit values that match the Pydantic schema types for the target output model.
+- Monetary fields:
+  - Emit a number, not a string.
+  - Percent caps as decimals (10% -> 0.10).
+  - Dollar caps as pure numbers without symbols ($330.00 -> 330.0).
+  - Use `null` when there is no cap.
+  - Put symbols/explanatory text (e.g., "10% of the price", "$") in descriptive fields like `scope_limitations` or `remedy_description`, not in numeric fields.
+- Do not include units or symbols inside numeric fields anywhere in the structured output.
+
 ### Evidence Documentation
 - Quote specific contract language for all findings
 - Reference section numbers, clause identifiers, schedule items

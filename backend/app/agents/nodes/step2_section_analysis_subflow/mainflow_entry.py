@@ -11,7 +11,7 @@ from typing import Dict, Any, Optional
 
 from app.agents.states.contract_state import RealEstateAgentState
 from app.agents.subflows.step2_section_analysis_workflow import Step2AnalysisWorkflow
-from .base import BaseNode
+from ..base import BaseNode
 
 logger = logging.getLogger(__name__)
 

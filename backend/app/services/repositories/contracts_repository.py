@@ -61,6 +61,7 @@ class ContractsRepository:
         conditions: Optional[Dict[str, Any]] = None,
         warranties: Optional[Dict[str, Any]] = None,
         default_termination: Optional[Dict[str, Any]] = None,
+        image_semantics: Optional[Dict[str, Any]] = None,
         raw_text: Optional[str] = None,
         property_address: Optional[str] = None,
         updated_by: str,
@@ -126,7 +127,8 @@ class ContractsRepository:
             INSERT INTO contracts (
                 content_hash, contract_type, purchase_method, use_category,
                 state, extracted_entity,
-                parties_property, financial_terms, conditions, warranties, default_termination,
+                parties_property, financial_terms, conditions, warranties, default_termination, image_semantics,
+                settlement_logistics, title_encumbrances, adjustments_outgoings, disclosure_compliance, special_risks,
                 raw_text, property_address, updated_by
             ) VALUES (
                 $1, $2, $3, $4,
@@ -137,9 +139,14 @@ class ContractsRepository:
                 $9::jsonb,
                 $10::jsonb,
                 $11::jsonb,
-                $12,
-                $13,
-                $14
+                $12::jsonb,
+                $13::jsonb,
+                $14::jsonb,
+                $15::jsonb,
+                $16::jsonb,
+                $17,
+                $18,
+                $19
             )
             ON CONFLICT (content_hash) DO UPDATE SET
                 -- If NULL, skip updating (keep existing)
@@ -154,6 +161,12 @@ class ContractsRepository:
                 conditions = COALESCE(EXCLUDED.conditions, contracts.conditions),
                 warranties = COALESCE(EXCLUDED.warranties, contracts.warranties),
                 default_termination = COALESCE(EXCLUDED.default_termination, contracts.default_termination),
+                image_semantics = COALESCE(EXCLUDED.image_semantics, contracts.image_semantics),
+                settlement_logistics = COALESCE(EXCLUDED.settlement_logistics, contracts.settlement_logistics),
+                title_encumbrances = COALESCE(EXCLUDED.title_encumbrances, contracts.title_encumbrances),
+                adjustments_outgoings = COALESCE(EXCLUDED.adjustments_outgoings, contracts.adjustments_outgoings),
+                disclosure_compliance = COALESCE(EXCLUDED.disclosure_compliance, contracts.disclosure_compliance),
+                special_risks = COALESCE(EXCLUDED.special_risks, contracts.special_risks),
                 raw_text = COALESCE(EXCLUDED.raw_text, contracts.raw_text),
                 property_address = COALESCE(EXCLUDED.property_address, contracts.property_address),
                 updated_by = COALESCE(EXCLUDED.updated_by, contracts.updated_by),
@@ -166,6 +179,12 @@ class ContractsRepository:
                          COALESCE(conditions, '{}'::jsonb) as conditions,
                          COALESCE(warranties, '{}'::jsonb) as warranties,
                          COALESCE(default_termination, '{}'::jsonb) as default_termination,
+                         COALESCE(image_semantics, '{}'::jsonb) as image_semantics,
+                         COALESCE(settlement_logistics, '{}'::jsonb) as settlement_logistics,
+                         COALESCE(title_encumbrances, '{}'::jsonb) as title_encumbrances,
+                         COALESCE(adjustments_outgoings, '{}'::jsonb) as adjustments_outgoings,
+                         COALESCE(disclosure_compliance, '{}'::jsonb) as disclosure_compliance,
+                         COALESCE(special_risks, '{}'::jsonb) as special_risks,
                          raw_text,
                          property_address,
                          updated_by,
@@ -207,6 +226,16 @@ class ContractsRepository:
                 if default_termination is not None
                 else None
             ),
+            (
+                json.dumps(image_semantics, default=_json_default)
+                if image_semantics is not None
+                else None
+            ),
+            None,
+            None,
+            None,
+            None,
+            None,
             raw_text,
             property_address,
             updated_by,
@@ -354,6 +383,12 @@ class ContractsRepository:
                     "conditions",
                     "warranties",
                     "default_termination",
+                    # Step 2 section-by-section analysis keys
+                    "settlement_logistics",
+                    "title_encumbrances",
+                    "adjustments_outgoings",
+                    "disclosure_compliance",
+                    "special_risks",
                 }
                 if key not in allowed:
                     raise ValueError(f"Unsupported section key: {key}")
@@ -430,6 +465,12 @@ class ContractsRepository:
                                COALESCE(conditions, '{}'::jsonb) as conditions,
                                COALESCE(warranties, '{}'::jsonb) as warranties,
                                COALESCE(default_termination, '{}'::jsonb) as default_termination,
+                               COALESCE(image_semantics, '{}'::jsonb) as image_semantics,
+                               COALESCE(settlement_logistics, '{}'::jsonb) as settlement_logistics,
+                               COALESCE(title_encumbrances, '{}'::jsonb) as title_encumbrances,
+                               COALESCE(adjustments_outgoings, '{}'::jsonb) as adjustments_outgoings,
+                               COALESCE(disclosure_compliance, '{}'::jsonb) as disclosure_compliance,
+                               COALESCE(special_risks, '{}'::jsonb) as special_risks,
                                raw_text, 
                                property_address, updated_by, created_at, updated_at
                         FROM contracts
@@ -451,6 +492,12 @@ class ContractsRepository:
                        COALESCE(conditions, '{}'::jsonb) as conditions,
                        COALESCE(warranties, '{}'::jsonb) as warranties,
                        COALESCE(default_termination, '{}'::jsonb) as default_termination,
+                       COALESCE(image_semantics, '{}'::jsonb) as image_semantics,
+                       COALESCE(settlement_logistics, '{}'::jsonb) as settlement_logistics,
+                       COALESCE(title_encumbrances, '{}'::jsonb) as title_encumbrances,
+                       COALESCE(adjustments_outgoings, '{}'::jsonb) as adjustments_outgoings,
+                       COALESCE(disclosure_compliance, '{}'::jsonb) as disclosure_compliance,
+                       COALESCE(special_risks, '{}'::jsonb) as special_risks,
                        raw_text, 
                        property_address, updated_by, created_at, updated_at
                 FROM contracts
@@ -488,6 +535,12 @@ class ContractsRepository:
             conditions=_normalize_json(row.get("conditions")),
             warranties=_normalize_json(row.get("warranties")),
             default_termination=_normalize_json(row.get("default_termination")),
+            image_semantics=_normalize_json(row.get("image_semantics")),
+            settlement_logistics=_normalize_json(row.get("settlement_logistics")),
+            title_encumbrances=_normalize_json(row.get("title_encumbrances")),
+            adjustments_outgoings=_normalize_json(row.get("adjustments_outgoings")),
+            disclosure_compliance=_normalize_json(row.get("disclosure_compliance")),
+            special_risks=_normalize_json(row.get("special_risks")),
             raw_text=row.get("raw_text"),
             property_address=row.get("property_address"),
             updated_by=row.get("updated_by"),
@@ -535,6 +588,7 @@ class ContractsRepository:
                        COALESCE(conditions, '{}'::jsonb) as conditions,
                        COALESCE(warranties, '{}'::jsonb) as warranties,
                        COALESCE(default_termination, '{}'::jsonb) as default_termination,
+                       COALESCE(image_semantics, '{}'::jsonb) as image_semantics,
                        raw_text, property_address, updated_by, created_at, updated_at
                 FROM contracts
                 WHERE id = $1
@@ -576,6 +630,7 @@ class ContractsRepository:
                 conditions=_normalize_json(row.get("conditions")),
                 warranties=_normalize_json(row.get("warranties")),
                 default_termination=_normalize_json(row.get("default_termination")),
+                image_semantics=_normalize_json(row.get("image_semantics")),
                 raw_text=row.get("raw_text"),
                 property_address=row.get("property_address"),
                 updated_by=row.get("updated_by"),
