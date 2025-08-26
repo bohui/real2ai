@@ -287,10 +287,7 @@ class LLMService(UserAwareService):
                 )
 
                 logger.warning(
-                    f"
-                    
-                    
-                    {attempt}/{attempts} "
+                    f"Parsing failed on attempt {attempt}/{attempts} "
                     f"(client={client_key}, model={model_name}). "
                     f"errors(validation={len(validation_errors)}, parsing={len(parsing_errors)}), "
                     f"confidence={parsing_result.confidence_score:.2f}, "

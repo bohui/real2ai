@@ -131,6 +131,7 @@ class RetryingPydanticOutputParser(LCPydanticOutputParser):
             # Try all JSON candidates and pick the first that validates
             candidates = self._extract_all_json_candidates(text)
             if not candidates:
+                logger.warning(f"No valid JSON found in output: {text}")
                 result.parsing_errors.append("No valid JSON found in output")
             else:
                 for idx, json_data in enumerate(candidates):
@@ -157,6 +158,7 @@ class RetryingPydanticOutputParser(LCPydanticOutputParser):
                                 result.confidence_score = 0.5
                                 return result
         except Exception as cleanup_error:
+            logger.warning(f"Cleanup parsing error: {cleanup_error}")
             result.parsing_errors.append(f"Cleanup parsing error: {cleanup_error}")
 
         # If our extraction didn't yield a valid parse, optionally fall back to LangChain's parser
@@ -173,6 +175,7 @@ class RetryingPydanticOutputParser(LCPydanticOutputParser):
                     )
                     return result
                 except Exception as lc_error:
+                    logger.warning(f"LangChain parsing error: {lc_error}")
                     result.parsing_errors.append(f"LangChain parsing error: {lc_error}")
         return result
 
