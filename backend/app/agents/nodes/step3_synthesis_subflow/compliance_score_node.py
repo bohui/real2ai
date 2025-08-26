@@ -1,8 +1,12 @@
 from datetime import datetime, UTC
 from typing import Any, Dict, Optional
+import logging
 
 from app.agents.nodes.contract_llm_base import ContractLLMNode
 from app.agents.states.step3_synthesis_state import Step3SynthesisState
+from app.prompts.schema.step3.compliance_summary_schema import ComplianceSummaryResult
+
+logger = logging.getLogger(__name__)
 
 
 class ComplianceScoreNode(ContractLLMNode):
@@ -18,83 +22,158 @@ class ComplianceScoreNode(ContractLLMNode):
     async def _short_circuit_check(
         self, state: Step3SynthesisState
     ) -> Optional[Step3SynthesisState]:
+        """Check if compliance summary already exists and is valid"""
+        existing_result = state.get("compliance_summary_result")
+        if existing_result:
+            try:
+                # Validate the existing result against our enhanced schema
+                validated_result = ComplianceSummaryResult(**existing_result)
+                logger.info(f"Compliance analysis already completed with score: {validated_result.score}")
+                return state
+            except Exception as e:
+                logger.warning(f"Existing compliance summary invalid, will regenerate: {e}")
+                return None
         return None
 
     async def _build_context_and_parser(self, state: Step3SynthesisState):
-        from app.core.prompts import PromptContext, ContextType
-        from app.core.prompts.parsers import create_parser
-        from app.prompts.schema.step3.compliance_summary_schema import (
-            ComplianceSummaryResult,
-        )
+        from app.core.prompts.context import PromptContext
+        from app.prompts.schema.step3.compliance_summary_schema import ComplianceSummaryResult
 
-        context = PromptContext(
-            context_type=ContextType.ANALYSIS,
-            variables={
+        # Build comprehensive context from Step 2 results
+        context_dict = {
+            "analysis_timestamp": datetime.now(UTC).isoformat(),
+            "australian_state": state.get("australian_state", "NSW"),
+            "cross_section_validation_result": state.get("cross_section_validation_result", {}),
+            "disclosure_compliance_result": state.get("disclosure_compliance_result", {}),
+            "conditions_result": state.get("conditions_result", {}),
+            "settlement_logistics_result": state.get("settlement_logistics_result", {}),
+            "seed_snippets": state.get("section_seeds", []),
+        }
+
+        # Validate required inputs for compliance analysis
+        required_inputs = [
+            "cross_section_validation_result",
+            "disclosure_compliance_result",
+            "conditions_result"
+        ]
+        
+        missing_inputs = []
+        for input_name in required_inputs:
+            if not context_dict.get(input_name):
+                missing_inputs.append(input_name)
+        
+        if missing_inputs:
+            logger.warning(f"Missing required inputs for compliance analysis: {missing_inputs}")
+
+        context = PromptContext(**context_dict)
+        
+        logger.info(f"Built compliance context with {len([k for k, v in context_dict.items() if v])} populated fields")
+        
+        return context, ComplianceSummaryResult
+
+    async def _validate_and_enhance_result(self, raw_result: Dict[str, Any], state: Step3SynthesisState) -> Dict[str, Any]:
+        """Validate and enhance the compliance summary result"""
+        try:
+            # Validate against our strict schema
+            validated_result = ComplianceSummaryResult(**raw_result)
+            
+            # Add metadata about the analysis
+            enhanced_result = validated_result.dict()
+            enhanced_result["metadata"].update({
+                "generator_node": "compliance_score",
                 "analysis_timestamp": datetime.now(UTC).isoformat(),
-                "australian_state": state.get("australian_state") or "NSW",
-                "cross_section_validation_result": state.get("cross_section_validation_result"),
-                "disclosure_compliance_result": state.get("disclosure_compliance_result"),
-                "conditions_result": state.get("conditions_result"),
-                "settlement_logistics_result": state.get("settlement_logistics_result"),
-                "retrieval_index_id": state.get("retrieval_index_id"),
-                "seed_snippets": (state.get("section_seeds", {}) or {}).get("snippets", {}).get("compliance_score"),
-            },
-        )
-        parser = create_parser(
-            ComplianceSummaryResult, strict_mode=False, retry_on_failure=True
-        )
-        return context, parser, "step3_compliance_score"
+                "input_sources": [
+                    "cross_section_validation_result",
+                    "disclosure_compliance_result",
+                    "conditions_result",
+                    "settlement_logistics_result"
+                ],
+                "total_gaps": len(validated_result.gaps),
+                "compliance_status": validated_result.status.value,
+                "critical_gaps": validated_result.total_gaps_by_severity.get("critical", 0),
+                "high_gaps": validated_result.total_gaps_by_severity.get("high", 0),
+                "schema_version": "1.2.0"
+            })
+            
+            logger.info(f"Compliance analysis completed: score={validated_result.score:.3f}, "
+                       f"status={validated_result.status.value}, gaps={len(validated_result.gaps)}")
+            
+            return enhanced_result
+            
+        except Exception as e:
+            logger.error(f"Compliance summary validation failed: {e}")
+            # Return a minimal valid result
+            fallback_result = {
+                "score": 0.5,
+                "status": "requires_review",
+                "gaps": [{
+                    "name": "System Validation Error",
+                    "description": f"Compliance analysis validation failed: {str(e)}",
+                    "severity": "high",
+                    "remediation": "Manual compliance review required due to system error",
+                    "estimated_remediation_days": 5
+                }],
+                "remediation_readiness": f"System error prevented complete compliance analysis: {str(e)}. Manual review required.",
+                "key_dependencies": ["manual_review"],
+                "total_gaps_by_severity": {"high": 1},
+                "estimated_remediation_timeline": 5,
+                "metadata": {
+                    "validation_error": str(e),
+                    "fallback_result": True,
+                    "analysis_timestamp": datetime.now(UTC).isoformat()
+                }
+            }
+            return fallback_result
 
-    def _coerce_to_model(self, data: Any) -> Optional[Any]:
+    async def execute(self, state: Step3SynthesisState) -> Step3SynthesisState:
+        """Execute compliance scoring with enhanced validation"""
         try:
-            from app.prompts.schema.step3.compliance_summary_schema import (
-                ComplianceSummaryResult,
-            )
+            # Check for short circuit
+            short_circuit_result = await self._short_circuit_check(state)
+            if short_circuit_result:
+                return short_circuit_result
 
-            if isinstance(data, ComplianceSummaryResult):
-                return data
-            if hasattr(data, "model_validate"):
-                return ComplianceSummaryResult.model_validate(data)
-        except Exception:
-            return None
-        return None
-
-    def _evaluate_quality(
-        self, result: Optional[Any], state: Step3SynthesisState
-    ) -> Dict[str, Any]:
-        if result is None:
-            return {"ok": False}
-        try:
-            score = float(getattr(result, "score", 0.0) or 0.0)
-            ok = 0.0 <= score <= 1.0
-            return {"ok": ok, "score": score}
-        except Exception:
-            return {"ok": False}
-
-    async def _persist_results(self, state: Step3SynthesisState, parsed: Any) -> None:
-        try:
-            from app.services.repositories.contracts_repository import ContractsRepository
-
-            content_hash = state.get("content_hash") or (
-                (state.get("document_data", {}) or {}).get("content_hash")
-                or (state.get("document_metadata", {}) or {}).get("content_hash")
-            )
-            if not content_hash:
-                return
-            repo = ContractsRepository()
-            value = parsed.model_dump() if hasattr(parsed, "model_dump") else parsed
-            await repo.update_section_analysis_key(
-                content_hash, "compliance_summary", value, updated_by=self.node_name
-            )
-        except Exception:
-            pass
-
-    async def _update_state_success(
-        self, state: Step3SynthesisState, parsed: Any, quality: Dict[str, Any]
-    ) -> Step3SynthesisState:
-        value = parsed.model_dump() if hasattr(parsed, "model_dump") else parsed
-        state["compliance_summary_result"] = value
-        await self.emit_progress(
-            state, self.progress_range[1], "Compliance readiness scored"
-        )
-        return {"compliance_summary_result": value}
+            # Build context and get parser
+            context, parser_class = await self._build_context_and_parser(state)
+            
+            # Execute LLM analysis
+            raw_result = await self._execute_llm_analysis(context, parser_class)
+            
+            # Validate and enhance result
+            validated_result = await self._validate_and_enhance_result(raw_result, state)
+            
+            # Update state
+            updated_state = state.copy()
+            updated_state["compliance_summary_result"] = validated_result
+            
+            # Update progress
+            progress_update = self._get_progress_update(state)
+            updated_state.update(progress_update)
+            
+            return updated_state
+            
+        except Exception as e:
+            logger.error(f"Compliance score node failed: {e}")
+            # Return state with error information
+            error_state = state.copy()
+            error_state["compliance_summary_result"] = {
+                "score": 0.3,
+                "status": "non_compliant",
+                "gaps": [{
+                    "name": "Critical System Error",
+                    "description": f"Compliance analysis failed due to system error: {str(e)}",
+                    "severity": "critical",
+                    "remediation": "Immediate manual compliance review required",
+                    "estimated_remediation_days": 1
+                }],
+                "remediation_readiness": "Critical system failure - immediate manual intervention required",
+                "key_dependencies": ["system_repair", "manual_review"],
+                "total_gaps_by_severity": {"critical": 1},
+                "estimated_remediation_timeline": 1,
+                "metadata": {
+                    "error": str(e),
+                    "node_name": "compliance_score",
+                    "analysis_timestamp": datetime.now(UTC).isoformat()
+                }
+            }
+            return error_state
