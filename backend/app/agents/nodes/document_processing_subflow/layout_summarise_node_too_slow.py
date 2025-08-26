@@ -308,11 +308,6 @@ class LayoutSummariseNode(DocumentProcessingNodeBase):
 
             # Upsert into contracts by content hash
             content_hash = state.get("content_hash")
-            if not content_hash:
-                # Try document metadata fetched earlier
-                metadata = state.get("_document_metadata") or {}
-                # content_hash may have been set in fetch_document_node
-                content_hash = state.get("content_hmac") or metadata.get("content_hash")
 
             if not content_hash:
                 self._log_warning(

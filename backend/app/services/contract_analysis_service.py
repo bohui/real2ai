@@ -256,9 +256,7 @@ class ContractAnalysisService:
             contract_id = initial_state.get("contract_id")
             if not contract_id:
                 try:
-                    content_hash = (document_data or {}).get("content_hash") or (
-                        document_data or {}
-                    ).get("content_hmac")
+                    content_hash = (document_data or {}).get("content_hash")
                     if content_hash:
                         contract_id = await ensure_contract(
                             service_client=None,

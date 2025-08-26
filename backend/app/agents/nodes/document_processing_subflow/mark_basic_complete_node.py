@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from app.models.supabase_models import DocumentStatus
 from app.agents.subflows.document_processing_workflow import DocumentProcessingState
 from .base_node import DocumentProcessingNodeBase
-from app.services.repositories.runs_repository import RunsRepository, RunStatus
+from app.services.repositories.runs_repository import RunsRepository
 import uuid
 
 
@@ -29,6 +29,7 @@ class MarkBasicCompleteNode(DocumentProcessingNodeBase):
     """
 
     # Inherit constructor from DocumentProcessingNodeBase
+    runs_repo = None
 
     async def initialize(self, user_id):
         """Initialize runs repository with user context"""
@@ -72,11 +73,6 @@ class MarkBasicCompleteNode(DocumentProcessingNodeBase):
             # Set completion status and timestamp
             processing_completed_at = datetime.now(timezone.utc)
 
-            update_data = {
-                "processing_status": DocumentStatus.BASIC_COMPLETE.value,
-                "processing_completed_at": processing_completed_at,
-            }
-
             # Update document record using repository
             from app.services.repositories.documents_repository import (
                 DocumentsRepository,
@@ -94,15 +90,7 @@ class MarkBasicCompleteNode(DocumentProcessingNodeBase):
             run_id = state.get("run_id")
             if run_id and self.runs_repo:
                 try:
-                    await self.runs_repo.complete_run(
-                        run_id=uuid.UUID(run_id),
-                        run_status=RunStatus.COMPLETED,
-                        run_output={
-                            "processing_completed": True,
-                            "final_status": DocumentStatus.BASIC_COMPLETE.value,
-                            "completion_time": processing_completed_at.isoformat(),
-                        },
-                    )
+                    await self.runs_repo.mark_run_completed(uuid.UUID(run_id))
                     self._log_info(f"Completed processing run {run_id}")
                 except Exception as e:
                     self._log_warning(f"Failed to complete processing run: {e}")

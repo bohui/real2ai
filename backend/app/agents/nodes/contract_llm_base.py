@@ -41,12 +41,7 @@ class ContractLLMNode(LLMNode):
                 ContractsRepository,
             )
 
-            content_hash = (
-                state.get("content_hash")
-                or state.get("content_hmac")
-                or (state.get("document_data", {}) or {}).get("content_hash")
-                or (state.get("document_metadata", {}) or {}).get("content_hash")
-            )
+            content_hash = state.get("content_hash")
 
             if not content_hash:
                 return None
@@ -97,12 +92,7 @@ class ContractLLMNode(LLMNode):
                 ContractsRepository,
             )
 
-            content_hash = (
-                state.get("content_hash")
-                or state.get("content_hmac")
-                or (state.get("document_data", {}) or {}).get("content_hash")
-                or (state.get("document_metadata", {}) or {}).get("content_hash")
-            )
+            content_hash = state.get("content_hash")
             if not content_hash:
                 logger.warning(
                     f"{self.__class__.__name__}: Missing content_hash; skipping contract upsert"

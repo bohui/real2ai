@@ -3,7 +3,7 @@ Settings management for CoreLogic API client.
 """
 
 from typing import Dict, Any
-from pydantic import Field, validator
+from pydantic import Field, field_validator
 
 try:
     from pydantic_settings import BaseSettings
@@ -102,16 +102,16 @@ class CoreLogicSettings(BaseSettings):
         "env_file": ".env",
         "env_file_encoding": "utf-8",
         "case_sensitive": False,
-        "extra": "ignore"  # Ignore extra environment variables
+        "extra": "ignore",  # Ignore extra environment variables
     }
 
-    @validator("corelogic_environment")
+    @field_validator("corelogic_environment")
     def validate_environment(cls, v):
         if v not in ["sandbox", "production"]:
             raise ValueError("Environment must be 'sandbox' or 'production'")
         return v
 
-    @validator("corelogic_service_tier")
+    @field_validator("corelogic_service_tier")
     def validate_service_tier(cls, v):
         if v not in ["basic", "professional", "enterprise"]:
             raise ValueError(
@@ -119,7 +119,7 @@ class CoreLogicSettings(BaseSettings):
             )
         return v
 
-    @validator("corelogic_default_valuation_type")
+    @field_validator("corelogic_default_valuation_type")
     def validate_valuation_type(cls, v):
         if v not in ["avm", "desktop", "professional"]:
             raise ValueError(
@@ -127,27 +127,27 @@ class CoreLogicSettings(BaseSettings):
             )
         return v
 
-    @validator("corelogic_default_state")
+    @field_validator("corelogic_default_state")
     def validate_state(cls, v):
         valid_states = ["NSW", "VIC", "QLD", "WA", "SA", "TAS", "ACT", "NT"]
         if v not in valid_states:
             raise ValueError(f"State must be one of {valid_states}")
         return v
 
-    @validator("corelogic_log_level")
+    @field_validator("corelogic_log_level")
     def validate_log_level(cls, v):
         valid_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
         if v.upper() not in valid_levels:
             raise ValueError(f"Log level must be one of {valid_levels}")
         return v.upper()
 
-    @validator("corelogic_min_confidence_score")
+    @field_validator("corelogic_min_confidence_score")
     def validate_confidence_score(cls, v):
         if not 0.0 <= v <= 1.0:
             raise ValueError("Confidence score must be between 0.0 and 1.0")
         return v
 
-    @validator("corelogic_budget_alert_threshold")
+    @field_validator("corelogic_budget_alert_threshold")
     def validate_alert_threshold(cls, v):
         if not 0.0 <= v <= 100.0:
             raise ValueError("Budget alert threshold must be between 0.0 and 100.0")

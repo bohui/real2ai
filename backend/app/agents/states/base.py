@@ -9,3 +9,4 @@ class LangGraphBaseState(TypedDict):
         lambda x, y: y,
     ]
     content_hash: str
+    content_hmac: Optional[str]

@@ -3,8 +3,8 @@ Entity Extraction Schemas for Contract Analysis
 Pydantic models for structured entity extraction from legal documents
 """
 
-from typing import Dict, List, Optional
-from pydantic import BaseModel, Field, validator
+from typing import Dict, List, Optional, ClassVar
+from pydantic import BaseModel, Field, field_validator, model_validator
 from datetime import date
 from decimal import Decimal
 from app.schema.enums import (
@@ -14,6 +14,7 @@ from app.schema.enums import (
     PropertyType,
     DateType,
     FinancialType,
+    PaymentDueEvent,
     PurchaseMethod,
     UseCategory,
     PropertyCondition,
@@ -74,7 +75,7 @@ class ContractParty(EntityBase):
         None, description="Solicitor contact details"
     )
 
-    @validator("name")
+    @field_validator("name")
     def validate_name_when_null(cls, v, values):
         """Ensure context provides information when name is null"""
         if v is None and not values.get("context"):
@@ -100,7 +101,7 @@ class ContractDate(EntityBase):
         None, description="Conditions attached to this date"
     )
 
-    @validator("date_text")
+    @field_validator("date_text")
     def validate_date_text_when_null(cls, v, values):
         """Ensure date_text provides context when date_value is null"""
         if values.get("date_value") is None and not v:
@@ -121,6 +122,10 @@ class FinancialAmount(EntityBase):
     # Payment terms
     payment_method: Optional[str] = Field(None, description="How payment is to be made")
     payment_due_date: Optional[date] = Field(None, description="When payment is due")
+    payment_due_event: Optional[PaymentDueEvent] = Field(
+        None,
+        description="Trigger event when due date is relative (e.g., completion, settlement)",
+    )
     payment_conditions: Optional[str] = Field(
         None, description="Conditions for payment"
     )
@@ -132,6 +137,39 @@ class FinancialAmount(EntityBase):
     percentage_of: Optional[str] = Field(
         None, description="What the percentage is calculated on"
     )
+
+    @model_validator(mode="before")
+    def normalize_due_fields(cls, values):
+        """Normalize payment_due_date and payment_due_event.
+
+        - If payment_due_date is a keyword like 'completion'/'settlement', move it into payment_due_event.
+        - Keep payment_due_date strictly as a calendar date when present.
+        """
+        due = values.get("payment_due_date")
+        if isinstance(due, str):
+            lowered = due.strip().lower()
+            mapping = {
+                "completion": PaymentDueEvent.COMPLETION,
+                "on completion": PaymentDueEvent.COMPLETION,
+                "settlement": PaymentDueEvent.SETTLEMENT,
+                "on settlement": PaymentDueEvent.SETTLEMENT,
+                "exchange": PaymentDueEvent.EXCHANGE,
+                "on exchange": PaymentDueEvent.EXCHANGE,
+                "contract_date": PaymentDueEvent.CONTRACT_DATE,
+                "contract date": PaymentDueEvent.CONTRACT_DATE,
+                "notice to complete": PaymentDueEvent.NOTICE_TO_COMPLETE,
+            }
+            # Exact match first, then substring fallback for robustness
+            event = mapping.get(lowered)
+            if event is None:
+                for key, enum_val in mapping.items():
+                    if key in lowered:
+                        event = enum_val
+                        break
+            if event is not None:
+                values["payment_due_event"] = values.get("payment_due_event") or event
+                values["payment_due_date"] = None
+        return values
 
 
 class LegalReference(EntityBase):
@@ -259,7 +297,7 @@ class ContractMetadata(BaseModel):
         default=None, description="Text excerpts from contract supporting each decision"
     )
 
-    @validator("contract_type", pre=True)
+    @field_validator("contract_type", mode="before")
     def validate_contract_type(cls, v):
         if isinstance(v, str):
             try:
@@ -268,7 +306,7 @@ class ContractMetadata(BaseModel):
                 return None
         return v
 
-    @validator("purchase_method", pre=True)
+    @field_validator("purchase_method", mode="before")
     def validate_purchase_method(cls, v):
         if isinstance(v, str):
             try:
@@ -277,7 +315,7 @@ class ContractMetadata(BaseModel):
                 return None
         return v
 
-    @validator("use_category", pre=True)
+    @field_validator("use_category", mode="before")
     def validate_use_category(cls, v):
         if isinstance(v, str):
             try:
@@ -286,7 +324,7 @@ class ContractMetadata(BaseModel):
                 return None
         return v
 
-    @validator("property_condition", pre=True)
+    @field_validator("property_condition", mode="before")
     def validate_property_condition(cls, v):
         if isinstance(v, str):
             try:
@@ -295,7 +333,7 @@ class ContractMetadata(BaseModel):
                 return None
         return v
 
-    @validator("transaction_complexity", pre=True)
+    @field_validator("transaction_complexity", mode="before")
     def validate_transaction_complexity(cls, v):
         if isinstance(v, str):
             try:
@@ -341,6 +379,9 @@ class SectionSeeds(BaseModel):
 
 class ContractEntityExtraction(BaseModel):
     """Complete entity extraction results for a contract"""
+
+    # Model config: when True, schema is conveyed via prompt instead of response_schema
+    schema_in_prompt: ClassVar[bool] = True
 
     # contract metadata
     metadata: ContractMetadata = Field(..., description="Contract metadata")
@@ -449,7 +490,7 @@ class DiagramEntityExtraction(BaseModel):
 
 
 # Validation helpers
-@validator("postcode", "always", pre=True)
+@field_validator("postcode", mode="before")
 def validate_australian_postcode(cls, v):
     """Validate Australian postcode format"""
     if v and isinstance(v, str):
@@ -459,7 +500,7 @@ def validate_australian_postcode(cls, v):
     return v
 
 
-@validator("amount", pre=True)
+@field_validator("amount", mode="before")
 def parse_financial_amount(cls, v):
     """Parse financial amounts from text"""
     if isinstance(v, str):

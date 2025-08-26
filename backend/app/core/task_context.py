@@ -545,8 +545,10 @@ async def _recovery_enabled_async_wrapper(
             context_key=context_key,
         )
 
-        # Execute function with recovery context as first parameter
-        return await func(recovery_ctx, *args, **kwargs)
+        # Execute function inside RecoveryContext so task_registry transitions
+        # from queued -> started and completes/records failures appropriately
+        async with recovery_ctx:
+            return await func(recovery_ctx, *args, **kwargs)
 
 
 async def _recovery_enabled_sync_wrapper(
@@ -574,8 +576,10 @@ async def _recovery_enabled_sync_wrapper(
             context_key=context_key,
         )
 
-        # Execute function with recovery context as first parameter
-        return func(recovery_ctx, *args, **kwargs)
+        # Execute function inside RecoveryContext so task_registry transitions
+        # from queued -> started and completes/records failures appropriately
+        async with recovery_ctx:
+            return func(recovery_ctx, *args, **kwargs)
 
 
 class TaskContextManager:

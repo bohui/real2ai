@@ -116,34 +116,22 @@ class Step2AnalysisWorkflow:
             self, progress_range=self.PROGRESS_RANGES["analyze_default_termination"]
         )
         self.settlement_logistics_node = SettlementLogisticsNode(
-            self,
-            "analyze_settlement_logistics",
-            progress_range=self.PROGRESS_RANGES["analyze_settlement_logistics"],
+            self, progress_range=self.PROGRESS_RANGES["analyze_settlement_logistics"]
         )
         self.title_encumbrances_node = TitleEncumbrancesNode(
-            self,
-            "analyze_title_encumbrances",
-            progress_range=self.PROGRESS_RANGES["analyze_title_encumbrances"],
+            self, progress_range=self.PROGRESS_RANGES["analyze_title_encumbrances"]
         )
         self.adjustments_outgoings_node = AdjustmentsOutgoingsNode(
-            self,
-            "calculate_adjustments_outgoings",
-            progress_range=self.PROGRESS_RANGES["calculate_adjustments_outgoings"],
+            self, progress_range=self.PROGRESS_RANGES["calculate_adjustments_outgoings"]
         )
         self.disclosure_compliance_node = DisclosureComplianceNode(
-            self,
-            "check_disclosure_compliance",
-            progress_range=self.PROGRESS_RANGES["check_disclosure_compliance"],
+            self, progress_range=self.PROGRESS_RANGES["check_disclosure_compliance"]
         )
         self.special_risks_node = SpecialRisksNode(
-            self,
-            "identify_special_risks",
-            progress_range=self.PROGRESS_RANGES["identify_special_risks"],
+            self, progress_range=self.PROGRESS_RANGES["identify_special_risks"]
         )
         self.cross_section_validation_node = CrossSectionValidationNode(
-            self,
-            "validate_cross_sections",
-            progress_range=self.PROGRESS_RANGES["validate_cross_sections"],
+            self, progress_range=self.PROGRESS_RANGES["validate_cross_sections"]
         )
         self.finalize_results_node = FinalizeResultsNode(
             self,
@@ -186,6 +174,7 @@ class Step2AnalysisWorkflow:
         graph.add_node("analyze_conditions", self.analyze_conditions)
         graph.add_node("analyze_warranties", self.analyze_warranties)
         graph.add_node("analyze_default_termination", self.analyze_default_termination)
+        graph.add_node("analyze_diagram", self.analyze_diagram)
 
         # Dependent Analysis Nodes (DAG sequencing)
         graph.add_node(
@@ -293,8 +282,9 @@ class Step2AnalysisWorkflow:
             "entities_extraction": entities_extraction,
             "legal_requirements_matrix": kwargs.get("legal_requirements_matrix"),
             "uploaded_diagrams": kwargs.get("uploaded_diagrams"),
-            # Required base field propagated from parent
+            # Required base fields propagated from parent
             "content_hash": parent_state.get("content_hash"),
+            "content_hmac": parent_state.get("content_hmac"),
             # Context from parent state
             "australian_state": parent_state.get("australian_state"),
             "contract_type": parent_state.get("contract_type"),
@@ -430,6 +420,10 @@ class Step2AnalysisWorkflow:
     @langsmith_trace(name="prepare_context", run_type="tool")
     async def prepare_context(self, state: Step2AnalysisState) -> Step2AnalysisState:
         return await self.prepare_context_node.execute(state)
+
+    @langsmith_trace(name="analyze_diagram", run_type="tool")
+    async def analyze_diagram(self, state: Step2AnalysisState) -> Step2AnalysisState:
+        return await self.analyze_diagram_node.execute(state)
 
     @langsmith_trace(name="analyze_parties_property", run_type="tool")
     async def analyze_parties_property(

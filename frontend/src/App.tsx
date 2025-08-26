@@ -30,6 +30,7 @@ const MarketAnalysisPage = React.lazy(
 const FinancialAnalysisPage = React.lazy(
   () => import("@/pages/FinancialAnalysisPage")
 );
+const ReportDetailPage = React.lazy(() => import("@/pages/ReportDetailPage"));
 const EvaluationPage = React.lazy(() => import("@/pages/EvaluationPage"));
 
 // Components
@@ -80,24 +81,33 @@ const App: React.FC = () => {
   // Global error handler for authentication errors
   React.useEffect(() => {
     const handleUnauthorized = (event: CustomEvent) => {
-      logger.warn("Authentication error detected, redirecting to login", event.detail);
-      
+      logger.warn(
+        "Authentication error detected, redirecting to login",
+        event.detail
+      );
+
       // Clear auth state
       useAuthStore.getState().logout();
-      
+
       // Show notification if we're not already on login page
       if (window.location.pathname !== "/auth/login") {
         // You can add a toast notification here if you have a notification system
-        console.warn("Session expired. Please log in again.");
+        // console.warn("Session expired. Please log in again.");
       }
     };
 
     // Listen for authentication errors
-    window.addEventListener("auth:unauthorized", handleUnauthorized as EventListener);
+    window.addEventListener(
+      "auth:unauthorized",
+      handleUnauthorized as EventListener
+    );
 
     // Cleanup
     return () => {
-      window.removeEventListener("auth:unauthorized", handleUnauthorized as EventListener);
+      window.removeEventListener(
+        "auth:unauthorized",
+        handleUnauthorized as EventListener
+      );
     };
   }, []);
 
@@ -326,6 +336,14 @@ const App: React.FC = () => {
                   <Route path="history" element={<HistoryPage />} />
                   <Route path="reports" element={<ReportsPage />} />
                   <Route
+                    path="reports/:contractId"
+                    element={
+                      <Suspense fallback={<AnalysisSkeleton />}>
+                        <ReportDetailPage />
+                      </Suspense>
+                    }
+                  />
+                  <Route
                     path="property-intelligence"
                     element={
                       <Suspense fallback={<IntelligenceSkeleton />}>
@@ -349,8 +367,8 @@ const App: React.FC = () => {
                       </Suspense>
                     }
                   />
-                  <Route 
-                    path="evaluation" 
+                  <Route
+                    path="evaluation"
                     element={
                       <ProtectedRoute requireAdmin>
                         <Suspense fallback={<IntelligenceSkeleton />}>

@@ -3,7 +3,7 @@ Pydantic models for structured workflow outputs
 """
 
 from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 from enum import Enum
 from datetime import datetime
 
@@ -60,7 +60,7 @@ class RiskFactor(BaseModel):
         default=None, description="Relevant legal reference or case law"
     )
 
-    @validator("severity", pre=True)
+    @field_validator("severity", mode="before")
     def validate_severity(cls, v):
         if isinstance(v, str):
             return RiskSeverity(v.lower())
@@ -92,11 +92,11 @@ class RiskAnalysisOutput(BaseModel):
         default=[], description="Risks specific to the Australian state"
     )
 
-    @validator("overall_risk_score")
+    @field_validator("overall_risk_score")
     def validate_risk_score(cls, v):
         return max(0.0, min(10.0, v))
 
-    @validator("confidence_level")
+    @field_validator("confidence_level")
     def validate_confidence(cls, v):
         return max(0.0, min(1.0, v))
 
@@ -130,13 +130,13 @@ class Recommendation(BaseModel):
         default=None, description="Potential consequences if not followed"
     )
 
-    @validator("priority", pre=True)
+    @field_validator("priority", mode="before")
     def validate_priority(cls, v):
         if isinstance(v, str):
             return RecommendationPriority(v.lower())
         return v
 
-    @validator("category", pre=True)
+    @field_validator("category", mode="before")
     def validate_category(cls, v):
         if isinstance(v, str):
             return RecommendationCategory(v.lower())
@@ -168,7 +168,7 @@ class RecommendationsOutput(BaseModel):
         default={}, description="State-specific advice and requirements"
     )
 
-    @validator("total_estimated_cost")
+    @field_validator("total_estimated_cost")
     def calculate_total_cost(cls, v, values):
         if v is None and "recommendations" in values:
             total = sum(
@@ -219,7 +219,7 @@ class ComplianceAnalysisOutput(BaseModel):
         default="NSW", description="Australian state for compliance check"
     )
 
-    @validator("australian_state", pre=True)
+    @field_validator("australian_state", mode="before")
     def set_default_australian_state(cls, v):
         """Ensure australian_state is never None or empty"""
         return v or "NSW"
@@ -295,7 +295,7 @@ class ContractTermsValidationOutput(BaseModel):
         default="NSW", description="Australian state for validation context"
     )
 
-    @validator("australian_state", pre=True)
+    @field_validator("australian_state", mode="before")
     def set_default_validation_state(cls, v):
         """Ensure australian_state is never None or empty"""
         return v or "NSW"
@@ -330,7 +330,7 @@ class ContractTermsOutput(BaseModel):
         default="NSW", description="Australian state for extraction context"
     )
 
-    @validator("state", pre=True)
+    @field_validator("state", mode="before")
     def set_default_extraction_state(cls, v):
         """Ensure state is never None or empty"""
         return v or "NSW"
@@ -376,7 +376,7 @@ class FullStructureAnalysisOutput(BaseModel):
         default=None, description="Text excerpts from contract supporting each decision"
     )
 
-    @validator("contract_type", pre=True)
+    @field_validator("contract_type", mode="before")
     def validate_contract_type(cls, v):
         if isinstance(v, str):
             try:
@@ -385,7 +385,7 @@ class FullStructureAnalysisOutput(BaseModel):
                 return None
         return v
 
-    @validator("purchase_method", pre=True)
+    @field_validator("purchase_method", mode="before")
     def validate_purchase_method(cls, v):
         if isinstance(v, str):
             try:
@@ -394,7 +394,7 @@ class FullStructureAnalysisOutput(BaseModel):
                 return None
         return v
 
-    @validator("use_category", pre=True)
+    @field_validator("use_category", mode="before")
     def validate_use_category(cls, v):
         if isinstance(v, str):
             try:
@@ -403,7 +403,7 @@ class FullStructureAnalysisOutput(BaseModel):
                 return None
         return v
 
-    @validator("property_condition", pre=True)
+    @field_validator("property_condition", mode="before")
     def validate_property_condition(cls, v):
         if isinstance(v, str):
             try:
@@ -412,7 +412,7 @@ class FullStructureAnalysisOutput(BaseModel):
                 return None
         return v
 
-    @validator("transaction_complexity", pre=True)
+    @field_validator("transaction_complexity", mode="before")
     def validate_transaction_complexity(cls, v):
         if isinstance(v, str):
             try:

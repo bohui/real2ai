@@ -43,71 +43,106 @@ This document provides comprehensive documentation of the Real2.AI LangGraph-bas
 
 ```mermaid
 graph TD
-    START([Start: Contract Upload]) --> VI[validate_input]
+    START([Start: Contract Upload]) --> VI[validate_input<br/>7%]
     
-    %% Core Processing Flow with Enhanced Validation
-    VI --> PD[process_document]
+    %% Core Processing Flow with Node-based Architecture
+    VI --> PD[process_document<br/>7-30%]
     
-    PD --> VDQ{enable_validation?}
-    VDQ -->|Yes| VDQ_NODE[validate_document_quality]
-    VDQ -->|No| ET[extract_contract_terms]
-    VDQ_NODE --> ET
-    
-    ET --> VTC{enable_validation?}
-    VTC -->|Yes| VTC_NODE[validate_terms_completeness]
-    VTC -->|No| AC[analyze_australian_compliance]
-    VTC_NODE --> AC
-    
-    AC --> ACD[analyze_contract_diagrams]
-    ACD --> AR[assess_contract_risks]
-    AR --> GR[generate_recommendations]
-    GR --> VFO{enable_validation?}
-    VFO -->|Yes| VFO_NODE[validate_final_output]
-    VFO -->|No| CR[compile_analysis_report]
-    VFO_NODE --> CR
-    
-    CR --> END([Analysis Complete])
-    
-    %% Error Handling Nodes
-    HE[handle_processing_error] --> END
-    RP[retry_processing]
-    
-    %% Conditional Decision Points
     PD --> CPS{check_processing_success}
-    CPS -->|success| VDQ
-    CPS -->|retry| RP
-    CPS -->|error| HE
+    CPS -->|success| EE[extract_entities<br/>30-59%]
+    CPS -->|retry| RP[retry_processing]
+    CPS -->|error| HE[handle_processing_error]
     
-    ET --> CEQ{check_extraction_quality}
-    CEQ -->|high_confidence ≥0.3| VTC
-    CEQ -->|low_confidence <0.3| RP
-    CEQ -->|error| HE
+    EE --> EES{check_entities_extraction_success}
+    EES -->|success| SA[extract_section_analysis<br/>59%]
+    EES -->|retry| RP
+    EES -->|error| HE
     
-    RP --> PD
+    SA --> SEQ{check_extraction_quality}
+    SEQ -->|high_confidence| S3[synthesize_step3<br/>60%]
+    SEQ -->|low_confidence| RP
+    SEQ -->|error| HE
+    
+    S3 --> END([Analysis Complete<br/>100%])
+    
+    %% Error Handling and Retry Flow
+    RP --> RAR{_route_after_retry}
+    RAR -->|restart_workflow| VI
+    RAR -->|retry_document_processing| PD
+    RAR -->|retry_entities_extraction| EE
+    RAR -->|retry_extraction| SA
+    RAR -->|continue_workflow| EE
+    
+    HE --> END
     
     %% State Updates (showing key checkpoints)
-    VI -.-> S1[State: input_validated<br/>🔄 document_data validation]
-    PD -.-> S2[State: document_processed<br/>📄 text extraction + metadata]
-    ET -.-> S3[State: terms_extracted<br/>🔍 contract_terms + confidence]
-    AC -.-> S4[State: compliance_analyzed<br/>⚖️ compliance_check + risks]
-    ACD -.-> S5[State: diagrams_analyzed<br/>📊 diagram insights + risks]
-    AR -.-> S6[State: risks_assessed<br/>⚠️ risk_assessment + scores]
-    GR -.-> S7[State: recommendations_generated<br/>💡 actionable recommendations]
-    CR -.-> S8[State: report_compiled<br/>📋 final analysis_results]
+    VI -.-> ST1[State: input_validated<br/>🔄 document_data validation]
+    PD -.-> ST2[State: document_processed<br/>📄 text extraction + metadata]
+    EE -.-> ST3[State: entities_extracted<br/>🔍 contract entities + structure]
+    SA -.-> ST4[State: section_analysis_complete<br/>📊 contract_terms + confidence]
+    S3 -.-> ST5[State: synthesis_complete<br/>📋 risk_summary + action_plan + compliance + buyer_report]
     
     %% Styling
     classDef processNode fill:#e1f5fe,stroke:#01579b,stroke-width:2px
     classDef decisionNode fill:#fff3e0,stroke:#e65100,stroke-width:2px
     classDef errorNode fill:#ffebee,stroke:#c62828,stroke-width:2px
     classDef stateNode fill:#f3e5f5,stroke:#4a148c,stroke-width:1px
-    classDef validationNode fill:#e8f5e8,stroke:#2e7d32,stroke-width:2px
+    classDef retryNode fill:#fff8e1,stroke:#f57c00,stroke-width:2px
     
-    class VI,PD,ET,AC,ACD,AR,GR,CR processNode
-    class CPS,CEQ,VDQ,VTC,VFO decisionNode
-    class HE,RP errorNode
-    class S1,S2,S3,S4,S5,S6,S7,S8 stateNode
-    class VDQ_NODE,VTC_NODE,VFO_NODE validationNode
+    class VI,PD,EE,SA,S3 processNode
+    class CPS,EES,SEQ,RAR decisionNode
+    class HE errorNode
+    class ST1,ST2,ST3,ST4,ST5 stateNode
+    class RP retryNode
 ```
+
+---
+
+## 1.1. Actual Implementation Details (Current Code)
+
+The workflow has been significantly simplified and refactored to use a **node-based architecture** as implemented in `backend/app/agents/contract_workflow.py`:
+
+### **Simplified Workflow Steps**
+1. **`validate_input`** (7%): Input validation using `InputValidationNode`
+2. **`process_document`** (7-30%): Document processing using `DocumentProcessingNode`
+3. **`extract_entities`** (30-59%): Entity extraction using `EntitiesExtractionNode`
+4. **`extract_section_analysis`** (59%): Section analysis using `SectionAnalysisNode`
+5. **`synthesize_step3`** (60%): Final synthesis using `Step3SynthesisNode`
+
+### **Key Implementation Changes**
+- **Removed Complex Validation**: Document quality validation, terms validation, and final output validation have been removed
+- **Simplified Flow**: Direct progression through core steps without conditional validation branches
+- **Node-Based Architecture**: Each step is implemented as a separate node class for better maintainability
+- **Retry Logic**: Intelligent retry system with routing back to appropriate workflow steps
+- **Progress Tracking**: Built-in progress tracking with resume capability
+
+### **Conditional Edge Logic**
+```python
+# Processing success check
+check_processing_success() -> "success" | "retry" | "error"
+
+# Entities extraction check  
+check_entities_extraction_success() -> "success" | "retry" | "error"
+
+# Extraction quality check
+check_extraction_quality() -> "high_confidence" | "low_confidence" | "error"
+
+# Retry routing
+_route_after_retry() -> "restart_workflow" | "retry_document_processing" | 
+                       "retry_entities_extraction" | "retry_extraction" | "continue_workflow"
+```
+
+### **Error Handling Strategy**
+- **Immediate Error Detection**: `_has_error_state()` checks for any error indicators
+- **Graceful Degradation**: Retry attempts with exponential backoff (max 3 retries)
+- **Smart Routing**: Retry processing node routes back to appropriate workflow steps
+- **State Preservation**: Error context and retry attempts are preserved in state
+
+### **Progress Tracking Integration**
+The `ProgressTrackingWorkflow` subclass provides:
+- **Resume Capability**: Skip completed steps when resuming from failures
+- **WebSocket Integration**: Real-time progress updates via centralized callback
+- **Step Ordering**: Fixed progression through `_STEP_ORDER` for consistent resume logic
 
 ---
 
@@ -569,8 +604,6 @@ sequenceDiagram
     participant BG as ⚙️ Background Task
     participant WF as 🧠 LangGraph Workflow
     participant State as 📊 RealEstateAgentState
-    participant LLM as 🤖 GPT-4/Gemini
-    participant Tools as 🇦🇺 AU Tools
     participant WS as 🔌 WebSocket
     participant Redis as 📡 Redis PubSub
     
@@ -587,105 +620,43 @@ sequenceDiagram
     end
     
     rect rgb(245, 255, 245)
-        Note over WF,Tools: Phase 2: Document Validation & Processing
-        BG->>WF: workflow.ainvoke(initial_state)
+        Note over WF,State: Phase 2: Input Validation & Document Processing
         WF->>State: validate_input()
         State-->>WF: input_validated
-        WF->>WS: Progress: 15% - "Validating document data"
-        
-        alt enable_validation
-            WF->>State: validate_document_quality()
-            State->>Tools: assess_text_quality()
-            Tools-->>State: quality_metrics + confidence
-            State-->>WF: document_quality_validated
-            WF->>WS: Progress: 25% - "Document quality assessed"
-        end
+        WF->>WS: Progress: 7% - "Initialize analysis"
         
         WF->>State: process_document()
         State-->>WF: document_processed
-        WF->>WS: Progress: 35% - "Document processing complete"
+        WF->>WS: Progress: 30% - "Extract text & diagrams"
     end
     
     rect rgb(255, 248, 240)
-        Note over WF,LLM: Phase 3: Advanced Term Extraction
-        WF->>LLM: Extract contract terms (LLM/Rule-based)
-        
-        alt LLM-based extraction
-            LLM->>LLM: Process contract_structure prompt
-            LLM-->>WF: Structured contract terms JSON
-        else Rule-based fallback
-            WF->>Tools: extract_australian_contract_terms()
-            Tools-->>WF: Pattern-matched terms
-        end
-        
-        WF->>State: terms_extracted + confidence_scores
-        WF->>WS: Progress: 50% - "Contract terms extracted"
-        
-        alt enable_validation
-            WF->>State: validate_terms_completeness()
-            State-->>WF: terms_validation_results
-            WF->>WS: Progress: 55% - "Terms validation complete"
-        end
+        Note over WF,State: Phase 3: Step 2 Section Analysis
+        WF->>State: extract_section_analysis()
+        State-->>WF: section_analysis_complete
+        WF->>WS: Progress: 59% - "Performing Step 2 analysis"
     end
     
     rect rgb(248, 240, 255)
-        Note over WF,Tools: Phase 4: Compliance & Diagram Analysis
-        WF->>Tools: analyze_australian_compliance()
-        Tools->>Tools: validate_cooling_off_period()
-        Tools->>Tools: calculate_stamp_duty()
-        Tools->>Tools: analyze_special_conditions()
-        Tools-->>State: compliance_results
-        WF->>WS: Progress: 70% - "Compliance analysis complete"
-        
-        WF->>LLM: analyze_contract_diagrams() (Gemini Vision)
-        LLM->>LLM: Process diagram images with context
-        LLM-->>State: diagram_analyses + risk_indicators
-        WF->>WS: Progress: 75% - "Diagram analysis complete"
-    end
-    
-    rect rgb(255, 240, 240)
-        Note over WF,LLM: Phase 5: Risk Assessment (AI-Powered)
-        WF->>LLM: assess_contract_risks()
-        LLM->>LLM: Process risk_assessment prompt with full context
-        LLM-->>WF: Comprehensive risk analysis JSON
-        WF->>State: risks_assessed + confidence_scores
-        WF->>WS: Progress: 85% - "Risk assessment complete"
-    end
-    
-    rect rgb(240, 255, 240)
-        Note over WF,LLM: Phase 6: Recommendations (AI-Powered)
-        WF->>LLM: generate_recommendations()
-        LLM->>LLM: Process recommendations prompt with user context
-        LLM-->>WF: Actionable recommendations JSON
-        WF->>State: recommendations_generated
-        WF->>WS: Progress: 95% - "Recommendations generated"
-        
-        alt enable_validation
-            WF->>State: validate_final_output()
-            State-->>WF: final_output_validation
-            WF->>WS: Progress: 97% - "Final validation complete"
-        end
+        Note over WF,State: Phase 4: Step 3 Synthesis
+        WF->>State: synthesize_step3()
+        State-->>WF: synthesis_complete (risk_summary, action_plan, compliance, buyer_report)
+        WF->>WS: Progress: 60% - "Synthesizing results"
     end
     
     rect rgb(248, 248, 255)
-        Note over WF,State: Phase 7: Report Compilation
-        WF->>State: compile_analysis_report()
-        State->>State: Calculate overall confidence score
-        State->>State: Compile comprehensive results
-        State-->>WF: report_compiled + final_analysis_results
+        Note over WF,State: Phase 5: Completion
+        WF-->>BG: Final RealEstateAgentState with results
+        BG->>API: Store results in database
         WF->>WS: Progress: 100% - "Analysis complete"
         WF->>Redis: Publish completion event
+        API-->>User: Analysis complete notification
     end
-    
-    WF-->>BG: Final RealEstateAgentState with results
-    BG->>API: Store results in database
-    API-->>User: Analysis complete notification
     
     rect rgb(230, 255, 230)
         Note over User,Redis: Real-Time User Experience
         Redis->>User: Live progress updates (5% → 100%)
         WS->>User: Granular step descriptions
-        User->>User: Monitor progress in real-time
         User->>API: Fetch final results when complete
     end
 ```

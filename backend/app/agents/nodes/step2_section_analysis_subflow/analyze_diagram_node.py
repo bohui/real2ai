@@ -148,34 +148,6 @@ class AnalyzeDiagramNode(ContractLLMNode):
             total += len(s)
         return selected
 
-    async def _short_circuit_check(
-        self, state: Step2AnalysisState
-    ) -> Optional[Step2AnalysisState]:
-        # First, run base idempotency check (contracts cache)
-        base = await super()._short_circuit_check(state)  # type: ignore[misc]
-        if base is not None:
-            return base
-
-        # If there are no uploaded diagrams, try to load from artifacts; skip if still empty
-        try:
-            uploaded = state.get("uploaded_diagrams") or {}
-            if not uploaded:
-                await self._ensure_uploaded_diagrams(state)
-                uploaded = state.get("uploaded_diagrams") or {}
-                if not uploaded:
-                    return self.update_state_step(
-                        state,
-                        f"{self.node_name}_skipped",
-                        data={
-                            "reason": "no_uploaded_diagrams",
-                            "contract_attribute": self.contract_attribute,
-                        },
-                    )
-        except Exception:
-            # If any issue accessing state, proceed without short-circuiting
-            pass
-        return None
-
     async def execute(self, state: Step2AnalysisState) -> Step2AnalysisState:  # type: ignore[override]
         # Progress tick
         progress_update = self._get_progress_update(state)
@@ -188,6 +160,9 @@ class AnalyzeDiagramNode(ContractLLMNode):
             short = await self._short_circuit_check(state)
             if short is not None:
                 return short
+
+            # Ensure uploaded diagrams are available in state
+            await self._ensure_uploaded_diagrams(state)
 
             uploaded = state.get("uploaded_diagrams") or {}
             if not uploaded:
@@ -316,9 +291,57 @@ class AnalyzeDiagramNode(ContractLLMNode):
             ):
                 return
 
-            content_hmac = state.get("content_hash") or state.get("content_hmac")
+            # Prefer true content_hmac; if missing, compute it from original bytes using content_hash
+            content_hmac = state.get("content_hmac")
             if not content_hmac:
-                return
+                try:
+                    content_hash = state.get("content_hash")
+                    if not content_hash:
+                        return
+
+                    # Resolve storage_path via user-scoped documents repository
+                    from app.core.auth_context import AuthContext
+                    from app.services.repositories.documents_repository import (
+                        DocumentsRepository,
+                    )
+                    from app.clients.factory import get_service_supabase_client
+                    from app.utils.content_utils import compute_content_hmac
+
+                    user_id = AuthContext.get_user_id() or state.get("user_id")
+                    docs_repo = DocumentsRepository(user_id=user_id)
+                    docs = await docs_repo.get_documents_by_content_hash(
+                        content_hash,
+                        str(user_id) if user_id else "",
+                        columns="storage_path",
+                    )
+                    if not docs:
+                        return
+
+                    storage_path = (
+                        (docs[0] or {}).get("storage_path")
+                        if isinstance(docs[0], dict)
+                        else getattr(docs[0], "storage_path", None)
+                    )
+                    if not storage_path:
+                        return
+
+                    # Download original bytes and compute HMAC
+                    client = await get_service_supabase_client()
+                    file_content = await client.download_file(
+                        bucket="documents", path=storage_path
+                    )
+                    if not isinstance(file_content, (bytes, bytearray)):
+                        file_content = (
+                            bytes(file_content, "utf-8")
+                            if isinstance(file_content, str)
+                            else bytes(file_content)
+                        )
+
+                    content_hmac = compute_content_hmac(bytes(file_content))
+                    state["content_hmac"] = content_hmac
+                except Exception:
+                    # Best-effort; if we cannot compute HMAC, skip artifact lookup
+                    return
 
             # Repositories and storage service
             from app.services.repositories.artifacts_repository import (

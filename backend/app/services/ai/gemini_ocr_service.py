@@ -315,41 +315,39 @@ Focus on accuracy and completeness. Extract all visible text content."""
                 else:
                     content_type = f"image/{file_type.lower()}"
 
-                # Use the service's analyze method for structured output
-                ai_response = (
-                    await self.gemini_service.gemini_client.analyze_image_semantics(
-                        content=file_content,
-                        content_type=content_type,
-                        analysis_context={
-                            "prompt": structured_prompt,
-                            "system_prompt": system_prompt,
-                            "expects_structured_output": True,
-                            "output_format": "json",
-                            "schema_type": schema_class.__name__,
-                        },
-                    )
-                )
+                # Use the unified LLMService for structured output
+                from app.services import get_llm_service
 
-                # Parse AI response using integrated parser
-                parsing_result = await self.parse_ai_response(
-                    template_name="user/ocr/whole_document_insight",
-                    ai_response=ai_response.get("content", ""),
+                llm_service = await get_llm_service()
+                parsing_result = await llm_service.generate_image_semantics(
+                    content=file_content,
+                    content_type=content_type,
+                    filename=filename,
+                    composition_name="image_semantics_only",
+                    context_variables={
+                        "ocr_mode": "whole_document",
+                        "schema_type": schema_class.__name__,
+                        **(context.variables if hasattr(context, "variables") else {}),
+                    },
                     output_parser=ocr_parser,
-                    use_retry=True,
                 )
 
                 # Handle parsing results
-                if parsing_result.success:
+                if getattr(parsing_result, "success", False):
                     logger.info(
                         f"Successfully extracted structured OCR data from {filename}"
                     )
 
+                    parsed = getattr(parsing_result, "parsed_data", None)
+                    payload = parsed.dict() if hasattr(parsed, "dict") else parsed
                     return {
-                        "ocr_extraction": parsing_result.parsed_data.dict(),
+                        "ocr_extraction": payload,
                         "service": "GeminiOCRService",
                         "service_version": "v4_structured_ocr",
                         "parsing_success": True,
-                        "parsing_confidence": parsing_result.confidence_score,
+                        "parsing_confidence": getattr(
+                            parsing_result, "confidence_score", 0.0
+                        ),
                         "file_processed": filename,
                         "extraction_mode": (
                             "quick" if use_quick_mode else "comprehensive"
@@ -357,18 +355,22 @@ Focus on accuracy and completeness. Extract all visible text content."""
                         "processing_timestamp": datetime.now(timezone.utc).isoformat(),
                         "processing_metadata": {
                             "entire_document_processed": True,
-                            "validation_errors": parsing_result.validation_errors,
-                            "parsing_errors": parsing_result.parsing_errors,
+                            "validation_errors": getattr(
+                                parsing_result, "validation_errors", []
+                            ),
+                            "parsing_errors": getattr(
+                                parsing_result, "parsing_errors", []
+                            ),
                         },
                     }
                 else:
                     logger.warning(
-                        f"Failed to parse structured OCR output for {filename}: {parsing_result.parsing_errors}"
+                        f"Failed to parse structured OCR output for {filename}: {getattr(parsing_result, 'parsing_errors', [])}"
                     )
 
                     # Fallback: try to extract basic text
                     fallback_result = await self._handle_ocr_parsing_failure(
-                        ai_response, parsing_result, filename
+                        {"content": ""}, parsing_result, filename
                     )
 
                     return fallback_result
@@ -547,54 +549,40 @@ Focus on accuracy and completeness. Extract all visible text content."""
                 file_type=file_type,
             )
 
-            # Use composition for image semantics analysis
-            composition_result = await self.render_composed(
-                composition_name="image_semantics_only",
-                context=context,
-                output_parser=semantic_parser,
-            )
-            analysis_prompt = composition_result["user_prompt"]
-            system_prompt = composition_result.get("system_prompt", "")
+            # Use unified LLMService image semantics
+            from app.services import get_llm_service
 
-            logger.debug(f"Generated structured prompt for {filename}")
-
-            # Get AI response using Gemini service
+            llm_service = await get_llm_service()
             try:
-                ai_response = (
-                    await self.gemini_service.gemini_client.analyze_image_semantics(
-                        content=file_content,
-                        content_type=(
-                            f"image/{file_type.lower()}"
-                            if file_type.lower() != "pdf"
-                            else "application/pdf"
-                        ),
-                        analysis_context={
-                            "prompt": analysis_prompt,
-                            "system_prompt": system_prompt,
-                            "expects_structured_output": True,
-                            "output_format": "json",
-                        },
-                    )
-                )
-
-                # Parse AI response using integrated parser
-                parsing_result = await self.parse_ai_response(
-                    template_name="image_semantics",
-                    ai_response=ai_response.get("content", ""),
+                parsing_result = await llm_service.generate_image_semantics(
+                    content=file_content,
+                    content_type=(
+                        f"image/{file_type.lower()}"
+                        if file_type.lower() != "pdf"
+                        else "application/pdf"
+                    ),
+                    filename=filename,
+                    composition_name="image_semantics_only",
+                    context_variables=(
+                        context.variables if hasattr(context, "variables") else {}
+                    ),
                     output_parser=semantic_parser,
-                    use_retry=True,
                 )
 
                 # Handle parsing results
-                if parsing_result.success:
+                if getattr(parsing_result, "success", False):
                     logger.info(f"Successfully parsed semantic analysis for {filename}")
 
+                    parsed = getattr(parsing_result, "parsed_data", None)
+                    payload = parsed.dict() if hasattr(parsed, "dict") else parsed
                     return {
-                        "semantic_analysis": parsing_result.parsed_data.dict(),
+                        "semantic_analysis": payload,
                         "service": "GeminiOCRService",
                         "service_version": "v4_parser_integrated",
                         "parsing_success": True,
-                        "parsing_confidence": parsing_result.confidence_score,
+                        "parsing_confidence": getattr(
+                            parsing_result, "confidence_score", 0.0
+                        ),
                         "file_processed": filename,
                         "image_type_detected": (
                             image_type.value if image_type else "unknown"
@@ -602,21 +590,39 @@ Focus on accuracy and completeness. Extract all visible text content."""
                         "analysis_timestamp": datetime.now(timezone.utc).isoformat(),
                         "processing_metadata": {
                             "prompt_with_format_instructions": True,
-                            "validation_errors": parsing_result.validation_errors,
-                            "parsing_errors": parsing_result.parsing_errors,
+                            "validation_errors": getattr(
+                                parsing_result, "validation_errors", []
+                            ),
+                            "parsing_errors": getattr(
+                                parsing_result, "parsing_errors", []
+                            ),
                         },
                     }
                 else:
                     logger.warning(
-                        f"Failed to parse structured output for {filename}: {parsing_result.parsing_errors}"
+                        f"Failed to parse structured output for {filename}: {getattr(parsing_result, 'parsing_errors', [])}"
                     )
-
-                    # Fallback: try to extract partial data or return raw response
-                    fallback_result = await self._handle_parsing_failure(
-                        ai_response, parsing_result, filename
-                    )
-
-                    return fallback_result
+                    # Fallback path is not directly available via LLMService route; return minimal info
+                    return {
+                        "semantic_analysis": None,
+                        "service": "GeminiOCRService",
+                        "service_version": "v4_parser_integrated",
+                        "parsing_success": False,
+                        "file_processed": filename,
+                        "image_type_detected": (
+                            image_type.value if image_type else "unknown"
+                        ),
+                        "analysis_timestamp": datetime.now(timezone.utc).isoformat(),
+                        "processing_metadata": {
+                            "prompt_with_format_instructions": True,
+                            "validation_errors": getattr(
+                                parsing_result, "validation_errors", []
+                            ),
+                            "parsing_errors": getattr(
+                                parsing_result, "parsing_errors", []
+                            ),
+                        },
+                    }
 
             except ClientQuotaExceededError as e:
                 logger.error(f"Gemini quota exceeded during semantic analysis: {e}")

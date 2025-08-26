@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from abc import ABC, abstractmethod
 
 from app.clients.factory import get_service_supabase_client
+from app.database.connection import fetch_raw_sql
 from app.services.repositories.recovery_repository import RecoveryRepository
 from app.core.task_recovery import TaskState, RecoveryMethod, RecoverableTask
 from app.core.celery import celery_app
@@ -482,6 +483,52 @@ class RecoveryOrchestrator:
                     task_kwargs={},  # Will be loaded separately if needed
                 )
                 recoverable_tasks.append(task)
+
+            # Also discover stale queued tasks that never started (e.g., lost broker message)
+            try:
+                repo = RecoveryRepository()
+                # Consider queued tasks that have been queued for > 10 minutes
+                rows = await fetch_raw_sql(
+                    """
+                    SELECT 
+                        id AS registry_id,
+                        task_id,
+                        task_name,
+                        user_id,
+                        current_state,
+                        last_heartbeat,
+                        recovery_priority,
+                        COALESCE(progress_percent, 0) AS progress_percent,
+                        COALESCE(current_step, '') AS current_step
+                    FROM task_registry
+                    WHERE auto_recovery_enabled = TRUE
+                      AND current_state = 'queued'
+                      AND scheduled_at < NOW() - INTERVAL '10 minutes'
+                """
+                )
+
+                for row in rows:
+                    try:
+                        task = RecoverableTask(
+                            registry_id=row["registry_id"],
+                            task_id=row["task_id"],
+                            task_name=row["task_name"],
+                            user_id=row["user_id"],
+                            current_state=TaskState(row["current_state"]),
+                            last_heartbeat=row["last_heartbeat"],
+                            recovery_priority=row["recovery_priority"],
+                            progress_percent=row["progress_percent"] or 0,
+                            current_step=row["current_step"] or "",
+                            task_args=(),
+                            task_kwargs={},
+                        )
+                        recoverable_tasks.append(task)
+                    except Exception as row_error:
+                        logger.warning(
+                            f"Skipping malformed queued task row for recovery: {row_error}"
+                        )
+            except Exception as q_err:
+                logger.error(f"Failed to discover stale queued tasks: {q_err}")
 
             return recoverable_tasks
 

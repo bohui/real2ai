@@ -79,11 +79,23 @@ class ApiService {
         const originalRequest = error.config as AxiosRequestConfigExtended;
 
         if (error.response?.status === 401 && !originalRequest._retry) {
+          logger.api("auth:401-received", {
+            url: originalRequest.url,
+            method: originalRequest.method,
+            retry: !!originalRequest._retry,
+            hasRefreshToken: !!this.refreshToken,
+            isBackendToken: this.isBackendToken(),
+          });
+
           // Don't attempt token refresh for login/register endpoints
           const isAuthEndpoint = originalRequest.url?.includes("/auth/login") ||
             originalRequest.url?.includes("/auth/register");
 
           if (isAuthEndpoint) {
+            logger.api("auth:401-on-auth-endpoint-skip-redirect", {
+              url: originalRequest.url,
+              method: originalRequest.method,
+            });
             // For auth endpoints, just clear tokens and let the login form handle the error
             this.clearTokens();
             return Promise.reject(error);
@@ -91,6 +103,10 @@ class ApiService {
 
           // For backend tokens, we can't refresh them - user needs to log in again
           if (this.isBackendToken()) {
+            logger.api("auth:backend-token-401-redirecting", {
+              url: originalRequest.url,
+              method: originalRequest.method,
+            });
             this.clearTokens();
             this.handleUnauthorized();
             return Promise.reject(
@@ -150,15 +166,18 @@ class ApiService {
           }
         }
 
-        // Handle 401 responses and network errors
+        // Handle 401/403 responses and network errors
         if (error.response?.status === 401) {
-          console.log("🚨 401 response detected in interceptor:", {
+          logger.api("auth:401-interceptor-redirect", {
             url: error.config?.url,
             method: error.config?.method,
-            status: error.response?.status,
-            message: (error.response?.data as any)?.detail || error.message,
           });
           this.handleUnauthorized();
+        } else if (error.response?.status === 403) {
+          logger.api("auth:403-detected-no-redirect", {
+            url: error.config?.url,
+            method: error.config?.method,
+          });
         } else if (
           error.code === "ERR_NETWORK" || error.message === "Network Error"
         ) {
@@ -177,9 +196,6 @@ class ApiService {
 
     // Load tokens from localStorage
     this.loadTokens();
-
-    // Test that interceptors are working
-    console.log("🔧 API Service initialized with interceptors");
   }
 
   // Token management
@@ -244,8 +260,6 @@ class ApiService {
 
   // Handle unauthorized access by redirecting to login
   private handleUnauthorized(): void {
-    console.log("🚨 handleUnauthorized called - redirecting to login");
-
     // Clear any existing auth state
     this.clearTokens();
 
@@ -258,51 +272,13 @@ class ApiService {
 
     // Force redirect to login page
     if (window.location.pathname !== "/auth/login") {
-      console.log(
-        "🔄 Redirecting from",
-        window.location.pathname,
-        "to /auth/login",
-      );
+      logger.api("auth:redirect-login", { from: window.location.pathname });
       window.location.href = "/auth/login";
-    } else {
-      console.log("📍 Already on login page, no redirect needed");
     }
   }
 
   clearToken(): void {
     this.clearTokens();
-  }
-
-  // Test method to verify 401 handling
-  test401Handling(): void {
-    console.log("🧪 Testing 401 handling...");
-    console.log(
-      "🧪 Current token:",
-      this.token ? `${this.token.substring(0, 20)}...` : "None",
-    );
-    console.log("🧪 Is backend token:", this.isBackendToken());
-
-    // Simulate a 401 response
-    console.log("🧪 Simulating 401 error...");
-    this.handleUnauthorized();
-  }
-
-  // Test method to verify interceptors are working
-  testInterceptors(): void {
-    console.log("🧪 Testing interceptors...");
-
-    // Make a test request that will fail
-    this.client.get("/non-existent-endpoint")
-      .then(() => {
-        console.log("❌ Unexpected success");
-      })
-      .catch((error) => {
-        console.log("🧪 Interceptor test result:", {
-          status: error.response?.status,
-          message: error.message,
-          isAxiosError: error.isAxiosError,
-        });
-      });
   }
 
   private loadTokens(): void {
@@ -694,6 +670,13 @@ class ApiService {
       `/api/contracts/${contractId}/report?format=${format}`,
     );
     return response.data.download_url;
+  }
+
+  async getReportJson(contractId: string): Promise<any> {
+    const response = await this.client.get(
+      `/api/contracts/${contractId}/report?format=json`,
+    );
+    return response.data;
   }
 
   // Health check

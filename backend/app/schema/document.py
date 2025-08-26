@@ -5,7 +5,6 @@ from pydantic import BaseModel, Field
 from datetime import datetime
 
 
-
 class SchemaBase(BaseModel):
     def get(self, key: str, default: Any = None) -> Any:
         return getattr(self, key, default)
@@ -32,7 +31,7 @@ class DocumentDetails(SchemaBase):
     status: str  # uploaded, processing, processed, failed
     storage_path: str
     created_at: datetime
-    processing_results: Optional[Dict[str, Any]] = None
+    # processing_results: Optional[Dict[str, Any]] = None
 
 
 class DocumentProcessingStatus(SchemaBase):
@@ -44,7 +43,7 @@ class DocumentProcessingStatus(SchemaBase):
     extraction_method: str
     ocr_recommended: bool = False
     ocr_available: bool = False
-    processing_results: Optional[Dict[str, Any]] = None
+    # processing_results: Optional[Dict[str, Any]] = None
     created_at: datetime
     updated_at: datetime
 
@@ -127,10 +126,10 @@ class DocumentProcessingSummary(SchemaBase):
     avg_confidence: float
 
 
-class ProcessingResults(SchemaBase):
-    text_extraction: Optional[TextExtractionResult] = None
-    diagram_processing: Optional[DiagramProcessingResult] = None
-    processing_summary: Optional[DocumentProcessingSummary] = None
+# class ProcessingResults(SchemaBase):
+#     text_extraction: Optional[TextExtractionResult] = None
+#     diagram_processing: Optional[DiagramProcessingResult] = None
+#     processing_summary: Optional[DocumentProcessingSummary] = None
 
 
 class DocumentProcessingUpdate(SchemaBase):
@@ -145,7 +144,7 @@ class DocumentProcessingUpdate(SchemaBase):
     overall_quality_score: float
     text_extraction_method: Optional[str] = None
     processing_completed_at: datetime
-    processing_results: ProcessingResults
+    # processing_results: ProcessingResults
 
 
 class ReportGenerationRequest(SchemaBase):
@@ -220,6 +219,7 @@ class ProcessedDocumentSummary(SchemaBase):
     file_type: Optional[str] = None
     storage_path: Optional[str] = None
     content_hash: Optional[str] = None
+    content_hmac: Optional[str] = None
 
 
 class TextExtractionOverview(SchemaBase):

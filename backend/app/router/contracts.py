@@ -1,6 +1,5 @@
 """Contract analysis router with cache-first strategy and enhanced error handling."""
 
-import hashlib
 from typing import Dict, List, Optional, Union, TypedDict, Any
 from uuid import UUID
 from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, Body, Query
@@ -664,13 +663,9 @@ def _is_valid_contract_document(document: DocumentRecord) -> bool:
     if document.get("file_size", 0) > 10 * 1024 * 1024:  # 10MB limit
         raise ValueError("File is too large. Please use a file smaller than 10MB")
 
-    # Check if document has content - either extracted text in processing_results or storage_path
-    processing_results = document.get("processing_results", {})
-    text_extraction = processing_results.get("text_extraction", {})
-    full_text = text_extraction.get("full_text", "")
+    # Check that original file is present in storage
     storage_path = document.get("storage_path", "")
-
-    if not full_text and not storage_path:
+    if not storage_path:
         raise ValueError("The document appears to be empty or corrupted")
 
     return True
@@ -825,19 +820,33 @@ async def _generate_document_content_hash(document: DocumentRecord) -> Optional[
         if document.get("content_hash"):
             return document["content_hash"]
 
-        # If document has processing results with text, hash that
-        processing_results = document.get("processing_results", {})
-        text_extraction = processing_results.get("text_extraction", {})
-        full_text = text_extraction.get("full_text", "")
+        # Prefer hashing the original file bytes from storage
+        storage_path = document.get("storage_path")
+        if storage_path:
+            try:
+                logger.info(
+                    f"Generating content_hash from original file: {storage_path}"
+                )
+                db_client = await AuthContext.get_authenticated_client(
+                    require_auth=True
+                )
+                if not hasattr(db_client, "_client") or db_client._client is None:
+                    await db_client.initialize()
 
-        if full_text:
-            # Hash the extracted text content
-            content_bytes = full_text.encode("utf-8")
-            return hashlib.sha256(content_bytes).hexdigest()
-
-        # Fallback: create hash from document metadata
-        metadata = f"{document.get('original_filename', '')}{document.get('file_size', 0)}{document.get('created_at', '')}"
-        return hashlib.sha256(metadata.encode("utf-8")).hexdigest()
+                file_bytes = await db_client.download_file(
+                    bucket="documents", path=storage_path
+                )
+                if isinstance(file_bytes, (bytes, bytearray)) and len(file_bytes) > 0:
+                    return CacheService.generate_content_hash(bytes(file_bytes))
+                else:
+                    logger.warning(
+                        "Downloaded file content is empty or invalid for hashing: storage_path=%s",
+                        storage_path,
+                    )
+            except Exception as download_err:
+                logger.error(
+                    f"Failed to download original file for hashing (will fallback to metadata): {download_err}"
+                )
 
     except Exception as e:
         logger.error(f"Error generating content hash: {str(e)}")

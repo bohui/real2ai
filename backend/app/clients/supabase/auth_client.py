@@ -88,17 +88,23 @@ class SupabaseAuthClient(AuthOperations):
 
         except AuthError as e:
             self.logger.error(f"Auth error authenticating user: {e}")
-            
+
             # Check if this is a JWT expiration error
             error_str = str(e).lower()
-            if 'expired' in error_str or 'invalid_token' in error_str or 'jwt' in error_str:
-                self.logger.info("JWT expiration or invalid token detected in auth client")
+            if (
+                "expired" in error_str
+                or "invalid_token" in error_str
+                or "jwt" in error_str
+            ):
+                self.logger.info(
+                    "JWT expiration or invalid token detected in auth client"
+                )
                 raise ClientAuthenticationError(
                     f"Token expired or invalid: {str(e)}",
                     client_name=self.client_name,
                     original_error=e,
                 )
-            
+
             # For other auth errors
             raise ClientAuthenticationError(
                 f"Authentication failed: {str(e)}",
@@ -409,3 +415,48 @@ class SupabaseAuthClient(AuthOperations):
         """Close auth client."""
         self._initialized = False
         self.logger.info("Auth client closed successfully")
+
+    # Compatibility wrapper used across the codebase
+    # Delegates to the underlying Supabase SDK and normalizes behavior
+    def refresh_session(self, refresh_token: str):
+        """Refresh session using a refresh token.
+
+        This provides a stable API for callers that expect
+        client.auth.refresh_session(refresh_token) to exist.
+        It delegates to the underlying Supabase client's auth implementation,
+        accommodating version differences.
+        """
+        try:
+            self.logger.debug("Refreshing Supabase session with provided refresh token")
+            auth = self.supabase_client.auth
+
+            # Try direct refresh_session with positional arg (newer SDKs)
+            try:
+                result = auth.refresh_session(refresh_token)  # type: ignore[attr-defined]
+            except TypeError:
+                # Try keyword argument form
+                result = auth.refresh_session(refresh_token=refresh_token)  # type: ignore[attr-defined]
+            except AttributeError:
+                # Fallback for SDKs without refresh_session: set_session triggers refresh exchange
+                result = auth.set_session("", refresh_token)
+
+            # Best-effort: ensure PostgREST/storage use the refreshed access token
+            try:
+                session = getattr(result, "session", None)
+                access_token = (
+                    getattr(session, "access_token", None) if session else None
+                )
+                if access_token:
+                    try:
+                        self.supabase_client.postgrest.auth(access_token)
+                    except Exception:
+                        pass
+            except Exception as update_err:
+                self.logger.debug(
+                    f"Post-refresh client auth update skipped: {update_err}"
+                )
+
+            return result
+        except Exception as e:
+            self.logger.error(f"Failed to refresh Supabase session: {e}")
+            raise

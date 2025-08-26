@@ -43,6 +43,7 @@ from .diagrams import DiagramType, ImageType
 
 # Entity Extraction Enums
 from .entities import EntityType, PartyRole, DateType, FinancialType
+from .payments import PaymentDueEvent
 
 # Section Enums
 from .sections import SectionKey
@@ -131,6 +132,7 @@ __all__ = [
     "PartyRole",
     "DateType",
     "FinancialType",
+    "PaymentDueEvent",
     # Sections
     "SectionKey",
     # Condition

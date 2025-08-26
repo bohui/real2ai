@@ -557,7 +557,7 @@ def integrate_structured_parsing_into_workflow():
         australian_state: str = "NSW"  # Default value
         # ... other fields
         
-        @validator('australian_state', pre=True)
+        @field_validator('australian_state', mode='before')
         def set_default_state(cls, v):
             return v or "NSW"  # Ensure never None/empty
     ```

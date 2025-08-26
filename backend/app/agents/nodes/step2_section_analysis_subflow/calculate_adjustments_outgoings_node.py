@@ -47,9 +47,7 @@ class AdjustmentsOutgoingsNode(ContractLLMNode):
                 .get("adjustments"),
                 # Dependencies per DAG
                 "financial_terms_result": state.get("financial_terms_result"),
-                "settlement_logistics_result": state.get(
-                    "settlement_logistics_result"
-                ),
+                "settlement_logistics_result": state.get("settlement_logistics_result"),
             },
         )
 
@@ -80,9 +78,7 @@ class AdjustmentsOutgoingsNode(ContractLLMNode):
         try:
             conf = float(getattr(result, "confidence_score", 0.0) or 0.0)
             completeness = float(getattr(result, "completeness_score", 0.0) or 0.0)
-            accuracy = float(
-                getattr(result, "calculation_accuracy_score", 0.0) or 0.0
-            )
+            accuracy = float(getattr(result, "calculation_accuracy_score", 0.0) or 0.0)
             ok = conf >= 0.75 and completeness >= 0.6 and accuracy >= 0.7
             return {
                 "ok": ok,
@@ -99,10 +95,7 @@ class AdjustmentsOutgoingsNode(ContractLLMNode):
                 ContractsRepository,
             )
 
-            content_hash = state.get("content_hash") or (
-                (state.get("document_data", {}) or {}).get("content_hash")
-                or (state.get("document_metadata", {}) or {}).get("content_hash")
-            )
+            content_hash = state.get("content_hash")
             if not content_hash:
                 return
 
@@ -120,6 +113,8 @@ class AdjustmentsOutgoingsNode(ContractLLMNode):
         value = parsed.model_dump() if hasattr(parsed, "model_dump") else parsed
         state["adjustments_outgoings_result"] = value
         await self.emit_progress(
-            state, self.progress_range[1], "Adjustments and outgoings calculation completed"
+            state,
+            self.progress_range[1],
+            "Adjustments and outgoings calculation completed",
         )
         return {"adjustments_outgoings_result": value}

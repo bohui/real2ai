@@ -22,15 +22,6 @@ class TitleEncumbrancesNode(ContractLLMNode):
         )
         self.progress_range = progress_range
 
-    async def _short_circuit_check(
-        self, state: Step2AnalysisState
-    ) -> Optional[Step2AnalysisState]:
-        # Allow base cache check to run (if column is present and populated)
-        try:
-            return await super()._short_circuit_check(state)  # type: ignore[misc]
-        except Exception:
-            return None
-
     async def _build_context_and_parser(self, state: Step2AnalysisState):
         from app.core.prompts import PromptContext, ContextType
         from app.core.prompts.parsers import create_parser
@@ -102,10 +93,7 @@ class TitleEncumbrancesNode(ContractLLMNode):
                 ContractsRepository,
             )
 
-            content_hash = state.get("content_hash") or (
-                (state.get("document_data", {}) or {}).get("content_hash")
-                or (state.get("document_metadata", {}) or {}).get("content_hash")
-            )
+            content_hash = state.get("content_hash")
             if not content_hash:
                 self.logger.warning(
                     "TitleEncumbrancesNode: Missing content_hash; skipping persist"

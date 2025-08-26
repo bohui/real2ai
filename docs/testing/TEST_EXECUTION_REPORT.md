@@ -10,7 +10,7 @@
 ### ✅ **Critical Bug Fixes Applied**
 
 #### 1. **Pydantic V2 Migration** 
-- **Issue**: Deprecated `@validator` decorators causing warnings
+- **Issue**: Deprecated `@field_validator` decorators causing warnings
 - **Fix**: Updated to `@field_validator` with `@classmethod` decorators
 - **Files Modified**: `app/api/models.py`
 - **Impact**: Eliminated 6 deprecation warnings

@@ -242,3 +242,50 @@ Check logs for recovery-related messages:
 - Recovery strategy selection
 
 Use health endpoints to monitor system status and identify issues before they become critical.
+
+## Retry Mechanisms Overview
+
+This system uses multiple layers of retry and recovery. Understanding which layer applies helps avoid duplicates and speeds up recovery.
+
+### 1) Broker Redelivery (no backend involvement)
+- Applies when a worker dies before acknowledging a task.
+- With `task_acks_late=True` and `worker_prefetch_multiplier=1`, the broker requeues the message automatically.
+- After workers restart, the task is picked up again.
+
+### 2) Celery Autoretry (task-level)
+- Tasks can declare `autoretry_for`, `max_retries`, and `countdown` (e.g., `comprehensive_document_analysis`).
+- On exception, Celery schedules a retry. No backend orchestration needed.
+- Visible in `task_registry` only if the task started and recovery context ran.
+
+### 3) Backend Recovery (recovery orchestrator)
+- Runs on API startup and via monitoring.
+- Discovers tasks in states: `processing`, `checkpoint`, `partial`, `orphaned` with stale `last_heartbeat` and recovers them using strategies:
+  - Resume from last checkpoint
+  - Clean restart
+  - Validation only
+- Updates `task_registry` state/history and avoids duplicates via idempotency keys (`analysis_id`, `content_hash`).
+
+### 4) Stale 'queued' Resubmission (safeguard)
+- If a task remains `queued` longer than a threshold (default 10 minutes), it may indicate a lost broker message or no workers at dispatch time.
+- The recovery orchestrator will include these stale queued tasks in discovery and resubmit them.
+- Safeguards:
+  - `auto_recovery_enabled=true`
+  - `retry_count < max_retries`
+  - Optional active-run check for the same `analysis_id`
+
+## Operator Runbook: When will a restart alone help?
+
+- Broker redelivery: yes, if the task was in-flight and unacked when the worker died.
+- Celery autoretry: yes, if retries remain and countdown expires while workers are alive.
+- Stale queued still in broker: yes, workers will simply consume it after restart.
+
+When backend is required:
+- Task was acknowledged and failed permanently; autoretries exhausted/disabled.
+- Registry shows stuck states (`processing`/`checkpoint`/`partial`/`orphaned`) with old heartbeats.
+- Registry shows stale `queued` beyond the threshold (likely lost dispatch).
+
+## Idempotency and Duplicate Prevention
+
+- Use `analysis_id`/`content_hash` as idempotency keys in task logic and persistence layers.
+- Before resubmission, set the registry to a transitional state (e.g., `recovering`), bump `retry_count`, and write a state history entry.
+- Always log the reason for recovery and the detection signals (heartbeat age, state, thresholds).

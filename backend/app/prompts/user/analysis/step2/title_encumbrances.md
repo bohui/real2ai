@@ -17,7 +17,7 @@ optional_variables:
   - "retrieval_index_id"
   - "seed_snippets"
   - "image_semantics_result"
-model_compatibility: ["gemini-2.5-flash", "gpt-4"]
+model_compatibility: ["gemini-2.5-flash"]
 max_tokens: 10000
 temperature_range: [0.1, 0.3]
 output_parser: TitleEncumbrancesAnalysisResult

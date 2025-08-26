@@ -394,7 +394,7 @@ async def comprehensive_document_analysis(
         docs_repo = DocumentsRepository()
         document = await docs_repo.get_document(UUID(document_id))
         if not document:
-            raise Exception("Document not found or access denied")
+            raise Exception(f"Document not found or access denied: {document_id}")
         # Convert to dict for backward compatibility
         document = {
             "id": str(document.id),

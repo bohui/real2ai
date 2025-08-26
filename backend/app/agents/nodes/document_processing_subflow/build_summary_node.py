@@ -168,6 +168,7 @@ class BuildSummaryNode(DocumentProcessingNodeBase):
                 file_type=file_type_value,
                 storage_path=storage_path_value,
                 content_hash=content_hash_value,
+                content_hmac=state.get("content_hmac"),
             )
 
             # Update state with final summary

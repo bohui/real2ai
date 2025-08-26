@@ -39,24 +39,10 @@ from app.core.langsmith_config import (
 
 # Node imports
 from app.agents.nodes import (
-    # Document Processing
     DocumentProcessingNode,
-    DocumentQualityValidationNode,
-    # Contract Analysis
     SectionAnalysisNode,
-    TermsValidationNode,
-    # Compliance Analysis
-    ComplianceAnalysisNode,
-    DiagramAnalysisNode,
-    # Risk Assessment
-    RiskAssessmentNode,
-    RecommendationsGenerationNode,
     EntitiesExtractionNode,
-    # Validation
-    FinalValidationNode,
-    # Utilities
     InputValidationNode,
-    ReportCompilationNode,
     ErrorHandlingNode,
     RetryProcessingNode,
 )
@@ -233,29 +219,15 @@ class ContractAnalysisWorkflow:
         """Initialize all workflow nodes."""
         # Document Processing Nodes
         self.document_processing_node = DocumentProcessingNode(self)
-        self.document_quality_validation_node = DocumentQualityValidationNode(self)
 
         # Contract Analysis Nodes
         self.entities_extraction_node = EntitiesExtractionNode(self)
         self.section_analysis_node = SectionAnalysisNode(self)
-        self.terms_validation_node = TermsValidationNode(self)
-
-        # Compliance Analysis Nodes
-        self.compliance_analysis_node = ComplianceAnalysisNode(self)
-        self.diagram_analysis_node = DiagramAnalysisNode(self)
-
-        # Risk Assessment Nodes
-        self.risk_assessment_node = RiskAssessmentNode(self)
-        self.recommendations_generation_node = RecommendationsGenerationNode(self)
         # Step 3 Synthesis Node
         self.step3_synthesis_node = Step3SynthesisNode(self)
 
-        # Validation Nodes
-        self.final_validation_node = FinalValidationNode(self)
-
         # Utility Nodes
         self.input_validation_node = InputValidationNode(self)
-        self.report_compilation_node = ReportCompilationNode(self)
         self.error_handling_node = ErrorHandlingNode(self)
         self.retry_processing_node = RetryProcessingNode(self)
 
@@ -263,17 +235,9 @@ class ContractAnalysisWorkflow:
         self.nodes = {
             "input_validation": self.input_validation_node,
             "document_processing": self.document_processing_node,
-            "document_quality_validation": self.document_quality_validation_node,
             "entities_extraction": self.entities_extraction_node,
             "section_analysis": self.section_analysis_node,
-            "terms_validation": self.terms_validation_node,
             "step3_synthesis": self.step3_synthesis_node,
-            "compliance_analysis": self.compliance_analysis_node,
-            "diagram_analysis": self.diagram_analysis_node,
-            "risk_assessment": self.risk_assessment_node,
-            "recommendations_generation": self.recommendations_generation_node,
-            "final_validation": self.final_validation_node,
-            "report_compilation": self.report_compilation_node,
             "error_handling": self.error_handling_node,
             "retry_processing": self.retry_processing_node,
         }
@@ -336,29 +300,14 @@ class ContractAnalysisWorkflow:
         """Create the LangGraph workflow with node-based architecture."""
         workflow = StateGraph(RealEstateAgentState)
 
-        # Add all node execution methods to the workflow
+        # Add minimal node execution methods to the workflow
         workflow.add_node("validate_input", self.validate_input)
         workflow.add_node("process_document", self.process_document)
         workflow.add_node("extract_entities", self.extract_entities)
         workflow.add_node("extract_terms", self.extract_section_analysis)
         workflow.add_node("synthesize_step3", self.synthesize_step3)
-        workflow.add_node("analyze_compliance", self.analyze_australian_compliance)
-        workflow.add_node("analyze_contract_diagrams", self.analyze_contract_diagrams)
-        workflow.add_node("assess_risks", self.assess_contract_risks)
-        workflow.add_node("generate_recommendations", self.generate_recommendations)
-        workflow.add_node("compile_report", self.compile_analysis_report)
 
-        # Add validation nodes if enabled
-        if self.enable_validation:
-            workflow.add_node(
-                "validate_document_quality", self.validate_document_quality_step
-            )
-            workflow.add_node(
-                "validate_terms_completeness", self.validate_terms_completeness_step
-            )
-            workflow.add_node("validate_final_output", self.validate_final_output_step)
-
-        # Add utility nodes
+        # Utility nodes (only error handling and retry)
         workflow.add_node("handle_error", self.handle_processing_error)
         workflow.add_node("retry_processing", self.retry_failed_step)
 
@@ -390,90 +339,21 @@ class ContractAnalysisWorkflow:
             },
         )
 
-        # After terms extraction, check quality and proceed
+        # After terms extraction, proceed directly to Step 3 or retry on low confidence
         workflow.add_conditional_edges(
             "extract_terms",
             self.check_extraction_quality,
             {
-                "high_confidence": (
-                    "validate_terms_completeness"
-                    if self.enable_validation
-                    else "analyze_compliance"
-                ),
+                "high_confidence": "synthesize_step3",
                 "low_confidence": "retry_processing",
                 "error": "handle_error",
             },
         )
 
-        # Add conditional edges to check for error states after critical nodes
-        if self.enable_validation:
-            workflow.add_conditional_edges(
-                "validate_terms_completeness",
-                self.check_terms_validation_success,
-                {
-                    "success": "analyze_compliance",
-                    "retry": "retry_processing",
-                    "error": "handle_error",
-                },
-            )
-
-        workflow.add_conditional_edges(
-            "analyze_compliance",
-            self.check_compliance_analysis_success,
-            {
-                "success": "analyze_contract_diagrams",
-                "retry": "retry_processing",
-                "error": "handle_error",
-            },
-        )
-
-        workflow.add_conditional_edges(
-            "analyze_contract_diagrams",
-            self.check_diagram_analysis_success,
-            {
-                "success": "assess_risks",
-                "retry": "retry_processing",
-                "error": "handle_error",
-            },
-        )
-
-        workflow.add_conditional_edges(
-            "assess_risks",
-            self.check_risk_assessment_success,
-            {
-                "success": "generate_recommendations",
-                "retry": "retry_processing",
-                "error": "handle_error",
-            },
-        )
-
-        workflow.add_conditional_edges(
-            "generate_recommendations",
-            self.check_recommendations_success,
-            {
-                "success": (
-                    "validate_final_output"
-                    if self.enable_validation
-                    else "compile_report"
-                ),
-                "retry": "retry_processing",
-                "error": "handle_error",
-            },
-        )
-
-        if self.enable_validation:
-            workflow.add_conditional_edges(
-                "validate_final_output",
-                self.check_final_validation_success,
-                {
-                    "success": "compile_report",
-                    "retry": "retry_processing",
-                    "error": "handle_error",
-                },
-            )
+        # Route Step 3 synthesis to end
+        workflow.add_edge("synthesize_step3", "__end__")
 
         # Terminal conditions
-        workflow.add_edge("compile_report", "__end__")
         workflow.add_edge("handle_error", "__end__")
 
         # CRITICAL FIX: Add edges from retry_processing back to workflow steps
@@ -487,15 +367,8 @@ class ContractAnalysisWorkflow:
                 "retry_document_processing": "process_document",
                 "retry_entities_extraction": "extract_entities",
                 "retry_extraction": "extract_terms",
-                "retry_compliance": "analyze_compliance",
-                "retry_diagrams": "analyze_contract_diagrams",
-                "retry_risks": "assess_risks",
-                "retry_recommendations": "generate_recommendations",
-                "retry_validation": (
-                    "validate_final_output"
-                    if self.enable_validation
-                    else "compile_report"
-                ),
+                # With simplified workflow, route generic retries
+                "retry_extraction": "extract_terms",
                 "continue_workflow": "extract_entities",  # Default fallback
             },
         )
@@ -742,13 +615,7 @@ class ContractAnalysisWorkflow:
         )
 
     @langsmith_trace(name="validate_document_quality", run_type="tool")
-    def validate_document_quality_step(
-        self, state: RealEstateAgentState
-    ) -> RealEstateAgentState:
-        """Execute document quality validation node."""
-        return self._run_async_node(
-            lambda: self.document_quality_validation_node.execute(state)
-        )
+    # Removed: document quality validation, handled in Step 3 subflow where relevant
 
     def extract_section_analysis(
         self, state: RealEstateAgentState
@@ -756,55 +623,23 @@ class ContractAnalysisWorkflow:
         """Execute Step 2 section-by-section analysis node."""
         return self._run_async_node(lambda: self.section_analysis_node.execute(state))
 
-    def validate_terms_completeness_step(
-        self, state: RealEstateAgentState
-    ) -> RealEstateAgentState:
-        """Execute terms validation node."""
-        return self._run_async_node(lambda: self.terms_validation_node.execute(state))
+    # Removed: terms validation, covered by Step 3 synthesis outputs
 
     def synthesize_step3(self, state: RealEstateAgentState) -> RealEstateAgentState:
         """Execute Step 3 synthesis node."""
         return self._run_async_node(lambda: self.step3_synthesis_node.execute(state))
 
-    def analyze_australian_compliance(
-        self, state: RealEstateAgentState
-    ) -> RealEstateAgentState:
-        """Execute compliance analysis node."""
-        return self._run_async_node(
-            lambda: self.compliance_analysis_node.execute(state)
-        )
+    # Removed: compliance analysis node (replaced by Step 3 compliance summary)
 
-    def analyze_contract_diagrams(
-        self, state: RealEstateAgentState
-    ) -> RealEstateAgentState:
-        """Execute diagram analysis node."""
-        return self._run_async_node(lambda: self.diagram_analysis_node.execute(state))
+    # Removed: diagram analysis node (handled earlier in document processing)
 
-    def assess_contract_risks(
-        self, state: RealEstateAgentState
-    ) -> RealEstateAgentState:
-        """Execute risk assessment node."""
-        return self._run_async_node(lambda: self.risk_assessment_node.execute(state))
+    # Removed: separate risk assessment node (Step 3 risk aggregator replaces it)
 
-    def generate_recommendations(
-        self, state: RealEstateAgentState
-    ) -> RealEstateAgentState:
-        """Execute recommendations generation node."""
-        return self._run_async_node(
-            lambda: self.recommendations_generation_node.execute(state)
-        )
+    # Removed: recommendations node (Step 3 action plan replaces it)
 
-    def validate_final_output_step(
-        self, state: RealEstateAgentState
-    ) -> RealEstateAgentState:
-        """Execute final validation node."""
-        return self._run_async_node(lambda: self.final_validation_node.execute(state))
+    # Removed: final validation node
 
-    def compile_analysis_report(
-        self, state: RealEstateAgentState
-    ) -> RealEstateAgentState:
-        """Execute report compilation node."""
-        return self._run_async_node(lambda: self.report_compilation_node.execute(state))
+    # Removed: report compilation node (buyer report generated in Step 3)
 
     def handle_processing_error(
         self, state: RealEstateAgentState
@@ -1160,19 +995,11 @@ class ProgressTrackingWorkflow(ContractAnalysisWorkflow):
 
     # Fixed order of primary steps per PRD for resume logic
     _STEP_ORDER = [
-        "document_uploaded",  # 5% (emitted by service before workflow starts)
+        "document_uploaded",  # 5%
         "validate_input",  # 7%
         "process_document",  # 7-30%
-        "save_pages",  # 30-40%
-        "save_diagrams",  # 40-43%
-        "layout_format_cleanup",  # 43-48%
-        "validate_document_quality",  # 52%
         "extract_terms",  # 59%
-        "validate_terms_completeness",  # 60%
-        "analyze_compliance",  # 68%
-        "assess_risks",  # 75%
-        "generate_recommendations",  # 85%
-        "compile_report",  # 98%
+        "synthesize_step3",  # 60%
         "analysis_complete",  # 100%
     ]
 
@@ -1304,88 +1131,15 @@ class ProgressTrackingWorkflow(ContractAnalysisWorkflow):
         )
         return super().synthesize_step3(state)
 
-    async def analyze_australian_compliance(self, state):
-        if self._should_skip("analyze_compliance", state):
-            return state
-        self._ws_progress(
-            state,
-            "analyze_compliance",
-            68,
-            "Analyzing compliance with Australian property laws",
-        )
-        await self._notify_status(
-            state,
-            "analyze_compliance",
-            68,
-            "Analyzing compliance with Australian property laws",
-        )
-        return super().analyze_australian_compliance(state)
+    # Removed overridden progress step for compliance
 
-    async def assess_contract_risks(self, state):
-        if self._should_skip("assess_risks", state):
-            return state
-        self._ws_progress(
-            state, "assess_risks", 75, "Assessing contract risks and potential issues"
-        )
-        await self._notify_status(
-            state, "assess_risks", 75, "Assessing contract risks and potential issues"
-        )
-        return super().assess_contract_risks(state)
+    # Removed overridden progress step for risks
 
-    async def generate_recommendations(self, state):
-        if self._should_skip("generate_recommendations", state):
-            return state
-        self._ws_progress(
-            state,
-            "generate_recommendations",
-            85,
-            "Generating actionable recommendations",
-        )
-        await self._notify_status(
-            state,
-            "generate_recommendations",
-            85,
-            "Generating actionable recommendations",
-        )
-        return super().generate_recommendations(state)
+    # Removed overridden progress step for recommendations
 
-    async def analyze_contract_diagrams(self, state):
-        if self._should_skip("analyze_contract_diagrams", state):
-            return state
-        result = super().analyze_contract_diagrams(state)
-        if not (isinstance(result, dict) and result.get("error_state")):
-            self._ws_progress(
-                state,
-                "analyze_contract_diagrams",
-                65,
-                "Analyzing contract diagrams and visual elements",
-            )
-            await self._notify_status(
-                state,
-                "analyze_contract_diagrams",
-                65,
-                "Analyzing contract diagrams and visual elements",
-            )
-        return result
+    # Removed overridden progress step for diagram analysis
 
-    async def validate_final_output_step(self, state):
-        if self._should_skip("validate_final_output", state):
-            return state
-        result = super().validate_final_output_step(state)
-        if not (isinstance(result, dict) and result.get("error_state")):
-            self._ws_progress(
-                state,
-                "validate_final_output",
-                95,
-                "Performing final validation of analysis results",
-            )
-            await self._notify_status(
-                state,
-                "validate_final_output",
-                95,
-                "Performing final validation of analysis results",
-            )
-        return result
+    # Removed overridden progress step for final validation
 
     # ---------- Conditional Edge Overrides to handle resume skip ----------
     def check_processing_success(self, state):
@@ -1393,10 +1147,7 @@ class ProgressTrackingWorkflow(ContractAnalysisWorkflow):
             return "success"
         return super().check_processing_success(state)
 
-    def check_document_quality(self, state):
-        if self._should_skip("validate_document_quality", state):
-            return "quality_passed"
-        return super().check_document_quality(state)
+    # Removed skip override for document quality
 
     def check_extraction_quality(self, state):
         if self._should_skip("extract_terms", state):
@@ -1409,7 +1160,4 @@ class ProgressTrackingWorkflow(ContractAnalysisWorkflow):
             return "high_confidence" if contract_terms else "error"
         return super().check_extraction_quality(state)
 
-    def check_terms_validation_success(self, state):
-        if self._should_skip("validate_terms_completeness", state):
-            return "success"
-        return super().check_terms_validation_success(state)
+    # Removed skip override for terms validation

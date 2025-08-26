@@ -1,5 +1,6 @@
 import React from "react";
 import { motion } from "framer-motion";
+import { useNavigate } from "react-router-dom";
 import {
   BarChart3,
   TrendingUp,
@@ -18,21 +19,23 @@ import { cn } from "@/utils";
 
 const ReportsPage: React.FC = () => {
   const { recentAnalyses } = useAnalysisStore();
+  const navigate = useNavigate();
 
   // SEO for Reports page
   usePageSEO({
-    title: 'Reports - Real2AI',
-    description: 'Generate comprehensive reports from your property analyses. Professional documentation for contracts, valuations, and investment assessments.',
+    title: "Reports - Real2AI",
+    description:
+      "Generate comprehensive reports from your property analyses. Professional documentation for contracts, valuations, and investment assessments.",
     keywords: [
-      'property reports',
-      'analysis reports',
-      'contract reports',
-      'professional documentation',
-      'Real2AI reports',
-      'property analysis documentation'
+      "property reports",
+      "analysis reports",
+      "contract reports",
+      "professional documentation",
+      "Real2AI reports",
+      "property analysis documentation",
     ],
-    canonical: '/app/reports',
-    noIndex: true // Private reports page
+    canonical: "/app/reports",
+    noIndex: true, // Private reports page
   });
 
   // Calculate summary statistics
@@ -336,7 +339,10 @@ const ReportsPage: React.FC = () => {
                         return (
                           <tr
                             key={analysis.contract_id}
-                            className="border-b border-neutral-100"
+                            className="border-b border-neutral-100 hover:bg-neutral-50 cursor-pointer"
+                            onClick={() =>
+                              navigate(`/app/reports/${analysis.contract_id}`)
+                            }
                           >
                             <td className="py-3 px-4">
                               <div className="flex items-center gap-2">

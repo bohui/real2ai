@@ -293,6 +293,9 @@ class DocumentProcessingNode(BaseNode):
                 },
             )
 
+            # Also expose at top-level for downstream nodes that check it
+            updated_data["content_hmac"] = getattr(summary, "content_hmac", None)
+
             return self.update_state_step(
                 state, "document_processed", data=updated_data
             )

@@ -119,6 +119,22 @@ def langsmith_trace(name: Optional[str] = None, run_type: str = "llm", **trace_k
 
         def _sanitize_value(value: Any) -> Any:
             try:
+                # Handle classes explicitly (e.g., Pydantic models passed as schemas)
+                # so we don't attempt to serialize them as instances.
+                import inspect as _inspect  # local alias to avoid shadowing
+
+                if _inspect.isclass(value):
+                    try:
+                        # Prefer fully-qualified name for readability in LangSmith
+                        module_name = getattr(value, "__module__", "")
+                        class_name = getattr(value, "__name__", str(value))
+                        fq_name = (
+                            f"{module_name}.{class_name}" if module_name else class_name
+                        )
+                        return {"class": fq_name}
+                    except Exception:
+                        # Fallback to simple string if even that fails
+                        return str(value)
                 if value is None or isinstance(value, (int, float, bool)):
                     return value
                 if isinstance(value, str):

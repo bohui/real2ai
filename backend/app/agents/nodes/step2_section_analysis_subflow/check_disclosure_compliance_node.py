@@ -100,10 +100,7 @@ class DisclosureComplianceNode(ContractLLMNode):
                 ContractsRepository,
             )
 
-            content_hash = state.get("content_hash") or (
-                (state.get("document_data", {}) or {}).get("content_hash")
-                or (state.get("document_metadata", {}) or {}).get("content_hash")
-            )
+            content_hash = state.get("content_hash")
             if not content_hash:
                 return
             repo = ContractsRepository()

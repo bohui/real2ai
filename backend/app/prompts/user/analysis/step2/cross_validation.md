@@ -14,7 +14,7 @@ optional_variables:
   - "contract_type"
   - "retrieval_index_id"
   - "seed_snippets"
-model_compatibility: ["gemini-2.5-flash", "gpt-4"]
+model_compatibility: ["gemini-2.5-flash"]
 max_tokens: 10000
 temperature_range: [0.1, 0.3]
 output_parser: CrossValidationResult

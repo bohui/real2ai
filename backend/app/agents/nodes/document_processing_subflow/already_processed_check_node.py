@@ -58,7 +58,7 @@ class AlreadyProcessedCheckNode(DocumentProcessingNodeBase):
 
             # Check if document is already processed by looking at database
             summary = await self._get_processed_document_summary(
-                user_client, document_id
+                user_client, document_id, state
             )
 
             updated_state = state.copy()
@@ -111,7 +111,9 @@ class AlreadyProcessedCheckNode(DocumentProcessingNodeBase):
                 },
             )
 
-    async def _get_processed_document_summary(self, user_client, document_id: str):
+    async def _get_processed_document_summary(
+        self, user_client, document_id: str, state: DocumentProcessingState
+    ):
         """
         Get processed document summary from database.
 
@@ -156,6 +158,7 @@ class AlreadyProcessedCheckNode(DocumentProcessingNodeBase):
                     document_obj, "text_extraction_method", None
                 ),
                 "processing_status": document_obj.processing_status,
+                "processing_results": getattr(document_obj, "processing_results", {}),
                 "original_filename": document_obj.original_filename,
                 "file_type": document_obj.file_type,
                 "storage_path": document_obj.storage_path,
@@ -163,14 +166,20 @@ class AlreadyProcessedCheckNode(DocumentProcessingNodeBase):
                 "artifact_text_id": getattr(document_obj, "artifact_text_id", None),
             }
 
-            # Check if document has been processed
+            # Determine processed status: prefer presence of processing_results; fallback to processing_status
             from app.models.supabase_models import DocumentStatus
 
+            processing_results = document.get("processing_results") or {}
             processing_status = document.get("processing_status")
-            if processing_status not in [
-                DocumentStatus.BASIC_COMPLETE,
-                DocumentStatus.ANALYSIS_COMPLETE,
-            ]:
+            is_processed = bool(processing_results) or (
+                processing_status
+                in [
+                    DocumentStatus.BASIC_COMPLETE,
+                    DocumentStatus.ANALYSIS_COMPLETE,
+                ]
+            )
+
+            if not is_processed:
                 return None
 
             # Check for artifacts presence using repositories
@@ -180,60 +189,77 @@ class AlreadyProcessedCheckNode(DocumentProcessingNodeBase):
 
             artifacts_repo = ArtifactsRepository()
 
-            # Check if there are page artifacts or diagram artifacts
+            # Compute content_hmac from state if present, otherwise from document bytes via storage
+            # Fall back to stored content_hash only if download fails
             content_hash = document.get("content_hash")
-            if not content_hash:
-                return None
-
-            # Compute content_hmac by downloading and hashing file content
-            storage_path = document.get("storage_path")
-            if not storage_path:
-                return None
+            content_hmac = None
 
             try:
-                # Download file content from storage to compute proper content_hmac
-                file_content = await user_client.download_file(
-                    bucket="documents", path=storage_path
-                )
-                if not isinstance(file_content, (bytes, bytearray)):
-                    # Some clients may return str; convert to bytes
-                    file_content = (
-                        bytes(file_content, "utf-8")
-                        if isinstance(file_content, str)
-                        else bytes(file_content)
+                # Prefer HMAC from state if already computed upstream
+                if isinstance(state, dict) and state.get("content_hmac"):
+                    content_hmac = state.get("content_hmac")
+                else:
+                    storage_path = document.get("storage_path")
+                    if not storage_path:
+                        return None
+
+                    # Download file content to compute proper content_hmac
+                    file_content = await user_client.download_file(
+                        bucket="documents", path=storage_path
                     )
+                    if not isinstance(file_content, (bytes, bytearray)):
+                        file_content = (
+                            bytes(file_content, "utf-8")
+                            if isinstance(file_content, str)
+                            else bytes(file_content)
+                        )
 
-                # Compute SHA256 hash of file content
-                import hashlib
+                    # Compute HMAC using configured secret
+                    from app.utils.content_utils import compute_content_hmac
 
-                content_hmac = hashlib.sha256(file_content).hexdigest()
+                    content_hmac = compute_content_hmac(file_content)
 
-                # Verify it matches stored content_hash (optional validation)
-                if content_hmac != content_hash:
+                # Optionally validate against stored hash if available
+                if content_hash and content_hmac and content_hmac != content_hash:
                     self._log_warning(
                         f"Content hash mismatch: computed={content_hmac[:12]}..., stored={content_hash[:12]}... for document {document_id}"
                     )
-                    # Continue with computed hash for artifact queries
-
             except Exception as e:
                 self._log_warning(
-                    f"Failed to download file content for hash computation: {e}"
+                    f"Failed to compute content HMAC from document bytes: {e}"
                 )
-                # Fallback to stored content_hash if download fails
                 content_hmac = content_hash
 
-            # Query for page artifacts (text content)
-            page_artifacts = await artifacts_repo.get_page_artifacts_by_content_hmac(
-                content_hmac
-            )
-            # Query for diagram artifacts
-            diagram_artifacts = (
-                await artifacts_repo.get_diagram_artifacts_by_content_hmac(content_hmac)
-            )
-
-            # Document is considered processed if it has at least one page artifact
-            if not page_artifacts:
+            if not content_hmac:
                 return None
+
+            # Try to directly load formatted text artifact first
+            full_text = ""
+            try:
+                from app.utils.storage_utils import ArtifactStorageService
+
+                storage_service = ArtifactStorageService()
+                formatted_uri = f"supabase://{storage_service.bucket_name}/{content_hmac}/full_text/formatted_text.txt"
+                full_text = await storage_service.download_text_blob(formatted_uri)
+            except Exception as formatted_err:
+                self._log_debug(
+                    f"Formatted text artifact not found or failed to download: {formatted_err}"
+                )
+                # Fallback: reconstruct from page artifacts
+                page_artifacts = (
+                    await artifacts_repo.get_page_artifacts_by_content_hmac(
+                        content_hmac
+                    )
+                )
+                # Query for diagram artifacts (may be used by downstream, keep for parity)
+                diagram_artifacts = (
+                    await artifacts_repo.get_diagram_artifacts_by_content_hmac(
+                        content_hmac
+                    )
+                )
+
+                if not page_artifacts:
+                    return None
 
             # Get australian_state from document or related contract
             australian_state = document.get("australian_state")
@@ -250,29 +276,39 @@ class AlreadyProcessedCheckNode(DocumentProcessingNodeBase):
             if not australian_state:
                 return None
 
-            # Reconstruct full text from page artifacts
-            full_text = ""
-            if page_artifacts:
-                # Sort by page number and concatenate text
-                sorted_artifacts = sorted(page_artifacts, key=lambda x: x.page_number)
-                page_texts = []
-                for artifact in sorted_artifacts:
-                    # Download text content from storage
-                    try:
+            # If we still don't have full_text, reconstruct from pages
+            if not full_text:
+                try:
+                    page_artifacts = (
+                        await artifacts_repo.get_page_artifacts_by_content_hmac(
+                            content_hmac
+                        )
+                    )
+                    if page_artifacts:
+                        sorted_artifacts = sorted(
+                            page_artifacts, key=lambda x: x.page_number
+                        )
+                        page_texts = []
                         from app.utils.storage_utils import ArtifactStorageService
 
                         storage_service = ArtifactStorageService()
-                        page_text = await storage_service.download_text_blob(
-                            artifact.page_text_uri
-                        )
-                        if page_text:
-                            page_texts.append(page_text)
-                    except Exception as e:
-                        self._log_warning(
-                            f"Failed to download page text for artifact {artifact.id}: {e}"
-                        )
+                        for artifact in sorted_artifacts:
+                            try:
+                                page_text = await storage_service.download_text_blob(
+                                    artifact.page_text_uri
+                                )
+                                if page_text:
+                                    page_texts.append(page_text)
+                            except Exception as e:
+                                self._log_warning(
+                                    f"Failed to download page text for artifact {artifact.id}: {e}"
+                                )
 
-                full_text = "\n\n".join(page_texts)
+                        full_text = "\n\n".join(page_texts)
+                except Exception as page_err:
+                    self._log_warning(
+                        f"Error reconstructing full text from page artifacts: {page_err}"
+                    )
 
             # Fallback if no text could be reconstructed
             if not full_text:
@@ -289,7 +325,8 @@ class AlreadyProcessedCheckNode(DocumentProcessingNodeBase):
                 character_count=len(full_text),
                 total_word_count=document.get("total_word_count")
                 or len(full_text.split()),
-                total_pages=document.get("total_pages") or len(page_artifacts),
+                total_pages=document.get("total_pages")
+                or (len(page_artifacts) if "page_artifacts" in locals() else 0),
                 extraction_method=document.get("text_extraction_method") or "unknown",
                 extraction_confidence=document.get("extraction_confidence") or 0.0,
                 processing_timestamp=(

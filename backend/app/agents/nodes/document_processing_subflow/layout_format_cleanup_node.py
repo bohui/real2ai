@@ -44,11 +44,7 @@ class LayoutFormatCleanupNode(DocumentProcessingNodeBase):
 
             document_id = state.get("document_id")
             text_extraction_result = state.get("text_extraction_result")
-            content_hash = (
-                state.get("content_hash")
-                or ((state.get("_document_metadata") or {}).get("content_hash"))
-                or state.get("content_hmac")
-            )
+            content_hash = state.get("content_hash")
 
             if not document_id:
                 return self._handle_error(
@@ -192,12 +188,6 @@ class LayoutFormatCleanupNode(DocumentProcessingNodeBase):
             # Update contract raw_text with formatted text
             try:
                 content_hash = state.get("content_hash")
-                if not content_hash:
-                    metadata = state.get("_document_metadata") or {}
-                    content_hash = state.get("content_hmac") or metadata.get(
-                        "content_hash"
-                    )
-
                 if content_hash:
                     contracts_repo = ContractsRepository()
                     await contracts_repo.upsert_contract_by_content_hash(

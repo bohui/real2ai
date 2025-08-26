@@ -179,10 +179,10 @@ class UpdateMetricsNode(DocumentProcessingNodeBase):
                 "overall_quality_score": avg_confidence,  # Use confidence as quality proxy
                 "text_extraction_method": primary_method,
                 "processing_completed_at": processing_completed_at,
-                "processing_results": {
-                    "text_extraction": text_extraction_dict,  # full_text excluded
-                    "diagram_processing": diagram_processing_serializable,
-                },
+                # "processing_results": {
+                #     "text_extraction": text_extraction_dict,  # full_text excluded
+                #     "diagram_processing": diagram_processing_serializable,
+                # },
             }
 
             # Add artifact_text_id if available to link document to its text artifact

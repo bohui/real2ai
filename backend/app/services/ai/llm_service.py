@@ -209,31 +209,43 @@ class LLMService(UserAwareService):
                 try:
                     # Provide Pydantic model directly as response_schema
                     pyd_model = getattr(output_parser, "pydantic_model", None)
+                    # Determine if schema should be embedded in prompt instead of response_schema
+                    # this is due to gemini doesn't support complex response_schema
+                    schema_in_prompt: bool = False
                     if pyd_model is not None:
-                        client_kwargs["response_schema"] = pyd_model
-
-                    # Strip trailing format instructions if they were appended to the prompt
-                    try:
-                        format_instructions = output_parser.get_format_instructions()
-                    except Exception:
-                        format_instructions = None
-                    if format_instructions:
-                        # Remove optional header + instructions at the end of the prompt
-                        header = "Format And Field Description Instructions:\n\n"
-                        # Pattern removes either the exact instructions or header+instructions if present at end
-                        pattern = (
-                            r"(?:\n\n)?(?:"
-                            + re.escape(header)
-                            + r")?"
-                            + re.escape(format_instructions)
-                            + r"\s*$"
+                        schema_in_prompt = bool(
+                            getattr(pyd_model, "schema_in_prompt", False)
                         )
-                        cleaned = re.sub(pattern, "", prompt_to_send, flags=re.DOTALL)
-                        if cleaned != prompt_to_send:
-                            logger.debug(
-                                "Stripped output parser format instructions from prompt for Gemini"
+                        if not schema_in_prompt:
+                            client_kwargs["response_schema"] = pyd_model
+
+                        # Strip trailing format instructions if they were appended to the prompt
+                        try:
+                            format_instructions = (
+                                output_parser.get_format_instructions()
                             )
-                            prompt_to_send = cleaned
+                        except Exception:
+                            format_instructions = None
+                        # Only strip format instructions when using response_schema; if schema is in prompt, keep them
+                        if format_instructions and not schema_in_prompt:
+                            # Remove optional header + instructions at the end of the prompt
+                            header = "Format And Field Description Instructions:\n\n"
+                            # Pattern removes either the exact instructions or header+instructions if present at end
+                            pattern = (
+                                r"(?:\n\n)?(?:"
+                                + re.escape(header)
+                                + r")?"
+                                + re.escape(format_instructions)
+                                + r"\s*$"
+                            )
+                            cleaned = re.sub(
+                                pattern, "", prompt_to_send, flags=re.DOTALL
+                            )
+                            if cleaned != prompt_to_send:
+                                logger.debug(
+                                    "Stripped output parser format instructions from prompt for Gemini"
+                                )
+                                prompt_to_send = cleaned
                 except Exception as strip_error:
                     logger.warning(
                         f"Failed Gemini structured-output preparation; proceeding with raw prompt: {strip_error}"
@@ -275,7 +287,10 @@ class LLMService(UserAwareService):
                 )
 
                 logger.warning(
-                    f"Parsing failed on attempt {attempt}/{attempts} "
+                    f"
+                    
+                    
+                    {attempt}/{attempts} "
                     f"(client={client_key}, model={model_name}). "
                     f"errors(validation={len(validation_errors)}, parsing={len(parsing_errors)}), "
                     f"confidence={parsing_result.confidence_score:.2f}, "
