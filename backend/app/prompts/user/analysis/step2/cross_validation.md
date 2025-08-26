@@ -2,18 +2,18 @@
 type: "user"
 category: "instructions"
 name: "cross_validation_analysis"
-version: "1.0.0"
+version: "2.0.0"
 description: "Step 2.12 - Cross-Section Validation and Consistency Checks"
 fragment_orchestration: "step2_cross_validation"
 required_variables:
-  - "contract_text"
   - "all_section_results"
   - "australian_state"
   - "analysis_timestamp"
 optional_variables:
-  - "entities_extraction"
   - "legal_requirements_matrix"
   - "contract_type"
+  - "retrieval_index_id"
+  - "seed_snippets"
 model_compatibility: ["gemini-2.5-flash", "gpt-4"]
 max_tokens: 10000
 temperature_range: [0.1, 0.3]
@@ -192,18 +192,9 @@ All previous section analysis results for cross-validation:
 4. **Professional Standards**: Ensure professional standard compliance
 
 ## Contract Text for Reference
-
-```
-{{contract_text}}
-```
+Not required; rely on Phase outputs and targeted retrieval.
 
 ## Additional Context
-
-{% if entities_extraction %}
-### Entity Extraction Results
-Original entity extraction for cross-validation:
-{{entities_extraction | tojsonpretty}}
-{% endif %}
 
 {% if legal_requirements_matrix %}
 ### Legal Requirements

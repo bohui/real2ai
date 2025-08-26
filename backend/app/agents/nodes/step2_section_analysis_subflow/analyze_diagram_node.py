@@ -176,11 +176,139 @@ class AnalyzeDiagramNode(ContractLLMNode):
             pass
         return None
 
+    async def execute(self, state: Step2AnalysisState) -> Step2AnalysisState:  # type: ignore[override]
+        # Progress tick
+        progress_update = self._get_progress_update(state)
+        state.update(progress_update)
+
+        try:
+            self._log_step_debug("Starting diagram semantics analysis", state)
+
+            # 1) Short-circuit and ensure diagram URIs
+            short = await self._short_circuit_check(state)
+            if short is not None:
+                return short
+
+            uploaded = state.get("uploaded_diagrams") or {}
+            if not uploaded:
+                # If still empty after ensure, skip gracefully
+                return self.update_state_step(
+                    state,
+                    f"{self.node_name}_skipped",
+                    data={"reason": "no_diagrams_available"},
+                )
+
+            # 2) Build context + parser + composition
+            context, parser, composition_name = await self._build_context_and_parser(
+                state
+            )
+            # PromptContext -> raw dict variables
+            try:
+                context_vars = getattr(context, "variables", {}) if context else {}
+            except Exception:
+                context_vars = {}
+
+            # 3) Call image semantics per diagram (download bytes on-demand)
+            from app.utils.storage_utils import ArtifactStorageService
+
+            storage_service = ArtifactStorageService()
+            llm_service = await self._get_llm_service()
+
+            per_image_results = []
+            for filename, uri in uploaded.items() if isinstance(uploaded, dict) else []:
+                try:
+                    # Download bytes just-in-time
+                    blob = await storage_service.download_blob(uri)
+                    if not isinstance(blob, (bytes, bytearray)):
+                        continue
+                    content_bytes = bytes(blob)
+
+                    # Infer content-type from filename/uri
+                    lower = str(filename or uri).lower()
+                    if lower.endswith(".png"):
+                        ctype = "image/png"
+                    elif lower.endswith(".jpg") or lower.endswith(".jpeg"):
+                        ctype = "image/jpeg"
+                    elif lower.endswith(".webp"):
+                        ctype = "image/webp"
+                    elif lower.endswith(".pdf"):
+                        ctype = "application/pdf"
+                    else:
+                        ctype = "image/jpeg"
+
+                    result = await llm_service.generate_image_semantics(
+                        content=content_bytes,
+                        content_type=ctype,
+                        filename=str(filename),
+                        composition_name=composition_name,
+                        context_variables=context_vars,
+                        output_parser=parser,
+                    )
+
+                    # Collect parsed object (ParsingResult or str)
+                    parsed_obj = None
+                    if hasattr(result, "success"):
+                        parsed_obj = getattr(result, "parsed_data", None)
+                    else:
+                        parsed_obj = result
+
+                    # Coerce to model, then to dict
+                    model_obj = self._coerce_to_model(parsed_obj)
+                    if model_obj is None:
+                        continue
+                    payload = (
+                        model_obj.model_dump()
+                        if hasattr(model_obj, "model_dump")
+                        else model_obj
+                    )
+                    per_image_results.append(
+                        {
+                            "filename": filename,
+                            "semantics": payload,
+                        }
+                    )
+                except Exception as per_err:
+                    self._log_warning(
+                        "Image semantics failed for one diagram",
+                        extra={"error": str(per_err), "filename": str(filename)},
+                    )
+                    continue
+
+            if not per_image_results:
+                return self.update_state_step(
+                    state,
+                    f"{self.node_name}_skipped",
+                    data={"reason": "no_results_from_diagrams"},
+                )
+
+            aggregate = {
+                "images": per_image_results,
+                "metadata": {
+                    "diagram_count": len(per_image_results),
+                    "filenames": [r.get("filename") for r in per_image_results],
+                    "generated_at": datetime.now(UTC).isoformat(),
+                },
+            }
+
+            # 4) Quality assessment (simple)
+            quality = {"ok": True, "diagram_count": len(per_image_results)}
+
+            # 5) Persist and update state
+            await self._persist_results(state, aggregate)
+            return await self._update_state_success(state, aggregate, quality)
+
+        except Exception as e:
+            self._log_exception(e, state, {"operation": f"{self.node_name}_execute"})
+            return self._handle_node_error(
+                state, e, f"{self.node_name} failed: {str(e)}"
+            )
+
     async def _ensure_uploaded_diagrams(self, state: Step2AnalysisState) -> None:
         """Populate state.uploaded_diagrams from artifacts if empty.
 
-        Loads diagram/image artifacts by content hash/HMAC and downloads image bytes
-        into a mapping of filename -> bytes. Best-effort; logs are handled by base.
+        Stores a lightweight filename->uri mapping only (no binary content) to
+        avoid memory overhead. This node is text-only and does not require raw
+        image bytes. Best-effort; logs are handled by base.
         """
         try:
             if (state.get("uploaded_diagrams") or {}) and isinstance(
@@ -196,10 +324,8 @@ class AnalyzeDiagramNode(ContractLLMNode):
             from app.services.repositories.artifacts_repository import (
                 ArtifactsRepository,
             )
-            from app.utils.storage_utils import ArtifactStorageService
 
             artifacts_repo = ArtifactsRepository()
-            storage_service = ArtifactStorageService()
 
             # Fetch diagram artifacts (includes diagrams and images)
             diagram_artifacts = (
@@ -208,7 +334,7 @@ class AnalyzeDiagramNode(ContractLLMNode):
             if not diagram_artifacts:
                 return
 
-            result: Dict[str, bytes] = {}
+            result: Dict[str, str] = {}
             for art in diagram_artifacts:
                 try:
                     uri = getattr(art, "image_uri", None)
@@ -218,10 +344,8 @@ class AnalyzeDiagramNode(ContractLLMNode):
                         f"{key}_p{page}.bin" if page is not None else f"{key}.bin"
                     )
                     if uri:
-                        # Only download known storage URIs
-                        content = await storage_service.download_blob(uri)
-                        if isinstance(content, (bytes, bytearray)):
-                            result[filename] = bytes(content)
+                        # Store URI string only; no downloads here
+                        result[filename] = uri
                 except Exception:
                     continue
 

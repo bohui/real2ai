@@ -22,6 +22,8 @@ from app.core.prompts.parsers import (
     RetryingPydanticOutputParser as BaseOutputParser,
     ParsingResult,
 )
+from app.core.prompts import get_prompt_manager, PromptContext
+from typing import Union
 
 
 logger = logging.getLogger(__name__)
@@ -296,6 +298,76 @@ class LLMService(UserAwareService):
                 client_name="LLMService",
                 original_error=e,
             )
+
+    async def generate_image_semantics(
+        self,
+        *,
+        content: bytes,
+        content_type: str,
+        filename: str,
+        composition_name: str,
+        context_variables: Dict[str, Any],
+        model: Optional[str] = None,
+        output_parser: Optional[BaseOutputParser[Any]] = None,
+        parse_generation_max_attempts: int = DEFAULT_PARSE_GENERATION_MAX_ATTEMPTS,
+    ) -> Union[str, ParsingResult]:
+        """Generate structured image semantics via provider-specific vision API.
+
+        - Renders composed prompts (system+user) using the prompt manager
+        - Routes to Gemini client for image analysis
+        - Optionally parses output via a provided Pydantic parser
+        """
+        try:
+            # Compose prompts
+            prompt_manager = get_prompt_manager()
+            context = PromptContext(
+                context_type="analysis", variables=context_variables
+            )
+            composition_result = await prompt_manager.render_composed(
+                composition_name=composition_name,
+                context=context,
+                output_parser=output_parser,
+            )
+            analysis_prompt: str = composition_result["user_prompt"]
+            system_prompt: str = composition_result.get("system_prompt", "")
+
+            # For now, route images to Gemini.
+            ai_response = await self.gemini.gemini_client.analyze_image_semantics(
+                content=content,
+                content_type=content_type,
+                analysis_context={
+                    "prompt": analysis_prompt,
+                    "system_prompt": system_prompt,
+                    "expects_structured_output": output_parser is not None,
+                    "output_format": "json" if output_parser is not None else "text",
+                    "filename": filename,
+                },
+            )
+
+            if output_parser is None:
+                return ai_response.get("content", "")
+
+            # Parse with retries
+            return await output_parser.parse_with_retries(
+                ai_response.get("content", ""),
+                max_attempts=parse_generation_max_attempts,
+                model_name=model or "gemini",
+            )
+        except (ClientRateLimitError, ClientQuotaExceededError) as e:
+            logger.warning(f"Image semantics quota/limit: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"generate_image_semantics failed: {e}")
+            if output_parser is not None:
+                return ParsingResult(
+                    success=False,
+                    parsed_data=None,
+                    raw_output=str(e),
+                    confidence_score=0.0,
+                    validation_errors=[str(e)],
+                    parsing_errors=[str(e)],
+                )
+            raise
 
     async def health_check(self) -> Dict[str, Any]:
         """Check service health of both underlying clients."""
