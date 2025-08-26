@@ -2,7 +2,7 @@
 type: "user"
 category: "instructions"
 name: "step3_risk_aggregation"
-version: "1.2.0"
+version: "1.3.0"
 description: "Step 3 - Risk Aggregation and Prioritization"
 fragment_orchestration: "step3_risk_aggregation"
 required_variables:
@@ -113,40 +113,6 @@ Return a `RiskSummaryResult` object with:
 2. **HIGH** risks next, sorted by risk_score (likelihood × impact)
 3. **MEDIUM** and **LOW** risks follow in order of risk_score
 4. Include evidence_refs for each risk (minimum 1 reference)
-
-### Example Output Structure
-```json
-{
-  "overall_risk_score": 0.75,
-  "top_risks": [
-    {
-      "title": "Unregistered Drainage Easement",
-      "description": "Survey plan shows potential unregistered easement for stormwater drainage across rear boundary, affecting 15% of property area and limiting development potential.",
-      "category": "title",
-      "severity": "high",
-      "likelihood": 0.8,
-      "impact": 0.9,
-      "evidence_refs": ["title_encumbrances_result.survey_analysis.potential_easements[0]"]
-    },
-    {
-      "title": "Accelerated Settlement Timeline",
-      "description": "21-day settlement period is 40% shorter than market standard, increasing risk of finance approval delays and incomplete due diligence.",
-      "category": "settlement",
-      "severity": "medium",
-      "likelihood": 0.6,
-      "impact": 0.7,
-      "evidence_refs": ["settlement_logistics_result.timeline_analysis.settlement_period"]
-    }
-  ],
-  "category_breakdown": {
-    "title": 0.9,
-    "settlement": 0.6,
-    "compliance": 0.3
-  },
-  "rationale": "Overall high risk driven by significant title uncertainty from unregistered easement. Settlement timeline pressure compounds risk. Compliance issues are minor but require attention.",
-  "confidence": 0.92
-}
-```
 
 ### Critical Instructions
 - **Strictly adhere to the RiskSummaryResult schema**

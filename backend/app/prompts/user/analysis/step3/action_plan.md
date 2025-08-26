@@ -2,7 +2,7 @@
 type: "user"
 category: "instructions"
 name: "step3_action_plan"
-version: "1.2.0"
+version: "1.3.0"
 description: "Step 3 - Recommended Actions & Timeline"
 fragment_orchestration: "step3_action_plan"
 required_variables:
@@ -134,70 +134,6 @@ Return an `ActionPlanResult` object with:
 - **Dependencies must reference valid action titles**
 - **Due dates must be realistic and achievable**
 - **Owners must be appropriate for the action type**
-
-### Example Output Structure
-```json
-{
-  "actions": [
-    {
-      "title": "Arrange Building and Pest Inspection",
-      "description": "Engage a qualified building and pest inspector to conduct a comprehensive inspection of the property, including structural elements, pest activity, and building compliance issues.",
-      "owner": "buyer",
-      "priority": "high",
-      "due_by": {
-        "relative_deadline": "within 5 days of contract exchange"
-      },
-      "dependencies": [],
-      "blocking_risks": ["Structural defects", "Termite damage"],
-      "estimated_duration_days": 3
-    },
-    {
-      "title": "Submit Finance Application",
-      "description": "Lodge formal finance application with lender including all required documentation, property valuation, and loan terms confirmation.",
-      "owner": "buyer",
-      "priority": "critical",
-      "due_by": {
-        "relative_deadline": "within 2 days of contract exchange"
-      },
-      "dependencies": [],
-      "blocking_risks": ["Finance rejection", "Valuation shortfall"],
-      "estimated_duration_days": 7
-    },
-    {
-      "title": "Review Building Inspection Report",
-      "description": "Analyze building inspection findings with solicitor to determine if any issues constitute grounds for contract termination or price renegotiation.",
-      "owner": "solicitor",
-      "priority": "high",
-      "due_by": {
-        "relative_deadline": "within 2 days of inspection completion"
-      },
-      "dependencies": ["Arrange Building and Pest Inspection"],
-      "blocking_risks": ["Major structural defects requiring contract exit"],
-      "estimated_duration_days": 1
-    },
-    {
-      "title": "Provide Unconditional Notice",
-      "description": "Submit formal unconditional notice to vendor's solicitor confirming satisfaction of all conditions precedent and commitment to proceed to settlement.",
-      "owner": "solicitor",
-      "priority": "critical",
-      "due_by": {
-        "date": "2025-02-15"
-      },
-      "dependencies": ["Submit Finance Application", "Review Building Inspection Report"],
-      "blocking_risks": ["Contract becomes void if not provided on time"],
-      "estimated_duration_days": 1
-    }
-  ],
-  "timeline_summary": "Critical 14-day period focusing on finance approval and property inspections, followed by unconditional commitment and settlement preparation over 21 days total.",
-  "critical_path": ["Submit Finance Application", "Provide Unconditional Notice"],
-  "total_estimated_days": 21,
-  "metadata": {
-    "analysis_timestamp": "{{analysis_timestamp}}",
-    "conditions_count": 3,
-    "settlement_period_days": 21
-  }
-}
-```
 
 ### Critical Instructions
 - **Strictly adhere to the ActionPlanResult schema**

@@ -2,7 +2,7 @@
 type: "user"
 category: "instructions"
 name: "step3_compliance_score"
-version: "1.2.0"
+version: "1.3.0"
 description: "Step 3 - Compliance Readiness Score"
 fragment_orchestration: "step3_compliance_score"
 required_variables:
@@ -134,54 +134,6 @@ Return a `ComplianceSummaryResult` object with:
 - **Include relevant legal references where applicable**
 - **Provide actionable remediation guidance**
 - **Estimate realistic timeframes for resolution**
-
-### Example Output Structure
-```json
-{
-  "score": 0.75,
-  "status": "partially_compliant",
-  "gaps": [
-    {
-      "name": "Missing Building Compliance Certificate",
-      "description": "The vendor has not provided a current building compliance certificate as required under section 32 vendor statement obligations for this jurisdiction.",
-      "severity": "high",
-      "remediation": "Request vendor to obtain compliance certificate from local council. If unavailable, seek legal advice on alternative compliance pathways or risk mitigation.",
-      "legal_reference": "Conveyancing Act 1919 (NSW) s32, Property Law Act 1958 (VIC) s32",
-      "estimated_remediation_days": 14
-    },
-    {
-      "name": "Incomplete Strata Financial Statements",
-      "description": "Strata plan financial statements provided are missing the most recent quarterly report and do not include capital works fund details.",
-      "severity": "medium",
-      "remediation": "Contact strata manager to obtain complete financial records including capital works fund statements and recent levy notices.",
-      "legal_reference": "Strata Schemes Management Act 2015 (NSW) Schedule 3",
-      "estimated_remediation_days": 7
-    },
-    {
-      "name": "Settlement Timeline Pressure",
-      "description": "The 21-day settlement period may not provide sufficient time for standard due diligence and compliance verification processes.",
-      "severity": "medium",
-      "remediation": "Negotiate settlement extension with vendor or implement accelerated due diligence timeline with increased resource allocation.",
-      "estimated_remediation_days": 3
-    }
-  ],
-  "remediation_readiness": "Most identified gaps can be remediated through vendor cooperation and standard processes. Timeline pressure requires immediate attention to resource allocation.",
-  "key_dependencies": ["vendor_cooperation", "council_responsiveness", "strata_manager_availability"],
-  "total_gaps_by_severity": {
-    "high": 1,
-    "medium": 2,
-    "low": 0,
-    "critical": 0
-  },
-  "estimated_remediation_timeline": 14,
-  "metadata": {
-    "analysis_timestamp": "{{analysis_timestamp}}",
-    "jurisdiction": "{{australian_state}}",
-    "total_disclosures_reviewed": 8,
-    "missing_disclosure_count": 2
-  }
-}
-```
 
 ### Scoring Consistency Rules
 - **Critical gaps**: Score cannot exceed 0.5

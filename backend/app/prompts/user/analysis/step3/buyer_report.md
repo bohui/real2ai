@@ -2,7 +2,7 @@
 type: "user"
 category: "instructions"
 name: "step3_buyer_report"
-version: "1.2.0"
+version: "1.3.0"
 description: "Step 3 - Buyer Report Synthesis"
 fragment_orchestration: "step3_buyer_report"
 required_variables:
@@ -155,88 +155,6 @@ Return a `BuyerReportResult` object with:
 5. **evidence_refs**: Source references for traceability
 6. **overall_recommendation**: Final recommendation
 7. **confidence_level**: Analysis confidence (0.7-1.0)
-
-### Example Output Structure
-```json
-{
-  "executive_summary": "Our analysis of this NSW residential property contract reveals several important considerations requiring your attention. While the property and financial terms are generally favorable, we've identified a potential unregistered easement issue that requires immediate investigation and a compressed settlement timeline that may challenge your preparation time. We recommend proceeding with caution while addressing these specific concerns through the outlined action plan.",
-  "section_summaries": [
-    {
-      "section_type": "title_encumbrances",
-      "name": "Title & Encumbrances",
-      "summary": "Title is clear of major encumbrances, but survey indicates potential unregistered drainage easement affecting rear boundary requiring investigation.",
-      "status": "WARNING"
-    },
-    {
-      "section_type": "settlement_logistics",
-      "name": "Settlement Process",
-      "summary": "21-day settlement period is achievable but requires immediate action on finance approval and inspections to meet deadlines.",
-      "status": "WARNING"
-    },
-    {
-      "section_type": "financial_terms",
-      "name": "Financial Terms",
-      "summary": "Purchase price is market-appropriate with standard deposit terms and clear GST treatment. No significant financial concerns identified.",
-      "status": "OK"
-    },
-    {
-      "section_type": "conditions",
-      "name": "Contract Conditions",
-      "summary": "Standard finance and building inspection conditions provide adequate buyer protection with reasonable timeframes for completion.",
-      "status": "OK"
-    }
-  ],
-  "key_risks": [
-    {
-      "title": "Unregistered Drainage Easement",
-      "description": "Survey plan indicates potential drainage easement across rear boundary not shown on title, which could limit property use and affect value.",
-      "severity": "high",
-      "impact_summary": "May restrict development options and reduce property value by 5-10%"
-    },
-    {
-      "title": "Compressed Settlement Timeline",
-      "description": "21-day settlement period leaves minimal time for due diligence, finance approval, and issue resolution.",
-      "severity": "medium",
-      "impact_summary": "Risk of delayed settlement penalties or contract termination if deadlines not met"
-    }
-  ],
-  "action_plan_overview": [
-    {
-      "title": "Investigate Potential Easement",
-      "owner": "solicitor",
-      "urgency": "HIGH",
-      "timeline": "within 5 days"
-    },
-    {
-      "title": "Expedite Finance Application",
-      "owner": "buyer",
-      "urgency": "IMMEDIATE",
-      "timeline": "within 2 days"
-    },
-    {
-      "title": "Arrange Building Inspection",
-      "owner": "buyer",
-      "urgency": "HIGH",
-      "timeline": "within 3 days"
-    }
-  ],
-  "evidence_refs": [
-    "title_encumbrances_result.survey_analysis.potential_easements",
-    "settlement_logistics_result.timeline_analysis.settlement_period",
-    "risk_summary_result.top_risks",
-    "action_plan_result.critical_path"
-  ],
-  "overall_recommendation": "PROCEED_WITH_CAUTION",
-  "confidence_level": 0.88,
-  "metadata": {
-    "analysis_timestamp": "{{analysis_timestamp}}",
-    "jurisdiction": "{{australian_state}}",
-    "total_risks_identified": 2,
-    "critical_actions": 3,
-    "report_version": "1.2.0"
-  }
-}
-```
 
 ### Validation Requirements
 - **Section types must be unique (no duplicates)**
