@@ -167,6 +167,7 @@ class ContractsRepository:
                 adjustments_outgoings = COALESCE(EXCLUDED.adjustments_outgoings, contracts.adjustments_outgoings),
                 disclosure_compliance = COALESCE(EXCLUDED.disclosure_compliance, contracts.disclosure_compliance),
                 special_risks = COALESCE(EXCLUDED.special_risks, contracts.special_risks),
+                cross_section_validation = COALESCE(EXCLUDED.cross_section_validation, contracts.cross_section_validation),
                 raw_text = COALESCE(EXCLUDED.raw_text, contracts.raw_text),
                 property_address = COALESCE(EXCLUDED.property_address, contracts.property_address),
                 updated_by = COALESCE(EXCLUDED.updated_by, contracts.updated_by),
@@ -185,6 +186,7 @@ class ContractsRepository:
                          COALESCE(adjustments_outgoings, '{}'::jsonb) as adjustments_outgoings,
                          COALESCE(disclosure_compliance, '{}'::jsonb) as disclosure_compliance,
                          COALESCE(special_risks, '{}'::jsonb) as special_risks,
+                         COALESCE(cross_section_validation, '{}'::jsonb) as cross_section_validation,
                          raw_text,
                          property_address,
                          updated_by,
@@ -231,6 +233,7 @@ class ContractsRepository:
                 if image_semantics is not None
                 else None
             ),
+            None,
             None,
             None,
             None,
@@ -471,6 +474,7 @@ class ContractsRepository:
                                COALESCE(adjustments_outgoings, '{}'::jsonb) as adjustments_outgoings,
                                COALESCE(disclosure_compliance, '{}'::jsonb) as disclosure_compliance,
                                COALESCE(special_risks, '{}'::jsonb) as special_risks,
+                               COALESCE(cross_section_validation, '{}'::jsonb) as cross_section_validation,
                                raw_text, 
                                property_address, updated_by, created_at, updated_at
                         FROM contracts
@@ -498,6 +502,7 @@ class ContractsRepository:
                        COALESCE(adjustments_outgoings, '{}'::jsonb) as adjustments_outgoings,
                        COALESCE(disclosure_compliance, '{}'::jsonb) as disclosure_compliance,
                        COALESCE(special_risks, '{}'::jsonb) as special_risks,
+                       COALESCE(cross_section_validation, '{}'::jsonb) as cross_section_validation,
                        raw_text, 
                        property_address, updated_by, created_at, updated_at
                 FROM contracts
@@ -541,6 +546,9 @@ class ContractsRepository:
             adjustments_outgoings=_normalize_json(row.get("adjustments_outgoings")),
             disclosure_compliance=_normalize_json(row.get("disclosure_compliance")),
             special_risks=_normalize_json(row.get("special_risks")),
+            cross_section_validation=_normalize_json(
+                row.get("cross_section_validation")
+            ),
             raw_text=row.get("raw_text"),
             property_address=row.get("property_address"),
             updated_by=row.get("updated_by"),

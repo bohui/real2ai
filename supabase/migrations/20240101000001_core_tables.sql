@@ -72,6 +72,7 @@ CREATE TABLE contracts (
     adjustments_outgoings JSONB DEFAULT '{}'::jsonb,
     disclosure_compliance JSONB DEFAULT '{}'::jsonb,
     special_risks JSONB DEFAULT '{}'::jsonb,
+    cross_section_validation JSONB DEFAULT '{}'::jsonb,
 
     raw_text TEXT,
     property_address TEXT,
@@ -603,6 +604,7 @@ ALTER TABLE contracts
     ADD COLUMN IF NOT EXISTS adjustments_outgoings JSONB DEFAULT '{}'::jsonb,
     ADD COLUMN IF NOT EXISTS disclosure_compliance JSONB DEFAULT '{}'::jsonb,
     ADD COLUMN IF NOT EXISTS special_risks JSONB DEFAULT '{}'::jsonb,
+    ADD COLUMN IF NOT EXISTS cross_section_validation JSONB DEFAULT '{}'::jsonb,
     DROP COLUMN IF EXISTS section_analysis,
     DROP COLUMN IF EXISTS contract_terms,
     DROP COLUMN IF EXISTS ocr_confidence;

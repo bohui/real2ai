@@ -154,6 +154,7 @@ class Contract(TimestampedBaseModel):
     adjustments_outgoings: Dict[str, Any] = Field(default_factory=dict)
     disclosure_compliance: Dict[str, Any] = Field(default_factory=dict)
     special_risks: Dict[str, Any] = Field(default_factory=dict)
+    cross_section_validation: Dict[str, Any] = Field(default_factory=dict)
     image_semantics: Dict[str, Any] = Field(default_factory=dict)
     raw_text: Optional[str] = None
     property_address: Optional[str] = None
