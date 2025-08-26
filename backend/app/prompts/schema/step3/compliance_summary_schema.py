@@ -1,11 +1,19 @@
 from typing import List, Dict, Any
 from pydantic import BaseModel, Field
+from enum import Enum
+
+
+class SeverityLevel(str, Enum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    CRITICAL = "critical"
 
 
 class ComplianceGap(BaseModel):
     name: str = Field(..., description="Gap name or requirement")
     description: str = Field(..., description="Description of the gap")
-    severity: str = Field(..., description="low, medium, high, critical")
+    severity: SeverityLevel = Field(..., description="Severity level")
     remediation: str = Field(..., description="Suggested remediation")
 
 

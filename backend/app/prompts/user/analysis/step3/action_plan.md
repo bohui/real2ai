@@ -2,7 +2,7 @@
 type: "user"
 category: "instructions"
 name: "step3_action_plan"
-version: "1.0.0"
+version: "1.1.0"
 description: "Step 3 - Recommended Actions & Timeline"
 fragment_orchestration: "step3_action_plan"
 required_variables:
@@ -16,8 +16,8 @@ required_variables:
 optional_variables:
   - "retrieval_index_id"
   - "seed_snippets"
-model_compatibility: ["gemini-2.5-flash", "gpt-4"]
-max_tokens: 7000
+model_compatibility: ["gemini-1.5-flash", "gpt-4"]
+max_tokens: 8000
 temperature_range: [0.1, 0.3]
 output_parser: ActionPlanResult
 tags: ["step3", "action_plan", "timeline"]
@@ -37,8 +37,39 @@ Inputs:
 Seeds: {{ seed_snippets or [] | tojsonpretty }}
 
 ## Requirements
-- Actions[] include title, description, owner, due_by, dependencies, blocking_risks
-- Due dates align with settlement/condition deadlines
-- Every critical discrepancy maps to an action
+- Actions must be instances of the `ActionItem` schema.
+- `owner` must be one of the `ActionOwner` enum values.
+- `due_by` must be a `DueDate` object.
+- Every critical discrepancy from the inputs must map to an action.
+- The action plan must be sequenced logically.
 
-Return a valid ActionPlanResult.
+### Example Output Format:
+```json
+{
+  "actions": [
+    {
+      "title": "Verify Finance Condition",
+      "description": "Confirm with your lender that the finance condition has been satisfied and provide written confirmation to the vendor's solicitor.",
+      "owner": "buyer",
+      "due_by": {
+        "relative_deadline": "3 days before finance condition expiry"
+      },
+      "dependencies": [],
+      "blocking_risks": ["Finance not approved"]
+    },
+    {
+      "title": "Arrange Building and Pest Inspection",
+      "description": "Engage a qualified inspector to conduct a building and pest inspection of the property.",
+      "owner": "buyer",
+      "due_by": {
+        "date": "2025-09-10"
+      },
+      "dependencies": [],
+      "blocking_risks": ["Major building defects found"]
+    }
+  ],
+  "timeline_summary": "The action plan is structured around the key dates of the contract, ensuring all conditions are met before settlement."
+}
+```
+
+Return a valid `ActionPlanResult`.

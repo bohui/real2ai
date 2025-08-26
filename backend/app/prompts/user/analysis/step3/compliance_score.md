@@ -2,7 +2,7 @@
 type: "user"
 category: "instructions"
 name: "step3_compliance_score"
-version: "1.0.0"
+version: "1.1.0"
 description: "Step 3 - Compliance Readiness Score"
 fragment_orchestration: "step3_compliance_score"
 required_variables:
@@ -15,8 +15,8 @@ required_variables:
 optional_variables:
   - "retrieval_index_id"
   - "seed_snippets"
-model_compatibility: ["gemini-2.5-flash", "gpt-4"]
-max_tokens: 6000
+model_compatibility: ["gemini-1.5-flash", "gpt-4"]
+max_tokens: 8000
 temperature_range: [0.1, 0.3]
 output_parser: ComplianceSummaryResult
 tags: ["step3", "compliance", "scoring"]
@@ -35,7 +35,32 @@ Inputs:
 Seeds: {{ seed_snippets or [] | tojsonpretty }}
 
 ## Requirements
-- Provide score (0-1), gaps[], remediation_readiness, key_dependencies
-- Score must respond predictably to input changes
+- `gaps` must be a list of `ComplianceGap` objects.
+- `severity` must be one of the `SeverityLevel` enum values.
+- Provide `score` (0-1), `gaps`[], `remediation_readiness`, and `key_dependencies`.
+- Score must respond predictably to input changes.
 
-Return a valid ComplianceSummaryResult.
+### Example Output Format:
+```json
+{
+  "score": 0.85,
+  "gaps": [
+    {
+      "name": "Missing Flood Zone Disclosure",
+      "description": "The vendor has not provided a flood zone disclosure, which is mandatory in this state.",
+      "severity": "high",
+      "remediation": "Request the vendor to provide the flood zone disclosure immediately."
+    },
+    {
+      "name": "Incomplete Strata Report",
+      "description": "The provided strata report is missing the last two years of financial statements.",
+      "severity": "medium",
+      "remediation": "Request the vendor to provide a complete strata report, including all financial statements."
+    }
+  ],
+  "remediation_readiness": "The identified gaps can be remediated by requesting the missing information from the vendor.",
+  "key_dependencies": ["vendor_disclosure"]
+}
+```
+
+Return a valid `ComplianceSummaryResult`.
