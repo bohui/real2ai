@@ -2,7 +2,7 @@
 type: "user"
 category: "instructions"
 name: "step3_buyer_report"
-version: "1.3.0"
+version: "1.4.0"
 description: "Step 3 - Buyer Report Synthesis"
 fragment_orchestration: "step3_buyer_report"
 required_variables:
@@ -23,7 +23,6 @@ required_variables:
   - "special_risks_result"
 optional_variables:
   - "retrieval_index_id"
-  - "seed_snippets"
 model_compatibility: ["gemini-1.5-flash", "gpt-4"]
 max_tokens: 8192
 temperature_range: [0.1, 0.3]
@@ -81,8 +80,6 @@ Use ALL provided Step 2 and Step 3 results to create a comprehensive buyer repor
 - Special Risks: ```json
 {{special_risks_result | tojsonpretty}}
 ```
-
-**Seeds for Context:** {{ seed_snippets or [] | tojsonpretty }}
 
 ## Report Structure Requirements
 

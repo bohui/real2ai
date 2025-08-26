@@ -2,7 +2,7 @@
 type: "user"
 category: "instructions"
 name: "step3_compliance_score"
-version: "1.3.0"
+version: "1.4.0"
 description: "Step 3 - Compliance Readiness Score"
 fragment_orchestration: "step3_compliance_score"
 required_variables:
@@ -14,7 +14,6 @@ required_variables:
   - "settlement_logistics_result"
 optional_variables:
   - "retrieval_index_id"
-  - "seed_snippets"
 model_compatibility: ["gemini-1.5-flash", "gpt-4"]
 max_tokens: 8000
 temperature_range: [0.1, 0.3]
@@ -49,8 +48,6 @@ Analyze the following Step 2 results to evaluate compliance status:
 ```json
 {{settlement_logistics_result | tojsonpretty}}
 ```
-
-**Seeds for Context:** {{ seed_snippets or [] | tojsonpretty }}
 
 ## Compliance Assessment Framework
 

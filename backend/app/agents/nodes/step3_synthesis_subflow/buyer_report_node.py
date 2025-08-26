@@ -60,8 +60,6 @@ class BuyerReportNode(ContractLLMNode):
             "adjustments_outgoings_result": state.get("adjustments_outgoings_result", {}),
             "disclosure_compliance_result": state.get("disclosure_compliance_result", {}),
             "special_risks_result": state.get("special_risks_result", {}),
-            
-            "seed_snippets": state.get("section_seeds", []),
         }
 
         # Validate required inputs for buyer report

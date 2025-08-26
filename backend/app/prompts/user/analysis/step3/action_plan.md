@@ -2,7 +2,7 @@
 type: "user"
 category: "instructions"
 name: "step3_action_plan"
-version: "1.3.0"
+version: "1.4.0"
 description: "Step 3 - Recommended Actions & Timeline"
 fragment_orchestration: "step3_action_plan"
 required_variables:
@@ -15,7 +15,6 @@ required_variables:
   - "conditions_result"
 optional_variables:
   - "retrieval_index_id"
-  - "seed_snippets"
 model_compatibility: ["gemini-1.5-flash", "gpt-4"]
 max_tokens: 8000
 temperature_range: [0.1, 0.3]
@@ -55,8 +54,6 @@ Review the following Step 2 analysis results to identify required actions:
 ```json
 {{conditions_result | tojsonpretty}}
 ```
-
-**Seeds for Context:** {{ seed_snippets or [] | tojsonpretty }}
 
 ## Action Planning Requirements
 

@@ -47,7 +47,6 @@ class ComplianceScoreNode(ContractLLMNode):
             "disclosure_compliance_result": state.get("disclosure_compliance_result", {}),
             "conditions_result": state.get("conditions_result", {}),
             "settlement_logistics_result": state.get("settlement_logistics_result", {}),
-            "seed_snippets": state.get("section_seeds", []),
         }
 
         # Validate required inputs for compliance analysis

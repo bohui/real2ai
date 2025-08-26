@@ -48,7 +48,6 @@ class ActionPlanNode(ContractLLMNode):
             "adjustments_outgoings_result": state.get("adjustments_outgoings_result", {}),
             "disclosure_compliance_result": state.get("disclosure_compliance_result", {}),
             "conditions_result": state.get("conditions_result", {}),
-            "seed_snippets": state.get("section_seeds", []),
         }
 
         # Validate required inputs for action planning

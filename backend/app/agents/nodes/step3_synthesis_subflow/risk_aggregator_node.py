@@ -48,7 +48,6 @@ class RiskAggregatorNode(ContractLLMNode):
             "disclosure_compliance_result": state.get("disclosure_compliance_result", {}),
             "title_encumbrances_result": state.get("title_encumbrances_result", {}),
             "settlement_logistics_result": state.get("settlement_logistics_result", {}),
-            "seed_snippets": state.get("section_seeds", []),
         }
 
         # Validate that we have sufficient input data
