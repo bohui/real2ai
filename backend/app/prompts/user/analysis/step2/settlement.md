@@ -10,7 +10,7 @@ required_variables:
   - "australian_state"
   - "analysis_timestamp"
 optional_variables:
-  - "entities_extraction"
+  - "extracted_entity"
   - "financial_terms_result"
   - "conditions_result"
   - "legal_requirements_matrix"
@@ -203,11 +203,6 @@ Use relevant diagram semantics that affect practical settlement logistics (servi
 {{ image_semantics_result | tojsonpretty }}
 {% endif %}
 
-## Contract Text for Analysis
-
-```
-{{contract_text}}
-```
 
 ## Additional Context
 

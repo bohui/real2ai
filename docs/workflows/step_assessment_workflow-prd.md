@@ -161,7 +161,7 @@ The Section-by-Section Analysis module performs specialized, expert-level review
 - Full-document context is used only as a fallback for broad sweeps or low-confidence cases.
 
 #### Inputs to Step 2 Nodes
-- `entities_extraction` (includes entities, conditions, section_seeds)
+- `extracted_entity` (includes entities, conditions, section_seeds)
 - `retrieval_index_id` (paragraph/clause index for retrieval)
 - `legal_requirements_matrix` and uploaded diagrams (where applicable)
 

@@ -25,7 +25,7 @@ class TestAnalyzeDefaultTerminationNode:
         """Sample Step2AnalysisState for testing"""
         return Step2AnalysisState(
             contract_text="Sample contract text for default termination analysis",
-            entities_extraction={
+            extracted_entity
                 "content_hash": "test_hash_default_term",
                 "document": {"content_hash": "test_hash_default_term"},
                 "default_terms": [
@@ -294,7 +294,7 @@ class TestAnalyzeDefaultTerminationNode:
     async def test_execute_with_complex_default_termination(self, node, sample_state):
         """Test execution with complex default termination context"""
         # Enhance sample state with more complex default termination terms
-        sample_state["entities_extraction"]["default_terms"] = [
+        sample_state["extracted_entity" = [
             {
                 "type": "finance_default",
                 "description": "Default on finance failure",
@@ -320,7 +320,7 @@ class TestAnalyzeDefaultTerminationNode:
                 "compensation_amount": "5000",
             },
         ]
-        sample_state["entities_extraction"]["termination_clauses"] = [
+        sample_state["extracted_entity"on_clauses"] = [
             {
                 "type": "mutual_agreement",
                 "description": "Termination by mutual agreement",
@@ -433,8 +433,8 @@ class TestAnalyzeDefaultTerminationNode:
     async def test_execute_with_no_default_termination(self, node, sample_state):
         """Test execution when no default termination terms are present"""
         # Remove default termination terms from sample state
-        sample_state["entities_extraction"]["default_terms"] = []
-        sample_state["entities_extraction"]["termination_clauses"] = []
+        sample_state["extracted_entity"]["default_terms"] = []
+        sample_state["extracted_entity"]["termination_clauses"] = []
 
         with patch(
             "app.services.repositories.contracts_repository.ContractsRepository"

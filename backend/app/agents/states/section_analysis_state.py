@@ -10,7 +10,7 @@ class Step2AnalysisState(LangGraphBaseState):
 
     # Input data
     contract_text: str
-    entities_extraction: Dict[str, Any]
+    extracted_entity: Dict[str, Any]
     legal_requirements_matrix: Optional[Dict[str, Any]]
     uploaded_diagrams: Optional[Dict[str, List[Dict[str, Any]]]]
 
@@ -26,24 +26,24 @@ class Step2AnalysisState(LangGraphBaseState):
     retrieval_index_id: Annotated[Optional[str], lambda x, y: y]
 
     # Phase 1 Foundation Results (Parallel)
-    parties_property_result: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
-    financial_terms_result: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
-    conditions_result: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
-    warranties_result: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
-    default_termination_result: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
-    image_semantics_result: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
+    parties_property: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
+    financial_terms: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
+    conditions: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
+    warranties: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
+    default_termination: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
+    image_semantics: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
 
     # Phase 2 Dependent Results (Sequential)
-    settlement_logistics_result: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
-    title_encumbrances_result: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
+    settlement_logistics: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
+    title_encumbrances: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
 
     # Phase 3 Synthesis Results (Sequential)
-    adjustments_outgoings_result: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
-    disclosure_compliance_result: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
-    special_risks_result: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
+    adjustments_outgoings: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
+    disclosure_compliance: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
+    special_risks: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
 
     # Cross-section validation
-    cross_section_validation_result: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
+    cross_section_validation: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
 
     # Workflow control
     phase1_complete: Annotated[bool, lambda x, y: y]

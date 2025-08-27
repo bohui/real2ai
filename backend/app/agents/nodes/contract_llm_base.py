@@ -3,7 +3,6 @@ ContractLLMNode: LLMNode specialization for contract-backed nodes.
 
 Parameters:
 - contract_attribute: the JSONB column on `contracts` to check/persist (e.g., 'extracted_entity')
-- state_field: the workflow state key to set on success/short-circuit (e.g., 'entities_extraction')
 
 Subclasses can override `_build_updated_fields(parsed, state)` to supply additional
 repository fields (e.g., contract_type, property_address) while the base class
@@ -26,12 +25,12 @@ class ContractLLMNode(LLMNode):
         node_name: str,
         *,
         contract_attribute: str,
-        state_field: str,
+        result_model: Any,
         progress_range: tuple[int, int] = (0, 100),
     ):
         super().__init__(workflow, node_name, progress_range)
         self.contract_attribute = contract_attribute
-        self.state_field = state_field
+        self.result_model = result_model
 
     async def _short_circuit_check(
         self, state: RealEstateAgentState
@@ -55,13 +54,13 @@ class ContractLLMNode(LLMNode):
 
             cached_value = getattr(existing_contract, self.contract_attribute, None)
             if isinstance(cached_value, dict) and bool(cached_value):
-                state[self.state_field] = cached_value
+                state[self.contract_attribute] = cached_value
                 try:
                     metadata = cached_value.get("metadata", {})
                     overall_confidence = metadata.get("overall_confidence")
                     if overall_confidence is not None:
                         state.setdefault("confidence_scores", {})[
-                            self.node_name
+                            self.contract_attribute
                         ] = overall_confidence
                 except Exception:
                     pass
@@ -86,6 +85,16 @@ class ContractLLMNode(LLMNode):
             )
         return None
 
+    def _coerce_to_model(self, data: Any) -> Optional[Any]:
+        try:
+            if isinstance(data, self.result_model):
+                return data
+            if hasattr(data, "model_validate"):
+                return self.result_model.model_validate(data)
+        except Exception:
+            return None
+        return None
+
     async def _persist_results(self, state: RealEstateAgentState, parsed: Any) -> None:
         try:
             from app.services.repositories.contracts_repository import (
@@ -95,21 +104,22 @@ class ContractLLMNode(LLMNode):
             content_hash = state.get("content_hash")
             if not content_hash:
                 logger.warning(
-                    f"{self.__class__.__name__}: Missing content_hash; skipping contract upsert"
+                    f"{self.__class__.__name__}: Missing content_hash; skipping contract persist"
                 )
                 return
 
-            updated_fields = self._build_updated_fields(parsed, state) or {}
-            updated_fields.setdefault("updated_by", self.node_name)
-
-            contracts_repo = ContractsRepository()
-            await contracts_repo.upsert_contract_by_content_hash(
-                content_hash=content_hash,
-                **updated_fields,
+            # Always use single-column section updater with the node's contract_attribute
+            value = parsed.model_dump() if hasattr(parsed, "model_dump") else parsed
+            repo = ContractsRepository()
+            await repo.update_section_analysis_key(
+                content_hash,
+                self.contract_attribute,
+                value,
+                updated_by=self.node_name,
             )
         except Exception as repo_err:
             logger.warning(
-                f"{self.__class__.__name__}: Contract upsert failed (non-fatal): {repo_err}"
+                f"{self.__class__.__name__}: Section persist failed (non-fatal): {repo_err}"
             )
 
     def _build_updated_fields(
@@ -129,14 +139,16 @@ class ContractLLMNode(LLMNode):
         except Exception:
             value = None
 
-        state[self.state_field] = value
+        state[self.contract_attribute] = value
 
-        # Try to propagate overall confidence into a stable key for this node
+        # Try to propagate overall confidence into a stable key for this contract attribute
         try:
             metadata = getattr(parsed, "metadata", None)
             overall_conf = getattr(metadata, "overall_confidence", None)
             if overall_conf is not None:
-                state.setdefault("confidence_scores", {})[self.node_name] = overall_conf
+                state.setdefault("confidence_scores", {})[
+                    self.contract_attribute
+                ] = overall_conf
         except Exception:
             pass
 

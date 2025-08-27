@@ -9,11 +9,11 @@ class PrepareContextNode(Step2NodeBase):
         updates: Dict[str, Any] = {}
 
         try:
-            entities_extraction = (state or {}).get("entities_extraction") or {}
+            extracted_entity = (state or {}).get("extracted_entity") or {}
 
             # Hoist section seeds and retrieval index from Step 1 entities into Step 2 state
             try:
-                seeds = (entities_extraction or {}).get("section_seeds") or {}
+                seeds = (extracted_entity or {}).get("section_seeds") or {}
                 if seeds:
                     updates["section_seeds"] = seeds
                     retrieval_index_id = seeds.get("retrieval_index_id")
@@ -38,7 +38,7 @@ class PrepareContextNode(Step2NodeBase):
                 or updates.get("legal_requirements_matrix")
             ):
                 try:
-                    meta = (entities_extraction or {}).get("metadata") or {}
+                    meta = (extracted_entity or {}).get("metadata") or {}
 
                     contract_type = state.get("contract_type") or meta.get(
                         "contract_type"

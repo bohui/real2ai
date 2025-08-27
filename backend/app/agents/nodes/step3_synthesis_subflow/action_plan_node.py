@@ -16,27 +16,9 @@ class ActionPlanNode(ContractLLMNode):
             workflow=workflow,
             node_name="generate_action_plan",
             contract_attribute="action_plan",
-            state_field="action_plan_result",
+            result_model=ActionPlanResult,
         )
         self.progress_range = progress_range
-
-    async def _short_circuit_check(
-        self, state: Step3SynthesisState
-    ) -> Optional[Step3SynthesisState]:
-        """Check if action plan already exists and is valid"""
-        existing_result = state.get("action_plan_result")
-        if existing_result:
-            try:
-                # Validate the existing result against our enhanced schema
-                validated_result = ActionPlanResult(**existing_result)
-                logger.info(
-                    f"Action plan already completed with {len(validated_result.actions)} actions"
-                )
-                return state
-            except Exception as e:
-                logger.warning(f"Existing action plan invalid, will regenerate: {e}")
-                return None
-        return None
 
     async def _build_context_and_parser(
         self, state: Step3SynthesisState
@@ -87,15 +69,7 @@ class ActionPlanNode(ContractLLMNode):
         composition_name = "step3_action_plan"
         return context, parser, composition_name
 
-    def _coerce_to_model(self, data: Any) -> Optional[Any]:
-        try:
-            if isinstance(data, ActionPlanResult):
-                return data
-            if hasattr(data, "model_validate"):
-                return ActionPlanResult.model_validate(data)
-        except Exception:
-            return None
-        return None
+    # Coercion handled by base class via result_model
 
     def _evaluate_quality(
         self, result: Optional[Any], state: Step3SynthesisState

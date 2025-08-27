@@ -697,9 +697,9 @@ class ContractAnalysisWorkflow:
             if self._has_error_state(state):
                 return "error"
             # Check if entities extraction completed successfully
-            if state.get("entities_extraction"):
+            if state.get("extracted_entity"):
                 return "success"
-            elif state.get("entities_extraction_skipped"):
+            elif state.get("extracted_entity_skipped"):
                 # If skipped, still continue to next step
                 return "success"
             else:

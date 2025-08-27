@@ -5,7 +5,9 @@ Unit tests for Section Analysis Node (Step 2 Integration)
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from backend.app.agents.nodes.step2_section_analysis_subflow.mainflow_entry import SectionAnalysisNode
+from backend.app.agents.nodes.step2_section_analysis_subflow.mainflow_entry import (
+    SectionAnalysisNode,
+)
 from app.agents.states.contract_state import RealEstateAgentState
 
 
@@ -53,7 +55,7 @@ class TestSectionAnalysisNode:
             processing_time=None,
             progress=None,
             notify_progress=None,
-            entities_extraction={"property": {"address": "123 Test St"}},
+            extracted_entitydress": "123 Test St"}},
             step2_analysis_result=None,
             analysis_results={},
             report_data=None,
@@ -88,7 +90,7 @@ class TestSectionAnalysisNode:
     async def test_execute_with_missing_entities(self, section_node, sample_state):
         """Test execution with missing entity results"""
         # Remove entities
-        sample_state["entities_extraction"] = None
+        sample_state["extracted_entity"] = None
 
         section_node.step2_workflow.execute = AsyncMock()
 

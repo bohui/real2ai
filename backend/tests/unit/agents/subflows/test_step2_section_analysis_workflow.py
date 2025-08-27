@@ -51,7 +51,7 @@ class TestStep2AnalysisWorkflow:
             processing_time=None,
             progress=None,
             notify_progress=None,
-            entities_extraction={"property": {"address": "123 Test St"}},
+            extracted_entityss": "123 Test St"}},
             step2_analysis_result=None,
             analysis_results={},
             report_data=None,
@@ -104,7 +104,7 @@ class TestStep2AnalysisWorkflow:
 
         result = await workflow.execute(
             contract_text=contract_text,
-            entities_extraction=sample_entities_result,
+            extracted_entitys_result,
             parent_state=sample_state,
         )
 
@@ -122,7 +122,7 @@ class TestStep2AnalysisWorkflow:
 
         result = await workflow.execute(
             contract_text="",  # Empty text
-            entities_extraction={},  # Empty entities
+            extracted_entityy entities
             parent_state=sample_state,
         )
 
@@ -147,7 +147,7 @@ class TestStep2AnalysisWorkflow:
 
         result = await workflow.execute(
             contract_text=contract_text,
-            entities_extraction=sample_entities_result,
+            extracted_entitymple_entities_result,
             parent_state=sample_state,
         )
 
@@ -174,7 +174,7 @@ class TestStep2AnalysisWorkflow:
 
         result = await workflow.execute(
             contract_text=contract_text,
-            entities_extraction=sample_entities_result,
+            extracted_entity=sample_entities_result,
             parent_state=sample_state,
         )
 
@@ -209,7 +209,7 @@ class TestStep2AnalysisWorkflow:
 
         result = await workflow.execute(
             contract_text=contract_text,
-            entities_extraction=sample_entities_result,
+            extracted_entity=sample_entities_result,
             parent_state=sample_state,
         )
 
@@ -228,7 +228,7 @@ class TestStep2AnalysisWorkflow:
 
         result = await workflow.execute(
             contract_text=contract_text,
-            entities_extraction=sample_entities_result,
+            extracted_entity=sample_entities_result,
             parent_state=sample_state,
         )
 
@@ -254,7 +254,7 @@ class TestStep2AnalysisWorkflow:
         ):
             result = await workflow.execute(
                 contract_text="Sample text",
-                entities_extraction=sample_entities_result,
+                extracted_entity=sample_entities_result,
                 parent_state=sample_state,
             )
 
@@ -271,7 +271,7 @@ class TestStep2AnalysisWorkflow:
         # Test state creation with required fields
         state = Step2AnalysisState(
             contract_text="Sample text",
-            entities_extraction={"test": "data"},
+            extracted_entity={"test": "data"},
             legal_requirements_matrix=None,
             uploaded_diagrams=None,
             australian_state="NSW",
@@ -303,7 +303,7 @@ class TestStep2AnalysisWorkflow:
         )
 
         assert state["contract_text"] == "Sample text"
-        assert state["entities_extraction"]["test"] == "data"
+        assert state["extracted_entity"]["test"] == "data"
         assert state["australian_state"] == "NSW"
         assert state["phase1_complete"] is False
         assert isinstance(state["processing_errors"], list)
@@ -329,7 +329,7 @@ class TestStep2AnalysisWorkflow:
 
         result = await workflow.execute(
             contract_text=contract_text,
-            entities_extraction=sample_entities_result,
+            extracted_entity=sample_entities_result,
             parent_state=sample_state,
             legal_requirements_matrix=legal_matrix,
             uploaded_diagrams=diagrams,

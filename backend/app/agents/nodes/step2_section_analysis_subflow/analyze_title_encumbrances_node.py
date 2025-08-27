@@ -14,11 +14,15 @@ class TitleEncumbrancesNode(ContractLLMNode):
         workflow: Step2AnalysisWorkflow,
         progress_range: tuple[int, int] = (88, 92),
     ):
+        from app.prompts.schema.step2.title_encumbrances_schema import (
+            TitleEncumbrancesAnalysisResult,
+        )
+
         super().__init__(
             workflow=workflow,
             node_name="analyze_title_encumbrances",
             contract_attribute="title_encumbrances",
-            state_field="title_encumbrances_result",
+            result_model=TitleEncumbrancesAnalysisResult,
         )
         self.progress_range = progress_range
 
@@ -41,9 +45,9 @@ class TitleEncumbrancesNode(ContractLLMNode):
                 .get("snippets", {})
                 .get("title_encumbrances"),
                 # Diagram semantics from Phase 1
-                "image_semantics_result": state.get("image_semantics_result"),
+                "image_semantics_result": state.get("image_semantics"),
                 # Parties & property baseline from Phase 1 (Step 2 foundation)
-                "parties_property_result": state.get("parties_property_result"),
+                "parties_property_result": state.get("parties_property"),
             },
         )
 
@@ -52,19 +56,7 @@ class TitleEncumbrancesNode(ContractLLMNode):
         )
         return context, parser, "step2_title_encumbrances"
 
-    def _coerce_to_model(self, data: Any) -> Optional[Any]:
-        try:
-            from app.prompts.schema.step2.title_encumbrances_schema import (
-                TitleEncumbrancesAnalysisResult,
-            )
-
-            if isinstance(data, TitleEncumbrancesAnalysisResult):
-                return data
-            if hasattr(data, "model_validate"):
-                return TitleEncumbrancesAnalysisResult.model_validate(data)
-        except Exception:
-            return None
-        return None
+    # Coercion handled by base class via result_model
 
     def _evaluate_quality(
         self, result: Optional[Any], state: Step2AnalysisState
@@ -87,36 +79,13 @@ class TitleEncumbrancesNode(ContractLLMNode):
         except Exception:
             return {"ok": False}
 
-    async def _persist_results(self, state: Step2AnalysisState, parsed: Any) -> None:
-        try:
-            from app.services.repositories.contracts_repository import (
-                ContractsRepository,
-            )
-
-            content_hash = state.get("content_hash")
-            if not content_hash:
-                self.logger.warning(
-                    "TitleEncumbrancesNode: Missing content_hash; skipping persist"
-                )
-                return
-
-            repo = ContractsRepository()
-            value = parsed.model_dump() if hasattr(parsed, "model_dump") else parsed
-            await repo.update_section_analysis_key(
-                content_hash, "title_encumbrances", value, updated_by=self.node_name
-            )
-        except Exception as pe:
-            self.logger.warning(
-                f"Failed to persist title_encumbrances via repository: {pe}"
-            )
-
     async def _update_state_success(
         self, state: Step2AnalysisState, parsed: Any, quality: Dict[str, Any]
     ) -> Step2AnalysisState:
         value = parsed.model_dump() if hasattr(parsed, "model_dump") else parsed
-        state["title_encumbrances_result"] = value
+        state["title_encumbrances"] = value
 
         await self.emit_progress(
             state, self.progress_range[1], "Title and encumbrances analysis completed"
         )
-        return {"title_encumbrances_result": value}
+        return {"title_encumbrances": value}

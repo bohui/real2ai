@@ -3,7 +3,9 @@ import pytest
 
 @pytest.mark.asyncio
 async def test_model_selection_uses_metadata_primary_and_fallbacks(mocker):
-    from backend.app.agents.nodes.step1_entities_extraction.entities_extraction_node import EntitiesExtractionNode
+    from backend.app.agents.nodes.step1_entities_extraction.entities_extraction_node import (
+        EntitiesExtractionNode,
+    )
 
     # Mock workflow with configs (no magic numbers hard-coded)
     class MockWorkflow:
@@ -13,7 +15,7 @@ async def test_model_selection_uses_metadata_primary_and_fallbacks(mocker):
         enable_quality_checks = True
         enable_fallbacks = True
         prompt_manager = mocker.Mock()
-        structured_parsers = {"entities_extraction": mocker.Mock()}
+        structured_parsers = {"extracted_entity": mocker.Mock()}
 
     node = EntitiesExtractionNode(MockWorkflow())
 
@@ -72,23 +74,25 @@ async def test_model_selection_uses_metadata_primary_and_fallbacks(mocker):
     result = await node.execute(state)
 
     # Ensure state update marked as complete and confidence set
-    assert result["progress"]["current_step"] == 1
+    assert result["progress"]["current_"extracted_entity"
     assert result["progress"]["percentage"] == 10
-    assert result["confidence_scores"]["entities_extraction"] == 0.85
+    assert result["confidence_scores"]["extracted_entity"= 0.85
 
 
 @pytest.mark.asyncio
 async def test_short_circuit_skips_when_cached(mocker):
-    from backend.app.agents.nodes.step1_entities_extraction.entities_extraction_node import EntitiesExtractionNode
+    from backend.app.agents.nodes.step1_entities_extraction.entities_extraction_node import (
+        EntitiesExtractionNode,
+    )
 
     class MockWorkflow:
         extraction_config = {"max_retries": 2, "min_confidence": 0.75}
         use_llm_config = {}
-        enable_validation = True
+        enable_validation = Tr"extracted_entity"
         enable_quality_checks = True
         enable_fallbacks = True
         prompt_manager = mocker.Mock()
-        structured_parsers = {"entities_extraction": mocker.Mock()}
+        structured_parsers = {"extracted_entity": mocker.Mock()}
 
     node = EntitiesExtractionNode(MockWorkflow())
 
@@ -110,11 +114,11 @@ async def test_short_circuit_skips_when_cached(mocker):
 
     state = {
         "content_hash": "abc",
-        "progress": {"current_step": 0, "total_steps": 10},
-    }
+        "progress": {""extracted_entity"tal_steps": 10},
+    }"extracted_entity"
 
     result = await node.execute(state)
-    assert result.get("entities_extraction") is not None
-    assert result["confidence_scores"]["entities_extraction"] == 0.9
+    assert result.get("extracted_entity") is not None
+    assert result["confidence_scores"]["extracted_entity"] == 0.9
     # Step should be marked as skipped
     assert result["progress"]["current_step"] == 1

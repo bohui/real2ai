@@ -27,7 +27,7 @@ class TestAnalyzeFinancialTermsNode:
         """Sample Step2AnalysisState for testing"""
         return Step2AnalysisState(
             contract_text="Sample contract text for financial analysis",
-            entities_extraction={
+            extracted_entity
                 "content_hash": "test_hash_456",
                 "document": {"content_hash": "test_hash_456"},
                 "financial": {"purchase_price": 800000, "deposit_amount": 80000},
@@ -364,7 +364,7 @@ class TestAnalyzeFinancialTermsNode:
     async def test_execute_with_financial_context(self, node, sample_state):
         """Test execution with rich financial context"""
         # Enhance sample state with more financial context
-        sample_state["entities_extraction"]["financial"] = {
+        sample_state["extracted_entity"financial"] = {
             "purchase_price": 800000,
             "deposit_amount": 80000,
             "stamp_duty": 32000,

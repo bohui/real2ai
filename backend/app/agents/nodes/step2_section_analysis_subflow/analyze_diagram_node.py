@@ -7,6 +7,7 @@ from app.agents.subflows.step2_section_analysis_workflow import (
     Step2AnalysisWorkflow,
 )
 from app.agents.nodes.contract_llm_base import ContractLLMNode
+from app.prompts.schema.image_semantics_schema import DiagramSemanticsBase
 
 
 class AnalyzeDiagramNode(ContractLLMNode):
@@ -41,11 +42,12 @@ class AnalyzeDiagramNode(ContractLLMNode):
         schema_confidence_threshold: float = 0.5,
         concurrency_limit: int = 5,
     ):
+
         super().__init__(
             workflow=workflow,
             node_name="analyze_diagram",
             contract_attribute="image_semantics",
-            state_field="image_semantics_result",
+            result_model=DiagramSemanticsBase,
         )
         self.progress_range = progress_range
         self.schema_confidence_threshold = schema_confidence_threshold
@@ -212,60 +214,75 @@ class AnalyzeDiagramNode(ContractLLMNode):
             except Exception:
                 context_vars = {}
 
-            # 3) Call image semantics per diagram (download bytes on-demand)
+            # 3) Call image semantics per diagram type (download bytes on-demand)
             from app.utils.storage_utils import ArtifactStorageService
             import asyncio
 
             storage_service = ArtifactStorageService()
             llm_service = await self._get_llm_service()
 
-            # Create tasks for concurrent processing
-            async def process_single_image(uri, info_list):
-                """Process a single image concurrently."""
+            # Create tasks for concurrent processing per diagram type
+            async def process_single_diagram_type(diagram_type, info_list):
+                """Process a single diagram type by selecting the best page (highest confidence)."""
                 try:
-                    # Determine best type hint for this URI (highest confidence)
-                    diagram_type_hint: str = "unknown"
+                    # Select the best page entry for this diagram type (highest confidence)
+                    selected_uri: Optional[str] = None
+                    best: Optional[dict] = None
                     if isinstance(info_list, list) and info_list:
                         try:
                             best = max(
                                 [i for i in info_list if isinstance(i, dict)],
                                 key=lambda x: float(x.get("confidence", 0.0)),
                             )
-                            diagram_type_hint = str(
-                                best.get("diagram_type_hint", "unknown")
+                            selected_uri = (
+                                str(best.get("uri")) if best.get("uri") else None
                             )
                         except Exception:
                             # Fall back to first available if any issue
                             first = next(
-                                (i for i in info_list if isinstance(i, dict)), None
+                                (
+                                    i
+                                    for i in info_list
+                                    if isinstance(i, dict) and i.get("uri")
+                                ),
+                                None,
                             )
                             if first:
-                                diagram_type_hint = str(
-                                    first.get("diagram_type_hint", "unknown")
-                                )
+                                selected_uri = str(first.get("uri"))
+
+                    if not selected_uri:
+                        self._log_warning(
+                            "No valid URI found for diagram type",
+                            extra={"diagram_type": str(diagram_type)},
+                        )
+                        return None
 
                     # Download bytes just-in-time
                     try:
-                        if isinstance(uri, str) and uri.startswith("supabase://"):
+                        if isinstance(selected_uri, str) and selected_uri.startswith(
+                            "supabase://"
+                        ):
                             content_bytes = (
-                                await storage_service.download_page_image_jpg(uri)
+                                await storage_service.download_page_image_jpg(
+                                    selected_uri
+                                )
                             )
                         else:
                             # Unsupported URI scheme here; skip gracefully
                             self._log_warning(
                                 "Unsupported image URI scheme; expected supabase://",
-                                extra={"uri": str(uri)},
+                                extra={"uri": str(selected_uri)},
                             )
                             return None
                     except Exception as dl_err:
                         self._log_warning(
                             "Failed to download image bytes",
-                            extra={"error": str(dl_err), "uri": str(uri)},
+                            extra={"error": str(dl_err), "uri": str(selected_uri)},
                         )
                         return None
 
                     # Infer content-type from filename/uri
-                    lower = str(uri).lower()
+                    lower = str(selected_uri).lower()
                     if lower.endswith(".png"):
                         ctype = "image/png"
                     elif lower.endswith(".jpg") or lower.endswith(".jpeg"):
@@ -277,7 +294,7 @@ class AnalyzeDiagramNode(ContractLLMNode):
                     else:
                         ctype = "image/jpeg"
 
-                    # Choose parser schema per diagram_type_hint and confidence
+                    # Choose parser schema per diagram_type and confidence
                     try:
                         from app.schema.enums.diagrams import DiagramType
                         from app.prompts.schema.image_semantics_schema import (
@@ -300,7 +317,7 @@ class AnalyzeDiagramNode(ContractLLMNode):
                             except Exception:
                                 hint_conf = 0.0
 
-                            enum_type = DiagramType(diagram_type_hint)
+                            enum_type = DiagramType(diagram_type)
                             if hint_conf < self.schema_confidence_threshold:
                                 enum_type = DiagramType.UNKNOWN
                         except Exception:
@@ -314,7 +331,7 @@ class AnalyzeDiagramNode(ContractLLMNode):
 
                     # Inject per-image variables (avoid full entities)
                     per_image_context_vars = dict(context_vars or {})
-                    per_image_context_vars["image_type"] = diagram_type_hint
+                    per_image_context_vars["image_type"] = diagram_type
                     per_image_context_vars["diagram_type_confidence"] = (
                         float(best.get("confidence", 0.0))
                         if isinstance(best, dict)
@@ -322,15 +339,15 @@ class AnalyzeDiagramNode(ContractLLMNode):
                     )
                     # Provide placeholder metadata for prompt while image bytes are passed separately
                     per_image_context_vars.setdefault(
-                        "image_data", {"source": "binary", "uri": uri}
+                        "image_data", {"source": "binary", "uri": selected_uri}
                     )
                     # Avoid passing full entities per image request
-                    per_image_context_vars.pop("entities_extraction", None)
+                    per_image_context_vars.pop("extracted_entity", None)
 
                     result = await llm_service.generate_image_semantics(
                         content=content_bytes,
                         content_type=ctype,
-                        filename=str(uri),
+                        filename=str(selected_uri),
                         composition_name=composition_name,
                         context_variables=per_image_context_vars,
                         output_parser=per_image_parser,
@@ -353,14 +370,17 @@ class AnalyzeDiagramNode(ContractLLMNode):
                         else model_obj
                     )
                     return {
-                        "uri": uri,
-                        "diagram_type": diagram_type_hint,
+                        "uri": selected_uri,
+                        "diagram_type": diagram_type,
                         "semantics": payload,
                     }
                 except Exception as per_err:
                     self._log_warning(
-                        "Image semantics failed for one diagram",
-                        extra={"error": str(per_err), "uri": str(uri)},
+                        "Diagram-type semantics failed",
+                        extra={
+                            "error": str(per_err),
+                            "diagram_type": str(diagram_type),
+                        },
                     )
                     return None
 
@@ -368,21 +388,21 @@ class AnalyzeDiagramNode(ContractLLMNode):
             tasks = []
             semaphore = asyncio.Semaphore(self.concurrency_limit)
 
-            async def process_with_semaphore(uri, info_list):
-                """Process a single image with concurrency control."""
+            async def process_with_semaphore(diagram_type, info_list):
+                """Process a single diagram type with concurrency control."""
                 async with semaphore:
-                    return await process_single_image(uri, info_list)
+                    return await process_single_diagram_type(diagram_type, info_list)
 
-            for uri, info_list in (
+            for diagram_type, info_list in (
                 uploaded.items() if isinstance(uploaded, dict) else []
             ):
-                task = process_with_semaphore(uri, info_list)
+                task = process_with_semaphore(diagram_type, info_list)
                 tasks.append(task)
 
             # Execute all tasks concurrently
             if tasks:
                 self._log_step_debug(
-                    f"Processing {len(tasks)} images concurrently with limit {self.concurrency_limit}",
+                    f"Processing {len(tasks)} diagram types concurrently with limit {self.concurrency_limit}",
                     state,
                 )
                 start_time = datetime.now(UTC)
@@ -395,32 +415,35 @@ class AnalyzeDiagramNode(ContractLLMNode):
                 )
 
                 # Filter out None results and exceptions
-                per_image_results = []
+                per_type_results = []
                 failed_count = 0
                 for i, result in enumerate(results):
                     if isinstance(result, Exception):
                         failed_count += 1
-                        uri = (
+                        diagram_type = (
                             list(uploaded.keys())[i]
                             if isinstance(uploaded, dict)
-                            else f"image_{i}"
+                            else f"diagram_type_{i}"
                         )
                         self._log_warning(
-                            "Image processing task failed with exception",
-                            extra={"error": str(result), "uri": str(uri)},
+                            "Diagram-type processing task failed with exception",
+                            extra={
+                                "error": str(result),
+                                "diagram_type": str(diagram_type),
+                            },
                         )
                     elif result is not None:
-                        per_image_results.append(result)
+                        per_type_results.append(result)
 
                 if failed_count > 0:
                     self._log_step_debug(
-                        f"Processed {len(per_image_results)} images successfully, {failed_count} failed",
+                        f"Processed {len(per_type_results)} diagram types successfully, {failed_count} failed",
                         state,
                     )
             else:
-                per_image_results = []
+                per_type_results = []
 
-            if not per_image_results:
+            if not per_type_results:
                 return self.update_state_step(
                     state,
                     f"{self.node_name}_skipped",
@@ -428,16 +451,17 @@ class AnalyzeDiagramNode(ContractLLMNode):
                 )
 
             aggregate = {
-                "images": per_image_results,
+                "images": per_type_results,
                 "metadata": {
-                    "diagram_count": len(per_image_results),
-                    "uris": [r.get("uri") for r in per_image_results],
+                    "diagram_count": len(per_type_results),
+                    "diagram_types": [r.get("diagram_type") for r in per_type_results],
+                    "uris": [r.get("uri") for r in per_type_results],
                     "generated_at": datetime.now(UTC).isoformat(),
                 },
             }
 
             # 4) Quality assessment (simple)
-            quality = {"ok": True, "diagram_count": len(per_image_results)}
+            quality = {"ok": True, "diagram_count": len(per_type_results)}
 
             # 5) Persist and update state
             await self._persist_results(state, aggregate)
@@ -551,16 +575,19 @@ class AnalyzeDiagramNode(ContractLLMNode):
                     key = getattr(art, "diagram_key", None) or "diagram"
                     page = getattr(art, "page_number", None)
                     diagram_meta = getattr(art, "diagram_meta", {}) or {}
+                    diagram_type = (
+                        (diagram_meta.get("diagram_type") or "unknown").strip()
+                        if isinstance(diagram_meta.get("diagram_type"), str)
+                        else "unknown"
+                    )
                     if uri:
-                        # Initialize list for this URI if it doesn't exist
-                        if uri not in result:
-                            result[uri] = []
-                        # Store metadata including diagram type
-                        result[uri].append(
+                        # Initialize list for this diagram type if it doesn't exist
+                        if diagram_type not in result:
+                            result[diagram_type] = []
+                        # Store metadata grouped by diagram type, including back-reference to URI
+                        result[diagram_type].append(
                             {
-                                "diagram_type_hint": diagram_meta.get(
-                                    "diagram_type", "unknown"
-                                ),
+                                "uri": uri,
                                 "confidence": diagram_meta.get("confidence", 0.5),
                                 "page_number": page,
                                 "diagram_key": key,
@@ -573,16 +600,9 @@ class AnalyzeDiagramNode(ContractLLMNode):
                 state["uploaded_diagrams"] = result
                 state["total_diagrams_processed"] = len(result)
                 # Log diagram types for debugging
-                diagram_types = []
-                for uri, diagram_list in result.items():
-                    for diagram_info in diagram_list:
-                        if (
-                            isinstance(diagram_info, dict)
-                            and "diagram_type_hint" in diagram_info
-                        ):
-                            diagram_types.append(diagram_info["diagram_type_hint"])
+                diagram_types = list(result.keys())
                 self._log_step_debug(
-                    f"Processed diagrams with types: {diagram_types}", state
+                    f"Processed diagrams grouped by types: {diagram_types}", state
                 )
         except Exception as e:
             # Best-effort; do not raise
@@ -593,7 +613,7 @@ class AnalyzeDiagramNode(ContractLLMNode):
         from app.core.prompts.parsers import create_parser
         from app.prompts.schema.image_semantics_schema import DiagramSemanticsBase
 
-        entities = state.get("entities_extraction", {}) or {}
+        entities = state.get("extracted_entity", {}) or {}
         meta: Dict[str, Any] = (entities or {}).get("metadata") or {}
 
         # Text-only LLM node: we cannot pass binary images; focus on semantics guidance
@@ -601,18 +621,23 @@ class AnalyzeDiagramNode(ContractLLMNode):
         # Only use title_encumbrances seeds (we do not maintain a dedicated diagram seed set)
         encumbrance_seeds = section_seeds.get("title_encumbrances")
         uploaded = state.get("uploaded_diagrams") or {}
-        diagram_uris = list(uploaded.keys()) if isinstance(uploaded, dict) else []
-        # Extract diagram types for analysis context
-        diagram_types = []
+        # After refactor: keys are diagram types; values are lists of entries each containing a uri
+        diagram_types = list(uploaded.keys()) if isinstance(uploaded, dict) else []
+        diagram_uris: List[str] = []
         if isinstance(uploaded, dict):
-            for uri, diagram_list in uploaded.items():
-                if isinstance(diagram_list, list):
-                    for diagram_info in diagram_list:
-                        if (
-                            isinstance(diagram_info, dict)
-                            and "diagram_type_hint" in diagram_info
-                        ):
-                            diagram_types.append(diagram_info["diagram_type_hint"])
+            try:
+                seen: set[str] = set()
+                for _dtype, entries in uploaded.items():
+                    if not isinstance(entries, list):
+                        continue
+                    for entry in entries:
+                        if isinstance(entry, dict):
+                            uri = entry.get("uri")
+                            if isinstance(uri, str) and uri and uri not in seen:
+                                seen.add(uri)
+                                diagram_uris.append(uri)
+            except Exception:
+                pass
 
         # Filter and compress seeds to a small, high-signal subset
         filtered_seeds = self._select_filtered_seeds(encumbrance_seeds, entities, state)
@@ -635,7 +660,7 @@ class AnalyzeDiagramNode(ContractLLMNode):
                 "legal_requirements_matrix": state.get("legal_requirements_matrix", {}),
                 "retrieval_index_id": state.get("retrieval_index_id"),
                 "seed_snippets": filtered_seeds if filtered_seeds else None,
-                "entities_extraction": entities,
+                "extracted_entity": entities,
                 "diagram_uris": diagram_uris,
                 "diagram_types": diagram_types,
                 # steer the analysis; can be refined later
@@ -692,7 +717,7 @@ class AnalyzeDiagramNode(ContractLLMNode):
         self, state: Step2AnalysisState, parsed: Any, quality: Dict[str, Any]
     ) -> Step2AnalysisState:
         value = parsed.model_dump() if hasattr(parsed, "model_dump") else parsed
-        state["image_semantics_result"] = value
+        state["image_semantics"] = value
 
         # Update simple diagram processing metrics based on availability
         try:
@@ -706,4 +731,4 @@ class AnalyzeDiagramNode(ContractLLMNode):
         await self.emit_progress(
             state, self.progress_range[1], "Diagram semantics analyzed"
         )
-        return {"image_semantics_result": value}
+        return {"image_semantics": value}

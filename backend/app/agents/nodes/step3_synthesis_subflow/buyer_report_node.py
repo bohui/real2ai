@@ -16,27 +16,9 @@ class BuyerReportNode(ContractLLMNode):
             workflow=workflow,
             node_name="synthesize_buyer_report",
             contract_attribute="buyer_report",
-            state_field="buyer_report_result",
+            result_model=BuyerReportResult,
         )
         self.progress_range = progress_range
-
-    async def _short_circuit_check(
-        self, state: Step3SynthesisState
-    ) -> Optional[Step3SynthesisState]:
-        """Check if buyer report already exists and is valid"""
-        existing_result = state.get("buyer_report_result")
-        if existing_result:
-            try:
-                # Validate the existing result against our enhanced schema
-                validated_result = BuyerReportResult(**existing_result)
-                logger.info(
-                    f"Buyer report already completed with {len(validated_result.key_risks)} risks and {len(validated_result.action_plan_overview)} actions"
-                )
-                return state
-            except Exception as e:
-                logger.warning(f"Existing buyer report invalid, will regenerate: {e}")
-                return None
-        return None
 
     async def _build_context_and_parser(
         self, state: Step3SynthesisState
@@ -104,15 +86,7 @@ class BuyerReportNode(ContractLLMNode):
         composition_name = "step3_buyer_report"
         return context, parser, composition_name
 
-    def _coerce_to_model(self, data: Any) -> Optional[Any]:
-        try:
-            if isinstance(data, BuyerReportResult):
-                return data
-            if hasattr(data, "model_validate"):
-                return BuyerReportResult.model_validate(data)
-        except Exception:
-            return None
-        return None
+    # Coercion handled by base class via result_model
 
     def _evaluate_quality(
         self, result: Optional[Any], state: Step3SynthesisState

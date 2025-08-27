@@ -27,7 +27,7 @@ class TestAnalyzePartiesPropertyNode:
         """Sample Step2AnalysisState for testing"""
         return Step2AnalysisState(
             contract_text="Sample contract text for parties analysis",
-            entities_extraction={
+            extracted_entity
                 "content_hash": "test_hash_123",
                 "document": {"content_hash": "test_hash_123"},
                 "property": {"address": "123 Test St"},

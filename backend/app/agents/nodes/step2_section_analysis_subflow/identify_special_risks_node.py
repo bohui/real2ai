@@ -6,6 +6,9 @@ from app.agents.subflows.step2_section_analysis_workflow import (
     Step2AnalysisWorkflow,
 )
 from app.agents.nodes.contract_llm_base import ContractLLMNode
+from app.prompts.schema.step2.special_risks_schema import (
+    SpecialRisksAnalysisResult,
+)
 
 
 class SpecialRisksNode(ContractLLMNode):
@@ -18,14 +21,9 @@ class SpecialRisksNode(ContractLLMNode):
             workflow=workflow,
             node_name="identify_special_risks",
             contract_attribute="special_risks",
-            state_field="special_risks_result",
+            result_model=SpecialRisksAnalysisResult,
         )
         self.progress_range = progress_range
-
-    async def _short_circuit_check(
-        self, state: Step2AnalysisState
-    ) -> Optional[Step2AnalysisState]:
-        return None
 
     async def _build_context_and_parser(self, state: Step2AnalysisState):
         from app.core.prompts import PromptContext, ContextType
@@ -36,13 +34,13 @@ class SpecialRisksNode(ContractLLMNode):
 
         # Build a compact cross-section bundle instead of full text
         all_section_results = {
-            "parties_property": state.get("parties_property_result"),
-            "financial_terms": state.get("financial_terms_result"),
-            "conditions": state.get("conditions_result"),
-            "warranties": state.get("warranties_result"),
-            "default_termination": state.get("default_termination_result"),
-            "settlement_logistics": state.get("settlement_logistics_result"),
-            "title_encumbrances": state.get("title_encumbrances_result"),
+            "parties_property": state.get("parties_property"),
+            "financial_terms": state.get("financial_terms"),
+            "conditions": state.get("conditions"),
+            "warranties": state.get("warranties"),
+            "default_termination": state.get("default_termination"),
+            "settlement_logistics": state.get("settlement_logistics"),
+            "title_encumbrances": state.get("title_encumbrances"),
         }
 
         context = PromptContext(
@@ -65,20 +63,6 @@ class SpecialRisksNode(ContractLLMNode):
         )
         return context, parser, "step2_special_risks"
 
-    def _coerce_to_model(self, data: Any) -> Optional[Any]:
-        try:
-            from app.prompts.schema.step2.special_risks_schema import (
-                SpecialRisksAnalysisResult,
-            )
-
-            if isinstance(data, SpecialRisksAnalysisResult):
-                return data
-            if hasattr(data, "model_validate"):
-                return SpecialRisksAnalysisResult.model_validate(data)
-        except Exception:
-            return None
-        return None
-
     def _evaluate_quality(
         self, result: Optional[Any], state: Step2AnalysisState
     ) -> Dict[str, Any]:
@@ -98,29 +82,12 @@ class SpecialRisksNode(ContractLLMNode):
         except Exception:
             return {"ok": False}
 
-    async def _persist_results(self, state: Step2AnalysisState, parsed: Any) -> None:
-        try:
-            from app.services.repositories.contracts_repository import (
-                ContractsRepository,
-            )
-
-            content_hash = state.get("content_hash")
-            if not content_hash:
-                return
-            repo = ContractsRepository()
-            value = parsed.model_dump() if hasattr(parsed, "model_dump") else parsed
-            await repo.update_section_analysis_key(
-                content_hash, "special_risks", value, updated_by=self.node_name
-            )
-        except Exception:
-            pass
-
     async def _update_state_success(
         self, state: Step2AnalysisState, parsed: Any, quality: Dict[str, Any]
     ) -> Step2AnalysisState:
         value = parsed.model_dump() if hasattr(parsed, "model_dump") else parsed
-        state["special_risks_result"] = value
+        state["special_risks"] = value
         await self.emit_progress(
             state, self.progress_range[1], "Special risks identification completed"
         )
-        return {"special_risks_result": value}
+        return {"special_risks": value}

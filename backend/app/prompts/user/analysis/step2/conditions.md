@@ -8,7 +8,7 @@ fragment_orchestration: "step2_conditions"
 required_variables:
   - "analysis_timestamp"
 optional_variables:
-  - "entities_extraction"
+  - "extracted_entity"
   - "legal_requirements_matrix"
   - "contract_type"
   - "australian_state"
@@ -26,7 +26,7 @@ tags: ["step2", "conditions", "risk-assessment", "timelines"]
 Perform comprehensive analysis of all contract conditions with systematic risk assessment, timeline mapping, and dependency analysis.
 
 ## Contract Context
-{% set meta = (entities_extraction or {}).get('metadata') or {} %}
+{% set meta = (extracted_entity or {}).get('metadata') or {} %}
 - **State**: {{ australian_state or meta.get('state') or 'unknown' }}
 - **Contract Type**: {{ contract_type or meta.get('contract_type') or 'unknown' }}
 - **Purchase Method**: {{ meta.get('purchase_method') or 'unknown' }}
@@ -164,10 +164,10 @@ No seed snippets provided.
 
 ## Additional Context
 
-{% if entities_extraction %}
+{% if extracted_entity %}
 ### Entity Extraction Results (Baseline)
 Previously extracted condition data (use as baseline; verify and reconcile):
-{{entities_extraction | tojsonpretty}}
+{{extracted_entity | tojsonpretty}}
 {% endif %}
 
 {% if legal_requirements_matrix %}
@@ -178,7 +178,7 @@ Previously extracted condition data (use as baseline; verify and reconcile):
 
 ## Analysis Instructions (Seeds + Retrieval + Metadata Scoping)
 
-1. Use `entities_extraction.conditions` and `metadata` as the baseline. Verify and enrich using `seed_snippets` as primary evidence.
+1. Use `extracted_entity.conditions` and `metadata` as the baseline. Verify and enrich using `seed_snippets` as primary evidence.
 2. If baseline + seeds are insufficient, perform targeted retrieval from `retrieval_index_id` for specific condition types (finance, inspection, special conditions) and deadlines (business days vs calendar).
 3. Classify each condition (standard/special, precedent/subsequent), identify responsible parties, requirements, deadlines, and dependencies.
 4. Compute or verify deadlines (use business day calculations where applicable) and map dependencies chronologically.

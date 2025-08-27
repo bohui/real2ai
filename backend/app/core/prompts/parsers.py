@@ -131,7 +131,9 @@ class RetryingPydanticOutputParser(LCPydanticOutputParser):
             # Try all JSON candidates and pick the first that validates
             candidates = self._extract_all_json_candidates(text)
             if not candidates:
-                logger.warning(f"No valid JSON found in output: {text}")
+                logger.warning(
+                    f"No valid JSON found in output for model {self._model.__name__}: {text}"
+                )
                 result.parsing_errors.append("No valid JSON found in output")
             else:
                 for idx, json_data in enumerate(candidates):

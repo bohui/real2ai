@@ -77,7 +77,7 @@ class SectionAnalysisNode(BaseNode):
             # Execute Step 2 workflow
             step2_results = await self.step2_workflow.execute(
                 contract_text=contract_text,
-                entities_extraction=entities_result,
+                extracted_entity=entities_result,
                 parent_state=state,
                 **additional_context,
             )
@@ -240,7 +240,7 @@ class SectionAnalysisNode(BaseNode):
         self, state: RealEstateAgentState
     ) -> Optional[Dict[str, Any]]:
         """Get entities extraction result from state"""
-        return state.get("entities_extraction") or state.get("entities_result")
+        return state.get("extracted_entity") or state.get("entities_result")
 
     def _prepare_additional_context(
         self, state: RealEstateAgentState

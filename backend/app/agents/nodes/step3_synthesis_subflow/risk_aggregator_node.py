@@ -12,30 +12,15 @@ logger = logging.getLogger(__name__)
 
 class RiskAggregatorNode(ContractLLMNode):
     def __init__(self, workflow, progress_range: tuple[int, int] = (0, 5)):
+        from app.prompts.schema.step3.risk_summary_schema import RiskSummaryResult
+
         super().__init__(
             workflow=workflow,
             node_name="aggregate_risks",
             contract_attribute="risk_summary",
-            state_field="risk_summary_result",
+            result_model=RiskSummaryResult,
         )
         self.progress_range = progress_range
-
-    async def _short_circuit_check(
-        self, state: Step3SynthesisState
-    ) -> Optional[Step3SynthesisState]:
-        """Check if risk summary already exists and is valid"""
-        existing_result = state.get("risk_summary_result")
-        if existing_result:
-            try:
-                validated_result = RiskSummaryResult(**existing_result)
-                logger.info(
-                    f"Risk aggregation already completed with score: {validated_result.overall_risk_score}"
-                )
-                return state
-            except Exception as e:
-                logger.warning(f"Existing risk summary invalid, will regenerate: {e}")
-                return None
-        return None
 
     async def _build_context_and_parser(
         self, state: Step3SynthesisState
@@ -83,15 +68,6 @@ class RiskAggregatorNode(ContractLLMNode):
         composition_name = "step3_risk_aggregation"
         return context, parser, composition_name
 
-    def _coerce_to_model(self, data: Any) -> Optional[Any]:
-        try:
-            if isinstance(data, RiskSummaryResult):
-                return data
-            if hasattr(data, "model_validate"):
-                return RiskSummaryResult.model_validate(data)
-        except Exception:
-            return None
-        return None
 
     def _evaluate_quality(
         self, result: Optional[Any], state: Step3SynthesisState

@@ -14,18 +14,17 @@ class AdjustmentsOutgoingsNode(ContractLLMNode):
         workflow: Step2AnalysisWorkflow,
         progress_range: tuple[int, int] = (94, 96),
     ):
+        from app.prompts.schema.step2.adjustments_schema import (
+            AdjustmentsAnalysisResult,
+        )
+
         super().__init__(
             workflow=workflow,
             node_name="calculate_adjustments_outgoings",
             contract_attribute="adjustments_outgoings",
-            state_field="adjustments_outgoings_result",
+            result_model=AdjustmentsAnalysisResult,
         )
         self.progress_range = progress_range
-
-    async def _short_circuit_check(
-        self, state: Step2AnalysisState
-    ) -> Optional[Step2AnalysisState]:
-        return None
 
     async def _build_context_and_parser(self, state: Step2AnalysisState):
         from app.core.prompts import PromptContext, ContextType
@@ -46,8 +45,8 @@ class AdjustmentsOutgoingsNode(ContractLLMNode):
                 .get("snippets", {})
                 .get("adjustments"),
                 # Dependencies per DAG
-                "financial_terms_result": state.get("financial_terms_result"),
-                "settlement_logistics_result": state.get("settlement_logistics_result"),
+                "financial_terms_result": state.get("financial_terms"),
+                "settlement_logistics_result": state.get("settlement_logistics"),
             },
         )
 
@@ -56,19 +55,7 @@ class AdjustmentsOutgoingsNode(ContractLLMNode):
         )
         return context, parser, "step2_adjustments"
 
-    def _coerce_to_model(self, data: Any) -> Optional[Any]:
-        try:
-            from app.prompts.schema.step2.adjustments_schema import (
-                AdjustmentsAnalysisResult,
-            )
-
-            if isinstance(data, AdjustmentsAnalysisResult):
-                return data
-            if hasattr(data, "model_validate"):
-                return AdjustmentsAnalysisResult.model_validate(data)
-        except Exception:
-            return None
-        return None
+    # Coercion handled by base class via result_model
 
     def _evaluate_quality(
         self, result: Optional[Any], state: Step2AnalysisState
@@ -89,32 +76,14 @@ class AdjustmentsOutgoingsNode(ContractLLMNode):
         except Exception:
             return {"ok": False}
 
-    async def _persist_results(self, state: Step2AnalysisState, parsed: Any) -> None:
-        try:
-            from app.services.repositories.contracts_repository import (
-                ContractsRepository,
-            )
-
-            content_hash = state.get("content_hash")
-            if not content_hash:
-                return
-
-            repo = ContractsRepository()
-            value = parsed.model_dump() if hasattr(parsed, "model_dump") else parsed
-            await repo.update_section_analysis_key(
-                content_hash, "adjustments_outgoings", value, updated_by=self.node_name
-            )
-        except Exception:
-            pass
-
     async def _update_state_success(
         self, state: Step2AnalysisState, parsed: Any, quality: Dict[str, Any]
     ) -> Step2AnalysisState:
         value = parsed.model_dump() if hasattr(parsed, "model_dump") else parsed
-        state["adjustments_outgoings_result"] = value
+        state["adjustments_outgoings"] = value
         await self.emit_progress(
             state,
             self.progress_range[1],
             "Adjustments and outgoings calculation completed",
         )
-        return {"adjustments_outgoings_result": value}
+        return {"adjustments_outgoings": value}

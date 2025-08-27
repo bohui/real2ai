@@ -75,7 +75,7 @@ class RealEstateAgentState(LangGraphBaseState):
 
     # Analysis Results Structure
     # Step 1: Entity extraction results
-    entities_extraction: Annotated[
+    extracted_entity: Annotated[
         Optional[Dict[str, Any]], lambda x, y: y
     ]  # Last value wins
 

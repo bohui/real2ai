@@ -16,29 +16,9 @@ class ComplianceScoreNode(ContractLLMNode):
             workflow=workflow,
             node_name="compute_compliance_score",
             contract_attribute="compliance_summary",
-            state_field="compliance_summary_result",
+            result_model=ComplianceSummaryResult,
         )
         self.progress_range = progress_range
-
-    async def _short_circuit_check(
-        self, state: Step3SynthesisState
-    ) -> Optional[Step3SynthesisState]:
-        """Check if compliance summary already exists and is valid"""
-        existing_result = state.get("compliance_summary_result")
-        if existing_result:
-            try:
-                # Validate the existing result against our enhanced schema
-                validated_result = ComplianceSummaryResult(**existing_result)
-                logger.info(
-                    f"Compliance analysis already completed with score: {validated_result.score}"
-                )
-                return state
-            except Exception as e:
-                logger.warning(
-                    f"Existing compliance summary invalid, will regenerate: {e}"
-                )
-                return None
-        return None
 
     async def _build_context_and_parser(
         self, state: Step3SynthesisState
@@ -86,15 +66,7 @@ class ComplianceScoreNode(ContractLLMNode):
         composition_name = "step3_compliance_score"
         return context, parser, composition_name
 
-    def _coerce_to_model(self, data: Any) -> Optional[Any]:
-        try:
-            if isinstance(data, ComplianceSummaryResult):
-                return data
-            if hasattr(data, "model_validate"):
-                return ComplianceSummaryResult.model_validate(data)
-        except Exception:
-            return None
-        return None
+    # Coercion handled by base class via result_model
 
     def _evaluate_quality(
         self, result: Optional[Any], state: Step3SynthesisState

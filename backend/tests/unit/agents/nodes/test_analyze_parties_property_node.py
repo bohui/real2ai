@@ -42,7 +42,7 @@ class TestPartiesPropertyNode:
     def sample_state(self):
         """Sample Step 2 analysis state"""
         return {
-            "entities_extraction": {
+            "extracted_entity": {
                 "content_hash": "test_hash_123",
                 "metadata": {
                     "state": "NSW",
@@ -137,7 +137,7 @@ class TestPartiesPropertyNode:
     def test_ensure_content_hash_on_state_from_entities_extraction(
         self, node, sample_state
     ):
-        """Test content_hash normalization from entities_extraction.content_hash"""
+        """Test content_hash normalization from extracted_entity.content_hash"""
         # Remove any existing content_hash
         sample_state.pop("content_hash", None)
         sample_state.pop("content_hmac", None)
@@ -149,9 +149,9 @@ class TestPartiesPropertyNode:
     def test_ensure_content_hash_on_state_from_document_fallback(
         self, node, sample_state
     ):
-        """Test content_hash normalization from entities_extraction.document.content_hash fallback"""
-        # Remove entities_extraction.content_hash but keep document.content_hash
-        sample_state["entities_extraction"].pop("content_hash")
+        """Test content_hash normalization from extracted_entity.document.content_hash fallback"""
+        # Remove extracted_entity.content_hash but keep document.content_hash
+        sample_state["extracted_entity"].pop("content_hash")
         sample_state.pop("content_hash", None)
         sample_state.pop("content_hmac", None)
 
@@ -162,8 +162,8 @@ class TestPartiesPropertyNode:
     def test_ensure_content_hash_on_state_no_hash_available(self, node, sample_state):
         """Test content_hash normalization when no hash is available"""
         # Remove all hash sources
-        sample_state["entities_extraction"].pop("content_hash")
-        sample_state["entities_extraction"]["document"].pop("content_hash")
+        sample_state["extracted_entity"].pop("content_hash")
+        sample_state["extracted_entity"]["document"].pop("content_hash")
         sample_state.pop("content_hash", None)
         sample_state.pop("content_hmac", None)
 
@@ -175,7 +175,7 @@ class TestPartiesPropertyNode:
     def test_ensure_content_hash_on_state_exception_handling(self, node, sample_state):
         """Test content_hash normalization handles exceptions gracefully"""
         # Make state access raise an exception
-        sample_state["entities_extraction"] = None
+        sample_state["extracted_entity"
 
         # Should not raise exception
         node._ensure_content_hash_on_state(sample_state)

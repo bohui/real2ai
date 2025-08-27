@@ -7,6 +7,12 @@ from app.agents.subflows.step2_section_analysis_workflow import (
 )
 from app.agents.nodes.contract_llm_base import ContractLLMNode
 
+from app.core.prompts import PromptContext, ContextType
+from app.prompts.schema.step2.conditions_schema import (
+    ConditionsAnalysisResult,
+)
+from app.core.prompts.parsers import create_parser
+
 
 class ConditionsNode(ContractLLMNode):
     def __init__(
@@ -18,25 +24,20 @@ class ConditionsNode(ContractLLMNode):
             workflow=workflow,
             node_name="analyze_conditions",
             contract_attribute="conditions",
-            state_field="conditions_result",
+            result_model=ConditionsAnalysisResult,
         )
         self.progress_range = progress_range
 
     async def _build_context_and_parser(self, state: Step2AnalysisState):
-        from app.core.prompts import PromptContext, ContextType
-        from app.prompts.schema.step2.conditions_schema import (
-            ConditionsAnalysisResult,
-        )
-        from app.core.prompts.parsers import create_parser
 
-        entities = state.get("entities_extraction", {}) or {}
+        entities = state.get("extracted_entity", {}) or {}
         meta = (entities or {}).get("metadata") or {}
 
         context = PromptContext(
             context_type=ContextType.ANALYSIS,
             variables={
                 "analysis_timestamp": datetime.now(UTC).isoformat(),
-                "entities_extraction": entities,
+                "extracted_entity": entities,
                 "australian_state": state.get("australian_state")
                 or meta.get("state")
                 or "NSW",
@@ -56,19 +57,7 @@ class ConditionsNode(ContractLLMNode):
         )
         return context, parser, "step2_conditions"
 
-    def _coerce_to_model(self, data: Any) -> Optional[Any]:
-        try:
-            from app.prompts.schema.step2.conditions_schema import (
-                ConditionsAnalysisResult,
-            )
-
-            if isinstance(data, ConditionsAnalysisResult):
-                return data
-            if hasattr(data, "model_validate"):
-                return ConditionsAnalysisResult.model_validate(data)
-        except Exception:
-            return None
-        return None
+    # Coercion handled by base class via result_model
 
     def _evaluate_quality(
         self, result: Optional[Any], state: Step2AnalysisState
@@ -93,10 +82,10 @@ class ConditionsNode(ContractLLMNode):
         self, state: Step2AnalysisState, parsed: Any, quality: Dict[str, Any]
     ) -> Step2AnalysisState:
         value = parsed.model_dump() if hasattr(parsed, "model_dump") else parsed
-        state["conditions_result"] = value
+        state["conditions"] = value
 
         await self.emit_progress(
             state, self.progress_range[1], "Conditions analysis completed"
         )
 
-        return {"conditions_result": value}
+        return {"conditions": value}

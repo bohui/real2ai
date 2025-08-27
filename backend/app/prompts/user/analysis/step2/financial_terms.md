@@ -8,7 +8,7 @@ fragment_orchestration: "step2_financial_terms"
 required_variables:
   - "analysis_timestamp"
 optional_variables:
-  - "entities_extraction"
+  - "extracted_entity"
   - "legal_requirements_matrix"
   - "contract_type"
   - "australian_state"
@@ -26,7 +26,7 @@ tags: ["step2", "financial", "terms", "verification"]
 Perform comprehensive analysis of financial terms and monetary obligations in this Australian real estate contract, focusing on accuracy verification, market alignment, and risk assessment.
 
 ## Contract Context
-{% set meta = (entities_extraction or {}).get('metadata') or {} %}
+{% set meta = (extracted_entity or {}).get('metadata') or {} %}
 - **State**: {{ australian_state or meta.get('state') or 'unknown' }}
 - **Contract Type**: {{ contract_type or meta.get('contract_type') or 'unknown' }}
 - **Purchase Method**: {{ meta.get('purchase_method') or 'unknown' }}
@@ -140,10 +140,10 @@ No seed snippets provided.
 
 ## Additional Context
 
-{% if entities_extraction %}
+{% if extracted_entity %}
 ### Entity Extraction Results (Baseline)
 Previously extracted financial data (use as baseline; verify and reconcile):
-{{entities_extraction | tojsonpretty}}
+{{extracted_entity | tojsonpretty}}
 {% endif %}
 
 {% if legal_requirements_matrix %}
@@ -154,7 +154,7 @@ Previously extracted financial data (use as baseline; verify and reconcile):
 
 ## Analysis Instructions (Seeds + Retrieval + Metadata Scoping)
 
-1. Use `entities_extraction` and `metadata` as the baseline. Verify and enrich using `seed_snippets` as primary evidence.
+1. Use `extracted_entity` and `metadata` as the baseline. Verify and enrich using `seed_snippets` as primary evidence.
 2. If baseline + seeds are insufficient, retrieve targeted financial clauses (price, deposit, payment schedule, interest/penalty, GST) from `retrieval_index_id` with concise queries.
 3. Double-check arithmetic and consistency; compute totals and percentages; validate GST calculations.
 4. Assess financial risks (high/medium/low) and quantify impact where feasible. Provide clause citations.

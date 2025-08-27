@@ -29,7 +29,7 @@ class EntitiesExtractionNode(ContractLLMNode):
             workflow=workflow,
             node_name="entities_extraction",
             contract_attribute="extracted_entity",
-            state_field="entities_extraction",
+            result_model=ContractEntityExtraction,
         )
         # Local parser instance; do not rely on workflow-managed parsers
         self._parser = create_parser(
@@ -57,7 +57,7 @@ class EntitiesExtractionNode(ContractLLMNode):
             context_type=ContextType.ANALYSIS,
             variables={
                 "contract_text": full_text,
-                "analysis_type": "entities_extraction",
+                "analysis_type": "extracted_entity",
                 "document_metadata": document_metadata,
                 "contract_type": contract_type_value,
                 "user_type": user_type_value,
@@ -69,19 +69,7 @@ class EntitiesExtractionNode(ContractLLMNode):
         parser = self._parser
         return context, parser, "contract_entities_extraction"
 
-    def _coerce_to_model(self, data: Any) -> Optional[ContractEntityExtraction]:
-        # Accept already-correct type
-        if isinstance(data, ContractEntityExtraction):
-            return data
-        # Try to validate dict-like payloads or objects exposing model_dump
-        try:
-            if hasattr(data, "model_dump"):
-                return ContractEntityExtraction.model_validate(data.model_dump())
-            if isinstance(data, dict):
-                return ContractEntityExtraction.model_validate(data)
-        except Exception:
-            return None
-        return None
+    # Coercion handled by base class via result_model
 
     def _evaluate_quality(
         self, result: Optional[ContractEntityExtraction], state: RealEstateAgentState
@@ -158,10 +146,12 @@ class EntitiesExtractionNode(ContractLLMNode):
         parsed: ContractEntityExtraction,
         quality: Dict[str, Any],
     ) -> RealEstateAgentState:
-        state["entities_extraction"] = parsed.model_dump()
+        data = parsed.model_dump()
+        # Primary: align with contract_attribute for consistency
+        state[self.contract_attribute] = data
         if parsed.metadata and parsed.metadata.overall_confidence is not None:
             state.setdefault("confidence_scores", {})[
-                "entities_extraction"
+                self.contract_attribute
             ] = parsed.metadata.overall_confidence
 
         return self.update_state_step(

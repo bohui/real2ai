@@ -3,7 +3,7 @@
 #### Context
 - Replace `ContractTermsExtractionNode` with a LangGraph-powered Step 2 sub-workflow that performs section-by-section analysis.
 - Aligns with PRD 4.1.2 and `docs/workflows/step_assessment_architect_dependencies.md` for dependency-driven execution.
-- Inputs include `full_text`, Step 1 `entities_extraction`, and relevant `RealEstateAgentState` context (`australian_state`, `contract_type`, `purchase_method`, `use_category`, `property_condition`), plus uploaded diagrams/overlays where available.
+- Inputs include `full_text`, Step 1 `extracted_entity`, and relevant `RealEstateAgentState` context (`australian_state`, `contract_type`, `purchase_method`, `use_category`, `property_condition`), plus uploaded diagrams/overlays where available.
 
 #### Objectives
 - Improve accuracy and explainability by decomposing monolithic extraction into 10 specialist analyzers with cross-validation.

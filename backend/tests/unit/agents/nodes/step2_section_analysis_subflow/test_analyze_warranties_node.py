@@ -25,7 +25,7 @@ class TestAnalyzeWarrantiesNode:
         """Sample Step2AnalysisState for testing"""
         return Step2AnalysisState(
             contract_text="Sample contract text for warranties analysis",
-            entities_extraction={
+            extracted_entity
                 "content_hash": "test_hash_warranties",
                 "document": {"content_hash": "test_hash_warranties"},
                 "warranties": [
@@ -269,7 +269,7 @@ class TestAnalyzeWarrantiesNode:
     async def test_execute_with_complex_warranties(self, node, sample_state):
         """Test execution with complex warranties context"""
         # Enhance sample state with more complex warranties
-        sample_state["entities_extraction"]["warranties"] = [
+        sample_state["extracted_entity"warranties"] = [
             {
                 "type": "title",
                 "description": "Clear title warranty",
@@ -375,7 +375,7 @@ class TestAnalyzeWarrantiesNode:
     async def test_execute_with_no_warranties(self, node, sample_state):
         """Test execution when no warranties are present"""
         # Remove warranties from sample state
-        sample_state["entities_extraction"]["warranties"] = []
+        sample_state["extracted_entity"]["warranties"] = []
 
         with patch(
             "app.services.repositories.contracts_repository.ContractsRepository"

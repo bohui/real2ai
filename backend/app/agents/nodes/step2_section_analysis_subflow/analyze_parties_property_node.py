@@ -6,6 +6,9 @@ from app.agents.subflows.step2_section_analysis_workflow import (
     Step2AnalysisWorkflow,
 )
 from app.agents.nodes.contract_llm_base import ContractLLMNode
+from app.prompts.schema.step2.parties_property_schema import (
+    PartiesPropertyAnalysisResult,
+)
 
 
 class PartiesPropertyNode(ContractLLMNode):
@@ -16,7 +19,7 @@ class PartiesPropertyNode(ContractLLMNode):
             workflow=workflow,  # will be set by caller if needed; BaseNode doesn't require it
             node_name="analyze_parties_property",
             contract_attribute="parties_property",
-            state_field="parties_property_result",
+            result_model=PartiesPropertyAnalysisResult,
         )
         # Use BaseNode progress tracking if available in caller context
         self.progress_range = progress_range
@@ -27,8 +30,8 @@ class PartiesPropertyNode(ContractLLMNode):
             PartiesPropertyAnalysisResult,
         )
 
-        # Prefer metadata from entities_extraction
-        entities = state.get("entities_extraction", {}) or {}
+        # Prefer metadata from extracted_entity
+        entities = state.get("extracted_entity", {}) or {}
         meta = (entities or {}).get("metadata") or {}
 
         context = PromptContext(
@@ -36,7 +39,7 @@ class PartiesPropertyNode(ContractLLMNode):
             variables={
                 # Seeds + metadata; avoid passing full text by default
                 "analysis_timestamp": datetime.now(UTC).isoformat(),
-                "entities_extraction": entities,
+                "extracted_entity": entities,
                 "australian_state": state.get("australian_state")
                 or meta.get("state")
                 or "NSW",
@@ -63,20 +66,6 @@ class PartiesPropertyNode(ContractLLMNode):
         )
         return context, parser, "step2_parties_property"
 
-    def _coerce_to_model(self, data: Any) -> Optional[Any]:
-        try:
-            from app.prompts.schema.step2.parties_property_schema import (
-                PartiesPropertyAnalysisResult,
-            )
-
-            if isinstance(data, PartiesPropertyAnalysisResult):
-                return data
-            if hasattr(data, "model_validate"):
-                return data.model_validate()
-        except Exception:
-            return None
-        return None
-
     def _evaluate_quality(
         self, result: Optional[Any], state: Step2AnalysisState
     ) -> Dict[str, Any]:
@@ -101,12 +90,12 @@ class PartiesPropertyNode(ContractLLMNode):
         self, state: Step2AnalysisState, parsed: Any, quality: Dict[str, Any]
     ) -> Step2AnalysisState:
         value = parsed.model_dump() if hasattr(parsed, "model_dump") else parsed
-        state["parties_property_result"] = value
+        state["parties_property"] = value
 
         await self.emit_progress(
             state, self.progress_range[1], "Parties and property analysis completed"
         )
 
         return {
-            "parties_property_result": value,
+            "parties_property": value,
         }

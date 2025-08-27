@@ -29,11 +29,11 @@ class Step3SynthesisState(LangGraphBaseState):
     warranties_result: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
     default_termination_result: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
 
-    # Step 3 Outputs
-    risk_summary_result: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
-    action_plan_result: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
-    compliance_summary_result: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
-    buyer_report_result: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
+    # Step 3 Outputs (aligned with contract attributes)
+    risk_summary: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
+    action_plan: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
+    compliance_summary: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
+    buyer_report: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
 
     # Tracking
     start_time: Optional[datetime]

@@ -25,7 +25,7 @@ class TestAnalyzeConditionsNode:
         """Sample Step2AnalysisState for testing"""
         return Step2AnalysisState(
             contract_text="Sample contract text for conditions analysis",
-            entities_extraction={
+            extracted_entity
                 "content_hash": "test_hash_789",
                 "document": {"content_hash": "test_hash_789"},
                 "conditions": [
@@ -378,7 +378,7 @@ class TestAnalyzeConditionsNode:
     async def test_execute_with_complex_conditions(self, node, sample_state):
         """Test execution with complex conditions context"""
         # Enhance sample state with more complex conditions
-        sample_state["entities_extraction"]["conditions"] = [
+        sample_state["extracted_entity"]["conditions"] = [
             {
                 "type": "finance",
                 "deadline": "2024-02-15",
@@ -478,7 +478,7 @@ class TestAnalyzeConditionsNode:
     async def test_execute_with_no_conditions(self, node, sample_state):
         """Test execution when no conditions are present"""
         # Remove conditions from sample state
-        sample_state["entities_extraction"]["conditions"] = []
+        sample_state["extracted_entity"]["conditions"] = []
 
         with patch(
             "app.services.repositories.contracts_repository.ContractsRepository"

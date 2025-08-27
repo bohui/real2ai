@@ -18,7 +18,7 @@ class InitializeWorkflowNode(Step2NodeBase):
                 "No contract text provided for Step 2 analysis"
             )
 
-        if not state.get("entities_extraction"):
+        if not state.get("extracted_entity"):
             updates.setdefault("processing_errors", []).append(
                 "No entities extraction result provided for Step 2 analysis"
             )

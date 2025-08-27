@@ -9,6 +9,7 @@ from typing import Dict, List, Optional, Tuple, Callable, Awaitable
 import os
 import tempfile
 from datetime import datetime, timezone
+import asyncio
 
 from app.agents.subflows.document_processing_workflow import DocumentProcessingState
 from app.schema.document import (
@@ -43,7 +44,11 @@ class ExtractTextNode(DocumentProcessingNodeBase):
 
     # Inherit constructor from DocumentProcessingNodeBase
     def __init__(
-        self, workflow, use_llm: bool = True, progress_range: tuple[int, int] = (7, 30)
+        self,
+        workflow,
+        use_llm: bool = True,
+        progress_range: tuple[int, int] = (7, 30),
+        page_concurrency_limit: int = 4,
     ):
         super().__init__(workflow, "extract_text", progress_range)
         self.use_llm = use_llm
@@ -58,6 +63,8 @@ class ExtractTextNode(DocumentProcessingNodeBase):
         # Heuristics / thresholds
         self._min_text_len_for_ocr = 100
         self._ocr_zoom = 2.0
+        # Bounded concurrency for page-level processing
+        self._page_concurrency_limit = max(1, page_concurrency_limit)
         self._diagram_keywords = [
             "diagram",
             "plan",
@@ -1027,195 +1034,113 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                     gemini_service = None
 
             doc = pymupdf.open(stream=file_content, filetype="pdf")
-            pages: List[PageExtraction] = []
+            total_pages = len(doc)
+            pages: List[Optional[PageExtraction]] = [None] * total_pages
             extraction_methods: List[str] = []
-            full_text_parts: List[str] = []
+            full_text_parts: List[Optional[str]] = [None] * total_pages
             # PRD: prepare notify callback (explicit takes precedence over state) for incremental progress 7-30%
             notify_cb = self._progress_callback or state.get("notify_progress")
             last_sent_percent = 7
 
-            total_pages = len(doc)
-            for idx in range(total_pages):
-                page = doc.load_page(idx)
-                # Build text from spans, excluding header/footer, and capture font sizes
-                try:
-                    raw_text, decorated_text = (
-                        self._extract_page_text_with_fonts_excluding_headers_footers(
-                            page
+            semaphore = asyncio.Semaphore(self._page_concurrency_limit)
+            shared_lock = asyncio.Lock()
+
+            async def process_single_page(page_index: int) -> None:
+                async with semaphore:
+                    page = doc.load_page(page_index)
+                    # Build text from spans, excluding header/footer, and capture font sizes
+                    try:
+                        raw_text, decorated_text = (
+                            self._extract_page_text_with_fonts_excluding_headers_footers(
+                                page
+                            )
+                        )
+                        method = "pymupdf_spans"
+                        text_to_use = raw_text
+                        decorated_for_full = decorated_text
+                    except Exception as span_err:
+                        self._log_warning(
+                            f"Span-based extraction failed on page {page_index + 1}: {span_err}"
+                        )
+                        raw_text = page.get_text() or ""
+                        method = "pymupdf"
+                        text_to_use = raw_text
+                        decorated_for_full = text_to_use
+
+                    is_low_text = len(raw_text.strip()) < self._min_text_len_for_ocr
+                    has_images = bool(page.get_images())
+                    has_diagram_kw = self._has_diagram_keywords(raw_text)
+
+                    settings = get_settings()
+                    should_ocr = (
+                        (is_low_text + has_images + has_diagram_kw) >= 2
+                        if settings.enable_selective_ocr
+                        else False
+                    )
+                    trigger_label = (
+                        "low_text_and_images"
+                        if (is_low_text and has_images)
+                        else (
+                            "low_text_and_diagram_keywords"
+                            if (is_low_text and has_diagram_kw)
+                            else "no_trigger"
                         )
                     )
-                    method = "pymupdf_spans"
-                    text_to_use = raw_text
-                    decorated_for_full = decorated_text
-                except Exception as span_err:
-                    # Fallback to simple text extraction if span processing fails
-                    self._log_warning(
-                        f"Span-based extraction failed on page {idx + 1}: {span_err}"
+
+                    self._log_info(
+                        f"Selective OCR decision for page {page_index + 1}",
+                        is_low_text=is_low_text,
+                        has_images=has_images,
+                        has_diagram_kw=has_diagram_kw,
+                        min_text_len_for_ocr=self._min_text_len_for_ocr,
+                        should_ocr=should_ocr,
+                        trigger=trigger_label,
                     )
-                    raw_text = page.get_text() or ""
-                    method = "pymupdf"
-                    text_to_use = raw_text
-                    decorated_for_full = text_to_use
 
-                # Heuristic flags
-                is_low_text = len(raw_text.strip()) < self._min_text_len_for_ocr
-                has_images = bool(page.get_images())
-                has_diagram_kw = self._has_diagram_keywords(raw_text)
-
-                # Selective OCR for low-text/scanned pages (LLM first, PyTesseract fallback)
-                # Only run OCR when there's insufficient text AND visual content that might contain text
-                settings = get_settings()
-                should_ocr = (
-                    (is_low_text + has_images + has_diagram_kw) >= 2
-                    if settings.enable_selective_ocr
-                    else False
-                )
-                trigger_label = (
-                    "low_text_and_images"
-                    if (is_low_text and has_images)
-                    else (
-                        "low_text_and_diagram_keywords"
-                        if (is_low_text and has_diagram_kw)
-                        else "no_trigger"
-                    )
-                )
-
-                self._log_info(
-                    f"Selective OCR decision for page {idx + 1}",
-                    is_low_text=is_low_text,
-                    has_images=has_images,
-                    has_diagram_kw=has_diagram_kw,
-                    min_text_len_for_ocr=self._min_text_len_for_ocr,
-                    should_ocr=should_ocr,
-                    trigger=trigger_label,
-                )
-
-                if should_ocr:
-                    ocr_text = ""
-                    ocr_method = method
-                    # Try LLM OCR first if enabled
-                    if self.use_llm and gemini_service:
-                        try:
-                            self._log_info(
-                                f"Invoking Gemini OCR for page {idx + 1}",
-                                extra={
-                                    "trigger": trigger_label,
-                                    "use_llm": self.use_llm,
-                                },
-                            )
-                            # Render page image at higher DPI
-                            png_bytes = self._render_page_png(page, zoom=self._ocr_zoom)
-                            llm_result = (
-                                await gemini_service.extract_text_diagram_insight(
-                                    file_content=png_bytes,
-                                    file_type="png",
-                                    filename=f"page_{idx+1}.png",
-                                    analysis_focus="ocr",
-                                    australian_state=state.get(
-                                        "australian_state", "NSW"
-                                    ),
-                                    contract_type=state.get(
-                                        "contract_type", "purchase_agreement"
-                                    ),
-                                    document_type=state.get(
-                                        "document_type", "contract"
-                                    ),
-                                )
-                            )
-                            llm_text = (llm_result.text or "") if llm_result else ""
-                            if len(llm_text.strip()) > len(raw_text.strip()):
-                                ocr_text = llm_text
-                                ocr_method = "gemini_ocr"
+                    if should_ocr:
+                        ocr_text = ""
+                        ocr_method = method
+                        if self.use_llm and gemini_service:
+                            try:
                                 self._log_info(
-                                    f"Gemini OCR chosen for page {idx + 1}",
-                                    extra={"chars": len(ocr_text)},
+                                    f"Invoking Gemini OCR for page {page_index + 1}",
+                                    extra={
+                                        "trigger": trigger_label,
+                                        "use_llm": self.use_llm,
+                                    },
                                 )
-                            # If LLM returned diagram types, mark later in analysis
-                            diagrams = getattr(llm_result, "diagrams", None) or []
-                            has_images = bool(diagrams)
-
-                            # Update diagram processing result with detected diagrams
-                            if diagrams:
-                                for hint_index, diagram_type in enumerate(
-                                    diagrams, start=1
-                                ):
-                                    diagram_type_value = (
-                                        getattr(diagram_type, "value", None)
-                                        or str(diagram_type)
-                                        or "unknown"
+                                png_bytes = self._render_page_png(
+                                    page, zoom=self._ocr_zoom
+                                )
+                                llm_result = (
+                                    await gemini_service.extract_text_diagram_insight(
+                                        file_content=png_bytes,
+                                        file_type="png",
+                                        filename=f"page_{page_index+1}.png",
+                                        analysis_focus="ocr",
+                                        australian_state=state.get(
+                                            "australian_state", "NSW"
+                                        ),
+                                        contract_type=state.get(
+                                            "contract_type", "purchase_agreement"
+                                        ),
+                                        document_type=state.get(
+                                            "document_type", "contract"
+                                        ),
                                     )
-                                    confidence = float(
-                                        getattr(llm_result, "text_confidence", 0.0)
-                                        or 0.0
+                                )
+                                llm_text = (llm_result.text or "") if llm_result else ""
+                                if len(llm_text.strip()) > len(raw_text.strip()):
+                                    ocr_text = llm_text
+                                    ocr_method = "gemini_ocr"
+                                    self._log_info(
+                                        f"Gemini OCR chosen for page {page_index + 1}",
+                                        extra={"chars": len(ocr_text)},
                                     )
+                                diagrams = getattr(llm_result, "diagrams", None) or []
+                                has_images = bool(diagrams)
 
-                                    # Create a simple diagram representation
-                                    class SimpleDiagram:
-                                        def __init__(
-                                            self, page, type_value, confidence, method
-                                        ):
-                                            self.page = page
-                                            self.type = type_value
-                                            self.confidence = confidence
-                                            self.detection_method = method
-
-                                    # Add to diagram processing result
-                                    self.diagram_processing_result["diagrams"].append(
-                                        SimpleDiagram(
-                                            idx + 1,  # page number
-                                            diagram_type_value,
-                                            confidence,
-                                            "llm_ocr_hint",
-                                        )
-                                    )
-
-                                    # Update counts and tracking
-                                    self.diagram_processing_result[
-                                        "total_diagrams"
-                                    ] += 1
-                                    if (
-                                        idx + 1
-                                        not in self.diagram_processing_result[
-                                            "diagram_pages"
-                                        ]
-                                    ):
-                                        self.diagram_processing_result[
-                                            "diagram_pages"
-                                        ].append(idx + 1)
-
-                                    # Update diagram types count
-                                    if (
-                                        diagram_type_value
-                                        not in self.diagram_processing_result[
-                                            "diagram_types"
-                                        ]
-                                    ):
-                                        self.diagram_processing_result["diagram_types"][
-                                            diagram_type_value
-                                        ] = 0
-                                    self.diagram_processing_result["diagram_types"][
-                                        diagram_type_value
-                                    ] += 1
-
-                            # Track this page as processed by Gemini OCR (regardless of whether diagrams were found)
-                            if (
-                                idx + 1
-                                not in self.diagram_processing_result["pages_processed"]
-                            ):
-                                self.diagram_processing_result[
-                                    "pages_processed"
-                                ].append(idx + 1)
-
-                            # Persist artifact hints with images so downstream diagram detection can skip duplicate API calls
-                            if has_images:
-                                try:
-                                    # Ensure services are initialized
-                                    if not self.visual_artifact_service:
-                                        await self.initialize()
-
-                                    # Persist per-hint artifacts with visual content
-                                    persisted_any = False
-                                    diagrams = getattr(llm_result, "diagrams", [])
+                                if diagrams:
                                     for hint_index, diagram_type in enumerate(
                                         diagrams, start=1
                                     ):
@@ -1224,147 +1149,225 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                                             or str(diagram_type)
                                             or "unknown"
                                         )
-                                        diagram_key = f"llm_ocr_hint_page_{idx+1}_{hint_index:02d}"
-
-                                        # Use visual artifact service to store both image and metadata
-                                        result = await self.visual_artifact_service.store_visual_artifact(
-                                            image_bytes=png_bytes,
-                                            content_hmac=state["content_hmac"],
-                                            algorithm_version=get_settings().artifacts_algorithm_version,
-                                            params_fingerprint=state.get(
-                                                "params_fingerprint"
-                                            )
-                                            or "",
-                                            page_number=idx + 1,
-                                            diagram_key=diagram_key,
-                                            artifact_type="diagram",
-                                            diagram_meta={
-                                                "type": diagram_type_value,
-                                                "confidence": float(
-                                                    getattr(
-                                                        llm_result,
-                                                        "text_confidence",
-                                                        0.0,
-                                                    )
-                                                    or 0.0
-                                                ),
-                                                "detection_method": "llm_ocr_hint",
-                                            },
+                                        confidence = float(
+                                            getattr(llm_result, "text_confidence", 0.0)
+                                            or 0.0
                                         )
-                                        persisted_any = True
-                                        if result.cache_hit:
-                                            self._log_info(
-                                                f"Reused cached visual artifact for page {idx + 1} hint {hint_index}"
-                                            )
 
-                                    if persisted_any:
-                                        self._log_info(
-                                            f"Stored LLM OCR diagram hint(s) with images for page {idx + 1}",
-                                            extra={
-                                                "hint_count": (
-                                                    len(diagrams) if diagrams else 1
+                                        class SimpleDiagram:
+                                            def __init__(
+                                                self,
+                                                page,
+                                                type_value,
+                                                confidence,
+                                                method,
+                                            ):
+                                                self.page = page
+                                                self.type = type_value
+                                                self.confidence = confidence
+                                                self.detection_method = method
+
+                                        async with shared_lock:
+                                            self.diagram_processing_result[
+                                                "diagrams"
+                                            ].append(
+                                                SimpleDiagram(
+                                                    page_index + 1,
+                                                    diagram_type_value,
+                                                    confidence,
+                                                    "llm_ocr_hint",
                                                 )
-                                            },
-                                        )
-                                except Exception as persist_err:
-                                    # Do not fail text extraction if persisting hint fails
-                                    self._log_warning(
-                                        f"Failed to persist LLM OCR diagram hint for page {idx + 1}: {persist_err}"
-                                    )
-                            # No single diagram_hint anymore
-                        except Exception as e:
-                            self._log_warning(
-                                f"Gemini OCR failed on page {idx+1}, trying PyTesseract fallback: {e}"
-                            )
-                    else:
-                        self._log_info(
-                            f"Skipping Gemini OCR for page {idx + 1}",
-                            extra={
-                                "use_llm": self.use_llm,
-                                "service_available": bool(gemini_service),
-                                "trigger": trigger_label,
-                            },
-                        )
+                                            )
+                                            self.diagram_processing_result[
+                                                "total_diagrams"
+                                            ] += 1
+                                            if (
+                                                page_index + 1
+                                                not in self.diagram_processing_result[
+                                                    "diagram_pages"
+                                                ]
+                                            ):
+                                                self.diagram_processing_result[
+                                                    "diagram_pages"
+                                                ].append(page_index + 1)
+                                            if (
+                                                diagram_type_value
+                                                not in self.diagram_processing_result[
+                                                    "diagram_types"
+                                                ]
+                                            ):
+                                                self.diagram_processing_result[
+                                                    "diagram_types"
+                                                ][diagram_type_value] = 0
+                                            self.diagram_processing_result[
+                                                "diagram_types"
+                                            ][diagram_type_value] += 1
 
-                    # PyTesseract fallback for scanned pages if LLM OCR failed or unavailable
-                    if (
-                        not ocr_text
-                        and is_low_text
-                        and settings.enable_tesseract_fallback
-                    ):
-                        try:
+                                async with shared_lock:
+                                    if (
+                                        page_index + 1
+                                        not in self.diagram_processing_result[
+                                            "pages_processed"
+                                        ]
+                                    ):
+                                        self.diagram_processing_result[
+                                            "pages_processed"
+                                        ].append(page_index + 1)
+
+                                if has_images:
+                                    try:
+                                        if not self.visual_artifact_service:
+                                            await self.initialize()
+                                        persisted_any = False
+                                        diagrams = getattr(llm_result, "diagrams", [])
+                                        for hint_index, diagram_type in enumerate(
+                                            diagrams, start=1
+                                        ):
+                                            diagram_type_value = (
+                                                getattr(diagram_type, "value", None)
+                                                or str(diagram_type)
+                                                or "unknown"
+                                            )
+                                            diagram_key = f"llm_ocr_hint_page_{page_index+1}_{hint_index:02d}"
+                                            result = await self.visual_artifact_service.store_visual_artifact(
+                                                image_bytes=png_bytes,
+                                                content_hmac=state["content_hmac"],
+                                                algorithm_version=get_settings().artifacts_algorithm_version,
+                                                params_fingerprint=state.get(
+                                                    "params_fingerprint"
+                                                )
+                                                or "",
+                                                page_number=page_index + 1,
+                                                diagram_key=diagram_key,
+                                                artifact_type="diagram",
+                                                diagram_meta={
+                                                    "type": diagram_type_value,
+                                                    "confidence": float(
+                                                        getattr(
+                                                            llm_result,
+                                                            "text_confidence",
+                                                            0.0,
+                                                        )
+                                                        or 0.0
+                                                    ),
+                                                    "detection_method": "llm_ocr_hint",
+                                                },
+                                            )
+                                            persisted_any = True
+                                            if result.cache_hit:
+                                                self._log_info(
+                                                    f"Reused cached visual artifact for page {page_index + 1} hint {hint_index}"
+                                                )
+                                        if persisted_any:
+                                            self._log_info(
+                                                f"Stored LLM OCR diagram hint(s) with images for page {page_index + 1}",
+                                                extra={
+                                                    "hint_count": (
+                                                        len(diagrams) if diagrams else 1
+                                                    )
+                                                },
+                                            )
+                                    except Exception as persist_err:
+                                        self._log_warning(
+                                            f"Failed to persist LLM OCR diagram hint for page {page_index + 1}: {persist_err}"
+                                        )
+                            except Exception as e:
+                                self._log_warning(
+                                    f"Gemini OCR failed on page {page_index+1}, trying PyTesseract fallback: {e}"
+                                )
+                        else:
                             self._log_info(
-                                f"Attempting Tesseract OCR fallback for page {idx + 1}",
+                                f"Skipping Gemini OCR for page {page_index + 1}",
                                 extra={
-                                    "is_low_text": is_low_text,
-                                    "fallback_enabled": settings.enable_tesseract_fallback,
+                                    "use_llm": self.use_llm,
+                                    "service_available": bool(gemini_service),
+                                    "trigger": trigger_label,
                                 },
                             )
-                            # Render page image for PyTesseract
-                            png_bytes = self._render_page_png(page, zoom=self._ocr_zoom)
-                            tesseract_text = await self._extract_text_with_tesseract(
-                                png_bytes
-                            )
-                            if tesseract_text and len(tesseract_text.strip()) > len(
-                                raw_text.strip()
-                            ):
-                                ocr_text = tesseract_text
-                                ocr_method = "tesseract_ocr"
+
+                        if (
+                            not ocr_text
+                            and is_low_text
+                            and settings.enable_tesseract_fallback
+                        ):
+                            try:
                                 self._log_info(
-                                    f"Tesseract OCR chosen for page {idx + 1}",
-                                    extra={"chars": len(ocr_text)},
+                                    f"Attempting Tesseract OCR fallback for page {page_index + 1}",
+                                    extra={
+                                        "is_low_text": is_low_text,
+                                        "fallback_enabled": settings.enable_tesseract_fallback,
+                                    },
                                 )
-                        except Exception as e:
-                            self._log_warning(
-                                f"PyTesseract OCR failed on page {idx+1}: {e}"
-                            )
+                                png_bytes = self._render_page_png(
+                                    page, zoom=self._ocr_zoom
+                                )
+                                tesseract_text = (
+                                    await self._extract_text_with_tesseract(png_bytes)
+                                )
+                                if tesseract_text and len(tesseract_text.strip()) > len(
+                                    raw_text.strip()
+                                ):
+                                    ocr_text = tesseract_text
+                                    ocr_method = "tesseract_ocr"
+                                    self._log_info(
+                                        f"Tesseract OCR chosen for page {page_index + 1}",
+                                        extra={"chars": len(ocr_text)},
+                                    )
+                            except Exception as e:
+                                self._log_warning(
+                                    f"PyTesseract OCR failed on page {page_index+1}: {e}"
+                                )
 
-                    # Use OCR text if it's better than native text
-                    if ocr_text:
-                        text_to_use = ocr_text
-                        method = ocr_method
-                        # OCR text does not have span font sizes; use plain OCR text for full text output
-                        decorated_for_full = ocr_text
+                        if ocr_text:
+                            text_to_use = ocr_text
+                            method = ocr_method
+                            decorated_for_full = ocr_text
 
-                page_analysis = self._make_page_analysis(
-                    text_to_use,
-                    has_image=has_images,
-                    has_diagram_kw=has_diagram_kw,
-                )
+                    page_analysis = self._make_page_analysis(
+                        text_to_use,
+                        has_image=has_images,
+                        has_diagram_kw=has_diagram_kw,
+                    )
 
-                page_extraction = PageExtraction(
-                    page_number=idx + 1,
-                    text_content=text_to_use,
-                    text_length=len(text_to_use),
-                    word_count=len(text_to_use.split()) if text_to_use else 0,
-                    extraction_method=method,
-                    confidence=self._estimate_confidence(text_to_use),
-                    content_analysis=page_analysis,
-                )
+                    page_extraction = PageExtraction(
+                        page_number=page_index + 1,
+                        text_content=text_to_use,
+                        text_length=len(text_to_use),
+                        word_count=len(text_to_use.split()) if text_to_use else 0,
+                        extraction_method=method,
+                        confidence=self._estimate_confidence(text_to_use),
+                        content_analysis=page_analysis,
+                    )
 
-                pages.append(page_extraction)
-                full_text_parts.append(
-                    f"\n--- Page {idx + 1} ---\n{decorated_for_full}"
-                )
-                if method not in extraction_methods:
-                    extraction_methods.append(method)
+                    pages[page_index] = page_extraction
+                    full_text_parts[page_index] = (
+                        f"\n--- Page {page_index + 1} ---\n{decorated_for_full}"
+                    )
+                    async with shared_lock:
+                        if method not in extraction_methods:
+                            extraction_methods.append(method)
 
-                # Emit incremental page progress using base node method
-                await self.emit_page_progress(
-                    state,
-                    current_page=idx + 1,
-                    total_pages=total_pages,
-                    description="Extract text & diagrams",
-                    progress_range=self.progress_range,
-                )
+                    await self.emit_page_progress(
+                        state,
+                        current_page=page_index + 1,
+                        total_pages=total_pages,
+                        description="Extract text & diagrams",
+                        progress_range=self.progress_range,
+                    )
+
+            tasks = [process_single_page(i) for i in range(total_pages)]
+            await asyncio.gather(*tasks)
 
             doc.close()
 
-            full_text = "".join(full_text_parts)
+            full_text = "".join(s or "" for s in full_text_parts)
+            filtered_pages: List[PageExtraction] = [p for p in pages if p is not None]
             overall_conf = (
-                sum(p.confidence for p in pages) / len(pages) if pages else 0.0
+                sum(p.confidence for p in filtered_pages) / len(filtered_pages)
+                if filtered_pages
+                else 0.0
             )
-            total_words = sum(p.word_count for p in pages)
+            total_words = sum(p.word_count for p in filtered_pages)
 
             # Update final diagram processing result with page counts
             if hasattr(self, "diagram_processing_result"):
@@ -1382,7 +1385,7 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                 f"PDF text extraction completed for document {state.get('document_id', 'unknown')}",
                 extra={
                     "document_id": state.get("document_id"),
-                    "total_pages": len(pages),
+                    "total_pages": len(filtered_pages),
                     "extraction_methods": extraction_methods,
                     "full_text_length": len(full_text),
                     "full_text_sample": (
@@ -1393,14 +1396,14 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                     "pages_with_text": len(
                         [
                             p
-                            for p in pages
+                            for p in filtered_pages
                             if p.text_content and len(p.text_content.strip()) > 0
                         ]
                     ),
                     "pages_without_text": len(
                         [
                             p
-                            for p in pages
+                            for p in filtered_pages
                             if not p.text_content or len(p.text_content.strip()) == 0
                         ]
                     ),
@@ -1426,35 +1429,37 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                                     else False
                                 ),
                             }
-                            for p in pages
+                            for p in filtered_pages
                         ],
                     },
                 )
 
                 # Try to provide a more helpful error message
-                if len(pages) == 0:
+                if len(filtered_pages) == 0:
                     error_msg = "PDF extraction failed - no pages could be processed"
-                elif all(len(p.text_content or "").strip() < 10 for p in pages):
+                elif all(
+                    len(p.text_content or "").strip() < 10 for p in filtered_pages
+                ):
                     error_msg = "PDF extraction failed - all pages contain insufficient text (document may be image-based or corrupted)"
                 else:
-                    error_msg = f"PDF extraction failed - extracted only {len(full_text.strip())} characters across {len(pages)} pages"
+                    error_msg = f"PDF extraction failed - extracted only {len(full_text.strip())} characters across {len(filtered_pages)} pages"
 
                 return TextExtractionResult(
                     success=False,
                     error=error_msg,
                     full_text=full_text,  # Keep what we have for debugging
-                    pages=pages,
+                    pages=filtered_pages,
                     extraction_methods=extraction_methods,
                     overall_confidence=overall_conf,
-                    total_pages=len(pages),
+                    total_pages=len(filtered_pages),
                     total_word_count=total_words,
                 )
 
             result = TextExtractionResult(
                 success=True,
                 full_text=full_text,
-                pages=pages,
-                total_pages=len(pages),
+                pages=filtered_pages,
+                total_pages=len(filtered_pages),
                 extraction_methods=extraction_methods,
                 total_word_count=total_words,
                 overall_confidence=overall_conf,

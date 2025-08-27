@@ -22,7 +22,7 @@ optional_variables:
   - "retrieval_index_id"
   - "seed_snippets"
   - "diagram_filenames"
-  - "entities_extraction"
+  - "extracted_entity"
 model_compatibility: ["gemini-2.5-flash", "gpt-4-vision"]
 max_tokens: 65536
 temperature_range: [0.1, 0.4]
@@ -51,10 +51,10 @@ You are an expert property analyst specializing in extracting semantic meaning f
 - **Property Condition**: {{ property_condition }}
 {% endif %}
 
-{% if entities_extraction %}
+{% if extracted_entity %}
 ## Contract Entities (Context)
 - Use extracted entities to anchor interpretation (parties, addresses, lot/plan, dates).
-- Key entities: {{ entities_extraction | tojson }}
+- Key entities: {{ extracted_entity | tojson }}
 {% endif %}
 
 {% if seed_snippets %}

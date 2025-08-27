@@ -8,7 +8,7 @@ fragment_orchestration: "step2_default_termination"
 required_variables:
   - "analysis_timestamp"
 optional_variables:
-  - "entities_extraction"
+  - "extracted_entity"
   - "legal_requirements_matrix"
   - "contract_type"
   - "australian_state"
@@ -26,7 +26,7 @@ tags: ["step2", "default", "termination", "remedies"]
 Perform comprehensive analysis of default events, termination rights, remedy provisions, and enforcement mechanisms in this Australian real estate contract, focusing on risk assessment and party protection evaluation.
 
 ## Contract Context
-{% set meta = (entities_extraction or {}).get('metadata') or {} %}
+{% set meta = (extracted_entity or {}).get('metadata') or {} %}
 - **State**: {{ australian_state or meta.get('state') or 'unknown' }}
 - **Contract Type**: {{ contract_type or meta.get('contract_type') or 'unknown' }}
 - **Purchase Method**: {{ meta.get('purchase_method') or 'unknown' }}
@@ -167,10 +167,10 @@ No seed snippets provided.
 
 ## Additional Context
 
-{% if entities_extraction %}
+{% if extracted_entity %}
 ### Entity Extraction Results (Baseline)
 Previously extracted default/termination data (use as baseline; verify and reconcile):
-{{entities_extraction | tojsonpretty}}
+{{extracted_entity | tojsonpretty}}
 {% endif %}
 
 {% if legal_requirements_matrix %}
@@ -181,7 +181,7 @@ Previously extracted default/termination data (use as baseline; verify and recon
 
 ## Analysis Instructions (Seeds + Retrieval + Metadata Scoping)
 
-1. Use `entities_extraction` and `metadata` as the baseline. Verify and enrich using `seed_snippets` as primary evidence.
+1. Use `extracted_entity` and `metadata` as the baseline. Verify and enrich using `seed_snippets` as primary evidence.
 2. If baseline + seeds are insufficient, retrieve targeted default/termination/remedy clauses from `retrieval_index_id` with concise queries.
 3. Classify each default and termination right; analyze remedies, fairness, and consumer protection compliance.
 4. Assess overall default/termination risk; provide clause citations and practical enforcement considerations.

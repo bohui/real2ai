@@ -6,6 +6,7 @@ from app.agents.subflows.step2_section_analysis_workflow import (
     Step2AnalysisWorkflow,
 )
 from app.agents.nodes.contract_llm_base import ContractLLMNode
+from app.prompts.schema.step2.warranties_schema import WarrantiesAnalysisResult
 
 
 class WarrantiesNode(ContractLLMNode):
@@ -14,27 +15,28 @@ class WarrantiesNode(ContractLLMNode):
         workflow: Step2AnalysisWorkflow,
         progress_range: tuple[int, int] = (32, 40),
     ):
+
         super().__init__(
             workflow=workflow,
             node_name="analyze_warranties",
             contract_attribute="warranties",
-            state_field="warranties_result",
+            result_model=WarrantiesAnalysisResult,
         )
         self.progress_range = progress_range
 
     async def _build_context_and_parser(self, state: Step2AnalysisState):
         from app.core.prompts import PromptContext, ContextType
-        from app.prompts.schema.step2.warranties_schema import WarrantiesAnalysisResult
+
         from app.core.prompts.parsers import create_parser
 
-        entities = state.get("entities_extraction", {}) or {}
+        entities = state.get("extracted_entity", {}) or {}
         meta = (entities or {}).get("metadata") or {}
 
         context = PromptContext(
             context_type=ContextType.ANALYSIS,
             variables={
                 "analysis_timestamp": datetime.now(UTC).isoformat(),
-                "entities_extraction": entities,
+                "extracted_entity": entities,
                 "australian_state": state.get("australian_state")
                 or meta.get("state")
                 or "NSW",
@@ -54,19 +56,7 @@ class WarrantiesNode(ContractLLMNode):
         )
         return context, parser, "step2_warranties"
 
-    def _coerce_to_model(self, data: Any) -> Optional[Any]:
-        try:
-            from app.prompts.schema.step2.warranties_schema import (
-                WarrantiesAnalysisResult,
-            )
-
-            if isinstance(data, WarrantiesAnalysisResult):
-                return data
-            if hasattr(data, "model_validate"):
-                return WarrantiesAnalysisResult.model_validate(data)
-        except Exception:
-            return None
-        return None
+    # Coercion handled by base class via result_model
 
     def _evaluate_quality(
         self, result: Optional[Any], state: Step2AnalysisState
@@ -89,10 +79,10 @@ class WarrantiesNode(ContractLLMNode):
         self, state: Step2AnalysisState, parsed: Any, quality: Dict[str, Any]
     ) -> Step2AnalysisState:
         value = parsed.model_dump() if hasattr(parsed, "model_dump") else parsed
-        state["warranties_result"] = value
+        state["warranties"] = value
 
         await self.emit_progress(
             state, self.progress_range[1], "Warranties analysis completed"
         )
 
-        return {"warranties_result": value}
+        return {"warranties": value}

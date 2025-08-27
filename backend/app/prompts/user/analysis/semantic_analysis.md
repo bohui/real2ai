@@ -15,7 +15,7 @@ optional_variables:
   - "specific_clauses"
   - "legal_context"
   - "comparison_basis"
-model_compatibility: ["gemini-2.5-flash", "gpt-4"]
+model_compatibility: ["gemini-2.5-flash"]
 max_tokens: 8000
 temperature_range: [0.1, 0.4]
 output_parser: SemanticAnalysisOutput

@@ -241,7 +241,7 @@ class ContractTermsExtractionNode(BaseNode):
                     except Exception:
                         return None
 
-                entities_result = state.get("entities_extraction") or {}
+                entities_result = state.get("extracted_entity") or {}
                 metadata = entities_result.get("metadata") or {}
 
                 contract_type_val = state.get("contract_type") or metadata.get(

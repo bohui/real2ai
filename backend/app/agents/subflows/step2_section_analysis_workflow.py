@@ -258,7 +258,7 @@ class Step2AnalysisWorkflow:
     async def execute(
         self,
         contract_text: str,
-        entities_extraction: Dict[str, Any],
+        extracted_entity: Dict[str, Any],
         parent_state: RealEstateAgentState,
         **kwargs,
     ) -> Dict[str, Any]:
@@ -267,7 +267,7 @@ class Step2AnalysisWorkflow:
 
         Args:
             contract_text: Full contract text from document processing
-            entities_extraction: Results from Step 1 entity extraction
+            extracted_entity: Results from Step 1 entity extraction
             parent_state: Parent workflow state for context
             **kwargs: Additional context (diagrams, legal matrix, etc.)
 
@@ -279,7 +279,7 @@ class Step2AnalysisWorkflow:
         step2_state: Step2AnalysisState = {
             # Input data
             "contract_text": contract_text,
-            "entities_extraction": entities_extraction,
+            "extracted_entity": extracted_entity,
             "legal_requirements_matrix": kwargs.get("legal_requirements_matrix"),
             "uploaded_diagrams": kwargs.get("uploaded_diagrams"),
             # Required base fields propagated from parent
@@ -292,17 +292,17 @@ class Step2AnalysisWorkflow:
             "use_category": parent_state.get("use_category"),
             "property_condition": parent_state.get("property_condition"),
             # Initialize results as None
-            "parties_property_result": None,
-            "financial_terms_result": None,
-            "conditions_result": None,
-            "warranties_result": None,
-            "default_termination_result": None,
-            "settlement_logistics_result": None,
-            "title_encumbrances_result": None,
-            "adjustments_outgoings_result": None,
-            "disclosure_compliance_result": None,
-            "special_risks_result": None,
-            "cross_section_validation_result": None,
+            "parties_property": None,
+            "financial_terms": None,
+            "conditions": None,
+            "warranties": None,
+            "default_termination": None,
+            "settlement_logistics": None,
+            "title_encumbrances": None,
+            "adjustments_outgoings": None,
+            "disclosure_compliance": None,
+            "special_risks": None,
+            "cross_section_validation": None,
             # Initialize workflow control
             "phase1_complete": False,
             "phase2_complete": False,
@@ -377,19 +377,19 @@ class Step2AnalysisWorkflow:
             "total_duration_seconds": total_duration,
             # Section results
             "section_results": {
-                "parties_property": state.get("parties_property_result"),
-                "financial_terms": state.get("financial_terms_result"),
-                "conditions": state.get("conditions_result"),
-                "warranties": state.get("warranties_result"),
-                "default_termination": state.get("default_termination_result"),
-                "settlement_logistics": state.get("settlement_logistics_result"),
-                "title_encumbrances": state.get("title_encumbrances_result"),
-                "adjustments_outgoings": state.get("adjustments_outgoings_result"),
-                "disclosure_compliance": state.get("disclosure_compliance_result"),
-                "special_risks": state.get("special_risks_result"),
+                "parties_property": state.get("parties_property"),
+                "financial_terms": state.get("financial_terms"),
+                "conditions": state.get("conditions"),
+                "warranties": state.get("warranties"),
+                "default_termination": state.get("default_termination"),
+                "settlement_logistics": state.get("settlement_logistics"),
+                "title_encumbrances": state.get("title_encumbrances"),
+                "adjustments_outgoings": state.get("adjustments_outgoings"),
+                "disclosure_compliance": state.get("disclosure_compliance"),
+                "special_risks": state.get("special_risks"),
             },
             # Cross-section validation
-            "cross_section_validation": state.get("cross_section_validation_result"),
+            "cross_section_validation": state.get("cross_section_validation"),
             # Workflow metadata
             "workflow_metadata": {
                 "phases_completed": {

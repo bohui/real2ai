@@ -440,7 +440,7 @@ class RiskExtractor:
         boundary_risk = BoundaryRisk(
             risk_type="Encroachment",
             description="Neighbor's shed extends 0.5m over eastern boundary",
-            severity=RiskSeverity.HIGH,
+            severity=RiskSeverity.MAJOR,
             linked_diagrams=[title_plan],
             affected_boundaries=["Eastern boundary"],
             encroachment_details="Timber shed structure, approximately 2m x 3m",
@@ -450,7 +450,7 @@ class RiskExtractor:
         infrastructure_risk = InfrastructureRisk(
             risk_type="Sewer Main Under Property",
             description="Major sewer main runs directly under proposed building area",
-            severity=RiskSeverity.HIGH,
+            severity=RiskSeverity.MAJOR,
             linked_diagrams=[sewer_diagram],
             sewer_pipe_location="2m from eastern boundary, 1.5m depth",
             maintenance_access_requirements="Council requires 3m clear access zone",
@@ -461,7 +461,7 @@ class RiskExtractor:
             diagram_sources=[DiagramType.TITLE_PLAN, DiagramType.SEWER_SERVICE_DIAGRAM],
             boundary_risks=[boundary_risk],
             infrastructure_risks=[infrastructure_risk],
-            overall_risk_score=RiskSeverity.MEDIUM,
+            overall_risk_score=RiskSeverity.MODERATE,
             total_risks_identified=2,
             high_priority_risks=["Neighbor's shed encroachment"],
             recommended_actions=[

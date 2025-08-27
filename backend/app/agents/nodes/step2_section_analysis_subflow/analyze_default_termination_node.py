@@ -6,6 +6,9 @@ from app.agents.subflows.step2_section_analysis_workflow import (
     Step2AnalysisWorkflow,
 )
 from app.agents.nodes.contract_llm_base import ContractLLMNode
+from app.prompts.schema.step2.default_termination_schema import (
+    DefaultTerminationAnalysisResult,
+)
 
 
 class DefaultTerminationNode(ContractLLMNode):
@@ -14,29 +17,28 @@ class DefaultTerminationNode(ContractLLMNode):
         workflow: Step2AnalysisWorkflow,
         progress_range: tuple[int, int] = (40, 48),
     ):
+
         super().__init__(
             workflow=workflow,
             node_name="analyze_default_termination",
             contract_attribute="default_termination",
-            state_field="default_termination_result",
+            result_model=DefaultTerminationAnalysisResult,
         )
         self.progress_range = progress_range
 
     async def _build_context_and_parser(self, state: Step2AnalysisState):
         from app.core.prompts import PromptContext, ContextType
-        from app.prompts.schema.step2.default_termination_schema import (
-            DefaultTerminationAnalysisResult,
-        )
+
         from app.core.prompts.parsers import create_parser
 
-        entities = state.get("entities_extraction", {}) or {}
+        entities = state.get("extracted_entity", {}) or {}
         meta = (entities or {}).get("metadata") or {}
 
         context = PromptContext(
             context_type=ContextType.ANALYSIS,
             variables={
                 "analysis_timestamp": datetime.now(UTC).isoformat(),
-                "entities_extraction": entities,
+                "extracted_entity": entities,
                 "australian_state": state.get("australian_state")
                 or meta.get("state")
                 or "NSW",
@@ -56,19 +58,7 @@ class DefaultTerminationNode(ContractLLMNode):
         )
         return context, parser, "step2_default_termination"
 
-    def _coerce_to_model(self, data: Any) -> Optional[Any]:
-        try:
-            from app.prompts.schema.step2.default_termination_schema import (
-                DefaultTerminationAnalysisResult,
-            )
-
-            if isinstance(data, DefaultTerminationAnalysisResult):
-                return data
-            if hasattr(data, "model_validate"):
-                return DefaultTerminationAnalysisResult.model_validate(data)
-        except Exception:
-            return None
-        return None
+    # Coercion handled by base class via result_model
 
     def _evaluate_quality(
         self, result: Optional[Any], state: Step2AnalysisState
@@ -95,10 +85,10 @@ class DefaultTerminationNode(ContractLLMNode):
         self, state: Step2AnalysisState, parsed: Any, quality: Dict[str, Any]
     ) -> Step2AnalysisState:
         value = parsed.model_dump() if hasattr(parsed, "model_dump") else parsed
-        state["default_termination_result"] = value
+        state["default_termination"] = value
 
         await self.emit_progress(
             state, self.progress_range[1], "Default and termination analysis completed"
         )
 
-        return {"default_termination_result": value}
+        return {"default_termination": value}

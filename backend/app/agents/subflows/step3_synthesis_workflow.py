@@ -96,10 +96,10 @@ class Step3SynthesisWorkflow:
             "warranties_result": section_results.get("warranties"),
             "default_termination_result": section_results.get("default_termination"),
             # Outputs
-            "risk_summary_result": None,
-            "action_plan_result": None,
-            "compliance_summary_result": None,
-            "buyer_report_result": None,
+            "risk_summary": None,
+            "action_plan": None,
+            "compliance_summary": None,
+            "buyer_report": None,
             # Tracking
             "start_time": datetime.now(UTC),
             "processing_errors": [],
@@ -114,10 +114,10 @@ class Step3SynthesisWorkflow:
             result_state = await self.graph.ainvoke(s3_state)
             return {
                 "success": True,
-                "risk_summary": result_state.get("risk_summary_result"),
-                "action_plan": result_state.get("action_plan_result"),
-                "compliance_summary": result_state.get("compliance_summary_result"),
-                "buyer_report": result_state.get("buyer_report_result"),
+                "risk_summary": result_state.get("risk_summary"),
+                "action_plan": result_state.get("action_plan"),
+                "compliance_summary": result_state.get("compliance_summary"),
+                "buyer_report": result_state.get("buyer_report"),
                 "timestamp": datetime.now(UTC).isoformat(),
             }
         except Exception as e:
