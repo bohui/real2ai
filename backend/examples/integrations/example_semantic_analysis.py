@@ -202,17 +202,14 @@ class SemanticAnalysisExample:
                 if len(infrastructure) > 3:
                     print(f"   ... and {len(infrastructure) - 3} more")
 
-            # Risk indicators
-            risks = semantic_analysis.get("risk_indicators", [])
+            # Areas of concern surface potential risks at semantics stage
+            risks = semantic_analysis.get("areas_of_concern", [])
             if risks:
-                print(f"\n🚨 Risk Indicators ({len(risks)}):")
+                print(f"\n🚨 Areas of Concern ({len(risks)}):")
                 for risk in risks[:3]:  # Show first 3
-                    print(
-                        f"   • {risk.get('risk_type', 'Unknown')} ({risk.get('severity', 'Unknown')})"
-                    )
-                    print(f"     {risk.get('description', 'No description')}")
+                    print(f"   • {risk}")
                 if len(risks) > 3:
-                    print(f"   ... and {len(risks) - 3} more risks")
+                    print(f"   ... and {len(risks) - 3} more")
 
             # Suggested follow-up
             followup = semantic_analysis.get("suggested_followup", [])

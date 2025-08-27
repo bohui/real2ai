@@ -37,3 +37,19 @@ class ReliabilityRating(Enum):
     GOOD = "good"
     FAIR = "fair"
     POOR = "poor"
+
+
+class RiskCategory(str, Enum):
+    """Unified risk categories for consolidated risk reporting."""
+
+    INFRASTRUCTURE = "infrastructure"
+    EASEMENT = "easement"
+    BOUNDARY = "boundary"
+    DEVELOPMENT = "development"
+    ENVIRONMENTAL = "environmental"
+    ZONING = "zoning"
+    DISCREPANCY = "discrepancy"
+    ACCESS = "access"
+    COMPLIANCE = "compliance"
+    LEGAL = "legal"
+    OTHER = "other"

@@ -1,5 +1,5 @@
 from datetime import datetime, UTC
-from typing import Any, Optional, Dict
+from typing import Any, Optional, Dict, List
 import traceback
 
 from app.agents.subflows.step2_section_analysis_workflow import (
@@ -14,6 +14,7 @@ class AnalyzeDiagramNode(ContractLLMNode):
         self,
         workflow: Step2AnalysisWorkflow,
         progress_range: tuple[int, int] = (52, 58),
+        schema_confidence_threshold: float = 0.5,
     ):
         super().__init__(
             workflow=workflow,
@@ -22,6 +23,7 @@ class AnalyzeDiagramNode(ContractLLMNode):
             state_field="image_semantics_result",
         )
         self.progress_range = progress_range
+        self.schema_confidence_threshold = schema_confidence_threshold
 
     def _flatten_seeds(self, raw: Any) -> list[str]:
         items: list[str] = []
@@ -174,7 +176,7 @@ class AnalyzeDiagramNode(ContractLLMNode):
                     data={"reason": "no_diagrams_available"},
                 )
 
-            # 2) Build context + parser + composition
+            # 2) Build context + composition (parser chosen per-image)
             context, parser, composition_name = await self._build_context_and_parser(
                 state
             )
@@ -191,16 +193,53 @@ class AnalyzeDiagramNode(ContractLLMNode):
             llm_service = await self._get_llm_service()
 
             per_image_results = []
-            for filename, uri in uploaded.items() if isinstance(uploaded, dict) else []:
+            for uri, info_list in (
+                uploaded.items() if isinstance(uploaded, dict) else []
+            ):
                 try:
+                    # Determine best type hint for this URI (highest confidence)
+                    diagram_type_hint: str = "unknown"
+                    if isinstance(info_list, list) and info_list:
+                        try:
+                            best = max(
+                                [i for i in info_list if isinstance(i, dict)],
+                                key=lambda x: float(x.get("confidence", 0.0)),
+                            )
+                            diagram_type_hint = str(
+                                best.get("diagram_type_hint", "unknown")
+                            )
+                        except Exception:
+                            # Fall back to first available if any issue
+                            first = next(
+                                (i for i in info_list if isinstance(i, dict)), None
+                            )
+                            if first:
+                                diagram_type_hint = str(
+                                    first.get("diagram_type_hint", "unknown")
+                                )
+
                     # Download bytes just-in-time
-                    blob = await storage_service.download_blob(uri)
-                    if not isinstance(blob, (bytes, bytearray)):
+                    try:
+                        if isinstance(uri, str) and uri.startswith("supabase://"):
+                            content_bytes = (
+                                await storage_service.download_page_image_jpg(uri)
+                            )
+                        else:
+                            # Unsupported URI scheme here; skip gracefully
+                            self._log_warning(
+                                "Unsupported image URI scheme; expected supabase://",
+                                extra={"uri": str(uri)},
+                            )
+                            continue
+                    except Exception as dl_err:
+                        self._log_warning(
+                            "Failed to download image bytes",
+                            extra={"error": str(dl_err), "uri": str(uri)},
+                        )
                         continue
-                    content_bytes = bytes(blob)
 
                     # Infer content-type from filename/uri
-                    lower = str(filename or uri).lower()
+                    lower = str(uri).lower()
                     if lower.endswith(".png"):
                         ctype = "image/png"
                     elif lower.endswith(".jpg") or lower.endswith(".jpeg"):
@@ -212,13 +251,63 @@ class AnalyzeDiagramNode(ContractLLMNode):
                     else:
                         ctype = "image/jpeg"
 
+                    # Choose parser schema per diagram_type_hint and confidence
+                    try:
+                        from app.schema.enums.diagrams import DiagramType
+                        from app.prompts.schema.image_semantics_schema import (
+                            get_semantic_schema_class,
+                            GenericDiagramSemantics,
+                        )
+                        from app.core.prompts.parsers import (
+                            create_parser as _create_parser,
+                        )
+
+                        try:
+                            # If confidence is low, fall back to generic schema
+                            hint_conf = 0.0
+                            try:
+                                hint_conf = (
+                                    float(best.get("confidence", 0.0))
+                                    if isinstance(best, dict)
+                                    else 0.0
+                                )
+                            except Exception:
+                                hint_conf = 0.0
+
+                            enum_type = DiagramType(diagram_type_hint)
+                            if hint_conf < self.schema_confidence_threshold:
+                                enum_type = DiagramType.UNKNOWN
+                        except Exception:
+                            enum_type = DiagramType.UNKNOWN
+                        schema_cls = get_semantic_schema_class(enum_type)
+                        per_image_parser = _create_parser(
+                            schema_cls, strict_mode=False, retry_on_failure=True
+                        )
+                    except Exception:
+                        per_image_parser = None
+
+                    # Inject per-image variables (avoid full entities)
+                    per_image_context_vars = dict(context_vars or {})
+                    per_image_context_vars["image_type"] = diagram_type_hint
+                    per_image_context_vars["diagram_type_confidence"] = (
+                        float(best.get("confidence", 0.0))
+                        if isinstance(best, dict)
+                        else 0.0
+                    )
+                    # Provide placeholder metadata for prompt while image bytes are passed separately
+                    per_image_context_vars.setdefault(
+                        "image_data", {"source": "binary", "uri": uri}
+                    )
+                    # Avoid passing full entities per image request
+                    per_image_context_vars.pop("entities_extraction", None)
+
                     result = await llm_service.generate_image_semantics(
                         content=content_bytes,
                         content_type=ctype,
-                        filename=str(filename),
+                        filename=str(uri),
                         composition_name=composition_name,
-                        context_variables=context_vars,
-                        output_parser=parser,
+                        context_variables=per_image_context_vars,
+                        output_parser=per_image_parser,
                     )
 
                     # Collect parsed object (ParsingResult or str)
@@ -239,14 +328,15 @@ class AnalyzeDiagramNode(ContractLLMNode):
                     )
                     per_image_results.append(
                         {
-                            "filename": filename,
+                            "uri": uri,
+                            "diagram_type": diagram_type_hint,
                             "semantics": payload,
                         }
                     )
                 except Exception as per_err:
                     self._log_warning(
                         "Image semantics failed for one diagram",
-                        extra={"error": str(per_err), "filename": str(filename)},
+                        extra={"error": str(per_err), "uri": str(uri)},
                     )
                     continue
 
@@ -261,7 +351,7 @@ class AnalyzeDiagramNode(ContractLLMNode):
                 "images": per_image_results,
                 "metadata": {
                     "diagram_count": len(per_image_results),
-                    "filenames": [r.get("filename") for r in per_image_results],
+                    "uris": [r.get("uri") for r in per_image_results],
                     "generated_at": datetime.now(UTC).isoformat(),
                 },
             }
@@ -421,7 +511,7 @@ class AnalyzeDiagramNode(ContractLLMNode):
     async def _build_context_and_parser(self, state: Step2AnalysisState):
         from app.core.prompts import PromptContext, ContextType
         from app.core.prompts.parsers import create_parser
-        from app.prompts.schema.image_semantics_schema import DiagramSemantics
+        from app.prompts.schema.image_semantics_schema import DiagramSemanticsBase
 
         entities = state.get("entities_extraction", {}) or {}
         meta: Dict[str, Any] = (entities or {}).get("metadata") or {}
@@ -474,19 +564,19 @@ class AnalyzeDiagramNode(ContractLLMNode):
         )
 
         parser = create_parser(
-            DiagramSemantics, strict_mode=False, retry_on_failure=True
+            DiagramSemanticsBase, strict_mode=False, retry_on_failure=True
         )
         # Use a dedicated composition with a diagram-specific system prompt
         return context, parser, "step2_diagram_semantics"
 
     def _coerce_to_model(self, data: Any) -> Optional[Any]:
         try:
-            from app.prompts.schema.image_semantics_schema import DiagramSemantics
+            from app.prompts.schema.image_semantics_schema import DiagramSemanticsBase
 
-            if isinstance(data, DiagramSemantics):
+            if isinstance(data, DiagramSemanticsBase):
                 return data
             if hasattr(data, "model_validate"):
-                return DiagramSemantics.model_validate(data)
+                return DiagramSemanticsBase.model_validate(data)
         except Exception:
             return None
         return None

@@ -1,7 +1,7 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from typing import List, Optional, Dict, Any
 from datetime import datetime
-from app.schema.enums import RiskSeverity, DiagramType
+from app.schema.enums import RiskSeverity, DiagramType, ConfidenceLevel
 
 
 class DiagramReference(BaseModel):
@@ -22,7 +22,7 @@ class DiagramReference(BaseModel):
     prepared_by: Optional[str] = Field(
         None, description="Who prepared the diagram (surveyor, architect, etc.)"
     )
-    confidence_level: Optional[str] = Field(
+    confidence_level: Optional[ConfidenceLevel] = Field(
         None, description="Confidence in diagram accuracy (high/medium/low)"
     )
     notes: Optional[str] = Field(
@@ -291,46 +291,46 @@ class DiagramRiskAssessment(BaseModel):
 
     # Risk Categories
     boundary_risks: List[BoundaryRisk] = Field(
-        default=[], description="Boundary and encroachment risks"
+        default_factory=list, description="Boundary and encroachment risks"
     )
     easement_risks: List[EasementRisk] = Field(
-        default=[], description="Easement and right-of-way risks"
+        default_factory=list, description="Easement and right-of-way risks"
     )
     strata_risks: List[StrataRisk] = Field(
-        default=[], description="Strata and body corporate risks"
+        default_factory=list, description="Strata and body corporate risks"
     )
     development_risks: List[DevelopmentRisk] = Field(
-        default=[], description="Development and construction risks"
+        default_factory=list, description="Development and construction risks"
     )
     environmental_risks: List[EnvironmentalRisk] = Field(
-        default=[], description="Environmental and natural disaster risks"
+        default_factory=list, description="Environmental and natural disaster risks"
     )
     infrastructure_risks: List[InfrastructureRisk] = Field(
-        default=[], description="Infrastructure and utility risks"
+        default_factory=list, description="Infrastructure and utility risks"
     )
     zoning_risks: List[ZoningRisk] = Field(
-        default=[], description="Zoning and planning risks"
+        default_factory=list, description="Zoning and planning risks"
     )
     discrepancy_risks: List[DiscrepancyRisk] = Field(
-        default=[], description="Plan vs reality discrepancy risks"
+        default_factory=list, description="Plan vs reality discrepancy risks"
     )
     access_risks: List[AccessRisk] = Field(
-        default=[], description="Access and right-of-way risks"
+        default_factory=list, description="Access and right-of-way risks"
     )
     compliance_risks: List[ComplianceRisk] = Field(
-        default=[], description="Regulatory compliance risks"
+        default_factory=list, description="Regulatory compliance risks"
     )
 
     # Overall Assessment
     overall_risk_score: RiskSeverity = Field(..., description="Overall risk assessment")
     total_risks_identified: int = Field(
-        ..., description="Total number of risks identified"
+        0, description="Total number of risks identified"
     )
     high_priority_risks: List[str] = Field(
-        default=[], description="List of high priority risk descriptions"
+        default_factory=list, description="List of high priority risk descriptions"
     )
     recommended_actions: List[str] = Field(
-        default=[], description="Recommended actions to mitigate risks"
+        default_factory=list, description="Recommended actions to mitigate risks"
     )
 
     # Additional Information
@@ -341,13 +341,36 @@ class DiagramRiskAssessment(BaseModel):
         False, description="Whether legal review is recommended"
     )
     additional_investigations_needed: List[str] = Field(
-        default=[], description="Additional investigations recommended"
+        default_factory=list, description="Additional investigations recommended"
     )
     estimated_financial_impact: Optional[Dict[str, Any]] = Field(
         None, description="Estimated financial impact of risks"
     )
 
     model_config = {"use_enum_values": True, "arbitrary_types_allowed": True}
+
+    @model_validator(mode="after")
+    def compute_derived_fields(self):
+        total = (
+            len(self.boundary_risks)
+            + len(self.easement_risks)
+            + len(self.strata_risks)
+            + len(self.development_risks)
+            + len(self.environmental_risks)
+            + len(self.infrastructure_risks)
+            + len(self.zoning_risks)
+            + len(self.discrepancy_risks)
+            + len(self.access_risks)
+            + len(self.compliance_risks)
+        )
+        object.__setattr__(self, "total_risks_identified", total)
+
+        # If overall_risk_score wasn't explicitly set by caller, compute it
+        if self.overall_risk_score is None:
+            object.__setattr__(
+                self, "overall_risk_score", RiskExtractor.calculate_overall_risk(self)
+            )
+        return self
 
 
 # Example usage and helper functions

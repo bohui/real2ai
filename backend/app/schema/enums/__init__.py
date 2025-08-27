@@ -40,6 +40,7 @@ from .content import InsightType, ViewSource, ContentType
 
 # Diagram & Image Enums
 from .diagrams import DiagramType, DiagramType
+from .semantics import TextType, RelationshipType, GeometryType
 
 # Entity Extraction Enums
 from .entities import EntityType, PartyRole, DateType, FinancialType
@@ -127,6 +128,9 @@ __all__ = [
     # Diagram & Image
     "DiagramType",
     "DiagramType",
+    "TextType",
+    "RelationshipType",
+    "GeometryType",
     # Entity Extraction
     "EntityType",
     "PartyRole",

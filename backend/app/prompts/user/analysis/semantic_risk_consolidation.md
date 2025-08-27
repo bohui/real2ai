@@ -42,7 +42,7 @@ Consolidate and prioritize risks identified across multiple property diagrams to
 - **Image Type**: {{ analysis.semantic_analysis.image_type | default("Unknown") }}
 - **Infrastructure Elements**: {{ analysis.semantic_analysis.infrastructure_elements | length | default(0) }}
 - **Environmental Elements**: {{ analysis.semantic_analysis.environmental_elements | length | default(0) }}
-- **Risk Indicators**: {{ analysis.semantic_analysis.risk_indicators | length | default(0) }}
+- **Areas of Concern Count**: {{ analysis.semantic_analysis.areas_of_concern | length | default(0) }}
 - **Key Findings**: {{ analysis.semantic_analysis.key_findings | join("; ") | default("None specified") }}
 - **Areas of Concern**: {{ analysis.semantic_analysis.areas_of_concern | join("; ") | default("None specified") }}
 

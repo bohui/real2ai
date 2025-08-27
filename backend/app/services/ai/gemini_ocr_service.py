@@ -15,7 +15,7 @@ from app.core.langsmith_config import langsmith_trace, get_langsmith_config
 from langsmith.run_helpers import trace
 from app.core.prompts.parsers import create_parser, ParsingResult
 from app.services.base.user_aware_service import UserAwareService
-from app.prompts.schema.image_semantics_schema import DiagramSemantics, DiagramType
+from app.prompts.schema.image_semantics_schema import DiagramSemanticsBase, DiagramType
 from app.services.ai.gemini_service import GeminiService
 from app.clients.base.exceptions import (
     ClientError,
@@ -517,7 +517,7 @@ Focus on accuracy and completeness. Extract all visible text content."""
         Extract semantic meaning with structured output parsing
 
         This method demonstrates the new parser integration:
-        1. Creates Pydantic parser for DiagramSemantics
+        1. Creates Pydantic parser for DiagramSemanticsBase
         2. Renders prompt with auto-generated format instructions
         3. Parses AI response with validation and error handling
         4. Returns structured, validated results
@@ -537,7 +537,7 @@ Focus on accuracy and completeness. Extract all visible text content."""
                 image_type = await self._detect_image_type(filename, contract_context)
 
             # Create Pydantic output parser
-            semantic_parser = create_parser(DiagramSemantics)
+            semantic_parser = create_parser(DiagramSemanticsBase)
 
             # Prepare context for semantic analysis
             context = self.create_context(

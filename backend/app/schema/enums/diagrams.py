@@ -21,7 +21,7 @@ class DiagramType(str, Enum):
     STRATA_PLAN = "strata_plan"
     LANDSCAPE_PLAN = "landscape_plan"
     PARKING_PLAN = "parking_plan"
-
+    
     # Diagram-specific types
     TITLE_PLAN = "title_plan"
     BODY_CORPORATE_PLAN = "body_corporate_plan"
@@ -29,10 +29,10 @@ class DiagramType(str, Enum):
     SUBDIVISION_PLAN = "subdivision_plan"
     OFF_THE_PLAN_MARKETING = "off_the_plan_marketing"
     HERITAGE_OVERLAY = "heritage_overlay"
-
+    
     # Image-specific types
     AERIAL_VIEW = "aerial_view"
     CROSS_SECTION = "cross_section"
     ELEVATION_VIEW = "elevation_view"
-
+    
     UNKNOWN = "unknown"

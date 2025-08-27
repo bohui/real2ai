@@ -201,7 +201,7 @@ You are an expert property analyst specializing in extracting semantic meaning f
 ## Output Requirements
 
 ### Structured Analysis
-Return a comprehensive JSON structure following the DiagramSemantics schema including:
+Return a comprehensive JSON structure following the DiagramSemanticsBase schema including:
 
 1. **Image Metadata**
    - Image type classification
@@ -264,5 +264,5 @@ Return a comprehensive JSON structure following the DiagramSemantics schema incl
 - **Compliance**: Building requirements, development restrictions
 {% endif %}
 
-Begin semantic analysis of the provided image now. Return only the structured JSON output following the DiagramSemantics schema.
+Begin semantic analysis of the provided image now. Return only the structured JSON output following the DiagramSemanticsBase schema.
 
