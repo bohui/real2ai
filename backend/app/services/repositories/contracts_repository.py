@@ -266,6 +266,7 @@ class ContractsRepository:
             None,
             None,
             None,
+            None,
             raw_text,
             property_address,
             updated_by,

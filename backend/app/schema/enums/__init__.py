@@ -89,8 +89,8 @@ from .errors import (
     ValidationSeverity,
 )
 
-# Context & Output Enums
-from .context import ContextType, OutputFormat
+# Output Enums
+from .context import OutputFormat
 
 # Notification Enums
 from .notifications import NotificationType, NotificationPriority
@@ -176,8 +176,7 @@ __all__ = [
     "ErrorSeverity",
     "PromptErrorSeverity",
     "ValidationSeverity",
-    # Context & Output
-    "ContextType",
+    # Output
     "OutputFormat",
     # Notification
     "NotificationType",

@@ -14,7 +14,7 @@ from datetime import datetime
 from typing import List, Dict, Any
 from pydantic import ValidationError
 
-from backend.app.prompts.schema.diagram_analysis.diagram_risk_schema import (
+from app.prompts.schema.diagram_analysis.diagram_risk_schema import (
     DiagramReference,
     BoundaryRisk,
     InfrastructureRisk,

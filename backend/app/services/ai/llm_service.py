@@ -22,7 +22,7 @@ from app.core.prompts.parsers import (
     RetryingPydanticOutputParser as BaseOutputParser,
     ParsingResult,
 )
-from app.core.prompts import get_prompt_manager, PromptContext
+from app.core.prompts import get_prompt_manager, PromptContext, ContextType
 from typing import Union
 
 
@@ -333,7 +333,7 @@ class LLMService(UserAwareService):
             # Compose prompts
             prompt_manager = get_prompt_manager()
             context = PromptContext(
-                context_type="analysis", variables=context_variables
+                context_type=ContextType.ANALYSIS, variables=context_variables
             )
             composition_result = await prompt_manager.render_composed(
                 composition_name=composition_name,

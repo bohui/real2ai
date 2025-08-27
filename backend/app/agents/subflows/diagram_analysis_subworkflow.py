@@ -26,6 +26,7 @@ from app.agents.nodes.diagram_analysis_subflow.prepare_diagrams_node import (
 from app.agents.nodes.diagram_analysis_subflow.diagram_semantics_fanout_node import (
     DiagramSemanticsFanoutNode,
 )
+from app.core.prompts import get_prompt_manager
 
 
 logger = logging.getLogger(__name__)
@@ -35,6 +36,8 @@ class DiagramAnalysisSubWorkflow:
     def __init__(self, concurrency_limit: int = 5):
         self.graph: Optional[CompiledStateGraph] = None
         self.concurrency_limit = concurrency_limit
+        # Initialize prompt manager before creating nodes to avoid attribute errors
+        self.prompt_manager = get_prompt_manager()
         self._build_graph()
 
     def _build_graph(self) -> None:

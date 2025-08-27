@@ -1,10 +1,12 @@
 from datetime import datetime, UTC
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, TYPE_CHECKING
 
-from app.agents.subflows.step2_section_analysis_workflow import (
-    Step2AnalysisState,
-    Step2AnalysisWorkflow,
-)
+from app.agents.states.section_analysis_state import Step2AnalysisState
+
+if TYPE_CHECKING:
+    from app.agents.subflows.step2_section_analysis_workflow import (
+        Step2AnalysisWorkflow,
+    )
 from app.agents.nodes.contract_llm_base import ContractLLMNode
 from app.prompts.schema.step2.financial_terms_schema import (
     FinancialTermsAnalysisResult,
@@ -14,7 +16,7 @@ from app.prompts.schema.step2.financial_terms_schema import (
 class FinancialTermsNode(ContractLLMNode):
     def __init__(
         self,
-        workflow: Step2AnalysisWorkflow,
+        workflow: "Step2AnalysisWorkflow",
         progress_range: tuple[int, int] = (12, 22),
     ):
 

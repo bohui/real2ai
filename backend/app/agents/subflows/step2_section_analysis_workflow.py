@@ -21,7 +21,6 @@ from app.agents.states.contract_state import RealEstateAgentState
 from app.core.langsmith_config import langsmith_trace
 from app.agents.states.section_analysis_state import Step2AnalysisState
 from app.core.prompts import get_prompt_manager
-from app.agents.subflows.diagram_analysis_subworkflow import DiagramAnalysisSubWorkflow
 
 logger = logging.getLogger(__name__)
 
@@ -425,6 +424,10 @@ class Step2AnalysisWorkflow:
     @langsmith_trace(name="analyze_diagram", run_type="tool")
     async def analyze_diagram(self, state: Step2AnalysisState) -> Step2AnalysisState:
         # Delegate to new subworkflow for diagram analysis (prep -> semantics fanout -> risk)
+        # Lazy import to avoid circular dependency
+        from app.agents.subflows.diagram_analysis_subworkflow import (
+            DiagramAnalysisSubWorkflow,
+        )
 
         sub = DiagramAnalysisSubWorkflow()
         result_state = await sub.run(state)

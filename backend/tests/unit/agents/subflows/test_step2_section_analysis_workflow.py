@@ -51,7 +51,7 @@ class TestStep2AnalysisWorkflow:
             processing_time=None,
             progress=None,
             notify_progress=None,
-            extracted_entityss": "123 Test St"}},
+            extracted_entity={"address": "123 Test St"},
             step2_analysis_result=None,
             analysis_results={},
             report_data=None,
@@ -104,7 +104,7 @@ class TestStep2AnalysisWorkflow:
 
         result = await workflow.execute(
             contract_text=contract_text,
-            extracted_entitys_result,
+            extracted_entity=extracted_entitys_result,
             parent_state=sample_state,
         )
 
@@ -122,7 +122,7 @@ class TestStep2AnalysisWorkflow:
 
         result = await workflow.execute(
             contract_text="",  # Empty text
-            extracted_entityy entities
+            extracted_entity={},
             parent_state=sample_state,
         )
 
@@ -147,7 +147,7 @@ class TestStep2AnalysisWorkflow:
 
         result = await workflow.execute(
             contract_text=contract_text,
-            extracted_entitymple_entities_result,
+            extracted_entity=sample_entities_result,
             parent_state=sample_state,
         )
 

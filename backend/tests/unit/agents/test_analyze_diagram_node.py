@@ -19,7 +19,7 @@ pytest.skip(
     allow_module_level=True,
 )
 from app.schema.enums.risk import RiskCategory
-from backend.app.prompts.schema.diagram_analysis.diagram_risk_schema import (
+from app.prompts.schema.diagram_analysis.diagram_risk_schema import (
     RiskSeverity,
     BoundaryRisk,
     InfrastructureRisk,

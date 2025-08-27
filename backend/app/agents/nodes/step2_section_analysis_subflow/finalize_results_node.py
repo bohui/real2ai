@@ -1,7 +1,7 @@
 from datetime import datetime, UTC
 
 from .base_node import Step2NodeBase
-from app.agents.subflows.step2_section_analysis_workflow import Step2AnalysisState
+from app.agents.states.section_analysis_state import Step2AnalysisState
 
 
 class FinalizeResultsNode(Step2NodeBase):

@@ -3,7 +3,7 @@ import pytest
 
 @pytest.mark.asyncio
 async def test_model_selection_uses_metadata_primary_and_fallbacks(mocker):
-    from backend.app.agents.nodes.step1_entities_extraction.entities_extraction_node import (
+    from app.agents.nodes.step1_entities_extraction.entities_extraction_node import (
         EntitiesExtractionNode,
     )
 
@@ -81,7 +81,7 @@ async def test_model_selection_uses_metadata_primary_and_fallbacks(mocker):
 
 @pytest.mark.asyncio
 async def test_short_circuit_skips_when_cached(mocker):
-    from backend.app.agents.nodes.step1_entities_extraction.entities_extraction_node import (
+    from app.agents.nodes.step1_entities_extraction.entities_extraction_node import (
         EntitiesExtractionNode,
     )
 

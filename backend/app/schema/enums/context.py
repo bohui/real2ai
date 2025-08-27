@@ -1,16 +1,6 @@
-"""Context and output enums."""
+"""Output format enums."""
 
 from enum import Enum
-
-
-class ContextType(Enum):
-    """Context types"""
-
-    USER_PROFILE = "user_profile"
-    PROPERTY_CONTEXT = "property_context"
-    MARKET_CONTEXT = "market_context"
-    DOCUMENT_CONTEXT = "document_context"
-    SESSION_CONTEXT = "session_context"
 
 
 class OutputFormat(str, Enum):
