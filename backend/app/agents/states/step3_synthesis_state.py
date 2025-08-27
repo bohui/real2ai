@@ -28,6 +28,7 @@ class Step3SynthesisState(LangGraphBaseState):
     financial_terms_result: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
     warranties_result: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
     default_termination_result: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
+    diagram_risk_assessment_result: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
 
     # Step 3 Outputs (aligned with contract attributes)
     risk_summary: Annotated[Optional[Dict[str, Any]], lambda x, y: y]

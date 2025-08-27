@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field, model_validator
 from typing import List, Optional, Dict, Any
 from datetime import datetime
-from app.schema.enums import RiskSeverity, DiagramType, ConfidenceLevel
+from app.schema.enums import RiskLevel, DiagramType, ConfidenceLevel
 
 
 class DiagramReference(BaseModel):
@@ -33,7 +33,7 @@ class DiagramReference(BaseModel):
 class BoundaryRisk(BaseModel):
     risk_type: str = Field(..., description="Type of boundary risk")
     description: str = Field(..., description="Detailed description of the risk")
-    severity: RiskSeverity = Field(..., description="Risk severity level")
+    severity: RiskLevel = Field(..., description="Risk severity level")
     linked_diagrams: List[DiagramReference] = Field(
         ..., description="Diagrams that show this risk"
     )
@@ -56,7 +56,7 @@ class EasementRisk(BaseModel):
         ..., description="Type of easement (drainage, utility, access, etc.)"
     )
     description: str = Field(..., description="Description of easement risk")
-    severity: RiskSeverity = Field(..., description="Risk severity level")
+    severity: RiskLevel = Field(..., description="Risk severity level")
     linked_diagrams: List[DiagramReference] = Field(
         ..., description="Diagrams that show this risk"
     )
@@ -80,7 +80,7 @@ class EasementRisk(BaseModel):
 class StrataRisk(BaseModel):
     risk_type: str = Field(..., description="Type of strata-related risk")
     description: str = Field(..., description="Detailed description of the risk")
-    severity: RiskSeverity = Field(..., description="Risk severity level")
+    severity: RiskLevel = Field(..., description="Risk severity level")
     linked_diagrams: List[DiagramReference] = Field(
         ..., description="Diagrams that show this risk"
     )
@@ -104,7 +104,7 @@ class StrataRisk(BaseModel):
 class DevelopmentRisk(BaseModel):
     risk_type: str = Field(..., description="Type of development risk")
     description: str = Field(..., description="Detailed description of the risk")
-    severity: RiskSeverity = Field(..., description="Risk severity level")
+    severity: RiskLevel = Field(..., description="Risk severity level")
     linked_diagrams: List[DiagramReference] = Field(
         ..., description="Diagrams that show this risk"
     )
@@ -128,7 +128,7 @@ class DevelopmentRisk(BaseModel):
 class EnvironmentalRisk(BaseModel):
     risk_type: str = Field(..., description="Type of environmental risk")
     description: str = Field(..., description="Detailed description of the risk")
-    severity: RiskSeverity = Field(..., description="Risk severity level")
+    severity: RiskLevel = Field(..., description="Risk severity level")
     linked_diagrams: List[DiagramReference] = Field(
         ..., description="Diagrams that show this risk"
     )
@@ -155,7 +155,7 @@ class EnvironmentalRisk(BaseModel):
 class InfrastructureRisk(BaseModel):
     risk_type: str = Field(..., description="Type of infrastructure risk")
     description: str = Field(..., description="Detailed description of the risk")
-    severity: RiskSeverity = Field(..., description="Risk severity level")
+    severity: RiskLevel = Field(..., description="Risk severity level")
     linked_diagrams: List[DiagramReference] = Field(
         ..., description="Diagrams that show this risk"
     )
@@ -180,7 +180,7 @@ class InfrastructureRisk(BaseModel):
 class ZoningRisk(BaseModel):
     risk_type: str = Field(..., description="Type of zoning risk")
     description: str = Field(..., description="Detailed description of the risk")
-    severity: RiskSeverity = Field(..., description="Risk severity level")
+    severity: RiskLevel = Field(..., description="Risk severity level")
     linked_diagrams: List[DiagramReference] = Field(
         ..., description="Diagrams that show this risk"
     )
@@ -207,7 +207,7 @@ class ZoningRisk(BaseModel):
 class DiscrepancyRisk(BaseModel):
     risk_type: str = Field(..., description="Type of discrepancy risk")
     description: str = Field(..., description="Detailed description of the risk")
-    severity: RiskSeverity = Field(..., description="Risk severity level")
+    severity: RiskLevel = Field(..., description="Risk severity level")
     linked_diagrams: List[DiagramReference] = Field(
         ..., description="Diagrams that show this risk"
     )
@@ -231,7 +231,7 @@ class DiscrepancyRisk(BaseModel):
 class AccessRisk(BaseModel):
     risk_type: str = Field(..., description="Type of access risk")
     description: str = Field(..., description="Detailed description of the risk")
-    severity: RiskSeverity = Field(..., description="Risk severity level")
+    severity: RiskLevel = Field(..., description="Risk severity level")
     linked_diagrams: List[DiagramReference] = Field(
         ..., description="Diagrams that show this risk"
     )
@@ -255,7 +255,7 @@ class AccessRisk(BaseModel):
 class ComplianceRisk(BaseModel):
     risk_type: str = Field(..., description="Type of compliance risk")
     description: str = Field(..., description="Detailed description of the risk")
-    severity: RiskSeverity = Field(..., description="Risk severity level")
+    severity: RiskLevel = Field(..., description="Risk severity level")
     linked_diagrams: List[DiagramReference] = Field(
         ..., description="Diagrams that show this risk"
     )
@@ -322,7 +322,7 @@ class DiagramRiskAssessment(BaseModel):
     )
 
     # Overall Assessment
-    overall_risk_score: RiskSeverity = Field(..., description="Overall risk assessment")
+    overall_risk_score: RiskLevel = Field(..., description="Overall risk assessment")
     total_risks_identified: int = Field(
         0, description="Total number of risks identified"
     )
@@ -378,7 +378,7 @@ class RiskExtractor:
     """Helper class for extracting risks from diagram data"""
 
     @staticmethod
-    def calculate_overall_risk(assessment: DiagramRiskAssessment) -> RiskSeverity:
+    def calculate_overall_risk(assessment: DiagramRiskAssessment) -> RiskLevel:
         """Calculate overall risk based on individual risk assessments"""
         all_risks = (
             assessment.boundary_risks
@@ -394,23 +394,23 @@ class RiskExtractor:
         )
 
         if not all_risks:
-            return RiskSeverity.MINOR
+            return RiskLevel.LOW
 
-        major_risk_count = sum(
-            1 for risk in all_risks if risk.severity == RiskSeverity.MAJOR
+        high_risk_count = sum(
+            1 for risk in all_risks if risk.severity == RiskLevel.HIGH
         )
         critical_risk_count = sum(
-            1 for risk in all_risks if risk.severity == RiskSeverity.CRITICAL
+            1 for risk in all_risks if risk.severity == RiskLevel.CRITICAL
         )
 
         if critical_risk_count > 0:
-            return RiskSeverity.CRITICAL
-        elif major_risk_count >= 3:
-            return RiskSeverity.MAJOR
-        elif major_risk_count > 0:
-            return RiskSeverity.MODERATE
+            return RiskLevel.CRITICAL
+        elif high_risk_count >= 3:
+            return RiskLevel.HIGH
+        elif high_risk_count > 0:
+            return RiskLevel.MEDIUM
         else:
-            return RiskSeverity.MINOR
+            return RiskLevel.LOW
 
     @staticmethod
     def create_example_assessment() -> DiagramRiskAssessment:
@@ -440,7 +440,7 @@ class RiskExtractor:
         boundary_risk = BoundaryRisk(
             risk_type="Encroachment",
             description="Neighbor's shed extends 0.5m over eastern boundary",
-            severity=RiskSeverity.MAJOR,
+            severity=RiskLevel.HIGH,
             linked_diagrams=[title_plan],
             affected_boundaries=["Eastern boundary"],
             encroachment_details="Timber shed structure, approximately 2m x 3m",
@@ -450,7 +450,7 @@ class RiskExtractor:
         infrastructure_risk = InfrastructureRisk(
             risk_type="Sewer Main Under Property",
             description="Major sewer main runs directly under proposed building area",
-            severity=RiskSeverity.MAJOR,
+            severity=RiskLevel.HIGH,
             linked_diagrams=[sewer_diagram],
             sewer_pipe_location="2m from eastern boundary, 1.5m depth",
             maintenance_access_requirements="Council requires 3m clear access zone",
@@ -461,7 +461,7 @@ class RiskExtractor:
             diagram_sources=[DiagramType.TITLE_PLAN, DiagramType.SEWER_SERVICE_DIAGRAM],
             boundary_risks=[boundary_risk],
             infrastructure_risks=[infrastructure_risk],
-            overall_risk_score=RiskSeverity.MODERATE,
+            overall_risk_score=RiskLevel.MEDIUM,
             total_risks_identified=2,
             high_priority_risks=["Neighbor's shed encroachment"],
             recommended_actions=[

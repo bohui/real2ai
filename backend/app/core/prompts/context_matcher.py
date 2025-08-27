@@ -3,7 +3,12 @@
 Supports:
 - Wildcard "*" (matches any value)
 - List any-match (["purchase", "option"]) with case-insensitive comparison
+- List intersection (fragment list intersects with runtime list)
 - Scalar equality with case-insensitive comparison for strings
+
+Enhanced to handle diagram_type filtering where fragment specifies a list of
+applicable diagram types and runtime provides a list of actual diagram types.
+Fragment is included if any diagram types intersect.
 
 Logs match decisions to aid debugging.
 """
@@ -22,7 +27,9 @@ class ContextMatcher:
     def __init__(self) -> None:
         pass
 
-    def filter_fragments(self, fragments: List[Any], runtime_context: Dict[str, Any]) -> List[Any]:
+    def filter_fragments(
+        self, fragments: List[Any], runtime_context: Dict[str, Any]
+    ) -> List[Any]:
         """Return fragments whose metadata.context matches the runtime_context.
 
         Respects optional numeric 'priority' in fragment metadata (higher first).
@@ -57,7 +64,9 @@ class ContextMatcher:
         matched.sort(key=get_priority, reverse=True)
         return matched
 
-    def _matches_context(self, fragment_context: Dict[str, Any], runtime_context: Dict[str, Any]) -> bool:
+    def _matches_context(
+        self, fragment_context: Dict[str, Any], runtime_context: Dict[str, Any]
+    ) -> bool:
         if not fragment_context:
             return True
 
@@ -85,6 +94,11 @@ class ContextMatcher:
         return a == b
 
     def _list_contains(self, items: List[Any], value: Any) -> bool:
+        # Handle list intersection - if runtime value is a list, check if any items intersect
+        if isinstance(value, list):
+            return self._lists_intersect(items, value)
+
+        # Original single value logic
         if isinstance(value, str):
             value_lower = value.lower()
             for item in items:
@@ -96,111 +110,12 @@ class ContextMatcher:
         else:
             return value in items
 
-"""Generic context matching system for fragment selection"""
-
-import logging
-from typing import Dict, Any, List
-
-logger = logging.getLogger(__name__)
-
-
-class ContextMatcher:
-    """Generic context matching with wildcard and list support"""
-
-    def matches_context(self, fragment_context: Dict[str, Any], runtime_context: Dict[str, Any]) -> bool:
-        """
-        Check if fragment context matches runtime context
-        
-        Args:
-            fragment_context: Context requirements from fragment metadata
-            runtime_context: Runtime context values
-            
-        Returns:
-            True if fragment should be included, False otherwise
-        """
-        if not fragment_context:
-            return True
-
-        for key, required in fragment_context.items():
-            # Wildcard matches anything
-            if required == "*":
-                continue
-
-            actual = runtime_context.get(key)
-            if actual is None:
-                return False
-
-            # Normalize strings for case-insensitive comparison
-            def norm(v):
-                return v.lower() if isinstance(v, str) else v
-
-            if isinstance(required, list):
-                if norm(actual) not in [norm(x) for x in required]:
-                    return False
-            else:
-                if norm(actual) != norm(required):
-                    return False
-
-        return True
-
-    def filter_fragments(
-        self, 
-        fragments: List[Dict[str, Any]], 
-        runtime_context: Dict[str, Any]
-    ) -> List[Dict[str, Any]]:
-        """
-        Filter fragments based on context matching
-        
-        Args:
-            fragments: List of fragments with metadata
-            runtime_context: Runtime context values
-            
-        Returns:
-            List of matching fragments
-        """
-        matching_fragments = []
-        
-        for fragment in fragments:
-            fragment_context = fragment.get('metadata', {}).get('context', {})
-            
-            if self.matches_context(fragment_context, runtime_context):
-                matching_fragments.append(fragment)
-                logger.debug(
-                    f"✅ Fragment {fragment.get('name', 'unknown')} MATCHES: "
-                    f"fragment_context={fragment_context}, runtime_context={runtime_context}"
-                )
-            else:
-                # Log specific reason for non-match
-                mismatch_reason = self._get_mismatch_reason(fragment_context, runtime_context)
-                logger.debug(
-                    f"❌ Fragment {fragment.get('name', 'unknown')} NO MATCH: {mismatch_reason} "
-                    f"(fragment_context={fragment_context}, runtime_context={runtime_context})"
-                )
-        
-        return matching_fragments
-
-    def _get_mismatch_reason(self, fragment_context: Dict[str, Any], runtime_context: Dict[str, Any]) -> str:
-        """Get specific reason why fragment context doesn't match runtime context"""
-        if not fragment_context:
-            return "empty fragment context should match all"
-        
-        for key, required in fragment_context.items():
-            if required == "*":
-                continue
-                
-            actual = runtime_context.get(key)
-            if actual is None:
-                return f"missing runtime key '{key}'"
-                
-            # Normalize for comparison
-            def norm(v):
-                return v.lower() if isinstance(v, str) else v
-                
-            if isinstance(required, list):
-                if norm(actual) not in [norm(x) for x in required]:
-                    return f"'{key}': '{actual}' not in required list {required}"
-            else:
-                if norm(actual) != norm(required):
-                    return f"'{key}': '{actual}' != '{required}'"
-        
-        return "unknown mismatch"
+    def _lists_intersect(
+        self, fragment_list: List[Any], runtime_list: List[Any]
+    ) -> bool:
+        """Check if two lists have any common elements (case-insensitive for strings)"""
+        for fragment_item in fragment_list:
+            for runtime_item in runtime_list:
+                if self._equals(fragment_item, runtime_item):
+                    return True
+        return False

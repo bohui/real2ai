@@ -15,7 +15,7 @@ from app.core.langsmith_config import langsmith_trace, get_langsmith_config
 from langsmith.run_helpers import trace
 from app.core.prompts.parsers import create_parser, ParsingResult
 from app.services.base.user_aware_service import UserAwareService
-from app.prompts.schema.image_semantics_schema import DiagramSemanticsBase, DiagramType
+from backend.app.prompts.schema.diagram_analysis.image_semantics_schema import DiagramSemanticsBase, DiagramType
 from app.services.ai.gemini_service import GeminiService
 from app.clients.base.exceptions import (
     ClientError,

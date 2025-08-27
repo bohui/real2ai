@@ -12,13 +12,8 @@ class RiskLevel(str, Enum):
     CRITICAL = "critical"
 
 
-class RiskSeverity(str, Enum):
-    """Risk severity levels"""
-
-    MINOR = "minor"
-    MODERATE = "moderate"
-    MAJOR = "major"
-    CRITICAL = "critical"
+# Deprecated: RiskSeverity
+# Use RiskLevel (low, medium, high, critical) across the system.
 
 
 class VarianceLevel(Enum):

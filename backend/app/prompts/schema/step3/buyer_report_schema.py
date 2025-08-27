@@ -1,6 +1,7 @@
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel, Field, field_validator
 from enum import Enum
+from app.schema.enums import RiskLevel
 
 
 class SectionType(str, Enum):
@@ -18,6 +19,7 @@ class SectionType(str, Enum):
 
 
 class RiskSeverity(str, Enum):
+    """Deprecated alias for backward compatibility. Use RiskLevel."""
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
@@ -48,7 +50,7 @@ class KeyRisk(BaseModel):
     description: str = Field(
         ..., min_length=20, max_length=200, description="Brief risk description"
     )
-    severity: RiskSeverity = Field(..., description="Risk severity level")
+    severity: RiskLevel = Field(..., description="Risk severity level")
     impact_summary: str = Field(
         ..., min_length=10, max_length=150, description="Brief impact summary"
     )
@@ -136,10 +138,10 @@ class BuyerReportResult(BaseModel):
     @classmethod
     def sort_risks_by_severity(cls, v):
         severity_order = {
-            RiskSeverity.CRITICAL: 4,
-            RiskSeverity.HIGH: 3,
-            RiskSeverity.MEDIUM: 2,
-            RiskSeverity.LOW: 1,
+            RiskLevel.CRITICAL: 4,
+            RiskLevel.HIGH: 3,
+            RiskLevel.MEDIUM: 2,
+            RiskLevel.LOW: 1,
         }
         return sorted(v, key=lambda r: severity_order.get(r.severity, 0), reverse=True)
 

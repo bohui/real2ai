@@ -38,7 +38,6 @@ class FinancialTermsNode(ContractLLMNode):
             context_type=ContextType.ANALYSIS,
             variables={
                 "analysis_timestamp": datetime.now(UTC).isoformat(),
-                "extracted_entity": entities,
                 "australian_state": state.get("australian_state")
                 or meta.get("state")
                 or "NSW",

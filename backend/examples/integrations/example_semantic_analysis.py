@@ -5,7 +5,7 @@ Demonstrates how to analyze property diagrams for semantic meaning and risk asse
 
 import asyncio
 from app.services.gemini_ocr_service import GeminiOCRService
-from app.prompts.schema.image_semantics_schema import DiagramType
+from backend.app.prompts.schema.diagram_analysis.image_semantics_schema import DiagramType
 from app.agents.states.contract_state import AustralianState, ContractType
 
 

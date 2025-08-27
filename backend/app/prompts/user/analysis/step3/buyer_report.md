@@ -23,6 +23,7 @@ required_variables:
   - "special_risks_result"
 optional_variables:
   - "retrieval_index_id"
+  - "address"
 model_compatibility: ["gemini-1.5-flash", "gpt-4"]
 max_tokens: 8192
 temperature_range: [0.1, 0.3]
@@ -31,6 +32,17 @@ tags: ["step3", "buyer_report", "synthesis"]
 ---
 
 # Buyer Report Synthesis (Step 3)
+
+{% if address %}
+**Web Search Enhancement**: You have access to web search tools. Use the provided property address ({{ address }}) to research current information for the buyer report:
+- Current property market values and recent sales
+- Local area amenities and future development plans
+- School zones and public transport accessibility
+- Community facilities and local services
+- Any recent news or developments affecting the area
+
+Only search when current local information would provide valuable context for the buyer's decision-making.
+{% endif %}
 
 You are a senior property advisor preparing a comprehensive report for a property buyer. Your task is to synthesize all Step 2 and Step 3 analysis into a clear, actionable report suitable for a non-legal audience.
 

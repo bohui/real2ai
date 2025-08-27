@@ -15,6 +15,7 @@ required_variables:
   - "settlement_logistics_result"
 optional_variables:
   - "retrieval_index_id"
+  - "address"
 model_compatibility: ["gemini-1.5-flash", "gpt-4"]
 max_tokens: 8000
 temperature_range: [0.1, 0.3]
@@ -23,6 +24,17 @@ tags: ["step3", "risk_aggregation", "prioritization"]
 ---
 
 # Risk Aggregation and Prioritization (Step 3)
+
+{% if address %}
+**Web Search Enhancement**: You have access to web search tools. Use the provided property address ({{ address }}) to research current context for risk prioritization:
+- Recent property market trends in the area
+- Current environmental conditions or warnings
+- Recent council decisions affecting the area
+- Infrastructure projects impacting property access or value
+- Comparable recent sales to validate risk assessments
+
+Only search when current market or regulatory context would significantly affect risk prioritization.
+{% endif %}
 
 You are a senior property lawyer specializing in Australian real estate law. Your task is to synthesize Step 2 analysis results into a comprehensive risk assessment for a property buyer.
 

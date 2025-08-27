@@ -39,6 +39,7 @@ class RiskAggregatorNode(ContractLLMNode):
             ),
             "title_encumbrances_result": state.get("title_encumbrances_result", {}),
             "settlement_logistics_result": state.get("settlement_logistics_result", {}),
+            "diagram_risk_assessment_result": state.get("diagram_risk_assessment_result", {}),
         }
 
         required_inputs = [
@@ -47,6 +48,7 @@ class RiskAggregatorNode(ContractLLMNode):
             "disclosure_compliance_result",
             "title_encumbrances_result",
             "settlement_logistics_result",
+            "diagram_risk_assessment_result",
         ]
 
         missing_inputs = [

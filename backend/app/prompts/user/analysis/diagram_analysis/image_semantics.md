@@ -23,6 +23,7 @@ optional_variables:
   - "seed_snippets"
   - "diagram_filenames"
   - "extracted_entity"
+  - "address"
 model_compatibility: ["gemini-2.5-flash", "gpt-4-vision"]
 max_tokens: 65536
 temperature_range: [0.1, 0.4]
@@ -50,6 +51,9 @@ You are an expert property analyst specializing in extracting semantic meaning f
 {% if property_condition %}
 - **Property Condition**: {{ property_condition }}
 {% endif %}
+{% if address %}
+- **Property Address**: {{ address }}
+{% endif %}
 
 {% if extracted_entity %}
 ## Contract Entities (Context)
@@ -75,6 +79,19 @@ You are an expert property analyst specializing in extracting semantic meaning f
 - If multiple diagrams are implied, label findings with the relevant filename where possible.
 {% endif %}
 
+{% if address %}
+## Web Search Enhancement
+You have access to web search tools. Use the provided property address to search for current information that may help interpret diagram elements:
+- Current zoning classifications and recent changes
+- Local planning overlays affecting the property
+- Recent development applications in the area
+- Council infrastructure projects or road works
+- Environmental reports (flood studies, contamination)
+- Heritage listings or archaeological significance
+
+Only search when specific local context would significantly enhance semantic interpretation of diagram elements.
+
+{% endif %}
 ## Core Analysis Objectives
 
 ### 1. Infrastructure Identification

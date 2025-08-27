@@ -95,6 +95,7 @@ class Step3SynthesisWorkflow:
             "financial_terms_result": section_results.get("financial_terms"),
             "warranties_result": section_results.get("warranties"),
             "default_termination_result": section_results.get("default_termination"),
+            "diagram_risk_assessment_result": section_results.get("diagram_risks"),
             # Outputs
             "risk_summary": None,
             "action_plan": None,

@@ -14,7 +14,7 @@ from datetime import datetime
 from typing import List, Dict, Any
 from pydantic import ValidationError
 
-from app.prompts.schema.image_semantics_schema import (
+from backend.app.prompts.schema.diagram_analysis.image_semantics_schema import (
     DiagramSemanticsBase,
     GenericDiagramSemantics,
     SitePlanSemantics,

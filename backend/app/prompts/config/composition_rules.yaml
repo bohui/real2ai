@@ -163,7 +163,7 @@ compositions:
       - "step2_default_termination"
 
   step2_diagram_semantics:
-    description: "Step 2.3 - Diagram/Image Semantics Analysis"
+    description: "Step 2.3 - Diagram/Image Semantics Analysis (Generic)"
     version: "1.0.0"
     system_prompts:
       - name: "step2_image_semantics"
@@ -176,6 +176,384 @@ compositions:
         required: true
     user_prompts:
       - "image_semantics"
+
+  # Diagram-Specific Semantic Analysis Compositions
+  step2_diagram_semantics_site_plan:
+    description: "Step 2.3 - Site Plan Semantic Analysis"
+    version: "1.0.0"
+    system_prompts:
+      - name: "step2_image_semantics"
+        path: "system/step2_image_semantics.md"
+        priority: 105
+        required: true
+      - name: "australian_legal"
+        path: "system/conveyancer.md"
+        priority: 90
+        required: true
+    user_prompts:
+      - "image_semantics_site_plan"
+
+  step2_diagram_semantics_sewer_service_diagram:
+    description: "Step 2.3 - Sewer Service Diagram Semantic Analysis"
+    version: "1.0.0"
+    system_prompts:
+      - name: "step2_image_semantics"
+        path: "system/step2_image_semantics.md"
+        priority: 105
+        required: true
+      - name: "australian_legal"
+        path: "system/conveyancer.md"
+        priority: 90
+        required: true
+    user_prompts:
+      - "image_semantics_sewer_service_diagram"
+
+  step2_diagram_semantics_survey_diagram:
+    description: "Step 2.3 - Survey Diagram Semantic Analysis"
+    version: "1.0.0"
+    system_prompts:
+      - name: "step2_image_semantics"
+        path: "system/step2_image_semantics.md"
+        priority: 105
+        required: true
+      - name: "australian_legal"
+        path: "system/conveyancer.md"
+        priority: 90
+        required: true
+    user_prompts:
+      - "image_semantics_survey_diagram"
+
+  step2_diagram_semantics_flood_map:
+    description: "Step 2.3 - Flood Map Semantic Analysis"
+    version: "1.0.0"
+    system_prompts:
+      - name: "step2_image_semantics"
+        path: "system/step2_image_semantics.md"
+        priority: 105
+        required: true
+      - name: "australian_legal"
+        path: "system/conveyancer.md"
+        priority: 90
+        required: true
+    user_prompts:
+      - "image_semantics_flood_map"
+
+  step2_diagram_semantics_bushfire_map:
+    description: "Step 2.3 - Bushfire Map Semantic Analysis"
+    version: "1.0.0"
+    system_prompts:
+      - name: "step2_image_semantics"
+        path: "system/step2_image_semantics.md"
+        priority: 105
+        required: true
+      - name: "australian_legal"
+        path: "system/conveyancer.md"
+        priority: 90
+        required: true
+    user_prompts:
+      - "image_semantics_bushfire_map"
+
+  step2_diagram_semantics_utility_plan:
+    description: "Step 2.3 - Utility Plan Semantic Analysis"
+    version: "1.0.0"
+    system_prompts:
+      - name: "step2_image_semantics"
+        path: "system/step2_image_semantics.md"
+        priority: 105
+        required: true
+      - name: "australian_legal"
+        path: "system/conveyancer.md"
+        priority: 90
+        required: true
+    user_prompts:
+      - "image_semantics_utility_plan"
+
+  step2_diagram_semantics_title_plan:
+    description: "Step 2.3 - Title Plan Semantic Analysis"
+    version: "1.0.0"
+    system_prompts:
+      - name: "step2_image_semantics"
+        path: "system/step2_image_semantics.md"
+        priority: 105
+        required: true
+      - name: "australian_legal"
+        path: "system/conveyancer.md"
+        priority: 90
+        required: true
+    user_prompts:
+      - "image_semantics_title_plan"
+
+  step2_diagram_semantics_zoning_map:
+    description: "Step 2.3 - Zoning Map Semantic Analysis"
+    version: "1.0.0"
+    system_prompts:
+      - name: "step2_image_semantics"
+        path: "system/step2_image_semantics.md"
+        priority: 105
+        required: true
+      - name: "australian_legal"
+        path: "system/conveyancer.md"
+        priority: 90
+        required: true
+    user_prompts:
+      - "image_semantics_zoning_map"
+
+  step2_diagram_semantics_environmental_overlay:
+    description: "Step 2.3 - Environmental Overlay Semantic Analysis"
+    version: "1.0.0"
+    system_prompts:
+      - name: "step2_image_semantics"
+        path: "system/step2_image_semantics.md"
+        priority: 105
+        required: true
+      - name: "australian_legal"
+        path: "system/conveyancer.md"
+        priority: 90
+        required: true
+    user_prompts:
+      - "image_semantics_environmental_overlay"
+
+  step2_diagram_semantics_contour_map:
+    description: "Step 2.3 - Contour Map Semantic Analysis"
+    version: "1.0.0"
+    system_prompts:
+      - name: "step2_image_semantics"
+        path: "system/step2_image_semantics.md"
+        priority: 105
+        required: true
+      - name: "australian_legal"
+        path: "system/conveyancer.md"
+        priority: 90
+        required: true
+    user_prompts:
+      - "image_semantics_contour_map"
+
+  step2_diagram_semantics_drainage_plan:
+    description: "Step 2.3 - Drainage Plan Semantic Analysis"
+    version: "1.0.0"
+    system_prompts:
+      - name: "step2_image_semantics"
+        path: "system/step2_image_semantics.md"
+        priority: 105
+        required: true
+      - name: "australian_legal"
+        path: "system/conveyancer.md"
+        priority: 90
+        required: true
+    user_prompts:
+      - "image_semantics_drainage_plan"
+
+  step2_diagram_semantics_building_envelope_plan:
+    description: "Step 2.3 - Building Envelope Plan Semantic Analysis"
+    version: "1.0.0"
+    system_prompts:
+      - name: "step2_image_semantics"
+        path: "system/step2_image_semantics.md"
+        priority: 105
+        required: true
+      - name: "australian_legal"
+        path: "system/conveyancer.md"
+        priority: 90
+        required: true
+    user_prompts:
+      - "image_semantics_building_envelope_plan"
+
+  step2_diagram_semantics_development_plan:
+    description: "Step 2.3 - Development Plan Semantic Analysis"
+    version: "1.0.0"
+    system_prompts:
+      - name: "step2_image_semantics"
+        path: "system/step2_image_semantics.md"
+        priority: 105
+        required: true
+      - name: "australian_legal"
+        path: "system/conveyancer.md"
+        priority: 90
+        required: true
+    user_prompts:
+      - "image_semantics_development_plan"
+
+  step2_diagram_semantics_aerial_view:
+    description: "Step 2.3 - Aerial View Semantic Analysis"
+    version: "1.0.0"
+    system_prompts:
+      - name: "step2_image_semantics"
+        path: "system/step2_image_semantics.md"
+        priority: 105
+        required: true
+      - name: "australian_legal"
+        path: "system/conveyancer.md"
+        priority: 90
+        required: true
+    user_prompts:
+      - "image_semantics_aerial_view"
+
+  step2_diagram_semantics_strata_plan:
+    description: "Step 2.3 - Strata Plan Semantic Analysis"
+    version: "1.0.0"
+    system_prompts:
+      - name: "step2_image_semantics"
+        path: "system/step2_image_semantics.md"
+        priority: 105
+        required: true
+      - name: "australian_legal"
+        path: "system/conveyancer.md"
+        priority: 90
+        required: true
+    user_prompts:
+      - "image_semantics_strata_plan"
+
+  step2_diagram_semantics_heritage_overlay:
+    description: "Step 2.3 - Heritage Overlay Semantic Analysis"
+    version: "1.0.0"
+    system_prompts:
+      - name: "step2_image_semantics"
+        path: "system/step2_image_semantics.md"
+        priority: 105
+        required: true
+      - name: "australian_legal"
+        path: "system/conveyancer.md"
+        priority: 90
+        required: true
+    user_prompts:
+      - "image_semantics_heritage_overlay"
+
+  step2_diagram_semantics_subdivision_plan:
+    description: "Step 2.3 - Subdivision Plan Semantic Analysis"
+    version: "1.0.0"
+    system_prompts:
+      - name: "step2_image_semantics"
+        path: "system/step2_image_semantics.md"
+        priority: 105
+        required: true
+      - name: "australian_legal"
+        path: "system/conveyancer.md"
+        priority: 90
+        required: true
+    user_prompts:
+      - "image_semantics_subdivision_plan"
+
+  step2_diagram_semantics_landscape_plan:
+    description: "Step 2.3 - Landscape Plan Semantic Analysis"
+    version: "1.0.0"
+    system_prompts:
+      - name: "step2_image_semantics"
+        path: "system/step2_image_semantics.md"
+        priority: 105
+        required: true
+      - name: "australian_legal"
+        path: "system/conveyancer.md"
+        priority: 90
+        required: true
+    user_prompts:
+      - "image_semantics_landscape_plan"
+
+  step2_diagram_semantics_parking_plan:
+    description: "Step 2.3 - Parking Plan Semantic Analysis"
+    version: "1.0.0"
+    system_prompts:
+      - name: "step2_image_semantics"
+        path: "system/step2_image_semantics.md"
+        priority: 105
+        required: true
+      - name: "australian_legal"
+        path: "system/conveyancer.md"
+        priority: 90
+        required: true
+    user_prompts:
+      - "image_semantics_parking_plan"
+
+  step2_diagram_semantics_body_corporate_plan:
+    description: "Step 2.3 - Body Corporate Plan Semantic Analysis"
+    version: "1.0.0"
+    system_prompts:
+      - name: "step2_image_semantics"
+        path: "system/step2_image_semantics.md"
+        priority: 105
+        required: true
+      - name: "australian_legal"
+        path: "system/conveyancer.md"
+        priority: 90
+        required: true
+    user_prompts:
+      - "image_semantics_body_corporate_plan"
+
+  step2_diagram_semantics_off_the_plan_marketing:
+    description: "Step 2.3 - Off-the-Plan Marketing Semantic Analysis"
+    version: "1.0.0"
+    system_prompts:
+      - name: "step2_image_semantics"
+        path: "system/step2_image_semantics.md"
+        priority: 105
+        required: true
+      - name: "australian_legal"
+        path: "system/conveyancer.md"
+        priority: 90
+        required: true
+    user_prompts:
+      - "image_semantics_off_the_plan_marketing"
+
+  step2_diagram_semantics_cross_section:
+    description: "Step 2.3 - Cross Section Semantic Analysis"
+    version: "1.0.0"
+    system_prompts:
+      - name: "step2_image_semantics"
+        path: "system/step2_image_semantics.md"
+        priority: 105
+        required: true
+      - name: "australian_legal"
+        path: "system/conveyancer.md"
+        priority: 90
+        required: true
+    user_prompts:
+      - "image_semantics_cross_section"
+
+  step2_diagram_semantics_elevation_view:
+    description: "Step 2.3 - Elevation View Semantic Analysis"
+    version: "1.0.0"
+    system_prompts:
+      - name: "step2_image_semantics"
+        path: "system/step2_image_semantics.md"
+        priority: 105
+        required: true
+      - name: "australian_legal"
+        path: "system/conveyancer.md"
+        priority: 90
+        required: true
+    user_prompts:
+      - "image_semantics_elevation_view"
+
+  step2_diagram_semantics_unknown:
+    description: "Step 2.3 - Unknown Diagram Semantic Analysis"
+    version: "1.0.0"
+    system_prompts:
+      - name: "step2_image_semantics"
+        path: "system/step2_image_semantics.md"
+        priority: 105
+        required: true
+      - name: "australian_legal"
+        path: "system/conveyancer.md"
+        priority: 90
+        required: true
+    user_prompts:
+      - "image_semantics_unknown"
+
+  step2_diagram_risk:
+    description: "Step 2.3b - Diagram/Image Risk Assessment from image semantics"
+    version: "2.0.0"
+    system_prompts:
+      - name: "australian_legal"
+        path: "system/conveyancer.md"
+        priority: 90
+        required: true
+    user_prompts:
+      - "step2_diagram_risk"
+    fragment_groups:
+      - "diagram_analysis"
+      - "state_requirements"
+      - "user_experience"
+      - "analysis_depth"
+      - "shared"
 
   # Step 3 Synthesis Compositions
   step3_risk_aggregation:

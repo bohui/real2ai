@@ -9,7 +9,7 @@ This test file covers:
 
 import pytest
 from app.schema.enums.risk import RiskCategory, RiskSeverity
-from app.prompts.schema.diagram_risk_schema import (
+from backend.app.prompts.schema.diagram_analysis.diagram_risk_schema import (
     BoundaryRisk,
     InfrastructureRisk,
     EnvironmentalRisk,

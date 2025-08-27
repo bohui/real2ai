@@ -5,6 +5,7 @@ Pydantic models for structured workflow outputs
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field, field_validator
 from enum import Enum
+from app.schema.enums import RiskLevel
 from datetime import datetime
 
 from app.schema.enums.property import (
@@ -17,7 +18,7 @@ from app.schema.enums.property import (
 
 
 class RiskSeverity(str, Enum):
-    """Risk severity levels"""
+    """Deprecated alias for backward compatibility. Use RiskLevel."""
 
     LOW = "low"
     MEDIUM = "medium"
@@ -47,7 +48,7 @@ class RiskFactor(BaseModel):
     """Individual risk factor in contract analysis"""
 
     factor: str = Field(..., description="Description of the risk factor")
-    severity: RiskSeverity = Field(..., description="Severity level of the risk")
+    severity: RiskLevel = Field(..., description="Severity level of the risk")
     description: str = Field(..., description="Detailed explanation of the risk")
     impact: str = Field(..., description="Potential consequences of this risk")
     australian_specific: bool = Field(
@@ -64,7 +65,7 @@ class RiskFactor(BaseModel):
     @classmethod
     def validate_severity(cls, v):
         if isinstance(v, str):
-            return RiskSeverity(v.lower())
+            return RiskLevel(v.lower())
         return v
 
 
@@ -191,7 +192,7 @@ class ComplianceIssue(BaseModel):
 
     issue_type: str = Field(..., description="Type of compliance issue")
     description: str = Field(..., description="Description of the compliance issue")
-    severity: RiskSeverity = Field(..., description="Severity of the compliance issue")
+    severity: RiskLevel = Field(..., description="Severity of the compliance issue")
     legal_reference: str = Field(..., description="Relevant legal reference")
     resolution_required: bool = Field(
         ..., description="Whether resolution is required before settlement"

@@ -14,7 +14,7 @@ from datetime import datetime
 from typing import List, Dict, Any
 from pydantic import ValidationError
 
-from app.prompts.schema.diagram_risk_schema import (
+from backend.app.prompts.schema.diagram_analysis.diagram_risk_schema import (
     DiagramReference,
     BoundaryRisk,
     InfrastructureRisk,
@@ -25,7 +25,7 @@ from app.prompts.schema.diagram_risk_schema import (
 )
 from app.schema.enums import (
     DiagramType,
-    RiskSeverity,
+    RiskLevel,
     ConfidenceLevel,
     RiskCategory,
 )
@@ -46,13 +46,13 @@ class TestDiagramRiskSchema:
         risk = InfrastructureRisk(
             risk_type="test_risk",
             description="Test risk",
-            severity=RiskSeverity.MODERATE,
+            severity=RiskLevel.MEDIUM,
             linked_diagrams=[diagram_ref],
         )
 
         # Verify the risk was created successfully
         assert risk.risk_type == "test_risk"
-        assert risk.severity == RiskSeverity.MODERATE
+        assert risk.severity == RiskLevel.MEDIUM
 
     def test_risk_creation(self):
         """Test creating risk instances with various categories"""
@@ -66,21 +66,21 @@ class TestDiagramRiskSchema:
         infrastructure_risk = InfrastructureRisk(
             risk_type="sewer_main",
             description="Sewer main under property",
-            severity=RiskSeverity.MAJOR,
+            severity=RiskLevel.HIGH,
             linked_diagrams=[diagram_ref],
             sewer_pipe_location="Under eastern boundary",
             maintenance_access_requirements="3m easement required",
         )
 
         assert infrastructure_risk.risk_type == "sewer_main"
-        assert infrastructure_risk.severity == RiskSeverity.MAJOR
+        assert infrastructure_risk.severity == RiskLevel.HIGH
         assert infrastructure_risk.sewer_pipe_location == "Under eastern boundary"
 
         # Test boundary risk
         boundary_risk = BoundaryRisk(
             risk_type="encroachment",
             description="Encroachment on eastern boundary",
-            severity=RiskSeverity.MODERATE,
+            severity=RiskLevel.MEDIUM,
             linked_diagrams=[diagram_ref],
             affected_boundaries=["Eastern boundary"],
             encroachment_details="Shed extends 0.5m over boundary",
@@ -88,7 +88,7 @@ class TestDiagramRiskSchema:
         )
 
         assert boundary_risk.risk_type == "encroachment"
-        assert boundary_risk.severity == RiskSeverity.MODERATE
+        assert boundary_risk.severity == RiskLevel.MEDIUM
         assert boundary_risk.encroachment_details == "Shed extends 0.5m over boundary"
 
     def test_diagram_reference_validation(self):
@@ -128,7 +128,7 @@ class TestDiagramRiskSchema:
         boundary_risk = BoundaryRisk(
             risk_type="encroachment",
             description="Neighbor's shed extends 0.5m over eastern boundary",
-            severity=RiskSeverity.MAJOR,
+            severity=RiskLevel.HIGH,
             linked_diagrams=[title_plan],
             affected_boundaries=["Eastern boundary"],
             encroachment_details="Shed extends 0.5m over boundary",
@@ -138,7 +138,7 @@ class TestDiagramRiskSchema:
         infrastructure_risk = InfrastructureRisk(
             risk_type="sewer_main",
             description="Major sewer main runs directly under proposed building area",
-            severity=RiskSeverity.MAJOR,
+            severity=RiskLevel.HIGH,
             linked_diagrams=[sewer_diagram],
             sewer_pipe_location="Under building envelope",
             maintenance_access_requirements="Council requires 3m clear access zone",
@@ -150,7 +150,7 @@ class TestDiagramRiskSchema:
             diagram_sources=[DiagramType.TITLE_PLAN, DiagramType.SEWER_SERVICE_DIAGRAM],
             boundary_risks=[boundary_risk],
             infrastructure_risks=[infrastructure_risk],
-            overall_risk_score=RiskSeverity.MAJOR,
+            overall_risk_score=RiskLevel.HIGH,
             high_priority_risks=[
                 "Boundary encroachment requires immediate attention",
                 "Sewer main under building envelope affects construction",
@@ -179,7 +179,7 @@ class TestDiagramRiskSchema:
         assert len(assessment.diagram_sources) == 2
         assert len(assessment.boundary_risks) == 1
         assert len(assessment.infrastructure_risks) == 1
-        assert assessment.overall_risk_score == RiskSeverity.MAJOR
+        assert assessment.overall_risk_score == RiskLevel.HIGH
         assert len(assessment.high_priority_risks) == 2
         assert assessment.legal_review_required == True
 
@@ -195,14 +195,14 @@ class TestDiagramRiskSchema:
         risk1 = InfrastructureRisk(
             risk_type="test_risk_1",
             description="Test risk 1",
-            severity=RiskSeverity.MODERATE,
+            severity=RiskLevel.MEDIUM,
             linked_diagrams=[diagram_ref],
         )
 
         risk2 = BoundaryRisk(
             risk_type="test_risk_2",
             description="Test risk 2",
-            severity=RiskSeverity.MAJOR,
+            severity=RiskLevel.HIGH,
             linked_diagrams=[diagram_ref],
             affected_boundaries=["Eastern boundary"],
             potential_impact="Test impact",
@@ -213,7 +213,7 @@ class TestDiagramRiskSchema:
             diagram_sources=[DiagramType.SITE_PLAN],
             infrastructure_risks=[risk1],
             boundary_risks=[risk2],
-            overall_risk_score=RiskSeverity.MAJOR,
+            overall_risk_score=RiskLevel.HIGH,
         )
 
         # Verify computed fields
@@ -233,7 +233,7 @@ class TestDiagramRiskSchema:
         minor_risk = EnvironmentalRisk(
             risk_type="minor_issue",
             description="Minor issue",
-            severity=RiskSeverity.MINOR,
+            severity=RiskLevel.LOW,
             linked_diagrams=[diagram_ref],
             environmental_factor="minor_factor",
             mitigation_required="simple mitigation",
@@ -242,14 +242,14 @@ class TestDiagramRiskSchema:
         moderate_risk = InfrastructureRisk(
             risk_type="moderate_issue",
             description="Moderate issue",
-            severity=RiskSeverity.MODERATE,
+            severity=RiskLevel.MEDIUM,
             linked_diagrams=[diagram_ref],
         )
 
         major_risk = BoundaryRisk(
             risk_type="major_issue",
             description="Major issue",
-            severity=RiskSeverity.MAJOR,
+            severity=RiskLevel.HIGH,
             linked_diagrams=[diagram_ref],
             affected_boundaries=["Eastern boundary"],
             potential_impact="significant impact",
@@ -261,11 +261,11 @@ class TestDiagramRiskSchema:
             property_identifier="Test",
             diagram_sources=[DiagramType.SITE_PLAN],
             environmental_risks=[minor_risk, minor_risk],
-            overall_risk_score=RiskSeverity.MINOR,  # Set explicitly to avoid validation error
+            overall_risk_score=RiskLevel.LOW,  # Set explicitly to avoid validation error
         )
 
         computed_minor = RiskExtractor.calculate_overall_risk(minor_assessment)
-        assert computed_minor == RiskSeverity.MINOR
+        assert computed_minor == RiskLevel.LOW
 
         # Mixed risks
         mixed_assessment = DiagramRiskAssessment(
@@ -274,22 +274,22 @@ class TestDiagramRiskSchema:
             environmental_risks=[minor_risk],
             infrastructure_risks=[moderate_risk],
             boundary_risks=[major_risk],
-            overall_risk_score=RiskSeverity.MAJOR,  # Set explicitly to avoid validation error
+            overall_risk_score=RiskLevel.HIGH,  # Set explicitly to avoid validation error
         )
 
         computed_mixed = RiskExtractor.calculate_overall_risk(mixed_assessment)
-        assert computed_mixed == RiskSeverity.MODERATE
+        assert computed_mixed == RiskLevel.MEDIUM
 
         # All major risks
         major_assessment = DiagramRiskAssessment(
             property_identifier="Test",
             diagram_sources=[DiagramType.SITE_PLAN],
             boundary_risks=[major_risk, major_risk, major_risk],
-            overall_risk_score=RiskSeverity.MAJOR,  # Set explicitly to avoid validation error
+            overall_risk_score=RiskLevel.HIGH,  # Set explicitly to avoid validation error
         )
 
         computed_major = RiskExtractor.calculate_overall_risk(major_assessment)
-        assert computed_major == RiskSeverity.MAJOR
+        assert computed_major == RiskLevel.HIGH
 
     def test_risk_extractor_create_example_assessment(self):
         """Test RiskExtractor.create_example_assessment with new schema"""
@@ -462,8 +462,8 @@ class TestDiagramRiskSchema:
         # Verify computed overall risk score
         computed_score = RiskExtractor.calculate_overall_risk(assessment)
         assert (
-            computed_score == RiskSeverity.MODERATE
-        )  # Should be MODERATE due to 2 major risks (need 3+ for MAJOR)
+            computed_score == RiskLevel.MEDIUM
+        )  # Should be MEDIUM due to 2 high risks (need 3+ for HIGH)
 
     def test_risk_attributes_flexibility(self):
         """Test the flexibility of risk model fields"""

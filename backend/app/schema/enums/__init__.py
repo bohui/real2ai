@@ -35,7 +35,6 @@ from .market import (
 # Risk & Analysis Enums
 from .risk import (
     RiskLevel,
-    RiskSeverity,
     VarianceLevel,
     ReliabilityRating,
     RiskCategory,
@@ -124,7 +123,6 @@ __all__ = [
     "LiquidityLevel",
     # Risk & Analysis
     "RiskLevel",
-    "RiskSeverity",
     "VarianceLevel",
     "ReliabilityRating",
     "RiskCategory",

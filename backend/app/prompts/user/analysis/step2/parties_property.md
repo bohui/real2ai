@@ -17,6 +17,7 @@ optional_variables:
   - "use_category"
   - "property_condition"
   - "purchase_method"
+  - "address"
 model_compatibility: ["gemini-2.5-flash", "gpt-4"]
 max_tokens: 6000
 temperature_range: [0.1, 0.3]
@@ -27,6 +28,17 @@ tags: ["step2", "parties", "property", "verification"]
 # Parties & Property Verification Analysis (Step 2.1)
 
 Perform systematic verification analysis of parties and property details using Step 1 outputs as baseline. Use provided seed snippets first; expand via targeted retrieval only if coverage or confidence is insufficient. Avoid using full contract text unless explicitly instructed or required to resolve ambiguities.
+
+{% if address %}
+**Web Search Enhancement**: You have access to web search tools. Use the provided property address ({{ address }}) to verify and enhance property information:
+- Current property ownership and recent sales history
+- Property characteristics and recent development applications
+- Council records for the property
+- Planning overlays and zoning restrictions
+- Environmental hazards or contamination reports
+
+Only search when verification or additional context would significantly enhance the property analysis.
+{% endif %}
 
 ## Contract Context
 {% set meta = (extracted_entity or {}).get('metadata') or {} %}

@@ -275,12 +275,188 @@ registry:
       description: "Step 3 - Buyer Report Synthesis"
       estimated_tokens: 8000
 
+    # Diagram-Specific Image Semantics Prompts
     image_semantics:
-      path: "user/analysis/image_semantics.md"
+      path: "user/analysis/diagram_analysis/image_semantics.md"
       category: "analysis"
       system_requirements: ["step2_image_semantics", "australian_legal"]
-      description: "Semantic analysis of property diagrams and images"
+      description: "Generic semantic analysis of property diagrams and images"
       estimated_tokens: 12000
+
+    image_semantics_site_plan:
+      path: "user/analysis/diagram_analysis/image_semantics_site_plan.md"
+      category: "analysis"
+      system_requirements: ["step2_image_semantics", "australian_legal"]
+      description: "Site plan semantic analysis for property layout and boundaries"
+      estimated_tokens: 8000
+
+    image_semantics_sewer_service_diagram:
+      path: "user/analysis/diagram_analysis/image_semantics_sewer_service_diagram.md"
+      category: "analysis"
+      system_requirements: ["step2_image_semantics", "australian_legal"]
+      description: "Sewer service diagram semantic analysis for infrastructure mapping"
+      estimated_tokens: 8000
+
+    image_semantics_survey_diagram:
+      path: "user/analysis/diagram_analysis/image_semantics_survey_diagram.md"
+      category: "analysis"
+      system_requirements: ["step2_image_semantics", "australian_legal"]
+      description: "Survey diagram semantic analysis for precise boundaries and measurements"
+      estimated_tokens: 8000
+
+    image_semantics_flood_map:
+      path: "user/analysis/diagram_analysis/image_semantics_flood_map.md"
+      category: "analysis"
+      system_requirements: ["step2_image_semantics", "australian_legal"]
+      description: "Flood map semantic analysis for water risk assessment"
+      estimated_tokens: 8000
+
+    image_semantics_bushfire_map:
+      path: "user/analysis/diagram_analysis/image_semantics_bushfire_map.md"
+      category: "analysis"
+      system_requirements: ["step2_image_semantics", "australian_legal"]
+      description: "Bushfire map semantic analysis for fire risk assessment"
+      estimated_tokens: 8000
+
+    image_semantics_utility_plan:
+      path: "user/analysis/diagram_analysis/image_semantics_utility_plan.md"
+      category: "analysis"
+      system_requirements: ["step2_image_semantics", "australian_legal"]
+      description: "Utility plan semantic analysis for infrastructure services"
+      estimated_tokens: 8000
+
+    image_semantics_title_plan:
+      path: "user/analysis/diagram_analysis/image_semantics_title_plan.md"
+      category: "analysis"
+      system_requirements: ["step2_image_semantics", "australian_legal"]
+      description: "Title plan semantic analysis for legal boundaries and ownership"
+      estimated_tokens: 8000
+
+    image_semantics_zoning_map:
+      path: "user/analysis/diagram_analysis/image_semantics_zoning_map.md"
+      category: "analysis"
+      system_requirements: ["step2_image_semantics", "australian_legal"]
+      description: "Zoning map semantic analysis for development controls and land use"
+      estimated_tokens: 8000
+
+    image_semantics_environmental_overlay:
+      path: "user/analysis/diagram_analysis/image_semantics_environmental_overlay.md"
+      category: "analysis"
+      system_requirements: ["step2_image_semantics", "australian_legal"]
+      description: "Environmental overlay semantic analysis for environmental protection"
+      estimated_tokens: 8000
+
+    image_semantics_contour_map:
+      path: "user/analysis/diagram_analysis/image_semantics_contour_map.md"
+      category: "analysis"
+      system_requirements: ["step2_image_semantics", "australian_legal"]
+      description: "Contour map semantic analysis for topography and elevation"
+      estimated_tokens: 8000
+
+    image_semantics_drainage_plan:
+      path: "user/analysis/diagram_analysis/image_semantics_drainage_plan.md"
+      category: "analysis"
+      system_requirements: ["step2_image_semantics", "australian_legal"]
+      description: "Drainage plan semantic analysis for stormwater management"
+      estimated_tokens: 8000
+
+    image_semantics_building_envelope_plan:
+      path: "user/analysis/diagram_analysis/image_semantics_building_envelope_plan.md"
+      category: "analysis"
+      system_requirements: ["step2_image_semantics", "australian_legal"]
+      description: "Building envelope plan semantic analysis for development constraints"
+      estimated_tokens: 8000
+
+    image_semantics_development_plan:
+      path: "user/analysis/diagram_analysis/image_semantics_development_plan.md"
+      category: "analysis"
+      system_requirements: ["step2_image_semantics", "australian_legal"]
+      description: "Development plan semantic analysis for proposed development requirements"
+      estimated_tokens: 10000
+
+    image_semantics_aerial_view:
+      path: "user/analysis/diagram_analysis/image_semantics_aerial_view.md"
+      category: "analysis"
+      system_requirements: ["step2_image_semantics", "australian_legal"]
+      description: "Aerial view semantic analysis for contextual property assessment"
+      estimated_tokens: 8000
+
+    image_semantics_strata_plan:
+      path: "user/analysis/diagram_analysis/image_semantics_strata_plan.md"
+      category: "analysis"
+      system_requirements: ["step2_image_semantics", "australian_legal"]
+      description: "Strata plan semantic analysis for strata ownership structure"
+      estimated_tokens: 8000
+
+    image_semantics_heritage_overlay:
+      path: "user/analysis/diagram_analysis/image_semantics_heritage_overlay.md"
+      category: "analysis"
+      system_requirements: ["step2_image_semantics", "australian_legal"]
+      description: "Heritage overlay semantic analysis for heritage protection"
+      estimated_tokens: 8000
+
+    image_semantics_subdivision_plan:
+      path: "user/analysis/diagram_analysis/image_semantics_subdivision_plan.md"
+      category: "analysis"
+      system_requirements: ["step2_image_semantics", "australian_legal"]
+      description: "Subdivision plan semantic analysis for subdivision layout"
+      estimated_tokens: 8000
+
+    image_semantics_landscape_plan:
+      path: "user/analysis/diagram_analysis/image_semantics_landscape_plan.md"
+      category: "analysis"
+      system_requirements: ["step2_image_semantics", "australian_legal"]
+      description: "Landscape plan semantic analysis for vegetation requirements"
+      estimated_tokens: 8000
+
+    image_semantics_parking_plan:
+      path: "user/analysis/diagram_analysis/image_semantics_parking_plan.md"
+      category: "analysis"
+      system_requirements: ["step2_image_semantics", "australian_legal"]
+      description: "Parking plan semantic analysis for parking and vehicle circulation"
+      estimated_tokens: 8000
+
+    image_semantics_body_corporate_plan:
+      path: "user/analysis/diagram_analysis/image_semantics_body_corporate_plan.md"
+      category: "analysis"
+      system_requirements: ["step2_image_semantics", "australian_legal"]
+      description: "Body corporate plan semantic analysis for management structure"
+      estimated_tokens: 8000
+
+    image_semantics_off_the_plan_marketing:
+      path: "user/analysis/diagram_analysis/image_semantics_off_the_plan_marketing.md"
+      category: "analysis"
+      system_requirements: ["step2_image_semantics", "australian_legal"]
+      description: "Off-the-plan marketing semantic analysis for development marketing"
+      estimated_tokens: 8000
+
+    image_semantics_cross_section:
+      path: "user/analysis/diagram_analysis/image_semantics_cross_section.md"
+      category: "analysis"
+      system_requirements: ["step2_image_semantics", "australian_legal"]
+      description: "Cross section semantic analysis for vertical building analysis"
+      estimated_tokens: 8000
+
+    image_semantics_elevation_view:
+      path: "user/analysis/diagram_analysis/image_semantics_elevation_view.md"
+      category: "analysis"
+      system_requirements: ["step2_image_semantics", "australian_legal"]
+      description: "Elevation view semantic analysis for building facade analysis"
+      estimated_tokens: 8000
+
+    image_semantics_unknown:
+      path: "user/analysis/diagram_analysis/image_semantics_unknown.md"
+      category: "analysis"
+      system_requirements: ["step2_image_semantics", "australian_legal"]
+      description: "Generic diagram semantic analysis for unclassified diagram types"
+      estimated_tokens: 8000
+
+    step2_diagram_risk:
+      path: "user/analysis/step2/diagram_risk.md"
+      category: "analysis"
+      system_requirements: ["step2_image_semantics", "australian_legal"]
+      description: "Assess risks from diagram/image semantics output"
+      estimated_tokens: 8000
       
     # clarification_prompts:
     #   path: "interactions/clarification.md"

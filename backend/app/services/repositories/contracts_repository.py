@@ -266,7 +266,6 @@ class ContractsRepository:
             None,
             None,
             None,
-            None,
             raw_text,
             property_address,
             updated_by,
@@ -432,6 +431,8 @@ class ContractsRepository:
                     "disclosure_compliance",
                     "special_risks",
                     "cross_section_validation",
+                    "image_semantics",
+                    "diagram_risks",
                     # Step 3 synthesis keys
                     "risk_summary",
                     "action_plan",
@@ -454,6 +455,61 @@ class ContractsRepository:
                     content_hash,
                     key,
                     json.dumps(value, default=_json_default),
+                    updated_by,
+                )
+                return result.split()[-1] == "1"
+
+    async def update_image_semantics_for_diagram_type(
+        self,
+        content_hash: str,
+        diagram_type: str,
+        semantics_data: Dict[str, Any],
+        updated_by: Optional[str] = None,
+    ) -> bool:
+        """Concurrent-safe merge of diagram-type-specific data into image_semantics JSONB column.
+
+        Uses pg_advisory_xact_lock(content_hash) to serialize concurrent writers for same contract.
+        Merges data under the diagram_type key to avoid overriding other diagram types.
+        """
+        from app.database.connection import get_service_role_connection
+
+        def _json_default(v: Any):
+            if isinstance(v, (datetime, date)):
+                return v.isoformat()
+            return v
+
+        async with get_service_role_connection() as conn:
+            lock_key = hash(content_hash) & 0x7FFFFFFF
+            async with conn.transaction():
+                await conn.execute("SELECT pg_advisory_xact_lock($1)", lock_key)
+
+                # Ensure row exists minimally
+                await conn.execute(
+                    """
+                    INSERT INTO contracts (content_hash)
+                    VALUES ($1)
+                    ON CONFLICT (content_hash) DO NOTHING
+                    """,
+                    content_hash,
+                )
+
+                # Merge diagram-type-specific data into image_semantics JSONB
+                # Use COALESCE to handle NULL image_semantics, then merge the new data
+                update_sql = """
+                    UPDATE contracts
+                    SET image_semantics = COALESCE(image_semantics, '{}'::jsonb) || $2::jsonb,
+                        updated_by = COALESCE($3, updated_by),
+                        updated_at = now()
+                    WHERE content_hash = $1
+                """
+
+                # Structure the data with diagram_type as the key
+                merge_data = {diagram_type: semantics_data}
+
+                result = await conn.execute(
+                    update_sql,
+                    content_hash,
+                    json.dumps(merge_data, default=_json_default),
                     updated_by,
                 )
                 return result.split()[-1] == "1"

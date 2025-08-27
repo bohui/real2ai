@@ -21,6 +21,7 @@ from app.agents.states.contract_state import RealEstateAgentState
 from app.core.langsmith_config import langsmith_trace
 from app.agents.states.section_analysis_state import Step2AnalysisState
 from app.core.prompts import get_prompt_manager
+from app.agents.subflows.diagram_analysis_subworkflow import DiagramAnalysisSubWorkflow
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +72,6 @@ class Step2AnalysisWorkflow:
         from app.agents.nodes.step2_section_analysis_subflow import (
             InitializeWorkflowNode,
             PrepareContextNode,
-            AnalyzeDiagramNode,
             PartiesPropertyNode,
             FinancialTermsNode,
             ConditionsNode,
@@ -97,9 +97,7 @@ class Step2AnalysisWorkflow:
             "prepare_context",
             progress_range=self.PROGRESS_RANGES["prepare_context"],
         )
-        self.analyze_diagram_node = AnalyzeDiagramNode(
-            self, progress_range=self.PROGRESS_RANGES["analyze_diagram"]
-        )
+        # Diagram analysis now delegated to DiagramAnalysisSubWorkflow
         self.parties_property_node = PartiesPropertyNode(
             self, progress_range=self.PROGRESS_RANGES["analyze_parties_property"]
         )
@@ -143,7 +141,7 @@ class Step2AnalysisWorkflow:
         self.nodes = {
             "initialize_workflow": self.initialize_workflow_node,
             "prepare_context": self.prepare_context_node,
-            "analyze_diagram": self.analyze_diagram_node,
+            # "analyze_diagram": handled via subworkflow
             "analyze_parties_property": self.parties_property_node,
             "analyze_financial_terms": self.financial_terms_node,
             "analyze_conditions": self.conditions_node,
@@ -382,12 +380,15 @@ class Step2AnalysisWorkflow:
                 "conditions": state.get("conditions"),
                 "warranties": state.get("warranties"),
                 "default_termination": state.get("default_termination"),
+                "image_semantics": state.get("image_semantics"),
+                "diagram_risks": state.get("diagram_risks"),
                 "settlement_logistics": state.get("settlement_logistics"),
                 "title_encumbrances": state.get("title_encumbrances"),
                 "adjustments_outgoings": state.get("adjustments_outgoings"),
                 "disclosure_compliance": state.get("disclosure_compliance"),
                 "special_risks": state.get("special_risks"),
             },
+            # No separate top-level risk key; included in section_results
             # Cross-section validation
             "cross_section_validation": state.get("cross_section_validation"),
             # Workflow metadata
@@ -423,7 +424,11 @@ class Step2AnalysisWorkflow:
 
     @langsmith_trace(name="analyze_diagram", run_type="tool")
     async def analyze_diagram(self, state: Step2AnalysisState) -> Step2AnalysisState:
-        return await self.analyze_diagram_node.execute(state)
+        # Delegate to new subworkflow for diagram analysis (prep -> semantics fanout -> risk)
+
+        sub = DiagramAnalysisSubWorkflow()
+        result_state = await sub.run(state)
+        return result_state
 
     @langsmith_trace(name="analyze_parties_property", run_type="tool")
     async def analyze_parties_property(

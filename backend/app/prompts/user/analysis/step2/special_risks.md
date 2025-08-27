@@ -14,6 +14,7 @@ optional_variables:
   - "contract_type"
   - "retrieval_index_id"
   - "seed_snippets"
+  - "address"
 model_compatibility: ["gemini-2.5-flash", "gpt-4"]
 max_tokens: 8000
 temperature_range: [0.1, 0.3]
@@ -22,6 +23,17 @@ tags: ["step2", "special-risks", "unusual-terms", "synthesis"]
 ---
 
 # Special Risks Identification (Step 2.11)
+
+{% if address %}
+**Web Search Enhancement**: You have access to web search tools. Use the provided property address ({{ address }}) to research specific risks:
+- Local environmental hazards or contamination
+- Area-specific planning restrictions or overlays
+- Recent development or infrastructure changes
+- Council enforcement actions or compliance issues
+- Market trends affecting property values or risks
+
+Only search when local context would help identify property-specific risks not apparent from contract analysis.
+{% endif %}
 
 Perform comprehensive identification and analysis of special risks, unusual contract terms, and buyer protection gaps in this Australian real estate contract, focusing on non-standard provisions and hidden risks.
 
