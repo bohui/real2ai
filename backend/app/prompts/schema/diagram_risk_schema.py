@@ -394,10 +394,10 @@ class RiskExtractor:
         )
 
         if not all_risks:
-            return RiskSeverity.LOW
+            return RiskSeverity.MINOR
 
-        high_risk_count = sum(
-            1 for risk in all_risks if risk.severity == RiskSeverity.HIGH
+        major_risk_count = sum(
+            1 for risk in all_risks if risk.severity == RiskSeverity.MAJOR
         )
         critical_risk_count = sum(
             1 for risk in all_risks if risk.severity == RiskSeverity.CRITICAL
@@ -405,12 +405,12 @@ class RiskExtractor:
 
         if critical_risk_count > 0:
             return RiskSeverity.CRITICAL
-        elif high_risk_count >= 3:
-            return RiskSeverity.HIGH
-        elif high_risk_count > 0:
-            return RiskSeverity.MEDIUM
+        elif major_risk_count >= 3:
+            return RiskSeverity.MAJOR
+        elif major_risk_count > 0:
+            return RiskSeverity.MODERATE
         else:
-            return RiskSeverity.LOW
+            return RiskSeverity.MINOR
 
     @staticmethod
     def create_example_assessment() -> DiagramRiskAssessment:

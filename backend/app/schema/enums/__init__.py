@@ -33,7 +33,13 @@ from .market import (
 )
 
 # Risk & Analysis Enums
-from .risk import RiskLevel, RiskSeverity, VarianceLevel, ReliabilityRating
+from .risk import (
+    RiskLevel,
+    RiskSeverity,
+    VarianceLevel,
+    ReliabilityRating,
+    RiskCategory,
+)
 
 # Insight & Content Enums
 from .content import InsightType, ViewSource, ContentType
@@ -121,6 +127,7 @@ __all__ = [
     "RiskSeverity",
     "VarianceLevel",
     "ReliabilityRating",
+    "RiskCategory",
     # Insight & Content
     "InsightType",
     "ViewSource",
