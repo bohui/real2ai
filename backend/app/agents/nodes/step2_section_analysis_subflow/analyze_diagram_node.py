@@ -1,5 +1,6 @@
 from datetime import datetime, UTC
 from typing import Any, Optional, Dict
+import traceback
 
 from app.agents.subflows.step2_section_analysis_workflow import (
     Step2AnalysisState,
@@ -351,38 +352,76 @@ class AnalyzeDiagramNode(ContractLLMNode):
             artifacts_repo = ArtifactsRepository()
 
             # Fetch diagram artifacts (includes diagrams and images)
-            diagram_artifacts = (
-                await artifacts_repo.get_diagram_artifacts_by_content_hmac(content_hmac)
+            self._log_step_debug(
+                f"Fetching diagram artifacts for content_hmac: {content_hmac}", state
             )
+            try:
+                diagram_artifacts = (
+                    await artifacts_repo.get_diagram_artifacts_by_content_hmac(
+                        content_hmac
+                    )
+                )
+                self._log_step_debug(
+                    f"Successfully fetched {len(diagram_artifacts)} diagram artifacts",
+                    state,
+                )
+            except Exception as e:
+                self._log_warning(f"Error fetching diagram artifacts: {e}")
+                self._log_warning(f"Error type: {type(e)}")
+
+                self._log_warning(f"Traceback: {traceback.format_exc()}")
+                return
             if not diagram_artifacts:
                 return
 
-            result: Dict[str, str] = {}
+            result: Dict[str, List[Dict[str, Any]]] = {}
             for art in diagram_artifacts:
                 try:
                     uri = getattr(art, "image_uri", None)
                     key = getattr(art, "diagram_key", None) or "diagram"
                     page = getattr(art, "page_number", None)
-                    filename = (
-                        f"{key}_p{page}.bin" if page is not None else f"{key}.bin"
-                    )
+                    diagram_meta = getattr(art, "diagram_meta", {}) or {}
                     if uri:
-                        # Store URI string only; no downloads here
-                        result[filename] = uri
+                        # Initialize list for this URI if it doesn't exist
+                        if uri not in result:
+                            result[uri] = []
+                        # Store metadata including diagram type
+                        result[uri].append(
+                            {
+                                "diagram_type_hint": diagram_meta.get(
+                                    "diagram_type", "unknown"
+                                ),
+                                "confidence": diagram_meta.get("confidence", 0.5),
+                                "page_number": page,
+                                "diagram_key": key,
+                            }
+                        )
                 except Exception:
                     continue
 
             if result:
                 state["uploaded_diagrams"] = result
                 state["total_diagrams_processed"] = len(result)
-        except Exception:
+                # Log diagram types for debugging
+                diagram_types = []
+                for uri, diagram_list in result.items():
+                    for diagram_info in diagram_list:
+                        if (
+                            isinstance(diagram_info, dict)
+                            and "diagram_type_hint" in diagram_info
+                        ):
+                            diagram_types.append(diagram_info["diagram_type_hint"])
+                self._log_step_debug(
+                    f"Processed diagrams with types: {diagram_types}", state
+                )
+        except Exception as e:
             # Best-effort; do not raise
             pass
 
     async def _build_context_and_parser(self, state: Step2AnalysisState):
         from app.core.prompts import PromptContext, ContextType
         from app.core.prompts.parsers import create_parser
-        from app.prompts.schema.image_semantics_schema import ImageSemantics
+        from app.prompts.schema.image_semantics_schema import DiagramSemantics
 
         entities = state.get("entities_extraction", {}) or {}
         meta: Dict[str, Any] = (entities or {}).get("metadata") or {}
@@ -392,7 +431,18 @@ class AnalyzeDiagramNode(ContractLLMNode):
         # Only use title_encumbrances seeds (we do not maintain a dedicated diagram seed set)
         encumbrance_seeds = section_seeds.get("title_encumbrances")
         uploaded = state.get("uploaded_diagrams") or {}
-        diagram_filenames = list(uploaded.keys()) if isinstance(uploaded, dict) else []
+        diagram_uris = list(uploaded.keys()) if isinstance(uploaded, dict) else []
+        # Extract diagram types for analysis context
+        diagram_types = []
+        if isinstance(uploaded, dict):
+            for uri, diagram_list in uploaded.items():
+                if isinstance(diagram_list, list):
+                    for diagram_info in diagram_list:
+                        if (
+                            isinstance(diagram_info, dict)
+                            and "diagram_type_hint" in diagram_info
+                        ):
+                            diagram_types.append(diagram_info["diagram_type_hint"])
 
         # Filter and compress seeds to a small, high-signal subset
         filtered_seeds = self._select_filtered_seeds(encumbrance_seeds, entities, state)
@@ -416,24 +466,27 @@ class AnalyzeDiagramNode(ContractLLMNode):
                 "retrieval_index_id": state.get("retrieval_index_id"),
                 "seed_snippets": filtered_seeds if filtered_seeds else None,
                 "entities_extraction": entities,
-                "diagram_filenames": diagram_filenames,
+                "diagram_uris": diagram_uris,
+                "diagram_types": diagram_types,
                 # steer the analysis; can be refined later
                 "analysis_focus": "comprehensive",
             },
         )
 
-        parser = create_parser(ImageSemantics, strict_mode=False, retry_on_failure=True)
+        parser = create_parser(
+            DiagramSemantics, strict_mode=False, retry_on_failure=True
+        )
         # Use a dedicated composition with a diagram-specific system prompt
         return context, parser, "step2_diagram_semantics"
 
     def _coerce_to_model(self, data: Any) -> Optional[Any]:
         try:
-            from app.prompts.schema.image_semantics_schema import ImageSemantics
+            from app.prompts.schema.image_semantics_schema import DiagramSemantics
 
-            if isinstance(data, ImageSemantics):
+            if isinstance(data, DiagramSemantics):
                 return data
             if hasattr(data, "model_validate"):
-                return ImageSemantics.model_validate(data)
+                return DiagramSemantics.model_validate(data)
         except Exception:
             return None
         return None

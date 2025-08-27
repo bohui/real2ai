@@ -26,7 +26,7 @@ optional_variables:
 model_compatibility: ["gemini-2.5-flash", "gpt-4-vision"]
 max_tokens: 65536
 temperature_range: [0.1, 0.4]
-output_parser: ImageSemanticsOutput
+output_parser: DiagramSemanticsOutput
 tags: ["image", "semantics", "analysis", "property", "diagrams"]
 ---
 
@@ -201,7 +201,7 @@ You are an expert property analyst specializing in extracting semantic meaning f
 ## Output Requirements
 
 ### Structured Analysis
-Return a comprehensive JSON structure following the ImageSemantics schema including:
+Return a comprehensive JSON structure following the DiagramSemantics schema including:
 
 1. **Image Metadata**
    - Image type classification
@@ -264,5 +264,5 @@ Return a comprehensive JSON structure following the ImageSemantics schema includ
 - **Compliance**: Building requirements, development restrictions
 {% endif %}
 
-Begin semantic analysis of the provided image now. Return only the structured JSON output following the ImageSemantics schema.
+Begin semantic analysis of the provided image now. Return only the structured JSON output following the DiagramSemantics schema.
 

@@ -12,7 +12,7 @@ class Step2AnalysisState(LangGraphBaseState):
     contract_text: str
     entities_extraction: Dict[str, Any]
     legal_requirements_matrix: Optional[Dict[str, Any]]
-    uploaded_diagrams: Optional[Dict[str, bytes]]
+    uploaded_diagrams: Optional[Dict[str, List[Dict[str, Any]]]]
 
     # Context from parent state
     australian_state: Optional[str]

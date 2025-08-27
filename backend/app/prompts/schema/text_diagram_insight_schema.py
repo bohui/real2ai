@@ -1,7 +1,7 @@
 from typing import List
 from pydantic import BaseModel, Field
 
-from app.schema.enums import ImageType
+from app.schema.enums import DiagramType
 
 
 # class TextDiagramInsight(BaseModel):
@@ -28,18 +28,26 @@ from app.schema.enums import ImageType
 #         None, description="Specific diagram type if applicable"
 #     )
 
+MAX_TEXT_LENGTH = 7000
+
+# assume one diagram per page is enough for now
+MAX_DIAGRAMS = 1
+
 
 class TextDiagramInsightList(BaseModel):
     """Structured OCR result that supports multiple diagram hints per page."""
 
     text: str = Field(
         "",
-        description="Extracted full text from the image, default to empty string if no text is found",
+        description="Extracted full text from the image, default to empty string if no text is found,"
+        "if text more than 7000 characters or more than 1200 words or more than 300 lines, truncate it",
+        max_length=MAX_TEXT_LENGTH,
     )
     text_confidence: float = Field(0.0, description="OCR confidence score (0.0-1.0)")
-    diagrams: List[ImageType] = Field(
+    diagrams: List[DiagramType] = Field(
         default_factory=list,
         description="List of diagram hints detected in the image",
+        max_length=MAX_DIAGRAMS,
     )
     diagrams_confidence: float = Field(
         0.0, description="Diagram detection confidence score (0.0-1.0)"

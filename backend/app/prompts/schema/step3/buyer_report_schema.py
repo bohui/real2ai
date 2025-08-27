@@ -35,6 +35,7 @@ class SectionSummary(BaseModel):
     status: str = Field(..., description="Status: OK, WARNING, or ISSUE")
 
     @field_validator("status")
+    @classmethod
     def validate_status(cls, v):
         valid_statuses = ["OK", "WARNING", "ISSUE"]
         if v not in valid_statuses:
@@ -53,6 +54,7 @@ class KeyRisk(BaseModel):
     )
 
     @field_validator("title", "description", "impact_summary")
+    @classmethod
     def validate_strings(cls, v):
         return v.strip() if v else v
 
@@ -68,6 +70,7 @@ class ActionPlanOverviewItem(BaseModel):
     )
 
     @field_validator("urgency")
+    @classmethod
     def validate_urgency(cls, v):
         valid_urgencies = ["IMMEDIATE", "HIGH", "MEDIUM", "LOW"]
         if v not in valid_urgencies:
@@ -105,6 +108,7 @@ class BuyerReportResult(BaseModel):
     )
 
     @field_validator("overall_recommendation")
+    @classmethod
     def validate_recommendation(cls, v):
         valid_recommendations = ["PROCEED", "PROCEED_WITH_CAUTION", "RECONSIDER"]
         if v not in valid_recommendations:
@@ -114,12 +118,14 @@ class BuyerReportResult(BaseModel):
         return v
 
     @field_validator("evidence_refs")
+    @classmethod
     def validate_evidence_refs(cls, v):
         if not v:
             raise ValueError("Must provide at least one evidence reference")
         return [ref.strip() for ref in v if ref and ref.strip()]
 
     @field_validator("section_summaries")
+    @classmethod
     def validate_unique_sections(cls, v):
         section_types = [summary.section_type for summary in v]
         if len(section_types) != len(set(section_types)):
@@ -127,6 +133,7 @@ class BuyerReportResult(BaseModel):
         return v
 
     @field_validator("key_risks")
+    @classmethod
     def sort_risks_by_severity(cls, v):
         severity_order = {
             RiskSeverity.CRITICAL: 4,
@@ -137,6 +144,7 @@ class BuyerReportResult(BaseModel):
         return sorted(v, key=lambda r: severity_order.get(r.severity, 0), reverse=True)
 
     @field_validator("action_plan_overview")
+    @classmethod
     def sort_actions_by_urgency(cls, v):
         urgency_order = {"IMMEDIATE": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1}
         return sorted(v, key=lambda a: urgency_order.get(a.urgency, 0), reverse=True)

@@ -421,7 +421,7 @@ class DetectDiagramsWithOCRNode(DocumentProcessingNodeBase):
             )
 
             page_diagrams = []
-            # Diagrams are returned directly as a list of ImageType enums
+            # Diagrams are returned directly as a list of DiagramType enums
             diagrams = getattr(llm_result, "diagrams", None) or []
             if diagrams:
                 for d in diagrams:

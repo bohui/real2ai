@@ -6,6 +6,7 @@ instead of storing connections, preventing pool misuse.
 """
 
 import json
+import logging
 from typing import Dict, List, Optional, Any
 from uuid import UUID
 
@@ -19,7 +20,10 @@ from app.models.supabase_models import (
     ArtifactPage as PageArtifact,
     ArtifactDiagram as DiagramArtifact,
 )
+import traceback
 from app.utils.json_utils import safe_json_loads
+
+logger = logging.getLogger(__name__)
 
 
 class ArtifactsRepository:
@@ -89,7 +93,7 @@ class ArtifactsRepository:
             methods = row["methods"]
             if isinstance(methods, str):
                 methods = json.loads(methods)
-            
+
             timings = row["timings"]
             if isinstance(timings, str) and timings:
                 timings = json.loads(timings)
@@ -139,7 +143,7 @@ class ArtifactsRepository:
             methods = row["methods"]
             if isinstance(methods, str):
                 methods = json.loads(methods)
-            
+
             timings = row["timings"]
             if isinstance(timings, str) and timings:
                 timings = json.loads(timings)
@@ -247,7 +251,7 @@ class ArtifactsRepository:
                 methods = row["methods"]
                 if isinstance(methods, str):
                     methods = json.loads(methods)
-                
+
                 timings = row["timings"]
                 if isinstance(timings, str) and timings:
                     timings = json.loads(timings)
@@ -304,21 +308,36 @@ class ArtifactsRepository:
                 params_fingerprint,
             )
 
-            return [
-                PageArtifact(
-                    id=row["id"],
-                    content_hmac=row["content_hmac"],
-                    algorithm_version=row["algorithm_version"],
-                    params_fingerprint=row["params_fingerprint"],
-                    page_number=row["page_number"],
-                    page_text_uri=row["page_text_uri"],
-                    page_text_sha256=row["page_text_sha256"],
-                    layout=row["layout"],
-                    metrics=row["metrics"],
-                    created_at=row["created_at"],
-                )
-                for row in rows
-            ]
+            artifacts = []
+            for row in rows:
+                try:
+                    # Parse JSON fields safely
+                    layout = safe_json_loads(row["layout"])
+                    metrics = safe_json_loads(row["metrics"])
+
+                    artifact = PageArtifact(
+                        id=row["id"],
+                        content_hmac=row["content_hmac"],
+                        algorithm_version=row["algorithm_version"],
+                        params_fingerprint=row["params_fingerprint"],
+                        page_number=row["page_number"],
+                        page_text_uri=row["page_text_uri"],
+                        page_text_sha256=row["page_text_sha256"],
+                        layout=layout,
+                        metrics=metrics,
+                        created_at=row["created_at"],
+                    )
+                    artifacts.append(artifact)
+                except Exception as e:
+                    logger.error(f"Error creating PageArtifact from row: {e}")
+                    logger.error(f"Row data: {dict(row)}")
+                    logger.error(f"layout type: {type(row['layout'])}")
+                    logger.error(f"metrics type: {type(row['metrics'])}")
+                    logger.error(f"Traceback: {traceback.format_exc()}")
+                    # Skip this row and continue with others
+                    continue
+
+            return artifacts
 
     async def insert_page_artifact(
         self,
@@ -438,19 +457,35 @@ class ArtifactsRepository:
                 params_fingerprint,
             )
 
-            return [
-                DiagramArtifact(
-                    id=row["id"],
-                    content_hmac=row["content_hmac"],
-                    algorithm_version=row["algorithm_version"],
-                    params_fingerprint=row["params_fingerprint"],
-                    page_number=row["page_number"],
-                    diagram_key=row["diagram_key"],
-                    diagram_meta=row["diagram_meta"],
-                    created_at=row["created_at"],
-                )
-                for row in rows
-            ]
+            artifacts = []
+            for row in rows:
+                try:
+                    # Parse JSON fields safely
+                    diagram_meta = safe_json_loads(row["diagram_meta"], {})
+
+                    artifact = DiagramArtifact(
+                        id=row["id"],
+                        content_hmac=row["content_hmac"],
+                        algorithm_version=row["algorithm_version"],
+                        params_fingerprint=row["params_fingerprint"],
+                        page_number=row["page_number"],
+                        diagram_key=row["diagram_key"],
+                        diagram_meta=diagram_meta,
+                        created_at=row["created_at"],
+                    )
+                    artifacts.append(artifact)
+                except Exception as e:
+                    logger.error(f"Error creating DiagramArtifact from row: {e}")
+                    logger.error(f"Row data: {dict(row)}")
+                    logger.error(f"diagram_meta type: {type(row['diagram_meta'])}")
+                    logger.error(f"diagram_meta value: {row['diagram_meta']}")
+                    import traceback
+
+                    logger.error(f"Traceback: {traceback.format_exc()}")
+                    # Skip this row and continue with others
+                    continue
+
+            return artifacts
 
     async def insert_diagram_artifact(
         self,
@@ -1186,20 +1221,44 @@ class ArtifactsRepository:
                     algorithm_version,
                 )
 
-            return [
-                DiagramArtifact(
-                    id=row["id"],
-                    content_hmac=row["content_hmac"],
-                    algorithm_version=row["algorithm_version"],
-                    params_fingerprint=row["params_fingerprint"],
-                    page_number=row["page_number"],
-                    diagram_key=row["diagram_key"],
-                    diagram_meta=row["diagram_meta"],
-                    artifact_type=row["artifact_type"],
-                    image_uri=row["image_uri"],
-                    image_sha256=row["image_sha256"],
-                    image_metadata=row["image_metadata"],
-                    created_at=row["created_at"],
-                )
-                for row in rows
-            ]
+            artifacts = []
+            for row in rows:
+                try:
+                    # Parse JSON fields safely
+                    diagram_meta = safe_json_loads(row["diagram_meta"], {})
+                    image_metadata = safe_json_loads(row["image_metadata"])
+
+                    # Log the parsed values for debugging
+                    logger.debug(
+                        f"Parsed diagram_meta: {type(diagram_meta)} - {diagram_meta}"
+                    )
+                    logger.debug(
+                        f"Parsed image_metadata: {type(image_metadata)} - {image_metadata}"
+                    )
+
+                    artifact = DiagramArtifact(
+                        id=row["id"],
+                        content_hmac=row["content_hmac"],
+                        algorithm_version=row["algorithm_version"],
+                        params_fingerprint=row["params_fingerprint"],
+                        page_number=row["page_number"],
+                        diagram_key=row["diagram_key"],
+                        diagram_meta=diagram_meta,
+                        artifact_type=row["artifact_type"],
+                        image_uri=row["image_uri"],
+                        image_sha256=row["image_sha256"],
+                        image_metadata=image_metadata,
+                        created_at=row["created_at"],
+                    )
+                    artifacts.append(artifact)
+                except Exception as e:
+                    logger.error(f"Error creating DiagramArtifact from row: {e}")
+                    logger.error(f"Row data: {dict(row)}")
+                    logger.error(f"diagram_meta type: {type(row['diagram_meta'])}")
+                    logger.error(f"diagram_meta value: {row['diagram_meta']}")
+
+                    logger.error(f"Traceback: {traceback.format_exc()}")
+                    # Skip this row and continue with others
+                    continue
+
+            return artifacts

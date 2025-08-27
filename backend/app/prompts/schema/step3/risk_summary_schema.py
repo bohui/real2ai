@@ -42,6 +42,7 @@ class RiskItem(BaseModel):
     )
 
     @field_validator("evidence_refs", mode="after")
+    @classmethod
     def validate_evidence_refs(cls, v: List[str]) -> List[str]:
         cleaned: List[str] = []
         for ref in v:
@@ -80,6 +81,7 @@ class RiskSummaryResult(BaseModel):
     )
 
     @field_validator("category_breakdown", mode="after")
+    @classmethod
     def validate_category_breakdown(
         cls, v: Dict[RiskCategory, float]
     ) -> Dict[RiskCategory, float]:
@@ -93,6 +95,7 @@ class RiskSummaryResult(BaseModel):
         return v
 
     @field_validator("top_risks", mode="after")
+    @classmethod
     def sort_and_validate_risks(cls, v: List[RiskItem]) -> List[RiskItem]:
         if not v:
             raise ValueError("Must provide at least one risk")

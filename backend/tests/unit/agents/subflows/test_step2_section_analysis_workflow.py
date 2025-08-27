@@ -316,7 +316,16 @@ class TestStep2AnalysisWorkflow:
 
         contract_text = "Sample contract text"
         legal_matrix = {"NSW": {"purchase_agreement": ["disclosure_req_1"]}}
-        diagrams = {"title_plan": b"fake_image_data"}
+        diagrams = {
+            "fake_uri": [
+                {
+                    "diagram_type_hint": "title_plan",
+                    "confidence": 0.8,
+                    "page_number": 1,
+                    "diagram_key": "title_plan",
+                }
+            ]
+        }
 
         result = await workflow.execute(
             contract_text=contract_text,

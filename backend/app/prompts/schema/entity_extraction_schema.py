@@ -76,9 +76,10 @@ class ContractParty(EntityBase):
     )
 
     @field_validator("name")
-    def validate_name_when_null(cls, v, values):
+    @classmethod
+    def validate_name_when_null(cls, v, info):
         """Ensure context provides information when name is null"""
-        if v is None and not values.get("context"):
+        if v is None and not info.data.get("context"):
             raise ValueError("context must be provided when name is null")
         return v
 
@@ -102,9 +103,10 @@ class ContractDate(EntityBase):
     )
 
     @field_validator("date_text")
-    def validate_date_text_when_null(cls, v, values):
+    @classmethod
+    def validate_date_text_when_null(cls, v, info):
         """Ensure date_text provides context when date_value is null"""
-        if values.get("date_value") is None and not v:
+        if info.data.get("date_value") is None and not v:
             raise ValueError("date_text must be provided when date_value is null")
         return v
 
@@ -491,6 +493,7 @@ class DiagramEntityExtraction(BaseModel):
 
 # Validation helpers
 @field_validator("postcode", mode="before")
+@classmethod
 def validate_australian_postcode(cls, v):
     """Validate Australian postcode format"""
     if v and isinstance(v, str):
@@ -501,6 +504,7 @@ def validate_australian_postcode(cls, v):
 
 
 @field_validator("amount", mode="before")
+@classmethod
 def parse_financial_amount(cls, v):
     """Parse financial amounts from text"""
     if isinstance(v, str):

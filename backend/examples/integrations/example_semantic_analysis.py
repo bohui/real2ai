@@ -5,7 +5,7 @@ Demonstrates how to analyze property diagrams for semantic meaning and risk asse
 
 import asyncio
 from app.services.gemini_ocr_service import GeminiOCRService
-from app.prompts.schema.image_semantics_schema import ImageType
+from app.prompts.schema.image_semantics_schema import DiagramType
 from app.agents.states.contract_state import AustralianState, ContractType
 
 
@@ -46,7 +46,7 @@ class SemanticAnalysisExample:
             file_content=file_content,
             file_type="jpg",  # or png, pdf, etc.
             filename="sewer_service_plan.jpg",
-            image_type=ImageType.SEWER_SERVICE_DIAGRAM,
+            image_type=DiagramType.SEWER_SERVICE_DIAGRAM,
             contract_context=contract_context,
             analysis_focus="infrastructure",  # Focus on infrastructure elements
             risk_categories=["infrastructure", "construction", "access"],
@@ -80,7 +80,7 @@ class SemanticAnalysisExample:
             file_content=file_content,
             file_type="pdf",
             filename="site_plan.pdf",
-            image_type=ImageType.SITE_PLAN,
+            image_type=DiagramType.SITE_PLAN,
             contract_context=contract_context,
             analysis_focus="comprehensive",  # Comprehensive analysis
             risk_categories=["boundaries", "access", "development", "compliance"],
@@ -112,7 +112,7 @@ class SemanticAnalysisExample:
             file_content=file_content,
             file_type="png",
             filename="flood_risk_map.png",
-            image_type=ImageType.FLOOD_MAP,
+            image_type=DiagramType.FLOOD_MAP,
             contract_context=contract_context,
             analysis_focus="environmental",  # Focus on environmental risks
             risk_categories=["environmental", "insurance", "development"],

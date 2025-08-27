@@ -39,7 +39,7 @@ from .risk import RiskLevel, RiskSeverity, VarianceLevel, ReliabilityRating
 from .content import InsightType, ViewSource, ContentType
 
 # Diagram & Image Enums
-from .diagrams import DiagramType, ImageType
+from .diagrams import DiagramType, DiagramType
 
 # Entity Extraction Enums
 from .entities import EntityType, PartyRole, DateType, FinancialType
@@ -126,7 +126,7 @@ __all__ = [
     "ContentType",
     # Diagram & Image
     "DiagramType",
-    "ImageType",
+    "DiagramType",
     # Entity Extraction
     "EntityType",
     "PartyRole",

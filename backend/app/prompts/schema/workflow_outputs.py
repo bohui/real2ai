@@ -61,6 +61,7 @@ class RiskFactor(BaseModel):
     )
 
     @field_validator("severity", mode="before")
+    @classmethod
     def validate_severity(cls, v):
         if isinstance(v, str):
             return RiskSeverity(v.lower())
@@ -93,10 +94,12 @@ class RiskAnalysisOutput(BaseModel):
     )
 
     @field_validator("overall_risk_score")
+    @classmethod
     def validate_risk_score(cls, v):
         return max(0.0, min(10.0, v))
 
     @field_validator("confidence_level")
+    @classmethod
     def validate_confidence(cls, v):
         return max(0.0, min(1.0, v))
 
@@ -131,12 +134,14 @@ class Recommendation(BaseModel):
     )
 
     @field_validator("priority", mode="before")
+    @classmethod
     def validate_priority(cls, v):
         if isinstance(v, str):
             return RecommendationPriority(v.lower())
         return v
 
     @field_validator("category", mode="before")
+    @classmethod
     def validate_category(cls, v):
         if isinstance(v, str):
             return RecommendationCategory(v.lower())
@@ -169,11 +174,12 @@ class RecommendationsOutput(BaseModel):
     )
 
     @field_validator("total_estimated_cost")
-    def calculate_total_cost(cls, v, values):
-        if v is None and "recommendations" in values:
+    @classmethod
+    def calculate_total_cost(cls, v, info):
+        if v is None and "recommendations" in info.data:
             total = sum(
                 rec.estimated_cost or 0
-                for rec in values["recommendations"]
+                for rec in info.data["recommendations"]
                 if rec.estimated_cost is not None
             )
             return total if total > 0 else None
@@ -220,6 +226,7 @@ class ComplianceAnalysisOutput(BaseModel):
     )
 
     @field_validator("australian_state", mode="before")
+    @classmethod
     def set_default_australian_state(cls, v):
         """Ensure australian_state is never None or empty"""
         return v or "NSW"
@@ -296,6 +303,7 @@ class ContractTermsValidationOutput(BaseModel):
     )
 
     @field_validator("australian_state", mode="before")
+    @classmethod
     def set_default_validation_state(cls, v):
         """Ensure australian_state is never None or empty"""
         return v or "NSW"
@@ -331,6 +339,7 @@ class ContractTermsOutput(BaseModel):
     )
 
     @field_validator("state", mode="before")
+    @classmethod
     def set_default_extraction_state(cls, v):
         """Ensure state is never None or empty"""
         return v or "NSW"
@@ -377,6 +386,7 @@ class FullStructureAnalysisOutput(BaseModel):
     )
 
     @field_validator("contract_type", mode="before")
+    @classmethod
     def validate_contract_type(cls, v):
         if isinstance(v, str):
             try:
@@ -386,6 +396,7 @@ class FullStructureAnalysisOutput(BaseModel):
         return v
 
     @field_validator("purchase_method", mode="before")
+    @classmethod
     def validate_purchase_method(cls, v):
         if isinstance(v, str):
             try:
@@ -395,6 +406,7 @@ class FullStructureAnalysisOutput(BaseModel):
         return v
 
     @field_validator("use_category", mode="before")
+    @classmethod
     def validate_use_category(cls, v):
         if isinstance(v, str):
             try:
@@ -404,6 +416,7 @@ class FullStructureAnalysisOutput(BaseModel):
         return v
 
     @field_validator("property_condition", mode="before")
+    @classmethod
     def validate_property_condition(cls, v):
         if isinstance(v, str):
             try:
@@ -413,6 +426,7 @@ class FullStructureAnalysisOutput(BaseModel):
         return v
 
     @field_validator("transaction_complexity", mode="before")
+    @classmethod
     def validate_transaction_complexity(cls, v):
         if isinstance(v, str):
             try:

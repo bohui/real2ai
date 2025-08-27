@@ -258,7 +258,7 @@ class TestOCRProcessing:
         assert "connection failure" in result["error"].lower()
 
 
-class TestImageSemantics:
+class TestDiagramSemantics:
     """Test image semantics analysis functionality"""
 
     @pytest.mark.asyncio

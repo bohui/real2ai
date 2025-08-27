@@ -15,7 +15,7 @@ from app.core.langsmith_config import langsmith_trace, get_langsmith_config
 from langsmith.run_helpers import trace
 from app.core.prompts.parsers import create_parser, ParsingResult
 from app.services.base.user_aware_service import UserAwareService
-from app.prompts.schema.image_semantics_schema import ImageSemantics, ImageType
+from app.prompts.schema.image_semantics_schema import DiagramSemantics, DiagramType
 from app.services.ai.gemini_service import GeminiService
 from app.clients.base.exceptions import (
     ClientError,
@@ -508,7 +508,7 @@ Focus on accuracy and completeness. Extract all visible text content."""
         file_content: bytes,
         file_type: str,
         filename: str,
-        image_type: Optional[ImageType] = None,
+        image_type: Optional[DiagramType] = None,
         contract_context: Optional[Dict[str, Any]] = None,
         analysis_focus: Optional[str] = None,
         risk_categories: Optional[List[str]] = None,
@@ -517,7 +517,7 @@ Focus on accuracy and completeness. Extract all visible text content."""
         Extract semantic meaning with structured output parsing
 
         This method demonstrates the new parser integration:
-        1. Creates Pydantic parser for ImageSemantics
+        1. Creates Pydantic parser for DiagramSemantics
         2. Renders prompt with auto-generated format instructions
         3. Parses AI response with validation and error handling
         4. Returns structured, validated results
@@ -537,7 +537,7 @@ Focus on accuracy and completeness. Extract all visible text content."""
                 image_type = await self._detect_image_type(filename, contract_context)
 
             # Create Pydantic output parser
-            semantic_parser = create_parser(ImageSemantics)
+            semantic_parser = create_parser(DiagramSemantics)
 
             # Prepare context for semantic analysis
             context = self.create_context(
@@ -1006,23 +1006,23 @@ Focus on accuracy and completeness. Extract all visible text content."""
 
     async def _detect_image_type(
         self, filename: str, contract_context: Optional[Dict[str, Any]]
-    ) -> ImageType:
+    ) -> DiagramType:
         """Detect image type based on filename and context"""
         filename_lower = filename.lower()
 
         # Simple detection based on common patterns
         if "sewer" in filename_lower or "service" in filename_lower:
-            return ImageType.SEWER_SERVICE_DIAGRAM
+            return DiagramType.SEWER_SERVICE_DIAGRAM
         elif "title" in filename_lower or "plan" in filename_lower:
-            return ImageType.TITLE_PLAN
+            return DiagramType.TITLE_PLAN
         elif "survey" in filename_lower:
-            return ImageType.SURVEY_DIAGRAM
+            return DiagramType.SURVEY_DIAGRAM
         elif "flood" in filename_lower:
-            return ImageType.FLOOD_MAP
+            return DiagramType.FLOOD_MAP
         elif "bushfire" in filename_lower or "fire" in filename_lower:
-            return ImageType.BUSHFIRE_MAP
+            return DiagramType.BUSHFIRE_MAP
         else:
-            return ImageType.SITE_PLAN  # Default fallback
+            return DiagramType.SITE_PLAN  # Default fallback
 
     def _validate_file(self, file_content: bytes, file_type: str):
         """Validate file size and format"""
@@ -1156,7 +1156,7 @@ async def example_usage():
         file_content=file_content,
         file_type="png",
         filename="sewer_service_plan.png",
-        image_type=ImageType.SEWER_SERVICE_DIAGRAM,
+        image_type=DiagramType.SEWER_SERVICE_DIAGRAM,
         analysis_focus="infrastructure",
     )
 

@@ -36,6 +36,7 @@ class ComplianceGap(BaseModel):
     )
 
     @field_validator("name", "description", "remediation")
+    @classmethod
     def validate_non_empty_strings(cls, v: str) -> str:
         if not v or not v.strip():
             raise ValueError("Field cannot be empty or whitespace only")
@@ -67,10 +68,12 @@ class ComplianceSummaryResult(BaseModel):
     )
 
     @field_validator("score")
+    @classmethod
     def validate_score_consistency(cls, v: float):
         return v
 
     @field_validator("key_dependencies", mode="after")
+    @classmethod
     def validate_dependencies(cls, v: List[str]) -> List[str]:
         return [dep.strip() for dep in v if dep and dep.strip()]
 

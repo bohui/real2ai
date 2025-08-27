@@ -27,6 +27,7 @@ class DueDate(BaseModel):
     )
 
     @field_validator("date")
+    @classmethod
     def validate_date_format(cls, v: Optional[str]) -> Optional[str]:
         if v is not None:
             try:
@@ -71,6 +72,7 @@ class ActionItem(BaseModel):
     )
 
     @field_validator("dependencies", "blocking_risks", mode="after")
+    @classmethod
     def validate_references(cls, v: List[str]) -> List[str]:
         return [ref.strip() for ref in v if ref and ref.strip()]
 
@@ -93,6 +95,7 @@ class ActionPlanResult(BaseModel):
     )
 
     @field_validator("actions", mode="after")
+    @classmethod
     def validate_action_sequence(cls, v: List["ActionItem"]) -> List["ActionItem"]:
         if not v:
             raise ValueError("Must provide at least one action")
@@ -113,8 +116,9 @@ class ActionPlanResult(BaseModel):
         return v
 
     @field_validator("critical_path")
+    @classmethod
     def validate_critical_path(cls, v: List[str], info):
-        actions = info.data.get("actions", []) if hasattr(info, "data") else []
+        actions = info.data.get("actions", []) if info.data else []
         action_titles = {action.title for action in actions}
 
         for critical_action in v:

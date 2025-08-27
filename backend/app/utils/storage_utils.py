@@ -309,6 +309,49 @@ class ArtifactStorageService:
         except Exception as e:
             raise RuntimeError(f"JPG upload failed for {storage_path}: {e}")
 
+    async def download_page_image_jpg(self, uri: str) -> bytes:
+        """
+        Download JPG image from object storage.
+
+        Args:
+            uri: Storage URI (e.g., supabase://bucket/path)
+
+        Returns:
+            Image content as bytes
+
+        Raises:
+            ValueError: If URI format is invalid
+            RuntimeError: If download fails
+        """
+        if not uri.startswith("supabase://"):
+            raise ValueError(f"Invalid URI format: {uri}")
+
+        # Extract bucket and path from URI
+        parts = uri[11:].split("/", 1)  # Remove "supabase://"
+        if len(parts) != 2:
+            raise ValueError(f"Invalid URI structure: {uri}")
+
+        bucket, path = parts
+
+        client = await get_service_supabase_client()
+
+        try:
+            # Download file content
+            file_data = await client.download_file(bucket=bucket, path=path)
+
+            if not file_data:
+                raise RuntimeError(f"No data returned from storage: {uri}")
+
+            # Return bytes directly for image data
+            if isinstance(file_data, bytes):
+                return file_data
+            else:
+                # Convert to bytes if needed
+                return bytes(file_data)
+
+        except Exception as e:
+            raise RuntimeError(f"Storage download failed for {uri}: {e}")
+
     async def upload_page_json(
         self, json_bytes: bytes, content_hmac: str, page_number: int
     ) -> Tuple[str, str]:
