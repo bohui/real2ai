@@ -109,7 +109,11 @@ class ContractLLMNode(LLMNode):
                 return
 
             # Always use single-column section updater with the node's contract_attribute
-            value = parsed.model_dump() if hasattr(parsed, "model_dump") else parsed
+            value = (
+                parsed.model_dump(mode="json")
+                if hasattr(parsed, "model_dump")
+                else parsed
+            )
             repo = ContractsRepository()
             await repo.update_section_analysis_key(
                 content_hash,
@@ -126,7 +130,11 @@ class ContractLLMNode(LLMNode):
         self, parsed: Any, state: RealEstateAgentState
     ) -> Dict[str, Any]:
         try:
-            value = parsed.model_dump() if hasattr(parsed, "model_dump") else parsed
+            value = (
+                parsed.model_dump(mode="json")
+                if hasattr(parsed, "model_dump")
+                else parsed
+            )
         except Exception:
             value = None
         return {self.contract_attribute: value}
@@ -135,7 +143,11 @@ class ContractLLMNode(LLMNode):
         self, state: RealEstateAgentState, parsed: Any, quality: Dict[str, Any]
     ) -> RealEstateAgentState:
         try:
-            value = parsed.model_dump() if hasattr(parsed, "model_dump") else parsed
+            value = (
+                parsed.model_dump(mode="json")
+                if hasattr(parsed, "model_dump")
+                else parsed
+            )
         except Exception:
             value = None
 

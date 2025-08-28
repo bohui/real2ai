@@ -322,16 +322,26 @@ Focus on accuracy and completeness. Extract all visible text content."""
                 from app.services import get_llm_service
 
                 llm_service = await get_llm_service()
-                parsing_result = await llm_service.generate_image_semantics(
-                    content=file_content,
-                    content_type=content_type,
-                    filename=filename,
+                # Render prompts and pass to LLM service (service focuses on execution only)
+                composition_prompt = await self.render_composed(
                     composition_name="image_semantics_only",
-                    context_variables={
+                    context={
                         "ocr_mode": "whole_document",
                         "schema_type": schema_class.__name__,
-                        **(context.variables if hasattr(context, "variables") else {}),
+                        **(context if isinstance(context, dict) else context.variables),
                     },
+                    output_parser=ocr_parser,
+                )
+                parsing_result = await llm_service.generate_image_semantics(
+                    contents=[
+                        {
+                            "content": file_content,
+                            "content_type": content_type,
+                            "filename": filename,
+                        }
+                    ],
+                    analysis_prompt=composition_prompt.get("user_prompt", ""),
+                    system_prompt=composition_prompt.get("system_prompt", ""),
                     output_parser=ocr_parser,
                 )
 
@@ -557,18 +567,28 @@ Focus on accuracy and completeness. Extract all visible text content."""
 
             llm_service = await get_llm_service()
             try:
-                parsing_result = await llm_service.generate_image_semantics(
-                    content=file_content,
-                    content_type=(
-                        f"image/{file_type.lower()}"
-                        if file_type.lower() != "pdf"
-                        else "application/pdf"
-                    ),
-                    filename=filename,
+                # Render prompts and pass to LLM service
+                composition_prompt = await self.render_composed(
                     composition_name="image_semantics_only",
-                    context_variables=(
-                        context.variables if hasattr(context, "variables") else {}
+                    context=(
+                        context.variables if hasattr(context, "variables") else context
                     ),
+                    output_parser=semantic_parser,
+                )
+                parsing_result = await llm_service.generate_image_semantics(
+                    contents=[
+                        {
+                            "content": file_content,
+                            "content_type": (
+                                f"image/{file_type.lower()}"
+                                if file_type.lower() != "pdf"
+                                else "application/pdf"
+                            ),
+                            "filename": filename,
+                        }
+                    ],
+                    analysis_prompt=composition_prompt.get("user_prompt", ""),
+                    system_prompt=composition_prompt.get("system_prompt", ""),
                     output_parser=semantic_parser,
                 )
 

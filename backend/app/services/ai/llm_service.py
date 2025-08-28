@@ -12,7 +12,7 @@ from app.services.base.user_aware_service import UserAwareService
 from app.clients import get_openai_client, get_gemini_client
 from app.clients.openai.client import OpenAIClient
 from app.clients.gemini.client import GeminiClient
-from app.core.langsmith_config import log_trace_info
+from app.core.langsmith_config import log_trace_info, langsmith_trace
 from app.clients.base.exceptions import (
     ClientError,
     ClientQuotaExceededError,
@@ -22,7 +22,6 @@ from app.core.prompts.parsers import (
     RetryingPydanticOutputParser as BaseOutputParser,
     ParsingResult,
 )
-from app.core.prompts import get_prompt_manager, PromptContext, ContextType
 from typing import Union
 
 
@@ -311,60 +310,43 @@ class LLMService(UserAwareService):
                 original_error=e,
             )
 
+    @langsmith_trace(name="generate_image_semantics", run_type="llm")
     async def generate_image_semantics(
         self,
         *,
-        content: bytes,
-        content_type: str,
-        filename: str,
-        composition_name: str,
-        context_variables: Dict[str, Any],
+        contents: List[Dict[str, Any]],
+        analysis_prompt: str,
+        system_prompt: str = "",
         model: Optional[str] = None,
         output_parser: Optional[BaseOutputParser[Any]] = None,
         parse_generation_max_attempts: int = DEFAULT_PARSE_GENERATION_MAX_ATTEMPTS,
     ) -> Union[str, ParsingResult]:
-        """Generate structured image semantics via provider-specific vision API.
+        """Generate image semantics for one or more images in a single LLM call.
 
-        - Renders composed prompts (system+user) using the prompt manager
-        - Routes to Gemini client for image analysis
-        - Optionally parses output via a provided Pydantic parser
+        Expected contents format: list of {"content": bytes, "content_type": str, "filename": Optional[str]}.
         """
         try:
-            # Compose prompts
-            prompt_manager = get_prompt_manager()
-            context = PromptContext(
-                context_type=ContextType.ANALYSIS, variables=context_variables
-            )
-            composition_result = await prompt_manager.render_composed(
-                composition_name=composition_name,
-                context=context,
-                output_parser=output_parser,
-            )
-            analysis_prompt: str = composition_result["user_prompt"]
-            system_prompt: str = composition_result.get("system_prompt", "")
-
             # For now, route images to Gemini.
-            ai_response = await self.gemini.gemini_client.analyze_image_semantics(
-                content=content,
-                content_type=content_type,
+            ai_response = await self.gemini.analyze_image_semantics_batch(
+                contents=contents,
                 analysis_context={
                     "prompt": analysis_prompt,
                     "system_prompt": system_prompt,
                     "expects_structured_output": output_parser is not None,
                     "output_format": "json" if output_parser is not None else "text",
-                    "filename": filename,
+                    # also pass filenames list for traceability if provided
+                    "filenames": [
+                        c.get("filename")
+                        for c in (contents or [])
+                        if isinstance(c, dict)
+                    ],
                 },
             )
 
             if output_parser is None:
                 return ai_response.get("content", "")
 
-            # Parse with retries
-            return await output_parser.parse_with_retries(
-                ai_response.get("content", ""),
-                max_attempts=parse_generation_max_attempts,
-                model_name=model or "gemini",
-            )
+            return output_parser.parse_with_retry(ai_response.get("content", ""))
         except (ClientRateLimitError, ClientQuotaExceededError) as e:
             logger.warning(f"Image semantics quota/limit: {e}")
             raise

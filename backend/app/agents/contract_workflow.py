@@ -614,9 +614,7 @@ class ContractAnalysisWorkflow:
             lambda: self.document_processing_node.execute(state)
         )
 
-    @langsmith_trace(name="validate_document_quality", run_type="tool")
     # Removed: document quality validation, handled in Step 3 subflow where relevant
-
     def extract_section_analysis(
         self, state: RealEstateAgentState
     ) -> RealEstateAgentState:

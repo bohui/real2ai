@@ -35,13 +35,16 @@ class ContractsRepository:
         """Validate basic taxonomy consistency.
 
         - If contract_type is None: accept (cannot validate yet)
+        - If contract_type == 'purchase_agreement': purchase_method must be provided (NOT NULL)
         - If contract_type != 'purchase_agreement': purchase_method must be None
-        - If contract_type == 'purchase_agreement': purchase_method can be provided or None
         """
         try:
             if contract_type is None:
                 return True
-            if contract_type != "purchase_agreement" and purchase_method is not None:
+            if contract_type == "purchase_agreement":
+                return purchase_method is not None
+            # For all non-purchase_agreement types, purchase_method must be NULL
+            if purchase_method is not None:
                 return False
             return True
         except Exception:
@@ -103,6 +106,13 @@ class ContractsRepository:
         if not taxonomy_check:
             # Backward-compatible behavior for tests: downgrade invalid combinations conservatively
             if contract_type == "purchase_agreement" and purchase_method is None:
+                logger.warning(
+                    "Downgrading contract_type to 'unknown' due to missing purchase_method",
+                    extra={
+                        "content_hash": content_hash,
+                        "original_contract_type": contract_type,
+                    },
+                )
                 contract_type = "unknown"
             else:
                 raise ValueError(
@@ -401,7 +411,10 @@ class ContractsRepository:
         def _json_default(v: Any):
             if isinstance(v, (datetime, date)):
                 return v.isoformat()
-            return v
+            try:
+                return str(v)
+            except Exception:
+                return None
 
         async with get_service_role_connection() as conn:
             lock_key = hash(content_hash) & 0x7FFFFFFF

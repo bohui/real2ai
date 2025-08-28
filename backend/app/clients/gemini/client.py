@@ -462,6 +462,7 @@ class GeminiClient(BaseClient):
                 original_error=e,
             )
 
+    @langsmith_trace(name="gemini_analyze_image_semantics", run_type="llm")
     async def analyze_image_semantics(
         self, content: bytes, content_type: str, analysis_context: Dict[str, Any]
     ) -> Dict[str, Any]:
@@ -513,6 +514,68 @@ class GeminiClient(BaseClient):
         except Exception as e:
             raise ClientError(
                 f"Image analysis failed: {str(e)}",
+                client_name=self.client_name,
+                original_error=e,
+            )
+
+    @langsmith_trace(name="gemini_analyze_image_semantics_batch", run_type="llm")
+    async def analyze_image_semantics_batch(
+        self, *, contents: list[dict[str, Any]], analysis_context: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Analyze semantics for multiple images in a single request.
+
+        contents: list of {"content": bytes, "content_type": str, "filename": Optional[str]}
+        """
+        try:
+            # Build a single multimodal content: prompt + multiple images
+            parts: list[Part] = [
+                Part.from_text(
+                    text=analysis_context.get("prompt", "Analyze these images")
+                )
+            ]
+            for item in contents or []:
+                if not isinstance(item, dict):
+                    continue
+                data = item.get("content")
+                mime = item.get("content_type") or "image/jpeg"
+                if not data:
+                    continue
+                parts.append(Part.from_bytes(data=data, mime_type=mime))
+
+            content_obj = Content(role="user", parts=parts)
+
+            # Create generation config with optional system instruction
+            config_kwargs = {"safety_settings": self._get_safety_settings()}
+            if analysis_context.get("system_prompt"):
+                config_kwargs["system_instruction"] = analysis_context["system_prompt"]
+
+            generate_config = GenerateContentConfig(**config_kwargs)
+
+            import asyncio
+
+            response = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: self.client.models.generate_content(
+                    model=self.config.model_name,
+                    contents=[content_obj],
+                    config=generate_config,
+                ),
+            )
+
+            if not getattr(response, "candidates", None):
+                raise ClientError(
+                    "No analysis candidates returned (batch)",
+                    client_name=self.client_name,
+                )
+
+            return {
+                "content": self._extract_text_from_response(response),
+                "analysis_type": "image_semantics_batch",
+            }
+
+        except Exception as e:
+            raise ClientError(
+                f"Image analysis batch failed: {str(e)}",
                 client_name=self.client_name,
                 original_error=e,
             )

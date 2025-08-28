@@ -110,6 +110,76 @@ class EntitiesExtractionNode(ContractLLMNode):
 
     # Persist handled by ContractLLMNode using _build_updated_fields
 
+    async def _persist_results(
+        self, state: RealEstateAgentState, parsed: ContractEntityExtraction
+    ) -> None:
+        try:
+            from app.services.repositories.contracts_repository import (
+                ContractsRepository,
+            )
+
+            content_hash = state.get("content_hash")
+            if not content_hash:
+                logger.warning(
+                    f"{self.__class__.__name__}: Missing content_hash; skipping contract persist"
+                )
+                return
+
+            # Upsert root-level taxonomy + address alongside extracted_entity payload
+            repo = ContractsRepository()
+
+            # Root fields
+            try:
+                metadata = getattr(parsed, "metadata", None)
+                contract_type = (
+                    str(getattr(metadata, "contract_type", None).value)
+                    if getattr(metadata, "contract_type", None) is not None
+                    else None
+                )
+                purchase_method = (
+                    str(getattr(metadata, "purchase_method", None).value)
+                    if getattr(metadata, "purchase_method", None) is not None
+                    else None
+                )
+                use_category = (
+                    str(getattr(metadata, "use_category", None).value)
+                    if getattr(metadata, "use_category", None) is not None
+                    else None
+                )
+                state_val = (
+                    str(getattr(metadata, "state", None).value)
+                    if getattr(metadata, "state", None) is not None
+                    else None
+                )
+            except Exception:
+                contract_type = None
+                purchase_method = None
+                use_category = None
+                state_val = None
+
+            try:
+                property_address = None
+                if parsed.property_address and parsed.property_address.full_address:
+                    property_address = parsed.property_address.full_address
+            except Exception:
+                property_address = None
+
+            # Persist root fields + extracted_entity JSON
+            await repo.upsert_contract_by_content_hash(
+                content_hash,
+                contract_type=contract_type,
+                purchase_method=purchase_method,
+                use_category=use_category,
+                state=state_val,
+                extracted_entity=parsed.model_dump(mode="json"),
+                property_address=property_address,
+                updated_by=self.node_name,
+            )
+        except Exception as repo_err:
+            logger.warning(
+                f"{self.__class__.__name__}: Section persist failed (non-fatal): {repo_err}"
+            )
+
     def _build_updated_fields(
         self, parsed: ContractEntityExtraction, state: RealEstateAgentState
     ) -> Dict[str, Any]:

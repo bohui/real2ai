@@ -1,6 +1,7 @@
 from typing import Any, Dict, List, Optional
 
 from app.agents.nodes.contract_llm_base import ContractLLMNode
+from app.core.langsmith_config import langsmith_trace
 from app.agents.states.contract_state import RealEstateAgentState
 
 
@@ -35,6 +36,7 @@ class DiagramSemanticsNode(ContractLLMNode):
         self.diagram_type = diagram_type
         self.schema_confidence_threshold = schema_confidence_threshold
 
+    @langsmith_trace(name="diagram_semantics_execute", run_type="tool")
     async def execute(self, state: RealEstateAgentState) -> RealEstateAgentState:  # type: ignore[override]
         """Override execute to handle image-specific processing while following ContractLLMNode workflow."""
         progress_update = self._get_progress_update(state)
@@ -61,13 +63,11 @@ class DiagramSemanticsNode(ContractLLMNode):
                     data={"reason": "no_diagrams_available"},
                 )
 
-            # 3) Select best diagram
-            selected_uri, content_bytes, ctype = (
-                await self._select_and_download_diagram(entries)
-            )
-            if not selected_uri or not content_bytes:
+            # 3) Download all diagrams available for this type
+            downloads = await self._download_all_diagrams(entries)
+            if not downloads:
                 self._log_warning(
-                    f"Failed to download {self.diagram_type} diagram; skipping node"
+                    f"No downloadable {self.diagram_type} diagrams; skipping node"
                 )
                 return self.update_state_step(
                     state,
@@ -79,10 +79,8 @@ class DiagramSemanticsNode(ContractLLMNode):
             context_vars, parser, composition_name = (
                 await self._build_context_and_parser(state)
             )
-            if selected_uri:
-                context_vars["image_data"] = {"source": "binary", "uri": selected_uri}
 
-            # 5) Get LLM service and render prompts
+            # 5) Get LLM service and fetch model configuration from prompt metadata
             llm_service = await self._get_llm_service()
             composition_result = await self.prompt_manager.render_composed(
                 composition_name=composition_name,
@@ -91,7 +89,6 @@ class DiagramSemanticsNode(ContractLLMNode):
             )
             metadata = composition_result.get("metadata", {})
 
-            # Determine primary and fallback models
             primary_model = (
                 metadata.get("primary_model")
                 or metadata.get("model")
@@ -102,14 +99,59 @@ class DiagramSemanticsNode(ContractLLMNode):
                 compat = list(metadata.get("model_compatibility") or [])
                 fallback_models = [m for m in compat if m and m != primary_model]
 
-            # 6) Primary LLM call for image analysis
             max_retries = int(self.CONFIG_KEYS["max_retries"])
-            parsing_result = await llm_service.generate_image_semantics(
-                content=content_bytes,
-                content_type=ctype,
-                filename=str(selected_uri),
+
+            # 6) Prepare a single batched LLM call with all images
+            contents_list: List[Dict[str, Any]] = []
+            uris: List[str] = []
+            for item in downloads:
+                uri = item.get("uri")
+                content_bytes = item.get("content")
+                ctype = item.get("content_type") or "image/jpeg"
+                if not content_bytes:
+                    self._log_warning(
+                        "Skipping diagram with empty content",
+                        state,
+                        {"diagram_type": self.diagram_type, "uri": uri},
+                    )
+                    continue
+                contents_list.append(
+                    {
+                        "content": content_bytes,
+                        "content_type": ctype,
+                        "filename": str(uri) if uri else None,
+                    }
+                )
+                if uri:
+                    uris.append(str(uri))
+
+            if not contents_list:
+                self._log_warning(
+                    f"No valid {self.diagram_type} diagram contents to analyze; skipping node"
+                )
+                return self.update_state_step(
+                    state,
+                    f"{self.node_name}_skipped",
+                    data={"reason": "no_valid_diagram_contents"},
+                )
+
+            # Enrich context with all image URIs and render prompts once
+            batched_context = dict(context_vars)
+            if uris:
+                batched_context["image_uris"] = uris
+
+            composition_batched = await self.prompt_manager.render_composed(
                 composition_name=composition_name,
-                context_variables=context_vars,
+                context=batched_context,
+                output_parser=parser,
+            )
+            analysis_prompt = composition_batched.get("user_prompt", "")
+            system_prompt = composition_batched.get("system_prompt", "")
+
+            parsing_result = await llm_service.generate_image_semantics(
+                contents=contents_list,
+                analysis_prompt=analysis_prompt,
+                system_prompt=system_prompt,
                 output_parser=parser,
                 model=primary_model,
                 parse_generation_max_attempts=max_retries,
@@ -122,24 +164,7 @@ class DiagramSemanticsNode(ContractLLMNode):
             )
             quality = self._evaluate_quality(parsed, state)
 
-            # 7) Fallback attempts if quality check failed
-            if not quality.get("ok") and fallback_models:
-                parsed, quality = await self._evaluate_image_fallbacks(
-                    llm_service,
-                    parser,
-                    content_bytes,
-                    ctype,
-                    str(selected_uri),
-                    composition_name,
-                    context_vars,
-                    fallback_models,
-                    max_retries,
-                    parsed,
-                    quality,
-                    state,
-                )
-
-            if parsed is None:
+            if parsed is None or not quality.get("ok"):
                 # Not fatal; allow workflow to proceed gracefully
                 self._log_warning(
                     "Image semantics parsing failed; skipping node result"
@@ -147,7 +172,7 @@ class DiagramSemanticsNode(ContractLLMNode):
                 return self.update_state_step(
                     state,
                     f"{self.node_name}_skipped",
-                    data={"reason": "parse_failed_or_empty"},
+                    data={"reason": "parse_failed_or_low_quality"},
                 )
 
             # 8) Persist results
@@ -162,57 +187,44 @@ class DiagramSemanticsNode(ContractLLMNode):
                 state, e, f"{self.node_name} failed: {str(e)}"
             )
 
-    async def _select_and_download_diagram(
+    async def _download_all_diagrams(
         self, entries: List[Dict[str, Any]]
-    ) -> tuple[Optional[str], Optional[bytes], str]:
-        """Select best diagram and download its content."""
+    ) -> List[Dict[str, Any]]:
+        """Download all diagrams from entries and return list of {uri, content, content_type}."""
         from app.utils.storage_utils import ArtifactStorageService
 
-        # Select best diagram by confidence
-        best = None
-        try:
-            best = max(
-                [i for i in entries if isinstance(i, dict)],
-                key=lambda x: float(x.get("confidence", 0.0)),
-            )
-        except Exception:
-            best = next((i for i in entries if isinstance(i, dict)), None)
+        results: List[Dict[str, Any]] = []
+        if not isinstance(entries, list):
+            return results
 
-        selected_uri: Optional[str] = None
-        if isinstance(best, dict):
-            selected_uri = best.get("uri")
-        else:
-            for e in entries:
-                if isinstance(e, dict) and e.get("uri"):
-                    selected_uri = e.get("uri")
-                    break
-
-        if not selected_uri or not str(selected_uri).startswith("supabase://"):
-            return None, None, "image/jpeg"
-
-        # Download diagram content
         storage_service = ArtifactStorageService()
-        try:
-            content_bytes = await storage_service.download_page_image_jpg(
-                str(selected_uri)
-            )
-        except Exception:
-            return selected_uri, None, "image/jpeg"
+        for item in entries:
+            try:
+                if not isinstance(item, dict):
+                    continue
+                uri = item.get("uri")
+                if not isinstance(uri, str) or not uri.startswith("supabase://"):
+                    continue
+                content_bytes = await storage_service.download_page_image_jpg(str(uri))
+                lower = str(uri).lower()
+                if lower.endswith(".png"):
+                    ctype = "image/png"
+                elif lower.endswith(".jpg") or lower.endswith(".jpeg"):
+                    ctype = "image/jpeg"
+                elif lower.endswith(".webp"):
+                    ctype = "image/webp"
+                elif lower.endswith(".pdf"):
+                    ctype = "application/pdf"
+                else:
+                    ctype = "image/jpeg"
+                results.append(
+                    {"uri": uri, "content": content_bytes, "content_type": ctype}
+                )
+            except Exception:
+                # Skip failed downloads; higher-level logic will log as needed
+                continue
 
-        # Determine content type
-        lower = str(selected_uri).lower()
-        if lower.endswith(".png"):
-            ctype = "image/png"
-        elif lower.endswith(".jpg") or lower.endswith(".jpeg"):
-            ctype = "image/jpeg"
-        elif lower.endswith(".webp"):
-            ctype = "image/webp"
-        elif lower.endswith(".pdf"):
-            ctype = "application/pdf"
-        else:
-            ctype = "image/jpeg"
-
-        return selected_uri, content_bytes, ctype
+        return results
 
     async def _evaluate_image_fallbacks(
         self,

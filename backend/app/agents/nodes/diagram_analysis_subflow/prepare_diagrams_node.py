@@ -97,8 +97,8 @@ class PrepareDiagramsNode(BaseNode):
                     page = getattr(art, "page_number", None)
                     diagram_meta = getattr(art, "diagram_meta", {}) or {}
                     d_type = (
-                        (diagram_meta.get("diagram_type") or "unknown").strip()
-                        if isinstance(diagram_meta.get("diagram_type"), str)
+                        (diagram_meta.get("type") or "unknown").strip()
+                        if isinstance(diagram_meta.get("type"), str)
                         else "unknown"
                     )
                     if uri:

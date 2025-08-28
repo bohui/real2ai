@@ -2,6 +2,7 @@ from typing import Any, Dict, List
 import asyncio
 
 from app.agents.nodes.base import BaseNode
+from app.core.langsmith_config import langsmith_trace
 from app.agents.nodes.diagram_analysis_subflow.diagram_semantics_node import (
     DiagramSemanticsNode,
 )
@@ -22,6 +23,7 @@ class DiagramSemanticsFanoutNode(BaseNode):
         )
         self.concurrency_limit = concurrency_limit
 
+    @langsmith_trace(name="diagram_semantics_fanout", run_type="tool")
     async def execute(self, state: Dict[str, Any]) -> Dict[str, Any]:
         try:
             self._log_step_debug("Starting diagram semantics fanout", state)
@@ -42,7 +44,24 @@ class DiagramSemanticsFanoutNode(BaseNode):
                     node = DiagramSemanticsNode(
                         workflow=self.workflow, diagram_type=diagram_type
                     )
-                    node_state: Dict[str, Any] = {"uploaded_diagrams": uploaded}
+                    # Pass through required identifiers from parent state
+                    parent_content_hash = state.get("content_hash")
+                    if not parent_content_hash:
+                        self._log_warning(
+                            "diagram_semantics_fanout: Missing content_hash in parent state; idempotency/persistence may be skipped",
+                            state,
+                        )
+                    parent_content_hmac = state.get("content_hmac")
+                    if not parent_content_hmac:
+                        self._log_warning(
+                            "diagram_semantics_fanout: Missing content_hmac in parent state; artifact lookups may be limited",
+                            state,
+                        )
+                    node_state: Dict[str, Any] = {
+                        "uploaded_diagrams": uploaded,
+                        "content_hash": parent_content_hash,
+                        "content_hmac": parent_content_hmac,
+                    }
                     return await node.execute(node_state)
 
             tasks = [bounded(dt, lst) for dt, lst in uploaded.items()]
