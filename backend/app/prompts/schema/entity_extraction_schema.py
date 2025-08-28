@@ -428,6 +428,14 @@ class ContractEntityExtraction(BaseModel):
         default=None, description="Per-section seed snippets and retrieval guidance"
     )
 
+    # Quality assessment
+    confidence_score: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="Overall confidence score for this extraction (0-1)",
+    )
+
     # # Extraction metadata
     # extraction_timestamp: datetime = Field(default_factory=datetime.utcnow)
     # overall_confidence: float = Field(

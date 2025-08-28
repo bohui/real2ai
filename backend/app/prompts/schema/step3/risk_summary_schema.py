@@ -73,7 +73,7 @@ class RiskSummaryResult(BaseModel):
         max_length=1000,
         description="Reasoning behind scoring and prioritization",
     )
-    confidence: float = Field(
+    confidence_score: float = Field(
         ..., ge=0.5, le=1.0, description="Model confidence in the summary (minimum 0.5)"
     )
     metadata: Dict[str, Any] = Field(

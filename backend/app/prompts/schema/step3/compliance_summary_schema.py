@@ -63,6 +63,12 @@ class ComplianceSummaryResult(BaseModel):
     estimated_remediation_timeline: Optional[int] = Field(
         None, ge=1, description="Total estimated remediation days"
     )
+    confidence_score: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="Confidence score for this analysis (0-1)",
+    )
     metadata: Dict[str, Any] = Field(
         default_factory=dict, description="Metadata and provenance"
     )

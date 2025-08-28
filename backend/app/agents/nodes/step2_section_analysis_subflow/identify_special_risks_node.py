@@ -63,25 +63,6 @@ class SpecialRisksNode(ContractLLMNode):
         )
         return context, parser, "step2_special_risks"
 
-    def _evaluate_quality(
-        self, result: Optional[Any], state: Step2AnalysisState
-    ) -> Dict[str, Any]:
-        if result is None:
-            return {"ok": False}
-        try:
-            conf = float(getattr(result, "confidence_score", 0.0) or 0.0)
-            completeness = float(getattr(result, "completeness_score", 0.0) or 0.0)
-            accuracy = float(getattr(result, "risk_assessment_accuracy", 0.0) or 0.0)
-            ok = conf >= 0.75 and completeness >= 0.6 and accuracy >= 0.7
-            return {
-                "ok": ok,
-                "confidence_score": conf,
-                "completeness_score": completeness,
-                "risk_assessment_accuracy": accuracy,
-            }
-        except Exception:
-            return {"ok": False}
-
     async def _update_state_success(
         self, state: Step2AnalysisState, parsed: Any, quality: Dict[str, Any]
     ) -> Step2AnalysisState:

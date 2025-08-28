@@ -39,7 +39,9 @@ class RiskAggregatorNode(ContractLLMNode):
             ),
             "title_encumbrances_result": state.get("title_encumbrances_result", {}),
             "settlement_logistics_result": state.get("settlement_logistics_result", {}),
-            "diagram_risk_assessment_result": state.get("diagram_risk_assessment_result", {}),
+            "diagram_risk_assessment_result": state.get(
+                "diagram_risk_assessment_result", {}
+            ),
         }
 
         required_inputs = [
@@ -69,26 +71,3 @@ class RiskAggregatorNode(ContractLLMNode):
         )
         composition_name = "step3_risk_aggregation"
         return context, parser, composition_name
-
-
-    def _evaluate_quality(
-        self, result: Optional[Any], state: Step3SynthesisState
-    ) -> Dict[str, Any]:
-        if result is None:
-            return {"ok": False}
-        try:
-            overall = float(getattr(result, "overall_risk_score", 0.0) or 0.0)
-            confidence = float(getattr(result, "confidence", 0.0) or 0.0)
-            risks_len = len(getattr(result, "top_risks", []) or [])
-            coverage_score = 1.0 if risks_len >= 1 else 0.0
-            min_conf = 0.75
-            ok = (confidence >= min_conf) and (coverage_score >= 0.5)
-            return {
-                "ok": ok,
-                "overall_confidence": confidence,
-                "coverage_score": coverage_score,
-                "overall_risk_score": overall,
-                "num_top_risks": risks_len,
-            }
-        except Exception:
-            return {"ok": False}

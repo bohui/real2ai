@@ -40,13 +40,13 @@ class TextDiagramInsightList(BaseModel):
     text: str = Field(
         "",
         description="Extracted full text from the image, default to empty string if no text is found,"
-        "if text more than 7000 characters or more than 1200 words or more than 300 lines, truncate it",
+        "truncate it if text more than 7000 characters or more than 1200 words or more than 300 lines",
         max_length=MAX_TEXT_LENGTH,
     )
     text_confidence: float = Field(0.0, description="OCR confidence score (0.0-1.0)")
     diagrams: List[DiagramType] = Field(
         default_factory=list,
-        description="List of diagram hints detected in the image",
+        description="List of diagram types found in the image. Return empty list if the image contains only text, decorative elements (icons, banners), or no semantically meaningful diagrams",
         max_length=MAX_DIAGRAMS,
     )
     diagrams_confidence: float = Field(

@@ -34,12 +34,12 @@ class ContractType(str, Enum):
 class PurchaseMethod(str, Enum):
     """Purchase method, only when contract_type = purchase_agreement"""
 
-    STANDARD = "standard"
     OFF_PLAN = "off_plan"
     AUCTION = "auction"
     PRIVATE_TREATY = "private_treaty"
     TENDER = "tender"
     EXPRESSION_OF_INTEREST = "expression_of_interest"
+    OTHER = "other"
 
 
 class UseCategory(str, Enum):

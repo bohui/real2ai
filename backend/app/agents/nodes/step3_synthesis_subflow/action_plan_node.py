@@ -71,33 +71,6 @@ class ActionPlanNode(ContractLLMNode):
 
     # Coercion handled by base class via result_model
 
-    def _evaluate_quality(
-        self, result: Optional[Any], state: Step3SynthesisState
-    ) -> Dict[str, Any]:
-        if result is None:
-            return {"ok": False}
-        try:
-            actions = getattr(result, "actions", []) or []
-            total_actions = len(actions)
-            critical_actions = [
-                a
-                for a in actions
-                if getattr(a, "priority", None)
-                and getattr(a, "priority").value == "critical"
-            ]
-            coverage_score = 1.0 if total_actions >= 1 else 0.0
-            overall_confidence = 1.0 if total_actions >= 1 else 0.0
-            ok = coverage_score >= 0.5
-            return {
-                "ok": ok,
-                "overall_confidence": overall_confidence,
-                "coverage_score": coverage_score,
-                "total_actions": total_actions,
-                "critical_actions": len(critical_actions),
-            }
-        except Exception:
-            return {"ok": False}
-
     async def _validate_and_enhance_result(
         self, raw_result: Dict[str, Any], state: Step3SynthesisState
     ) -> Dict[str, Any]:

@@ -109,6 +109,12 @@ class OCRExtractionResult(BaseModel):
     extraction_confidence: float = Field(
         ..., description="Overall extraction confidence (0.0-1.0)"
     )
+    confidence_score: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="Confidence score for this analysis (0-1)",
+    )
     processing_notes: List[str] = Field(
         default_factory=list,
         description="Notes about processing issues or clarifications",

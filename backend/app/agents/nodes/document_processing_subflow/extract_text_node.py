@@ -63,6 +63,9 @@ class ExtractTextNode(DocumentProcessingNodeBase):
         # Heuristics / thresholds
         self._min_text_len_for_ocr = 100
         self._ocr_zoom = 2.0
+        # JPEG rendering settings for reduced token usage
+        self._jpeg_zoom = 1.0  # Lower resolution for token efficiency
+        self._jpeg_quality = 75  # Balanced quality vs size
         # Bounded concurrency for page-level processing
         self._page_concurrency_limit = max(1, page_concurrency_limit)
         self._diagram_keywords = [
@@ -218,6 +221,8 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                 "file_type": normalized_file_type,
                 "use_llm": self.use_llm,
                 "ocr_zoom": self._ocr_zoom,
+                "jpeg_zoom": self._jpeg_zoom,
+                "jpeg_quality": self._jpeg_quality,
                 "min_text_len_for_ocr": self._min_text_len_for_ocr,
                 "diagram_keywords": sorted(
                     self._diagram_keywords
@@ -1109,14 +1114,16 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                                         "use_llm": self.use_llm,
                                     },
                                 )
-                                png_bytes = self._render_page_png(
-                                    page, zoom=self._ocr_zoom
+                                jpeg_bytes = self._render_page_jpeg(
+                                    page,
+                                    zoom=self._jpeg_zoom,
+                                    quality=self._jpeg_quality,
                                 )
                                 llm_result = (
                                     await gemini_service.extract_text_diagram_insight(
-                                        file_content=png_bytes,
-                                        file_type="png",
-                                        filename=f"page_{page_index+1}.png",
+                                        file_content=jpeg_bytes,
+                                        file_type="jpeg",
+                                        filename=f"page_{page_index+1}.jpeg",
                                         analysis_focus="ocr",
                                         australian_state=state.get(
                                             "australian_state", "NSW"
@@ -1230,7 +1237,7 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                                             )
                                             diagram_key = f"llm_ocr_hint_page_{page_index+1}_{hint_index:02d}"
                                             result = await self.visual_artifact_service.store_visual_artifact(
-                                                image_bytes=png_bytes,
+                                                image_bytes=jpeg_bytes,
                                                 content_hmac=state["content_hmac"],
                                                 algorithm_version=get_settings().artifacts_algorithm_version,
                                                 params_fingerprint=state.get(
@@ -1298,11 +1305,13 @@ class ExtractTextNode(DocumentProcessingNodeBase):
                                         "fallback_enabled": settings.enable_tesseract_fallback,
                                     },
                                 )
-                                png_bytes = self._render_page_png(
-                                    page, zoom=self._ocr_zoom
+                                jpeg_bytes = self._render_page_jpeg(
+                                    page,
+                                    zoom=self._jpeg_zoom,
+                                    quality=self._jpeg_quality,
                                 )
                                 tesseract_text = (
-                                    await self._extract_text_with_tesseract(png_bytes)
+                                    await self._extract_text_with_tesseract(jpeg_bytes)
                                 )
                                 if tesseract_text and len(tesseract_text.strip()) > len(
                                     raw_text.strip()
@@ -1565,6 +1574,28 @@ class ExtractTextNode(DocumentProcessingNodeBase):
             # Fallback to default rendering
             pix = page.get_pixmap()
             return pix.pil_tobytes(format="PNG")
+
+    def _render_page_jpeg(self, page, zoom: float = 1.0, quality: int = 85) -> bytes:
+        """Render a PyMuPDF page to JPEG bytes with configurable zoom and quality.
+
+        Args:
+            page: PyMuPDF page object
+            zoom: Resolution multiplier (1.0 = original resolution, 0.5 = half resolution)
+            quality: JPEG quality (1-100, higher = better quality but larger size)
+
+        Returns:
+            JPEG image bytes
+        """
+        try:
+            import pymupdf
+
+            matrix = pymupdf.Matrix(zoom, zoom)
+            pix = page.get_pixmap(matrix=matrix)
+            return pix.pil_tobytes(format="JPEG", optimize=True, quality=quality)
+        except Exception:
+            # Fallback to default rendering with JPEG
+            pix = page.get_pixmap()
+            return pix.pil_tobytes(format="JPEG", optimize=True, quality=quality)
 
     def _extract_page_text_with_fonts_excluding_headers_footers(
         self, page

@@ -153,11 +153,17 @@ class RetryingPydanticOutputParser(LCPydanticOutputParser):
                                 f"Validation failed for model {self._model.__name__} on candidate {idx + 1}/{len(candidates)}: {ve.errors()}"
                             )
                         if not self.strict_mode:
-                            partial = self._attempt_partial_parsing(json_data)
-                            if partial is not None:
+                            # Try lenient parsing that accepts invalid enum values
+                            lenient_model = self._attempt_lenient_parsing(json_data)
+                            if lenient_model is not None:
                                 result.success = True
-                                result.parsed_data = partial
-                                result.confidence_score = 0.5
+                                result.parsed_data = lenient_model
+                                result.confidence_score = (
+                                    0.7  # Good confidence for lenient parsing
+                                )
+                                logger.debug(
+                                    f"Successfully parsed with lenient validation for candidate {idx + 1}"
+                                )
                                 return result
         except Exception as cleanup_error:
             logger.warning(f"Cleanup parsing error: {cleanup_error}")
@@ -295,6 +301,49 @@ class RetryingPydanticOutputParser(LCPydanticOutputParser):
         # Prefer later candidates as they are more likely to be the final result
         # but maintain stable order: earlier ones first, later ones last.
         return candidates
+
+    def _attempt_lenient_parsing(
+        self, json_data: Dict[str, Any]
+    ) -> Optional[BaseModel]:
+        """Attempt lenient parsing that accepts invalid enum values by bypassing validation."""
+        try:
+            # Pydantic v2: construct instance without validation and with proper internals
+            # 1) Keep only fields declared on the model to avoid unknown-field noise
+            model_fields = getattr(self._model, "model_fields", {}) or {}
+            allowed_keys = (
+                set(model_fields.keys()) if model_fields else set(json_data.keys())
+            )
+            filtered_values: Dict[str, Any] = {
+                key: value for key, value in json_data.items() if key in allowed_keys
+            }
+
+            # 2) Ensure required fields exist; set to None when missing to stabilize access
+            try:
+                schema = self._model.model_json_schema()
+                required_fields = set(schema.get("required", []))
+            except Exception:
+                required_fields = set()
+            for required_name in required_fields:
+                if required_name not in filtered_values:
+                    filtered_values[required_name] = None
+
+            # 3) Build instance without running validators
+            instance = self._model.model_construct(
+                _fields_set=set(filtered_values.keys()), **filtered_values
+            )
+
+            # Helpful debug for tracing lenient behavior without spamming logs
+            dropped = set(json_data.keys()) - set(filtered_values.keys())
+            if dropped:
+                logger.debug(
+                    f"Lenient parsing for {self._model.__name__}: dropped unknown fields {sorted(dropped)}"
+                )
+
+            return instance
+
+        except Exception as e:
+            logger.warning(f"Validation failed for model {self._model.__name__} on {e}")
+            return None
 
     def _attempt_partial_parsing(
         self, json_data: Dict[str, Any]

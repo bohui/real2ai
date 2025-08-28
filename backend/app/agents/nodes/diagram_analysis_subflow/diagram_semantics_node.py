@@ -359,7 +359,6 @@ class DiagramSemanticsNode(ContractLLMNode):
         context_vars = {
             "australian_state": state.get("australian_state", "NSW"),
             "contract_type": state.get("contract_type", "residential"),
-            "diagram_type": self.diagram_type,
         }
 
         # Add contract metadata if available
@@ -419,12 +418,8 @@ class DiagramSemanticsNode(ContractLLMNode):
                 f"{self.__class__.__name__}: Diagram semantics persist failed (non-fatal): {repo_err}"
             )
 
-    def _evaluate_quality(self, result: Optional[Any], state: RealEstateAgentState) -> Dict[str, Any]:  # type: ignore[override]
-        """Evaluate quality of image semantics analysis result."""
-        if result is None:
-            return {"ok": False, "reason": "no_result"}
-
-        # Check if result has expected structure
+    def _validate_content(self, result: Any) -> bool:
+        """Validate that the diagram semantics result contains meaningful content."""
         try:
             if hasattr(result, "model_dump"):
                 data = result.model_dump()
@@ -432,48 +427,21 @@ class DiagramSemanticsNode(ContractLLMNode):
                 data = result
 
             if not isinstance(data, dict):
-                return {"ok": False, "reason": "invalid_structure"}
+                return False
 
-            # Check for metadata with confidence scores
-            metadata = data.get("metadata", {})
-            overall_confidence = metadata.get("overall_confidence", 0.0)
-
-            if overall_confidence < self.schema_confidence_threshold:
-                return {
-                    "ok": False,
-                    "reason": "low_confidence",
-                    "confidence": overall_confidence,
-                    "threshold": self.schema_confidence_threshold,
-                }
-
-            # Basic validation - ensure some semantic content exists
+            # Check for diagram-specific semantic content
             has_content = bool(
-                data.get("semantic_elements")
-                or data.get("risk_indicators")
+                data.get("textual_information")
                 or data.get("spatial_relationships")
-                or data.get("text_content")
+                or data.get("semantic_summary")
+                or data.get("areas_of_concern")
+                or data.get("key_findings")
             )
 
-            if not has_content:
-                return {"ok": False, "reason": "no_semantic_content"}
+            return has_content
 
-            return {
-                "ok": True,
-                "confidence": overall_confidence,
-                "content_types": list(
-                    k
-                    for k in [
-                        "semantic_elements",
-                        "risk_indicators",
-                        "spatial_relationships",
-                        "text_content",
-                    ]
-                    if data.get(k)
-                ),
-            }
-
-        except Exception as e:
-            return {"ok": False, "reason": "evaluation_error", "error": str(e)}
+        except Exception:
+            return False
 
     async def _update_state_success(
         self, state: RealEstateAgentState, parsed: Any, quality: Dict[str, Any]
@@ -491,12 +459,11 @@ class DiagramSemanticsNode(ContractLLMNode):
 
         # Propagate confidence score for this specific diagram type
         try:
-            metadata = getattr(parsed, "metadata", None)
-            overall_conf = getattr(metadata, "overall_confidence", None)
-            if overall_conf is not None:
+            confidence_score = getattr(parsed, "confidence_score", None)
+            if confidence_score is not None:
                 state.setdefault("confidence_scores", {})[
                     f"image_semantics_{self.diagram_type}"
-                ] = overall_conf
+                ] = confidence_score
         except Exception:
             pass
 

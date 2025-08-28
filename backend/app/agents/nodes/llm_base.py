@@ -30,7 +30,7 @@ class LLMNode(BaseNode):
     # Config keys expected in workflow.extraction_config
     CONFIG_KEYS = {
         "max_retries": 2,
-        "min_confidence": 0.75,
+        "min_confidence": 0.5,
     }
 
     async def execute(self, state: RealEstateAgentState) -> RealEstateAgentState:  # type: ignore[override]

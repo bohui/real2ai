@@ -346,6 +346,12 @@ class DiagramRiskAssessment(BaseModel):
     estimated_financial_impact: Optional[Dict[str, Any]] = Field(
         None, description="Estimated financial impact of risks"
     )
+    confidence_score: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="Confidence score for this analysis (0-1)",
+    )
 
     model_config = {"use_enum_values": True, "arbitrary_types_allowed": True}
 

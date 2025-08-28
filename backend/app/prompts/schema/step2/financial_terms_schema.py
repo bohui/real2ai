@@ -223,7 +223,6 @@ class FinancialTermsAnalysisResult(BaseModel):
     confidence_score: float = Field(
         ..., ge=0.0, le=1.0, description="Confidence score for this analysis (0-1)"
     )
-
     # Summary and Evidence
     financial_summary: str = Field(..., description="Summary of key financial findings")
     total_buyer_cost: Optional[float] = Field(

@@ -58,27 +58,6 @@ class TitleEncumbrancesNode(ContractLLMNode):
 
     # Coercion handled by base class via result_model
 
-    def _evaluate_quality(
-        self, result: Optional[Any], state: Step2AnalysisState
-    ) -> Dict[str, Any]:
-        if result is None:
-            return {"ok": False}
-        try:
-            conf = float(getattr(result, "confidence_score", 0.0) or 0.0)
-            completeness = float(getattr(result, "completeness_score", 0.0) or 0.0)
-            diagram_integr = float(
-                getattr(result, "diagram_integration_score", 0.0) or 0.0
-            )
-            ok = (conf >= 0.75 and completeness >= 0.6) or (diagram_integr >= 0.6)
-            return {
-                "ok": ok,
-                "confidence_score": conf,
-                "completeness_score": completeness,
-                "diagram_integration_score": diagram_integr,
-            }
-        except Exception:
-            return {"ok": False}
-
     async def _update_state_success(
         self, state: Step2AnalysisState, parsed: Any, quality: Dict[str, Any]
     ) -> Step2AnalysisState:

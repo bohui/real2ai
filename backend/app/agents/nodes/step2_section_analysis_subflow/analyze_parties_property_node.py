@@ -70,26 +70,6 @@ class PartiesPropertyNode(ContractLLMNode):
         )
         return context, parser, "step2_parties_property"
 
-    def _evaluate_quality(
-        self, result: Optional[Any], state: Step2AnalysisState
-    ) -> Dict[str, Any]:
-        if result is None:
-            return {"ok": False}
-        try:
-            # Basic coverage checks
-            parties_ok = bool(getattr(result, "parties", []) or [])
-            prop_ok = getattr(result, "property_identification", None) is not None
-            conf = getattr(result, "confidence_score", 0.0) or 0.0
-            ok = (conf >= 0.75) or (parties_ok and prop_ok)
-            return {
-                "ok": ok,
-                "confidence_score": conf,
-                "has_parties": parties_ok,
-                "has_property_identification": prop_ok,
-            }
-        except Exception:
-            return {"ok": False}
-
     async def _update_state_success(
         self, state: Step2AnalysisState, parsed: Any, quality: Dict[str, Any]
     ) -> Step2AnalysisState:

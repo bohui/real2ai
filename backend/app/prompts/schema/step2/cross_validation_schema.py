@@ -313,6 +313,12 @@ class CrossValidationResult(BaseModel):
     synthesis_reliability: float = Field(
         ..., ge=0.0, le=1.0, description="Reliability of synthesis conclusions"
     )
+    confidence_score: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="Overall confidence score for this analysis (0-1)",
+    )
 
     # Evidence and methodology
     validation_methodology: List[str] = Field(

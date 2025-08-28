@@ -162,7 +162,6 @@ class PartiesPropertyAnalysisResult(BaseModel):
     confidence_score: float = Field(
         ..., ge=0.0, le=1.0, description="Confidence score for this analysis (0-1)"
     )
-
     # Evidence and Context
     evidence_references: List[str] = Field(
         default_factory=list,

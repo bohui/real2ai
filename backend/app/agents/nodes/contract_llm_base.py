@@ -17,6 +17,8 @@ from .llm_base import LLMNode
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_MIN_CONFIDENCE = 0.5
+
 
 class ContractLLMNode(LLMNode):
     def __init__(
@@ -31,6 +33,7 @@ class ContractLLMNode(LLMNode):
         super().__init__(workflow, node_name, progress_range)
         self.contract_attribute = contract_attribute
         self.result_model = result_model
+        self.min_confidence = DEFAULT_MIN_CONFIDENCE
 
     async def _short_circuit_check(
         self, state: RealEstateAgentState
@@ -56,12 +59,11 @@ class ContractLLMNode(LLMNode):
             if isinstance(cached_value, dict) and bool(cached_value):
                 state[self.contract_attribute] = cached_value
                 try:
-                    metadata = cached_value.get("metadata", {})
-                    overall_confidence = metadata.get("overall_confidence")
-                    if overall_confidence is not None:
+                    confidence_score = cached_value.get("confidence_score")
+                    if confidence_score is not None:
                         state.setdefault("confidence_scores", {})[
                             self.contract_attribute
-                        ] = overall_confidence
+                        ] = confidence_score
                 except Exception:
                     pass
 
@@ -126,6 +128,78 @@ class ContractLLMNode(LLMNode):
                 f"{self.__class__.__name__}: Section persist failed (non-fatal): [{type(repo_err).__name__}] {repo_err}"
             )
 
+    def _evaluate_quality(
+        self, result: Optional[Any], state: RealEstateAgentState
+    ) -> Dict[str, Any]:
+        """Generic quality evaluation for contract-backed nodes using confidence_score."""
+        if result is None:
+            return {"ok": False, "reason": "no_result"}
+
+        try:
+            # Check if result has confidence_score field
+            confidence_score = getattr(result, "confidence_score", 0.0)
+
+            # Use workflow-defined minimum confidence threshold
+            min_confidence = float(
+                self.CONFIG_KEYS.get("min_confidence", self.min_confidence)
+            )
+
+            if confidence_score < min_confidence:
+                return {
+                    "ok": False,
+                    "reason": "low_confidence",
+                    "confidence_score": confidence_score,
+                    "threshold": min_confidence,
+                }
+
+            # Basic validation - ensure some meaningful content exists
+            has_content = self._validate_content(result)
+
+            if not has_content:
+                return {"ok": False, "reason": "no_meaningful_content"}
+
+            return {
+                "ok": True,
+                "confidence_score": confidence_score,
+                "content_validated": True,
+            }
+
+        except Exception as e:
+            return {"ok": False, "reason": "evaluation_error", "error": str(e)}
+
+    def _validate_content(self, result: Any) -> bool:
+        """Validate that the result contains meaningful content. Override in subclasses if needed."""
+        try:
+            if hasattr(result, "model_dump"):
+                data = result.model_dump()
+            else:
+                data = result
+
+            if not isinstance(data, dict):
+                return False
+
+            # Basic check for non-empty content - adjust this logic per contract_attribute if needed
+            # This is a generic check that looks for any non-empty lists or non-null strings
+            for key, value in data.items():
+                if key in [
+                    "confidence_score",
+                    "analysis_timestamp",
+                    "analyzer_version",
+                ]:
+                    continue  # Skip metadata fields
+
+                if isinstance(value, list) and len(value) > 0:
+                    return True
+                elif isinstance(value, str) and len(value.strip()) > 0:
+                    return True
+                elif isinstance(value, dict) and len(value) > 0:
+                    return True
+
+            return False
+
+        except Exception:
+            return False
+
     def _build_updated_fields(
         self, parsed: Any, state: RealEstateAgentState
     ) -> Dict[str, Any]:
@@ -153,14 +227,13 @@ class ContractLLMNode(LLMNode):
 
         state[self.contract_attribute] = value
 
-        # Try to propagate overall confidence into a stable key for this contract attribute
+        # Try to propagate confidence score into a stable key for this contract attribute
         try:
-            metadata = getattr(parsed, "metadata", None)
-            overall_conf = getattr(metadata, "overall_confidence", None)
-            if overall_conf is not None:
+            confidence_score = getattr(parsed, "confidence_score", None)
+            if confidence_score is not None:
                 state.setdefault("confidence_scores", {})[
                     self.contract_attribute
-                ] = overall_conf
+                ] = confidence_score
         except Exception:
             pass
 

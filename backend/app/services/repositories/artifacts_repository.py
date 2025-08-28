@@ -10,7 +10,8 @@ import logging
 from typing import Dict, List, Optional, Any
 from uuid import UUID
 
-from app.database.connection import get_service_role_connection
+# Import moved inside methods to avoid circular imports
+# from app.database.connection import get_service_role_connection
 from app.utils.content_utils import (
     validate_content_hmac,
     validate_params_fingerprint,
@@ -24,6 +25,7 @@ import traceback
 from app.utils.json_utils import safe_json_loads
 
 logger = logging.getLogger(__name__)
+from app.database.connection import get_service_role_connection
 
 
 class ArtifactsRepository:

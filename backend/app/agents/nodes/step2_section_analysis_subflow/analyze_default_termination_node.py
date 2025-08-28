@@ -60,27 +60,6 @@ class DefaultTerminationNode(ContractLLMNode):
 
     # Coercion handled by base class via result_model
 
-    def _evaluate_quality(
-        self, result: Optional[Any], state: Step2AnalysisState
-    ) -> Dict[str, Any]:
-        if result is None:
-            return {"ok": False}
-        try:
-            has_default_termination = bool(
-                getattr(result, "default_termination", []) or []
-            )
-            conf = float(getattr(result, "confidence_score", 0.0) or 0.0)
-            completeness = float(getattr(result, "completeness_score", 0.0) or 0.0)
-            ok = (conf >= 0.75 and completeness >= 0.6) or has_default_termination
-            return {
-                "ok": ok,
-                "confidence_score": conf,
-                "completeness_score": completeness,
-                "has_default_termination": has_default_termination,
-            }
-        except Exception:
-            return {"ok": False}
-
     async def _update_state_success(
         self, state: Step2AnalysisState, parsed: Any, quality: Dict[str, Any]
     ) -> Step2AnalysisState:

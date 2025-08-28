@@ -88,20 +88,14 @@ class EntitiesExtractionNode(ContractLLMNode):
                 "has_conditions": hasattr(result, "conditions")
                 and bool(getattr(result, "conditions", [])),
             }
-            overall_conf = (
-                result.metadata.overall_confidence
-                if getattr(result, "metadata", None) is not None
-                else None
-            )
+            overall_conf = getattr(result, "confidence_score", 0.0)
             coverage_score = sum(1 for v in coverage.values() if v) / max(
                 len(coverage), 1
             )
-            ok = (
-                overall_conf is not None and overall_conf >= min_confidence
-            ) or coverage_score >= 0.7
+            ok = (overall_conf >= min_confidence) or coverage_score >= 0.7
             return {
                 "ok": ok,
-                "overall_confidence": overall_conf,
+                "confidence_score": overall_conf,
                 "coverage_score": coverage_score,
                 **coverage,
             }

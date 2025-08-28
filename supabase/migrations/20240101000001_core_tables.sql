@@ -610,6 +610,7 @@ ALTER TABLE contracts
     ADD COLUMN IF NOT EXISTS disclosure_compliance JSONB DEFAULT '{}'::jsonb,
     ADD COLUMN IF NOT EXISTS special_risks JSONB DEFAULT '{}'::jsonb,
     ADD COLUMN IF NOT EXISTS cross_section_validation JSONB DEFAULT '{}'::jsonb,
+    ADD COLUMN IF NOT EXISTS diagram_risks JSONB DEFAULT '{}'::jsonb,
     ADD COLUMN IF NOT EXISTS risk_summary JSONB DEFAULT '{}'::jsonb,
     ADD COLUMN IF NOT EXISTS action_plan JSONB DEFAULT '{}'::jsonb,
     ADD COLUMN IF NOT EXISTS compliance_summary JSONB DEFAULT '{}'::jsonb,

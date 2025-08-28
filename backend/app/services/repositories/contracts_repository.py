@@ -406,7 +406,6 @@ class ContractsRepository:
 
         Uses pg_advisory_xact_lock(content_hash) to serialize concurrent writers for same contract.
         """
-        from app.database.connection import get_service_role_connection
 
         def _json_default(v: Any):
             if isinstance(v, (datetime, date)):
@@ -459,16 +458,29 @@ class ContractsRepository:
                 # Build dynamic SQL safely by whitelisting the column name
                 update_sql = f"""
                     UPDATE contracts
-                    SET {key} = $3::jsonb,
-                        updated_by = COALESCE($4, updated_by),
+                    SET {key} = $2::jsonb,
+                        updated_by = COALESCE($3, updated_by),
                         updated_at = now()
                     WHERE content_hash = $1
                 """
+
+                # Log the SQL and parameters for debugging
+                json_value = json.dumps(value, default=_json_default)
+                logger.debug(
+                    f"Executing update_section_analysis_key SQL: {update_sql}",
+                    extra={
+                        "content_hash": content_hash,
+                        "key": key,
+                        "value_type": type(value).__name__,
+                        "json_value_length": len(json_value) if json_value else 0,
+                        "updated_by": updated_by,
+                    },
+                )
+
                 result = await conn.execute(
                     update_sql,
                     content_hash,
-                    key,
-                    json.dumps(value, default=_json_default),
+                    json_value,
                     updated_by,
                 )
                 return result.split()[-1] == "1"

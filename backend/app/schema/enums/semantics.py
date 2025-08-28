@@ -30,6 +30,7 @@ class RelationshipType(str, Enum):
     PERPENDICULAR = "perpendicular"
     NEAR = "near"
     FAR = "far"
+    WITHIN = "within"
     OTHER = "other"
 
 

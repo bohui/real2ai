@@ -68,35 +68,6 @@ class ComplianceScoreNode(ContractLLMNode):
 
     # Coercion handled by base class via result_model
 
-    def _evaluate_quality(
-        self, result: Optional[Any], state: Step3SynthesisState
-    ) -> Dict[str, Any]:
-        if result is None:
-            return {"ok": False}
-        try:
-            score = float(getattr(result, "score", 0.0) or 0.0)
-            gaps = getattr(result, "gaps", []) or []
-            status = getattr(result, "status", None)
-            severity_counts = getattr(result, "total_gaps_by_severity", {}) or {}
-            critical_count = (
-                severity_counts.get(getattr(status, "CRITICAL", "critical"), 0)
-                if isinstance(severity_counts, dict)
-                else 0
-            )
-            coverage_score = 1.0 if score >= 0.3 or len(gaps) >= 1 else 0.0
-            overall_confidence = min(max(1.0 - (critical_count * 0.2), 0.0), 1.0)
-            ok = coverage_score >= 0.5
-            return {
-                "ok": ok,
-                "overall_confidence": overall_confidence,
-                "coverage_score": coverage_score,
-                "score": score,
-                "gaps": len(gaps),
-                "critical_gaps": critical_count,
-            }
-        except Exception:
-            return {"ok": False}
-
     async def _validate_and_enhance_result(
         self, raw_result: Dict[str, Any], state: Step3SynthesisState
     ) -> Dict[str, Any]:

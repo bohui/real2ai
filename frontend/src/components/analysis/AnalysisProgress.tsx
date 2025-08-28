@@ -183,6 +183,23 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({ className }) => {
 
   console.log("✅ AnalysisProgress: Rendering component");
 
+  // Helper function to determine when a step should be marked as completed based on progress
+  const getStepProgressThreshold = (stepKey: string): number => {
+    const thresholds: Record<string, number> = {
+      document_uploaded: 10,
+      validate_document_quality: 25,
+      document_processing: 40,
+      extract_text_diagrams: 50,
+      extract_terms: 59,
+      validate_terms_completeness: 70,
+      analyze_compliance: 80,
+      assess_risks: 85,
+      generate_recommendations: 90,
+      compile_report: 95,
+    };
+    return thresholds[stepKey] || 0;
+  };
+
   const progress = analysisProgress?.progress_percent || 0;
 
   // Filter steps based on configuration and current progress
@@ -206,18 +223,6 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({ className }) => {
       )
     : -1;
   const isConnected = wsService?.isWebSocketConnected() || false;
-
-  const handleCancelAnalysis = () => {
-    if (wsService && isAnalyzing) {
-      if (
-        confirm(
-          "Are you sure you want to cancel this analysis? This action cannot be undone."
-        )
-      ) {
-        wsService.cancelAnalysis();
-      }
-    }
-  };
 
   return (
     <Card
@@ -268,18 +273,6 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({ className }) => {
                 <div className="text-xs text-neutral-500">Complete</div>
               </div>
             )}
-
-            {/* Cancel Button */}
-            {isAnalyzing && !analysisError && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleCancelAnalysis}
-                className="text-red-600 border-red-200 hover:bg-red-50 shadow-sm"
-              >
-                Cancel
-              </Button>
-            )}
           </div>
         </div>
       </CardHeader>
@@ -311,9 +304,27 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({ className }) => {
         <div className="space-y-3">
           {visibleSteps.map((step, index) => {
             const isCompleted =
-              currentStepIndex > index || (!isAnalyzing && currentAnalysis);
-            const isCurrent = currentStepIndex === index && isAnalyzing;
-            const isPending = currentStepIndex < index && isAnalyzing;
+              currentStepIndex > index ||
+              progress >= getStepProgressThreshold(step.key) ||
+              (!isAnalyzing && currentAnalysis);
+            const nextStepKey =
+              visibleSteps[Math.min(index + 1, visibleSteps.length - 1)]?.key;
+            const nextThreshold = nextStepKey
+              ? getStepProgressThreshold(nextStepKey)
+              : 100;
+
+            const isCurrent =
+              (currentStepIndex === index && isAnalyzing) ||
+              (isAnalyzing &&
+                progress >= getStepProgressThreshold(step.key) &&
+                progress < nextThreshold);
+            // A step is pending only if we are analyzing, it is not completed,
+            // and it comes after the current step. If current step is unknown (-1),
+            // treat all non-completed steps as pending.
+            const isPending =
+              isAnalyzing &&
+              !isCompleted &&
+              (currentStepIndex === -1 || currentStepIndex < index);
             const failureContext = !!analysisError && !isAnalyzing;
             const isFailedStep = failureContext && currentStepIndex === index;
 
@@ -328,7 +339,7 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({ className }) => {
                 className={cn(
                   "flex items-start gap-3 p-3 rounded-xl transition-all duration-200 shadow-sm",
                   isCompleted &&
-                    "bg-gradient-to-r from-success-50 to-success-100/50 border border-success-200",
+                    "bg-gradient-to-r from-green-50 to-green-100/50 border border-green-200",
                   isCurrent &&
                     "bg-gradient-to-r from-primary-50 to-primary-100/50 border border-primary-200 shadow-md",
                   isPending && "bg-neutral-50 border border-neutral-200"
@@ -338,7 +349,7 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({ className }) => {
                   className={cn(
                     "flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200 shadow-sm",
                     isCompleted &&
-                      "bg-gradient-to-br from-success-500 to-success-600 text-white",
+                      "bg-gradient-to-br from-green-500 to-green-600 text-white",
                     isCurrent &&
                       "bg-gradient-to-br from-primary-500 to-primary-600 text-white",
                     isPending && "bg-neutral-300 text-neutral-600"
@@ -357,7 +368,7 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({ className }) => {
                   <h4
                     className={cn(
                       "font-semibold transition-colors duration-200",
-                      isCompleted && "text-success-900",
+                      isCompleted && "text-green-900",
                       isCurrent && "text-primary-900",
                       isPending && "text-neutral-600"
                     )}
@@ -367,7 +378,7 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({ className }) => {
                   <p
                     className={cn(
                       "text-sm mt-1 transition-colors duration-200",
-                      isCompleted && "text-success-700",
+                      isCompleted && "text-green-700",
                       isCurrent && "text-primary-700",
                       isPending && "text-neutral-500"
                     )}
@@ -384,7 +395,7 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({ className }) => {
                       exit={{ scale: 0 }}
                       className="flex-shrink-0"
                     >
-                      <CheckCircle className="w-5 h-5 text-success-600" />
+                      <CheckCircle className="w-5 h-5 text-green-600" />
                     </motion.div>
                   )}
                 </AnimatePresence>

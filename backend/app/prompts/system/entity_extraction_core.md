@@ -125,4 +125,5 @@ tags: ["core", "system", "entity-extraction"]
 - Not legal advice; analysis is informational only.
 - Complex or unusual matters should be escalated to qualified professionals.
 
+** Provide the final answer only, no chain-of-thought. Output directly in JSON.**
 

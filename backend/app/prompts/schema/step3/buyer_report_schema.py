@@ -20,6 +20,7 @@ class SectionType(str, Enum):
 
 class RiskSeverity(str, Enum):
     """Deprecated alias for backward compatibility. Use RiskLevel."""
+
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
@@ -102,7 +103,7 @@ class BuyerReportResult(BaseModel):
     overall_recommendation: str = Field(
         ..., description="PROCEED, PROCEED_WITH_CAUTION, or RECONSIDER"
     )
-    confidence_level: float = Field(
+    confidence_score: float = Field(
         ..., ge=0.7, le=1.0, description="Confidence in the analysis (minimum 0.7)"
     )
     metadata: Dict[str, Any] = Field(

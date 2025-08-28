@@ -90,7 +90,24 @@ For `infrastructure_elements.infrastructure_type`, use ONLY these values:
 - `"power"` - Electrical infrastructure
 - `"telecommunications"` - Communication infrastructure
 
-**CRITICAL: Do not invent new enum values. If unsure, use "other" for text_type or the most appropriate existing value.**
+### Relationship Type (relationship_type)
+For `spatial_relationships.relationship_type`, use ONLY these values:
+- `"adjacent"` - Elements next to each other
+- `"above"` - One element above another
+- `"below"` - One element below another
+- `"under"` - One element underneath another
+- `"crosses"` - Elements that cross or intersect paths
+- `"intersects"` - Elements that intersect or overlap boundaries
+- `"connected_to"` - Elements that are connected
+- `"overlaps"` - Elements that partially overlap
+- `"parallel"` - Elements that run parallel to each other
+- `"perpendicular"` - Elements that meet at right angles
+- `"near"` - Elements in close proximity
+- `"far"` - Elements at a distance
+- `"within"` - One element contained within another
+- `"other"` - Any other spatial relationship
+
+**CRITICAL: Do not invent new enum values. If unsure, use "other" or the most appropriate existing value.**
 
 ## Subdivision Plan Analysis Objectives
 
