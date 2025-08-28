@@ -359,6 +359,7 @@ class DiagramSemanticsNode(ContractLLMNode):
         context_vars = {
             "australian_state": state.get("australian_state", "NSW"),
             "contract_type": state.get("contract_type", "residential"),
+            "diagram_type": self.diagram_type,
         }
 
         # Add contract metadata if available

@@ -54,7 +54,45 @@ Focus on: {{ seed_snippets | tojson }}
 Analyzing: {{ diagram_filenames | join(", ") }}
 {% endif %}
 
-## Contour Map Analysis Objectives Objectives
+## Schema Compliance Requirements
+
+**IMPORTANT: Use ONLY the following enum values as specified in the schema:**
+
+### Text Type (text_type)
+For `textual_information.text_type`, use ONLY these values:
+- `"label"` - For contour labels, elevation marks, plan references
+- `"measurement"` - For elevations, distances, areas, slopes
+- `"title"` - For main headings, map titles, section headers
+- `"legend"` - For map keys, symbols, abbreviations
+- `"note"` - For explanatory text, legal statements, conditions
+- `"warning"` - For cautionary text, important notices
+- `"other"` - For any text that doesn't fit the above categories
+
+### Confidence Level (analysis_confidence)
+For `analysis_confidence`, use ONLY these values:
+- `"high"` - When analysis is comprehensive and confident
+- `"medium"` - When analysis has some uncertainty
+- `"low"` - When analysis has significant limitations
+
+### Environmental Type (environmental_type)
+For `environmental_elements.environmental_type`, use ONLY these values:
+- `"contour"` - Contour lines
+- `"elevation"` - Elevation points
+- `"slope"` - Slope areas
+- `"water_body"` - Water bodies
+- `"other"` - Any other environmental feature
+
+### Slope Type (slope_type)
+For `environmental_elements.slope_type`, use ONLY these values:
+- `"gentle"` - Gentle slopes
+- `"moderate"` - Moderate slopes
+- `"steep"` - Steep slopes
+- `"very_steep"` - Very steep slopes
+- `"other"` - Any other slope type
+
+**CRITICAL: Do not invent new enum values. If unsure, use "other" for text_type or the most appropriate existing value.**
+
+## Contour Map Analysis Objectives
 
 ### 1. Environmental Elements (environmental_elements)
 **Map topographical and elevation features:**

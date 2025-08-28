@@ -123,7 +123,7 @@ class ContractLLMNode(LLMNode):
             )
         except Exception as repo_err:
             logger.warning(
-                f"{self.__class__.__name__}: Section persist failed (non-fatal): {repo_err}"
+                f"{self.__class__.__name__}: Section persist failed (non-fatal): [{type(repo_err).__name__}] {repo_err}"
             )
 
     def _build_updated_fields(

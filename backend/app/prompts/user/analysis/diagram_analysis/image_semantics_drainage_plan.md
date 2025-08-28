@@ -54,7 +54,44 @@ Focus on: {{ seed_snippets | tojson }}
 Analyzing: {{ diagram_filenames | join(", ") }}
 {% endif %}
 
-## Drainage Infrastructure Analysis Objectives
+## Schema Compliance Requirements
+
+**IMPORTANT: Use ONLY the following enum values as specified in the schema:**
+
+### Text Type (text_type)
+For `textual_information.text_type`, use ONLY these values:
+- `"label"` - For drain labels, catchment areas, plan references
+- `"measurement"` - For pipe diameters, depths, distances, flows
+- `"title"` - For main headings, plan titles, section headers
+- `"legend"` - For map keys, symbols, abbreviations
+- `"note"` - For explanatory text, legal statements, conditions
+- `"warning"` - For cautionary text, important notices
+- `"other"` - For any text that doesn't fit the above categories
+
+### Confidence Level (analysis_confidence)
+For `analysis_confidence`, use ONLY these values:
+- `"high"` - When analysis is comprehensive and confident
+- `"medium"` - When analysis has some uncertainty
+- `"low"` - When analysis has significant limitations
+
+### Infrastructure Type (infrastructure_type)
+For `infrastructure_elements.infrastructure_type`, use ONLY these values:
+- `"stormwater"` - Stormwater drainage infrastructure
+- `"sewer"` - Sewerage infrastructure
+- `"water"` - Water supply infrastructure
+- `"other"` - Any other infrastructure type
+
+### Drainage Type (drainage_type)
+For `infrastructure_elements.drainage_type`, use ONLY these values:
+- `"pipe"` - Drainage pipes
+- `"channel"` - Open drainage channels
+- `"pit"` - Drainage pits
+- `"swale"` - Drainage swales
+- `"other"` - Any other drainage type
+
+**CRITICAL: Do not invent new enum values. If unsure, use "other" for text_type or the most appropriate existing value.**
+
+## Drainage Plan Analysis Objectives
 
 ### 1. Infrastructure Elements (infrastructure_elements)
 **Map all drainage infrastructure:**

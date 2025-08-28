@@ -54,7 +54,45 @@ Focus on: {{ seed_snippets | tojson }}
 Analyzing: {{ diagram_filenames | join(", ") }}
 {% endif %}
 
-## Bushfire Risk Analysis Objectives
+## Schema Compliance Requirements
+
+**IMPORTANT: Use ONLY the following enum values as specified in the schema:**
+
+### Text Type (text_type)
+For `textual_information.text_type`, use ONLY these values:
+- `"label"` - For zone labels, area names, plan references
+- `"measurement"` - For distances, areas, buffer zones
+- `"title"` - For main headings, map titles, section headers
+- `"legend"` - For map keys, symbols, abbreviations
+- `"note"` - For explanatory text, legal statements, conditions
+- `"warning"` - For cautionary text, important notices
+- `"other"` - For any text that doesn't fit the above categories
+
+### Confidence Level (analysis_confidence)
+For `analysis_confidence`, use ONLY these values:
+- `"high"` - When analysis is comprehensive and confident
+- `"medium"` - When analysis has some uncertainty
+- `"low"` - When analysis has significant limitations
+
+### Environmental Type (environmental_type)
+For `environmental_elements.environmental_type`, use ONLY these values:
+- `"bushfire_zone"` - Bushfire-prone areas
+- `"vegetation"` - Natural vegetation areas
+- `"cleared_area"` - Cleared or managed areas
+- `"water_body"` - Rivers, creeks, lakes
+- `"other"` - Any other environmental feature
+
+### Risk Level (risk_level)
+For `risk_indicators.risk_level`, use ONLY these values:
+- `"extreme"` - Extreme bushfire risk
+- `"high"` - High bushfire risk
+- `"medium"` - Medium bushfire risk
+- `"low"` - Low bushfire risk
+- `"minimal"` - Minimal bushfire risk
+
+**CRITICAL: Do not invent new enum values. If unsure, use "other" for text_type or the most appropriate existing value.**
+
+## Bushfire Map Analysis Objectives
 
 ### 1. Environmental Elements (environmental_elements)
 **Map all fire-related features:**

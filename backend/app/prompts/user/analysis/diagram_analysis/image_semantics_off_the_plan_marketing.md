@@ -54,7 +54,45 @@ Focus on: {{ seed_snippets | tojson }}
 Analyzing: {{ diagram_filenames | join(", ") }}
 {% endif %}
 
-## Off-the-Plan Marketing Analysis Objectives
+## Schema Compliance Requirements
+
+**IMPORTANT: Use ONLY the following enum values as specified in the schema:**
+
+### Text Type (text_type)
+For `textual_information.text_type`, use ONLY these values:
+- `"label"` - For unit labels, amenity names, plan references
+- `"measurement"` - For dimensions, areas, distances, prices
+- `"title"` - For main headings, plan titles, section headers
+- `"legend"` - For map keys, symbols, abbreviations
+- `"note"` - For explanatory text, legal statements, conditions
+- `"warning"` - For cautionary text, important notices
+- `"other"` - For any text that doesn't fit the above categories
+
+### Confidence Level (analysis_confidence)
+For `analysis_confidence`, use ONLY these values:
+- `"high"` - When analysis is comprehensive and confident
+- `"medium"` - When analysis has some uncertainty
+- `"low"` - When analysis has significant limitations
+
+### Building Type (building_type)
+For `building_elements.building_type`, use ONLY these values:
+- `"residential"` - Residential units
+- `"commercial"` - Commercial units
+- `"mixed_use"` - Mixed use units
+- `"other"` - Any other building type
+
+### Unit Type (unit_type)
+For `building_elements.unit_type`, use ONLY these values:
+- `"studio"` - Studio apartments
+- `"one_bedroom"` - One bedroom units
+- `"two_bedroom"` - Two bedroom units
+- `"three_bedroom"` - Three bedroom units
+- `"penthouse"` - Penthouse units
+- `"other"` - Any other unit type
+
+**CRITICAL: Do not invent new enum values. If unsure, use "other" for text_type or the most appropriate existing value.**
+
+## Off-The-Plan Marketing Analysis Objectives
 
 ### 1. Building Elements (building_elements)
 **Document proposed buildings and developments:**

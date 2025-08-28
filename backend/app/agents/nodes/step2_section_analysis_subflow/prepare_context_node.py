@@ -32,6 +32,21 @@ class PrepareContextNode(Step2NodeBase):
             except Exception as hoist_err:
                 self._log_warning(f"Failed to hoist section seeds: {hoist_err}")
 
+            # Hoist contract metadata from Step 1 entities into Step 2 state
+            try:
+                metadata = (extracted_entity or {}).get("metadata") or {}
+                if metadata:
+                    updates["contract_metadata"] = metadata
+                    self.logger.info(
+                        "Hoisted contract_metadata for Step 2",
+                        extra={
+                            "has_metadata": bool(metadata),
+                            "metadata_keys": list(metadata.keys()) if metadata else [],
+                        },
+                    )
+            except Exception as metadata_err:
+                self._log_warning(f"Failed to hoist contract metadata: {metadata_err}")
+
             # Derive legal requirements matrix if not provided
             if not (
                 state.get("legal_requirements_matrix")

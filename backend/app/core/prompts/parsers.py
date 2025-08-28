@@ -177,7 +177,9 @@ class RetryingPydanticOutputParser(LCPydanticOutputParser):
                     )
                     return result
                 except Exception as lc_error:
-                    logger.warning(f"LangChain parsing error: {lc_error}")
+                    logger.warning(
+                        f"LangChain parsing error for model [{self._model.__name__}]: {lc_error}"
+                    )
                     result.parsing_errors.append(f"LangChain parsing error: {lc_error}")
         return result
 

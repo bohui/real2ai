@@ -61,6 +61,14 @@ class DiagramSemanticsFanoutNode(BaseNode):
                         "uploaded_diagrams": uploaded,
                         "content_hash": parent_content_hash,
                         "content_hmac": parent_content_hmac,
+                        # Pass through context needed by DiagramSemanticsNode
+                        "australian_state": state.get("australian_state"),
+                        "contract_type": state.get("contract_type"),
+                        "contract_metadata": state.get("contract_metadata"),
+                        "seed_snippets": state.get("section_seeds", {}).get("snippets"),
+                        "diagram_filenames": [
+                            entry.get("uri") for entry in entries if entry.get("uri")
+                        ],
                     }
                     return await node.execute(node_state)
 

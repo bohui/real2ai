@@ -54,7 +54,44 @@ Focus on: {{ seed_snippets | tojson }}
 Analyzing: {{ diagram_filenames | join(", ") }}
 {% endif %}
 
-## Cross Section Analysis Objectives Objectives
+## Schema Compliance Requirements
+
+**IMPORTANT: Use ONLY the following enum values as specified in the schema:**
+
+### Text Type (text_type)
+For `textual_information.text_type`, use ONLY these values:
+- `"label"` - For section labels, layer names, plan references
+- `"measurement"` - For depths, heights, distances, thicknesses
+- `"title"` - For main headings, section titles, headers
+- `"legend"` - For map keys, symbols, abbreviations
+- `"note"` - For explanatory text, legal statements, conditions
+- `"warning"` - For cautionary text, important notices
+- `"other"` - For any text that doesn't fit the above categories
+
+### Confidence Level (analysis_confidence)
+For `analysis_confidence`, use ONLY these values:
+- `"high"` - When analysis is comprehensive and confident
+- `"medium"` - When analysis has some uncertainty
+- `"low"` - When analysis has significant limitations
+
+### Environmental Type (environmental_type)
+For `environmental_elements.environmental_type`, use ONLY these values:
+- `"soil"` - Soil layers
+- `"rock"` - Rock layers
+- `"water"` - Water table or aquifers
+- `"vegetation"` - Vegetation layers
+- `"other"` - Any other environmental feature
+
+### Layer Type (layer_type)
+For `environmental_elements.layer_type`, use ONLY these values:
+- `"surface"` - Surface layers
+- `"subsurface"` - Subsurface layers
+- `"bedrock"` - Bedrock layers
+- `"other"` - Any other layer type
+
+**CRITICAL: Do not invent new enum values. If unsure, use "other" for text_type or the most appropriate existing value.**
+
+## Cross Section Analysis Objectives
 
 ### 1. Building Elements (building_elements)
 **Document building elements shown in cross-section:**

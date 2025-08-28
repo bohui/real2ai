@@ -20,6 +20,7 @@ class Step2AnalysisState(LangGraphBaseState):
     purchase_method: Optional[str]
     use_category: Optional[str]
     property_condition: Optional[str]
+    contract_metadata: Optional[Dict[str, Any]]
 
     # Seeds / retrieval context
     section_seeds: Annotated[Optional[Dict[str, Any]], lambda x, y: y]

@@ -54,7 +54,44 @@ Focus on: {{ seed_snippets | tojson }}
 Analyzing: {{ diagram_filenames | join(", ") }}
 {% endif %}
 
-## Building Envelope Analysis Objectives Objectives
+## Schema Compliance Requirements
+
+**IMPORTANT: Use ONLY the following enum values as specified in the schema:**
+
+### Text Type (text_type)
+For `textual_information.text_type`, use ONLY these values:
+- `"label"` - For envelope labels, area names, plan references
+- `"measurement"` - For dimensions, areas, distances, heights
+- `"title"` - For main headings, plan titles, section headers
+- `"legend"` - For map keys, symbols, abbreviations
+- `"note"` - For explanatory text, legal statements, conditions
+- `"warning"` - For cautionary text, important notices
+- `"other"` - For any text that doesn't fit the above categories
+
+### Confidence Level (analysis_confidence)
+For `analysis_confidence`, use ONLY these values:
+- `"high"` - When analysis is comprehensive and confident
+- `"medium"` - When analysis has some uncertainty
+- `"low"` - When analysis has significant limitations
+
+### Building Type (building_type)
+For `building_elements.building_type`, use ONLY these values:
+- `"residential"` - Residential buildings
+- `"commercial"` - Commercial buildings
+- `"industrial"` - Industrial buildings
+- `"mixed_use"` - Mixed use buildings
+- `"other"` - Any other building type
+
+### Envelope Type (envelope_type)
+For `building_elements.envelope_type`, use ONLY these values:
+- `"buildable"` - Buildable areas
+- `"restricted"` - Restricted building areas
+- `"setback"` - Setback areas
+- `"other"` - Any other envelope type
+
+**CRITICAL: Do not invent new enum values. If unsure, use "other" for text_type or the most appropriate existing value.**
+
+## Building Envelope Plan Analysis Objectives
 
 ### 1. Building Elements (building_elements)
 **Document building envelope constraints:**

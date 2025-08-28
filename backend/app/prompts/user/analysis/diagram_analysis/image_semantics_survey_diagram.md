@@ -54,6 +54,43 @@ Focus on: {{ seed_snippets | tojson }}
 Analyzing: {{ diagram_filenames | join(", ") }}
 {% endif %}
 
+## Schema Compliance Requirements
+
+**IMPORTANT: Use ONLY the following enum values as specified in the schema:**
+
+### Text Type (text_type)
+For `textual_information.text_type`, use ONLY these values:
+- `"label"` - For survey mark numbers, lot references, plan numbers
+- `"measurement"` - For distances, angles, bearings, elevations
+- `"title"` - For main headings, survey titles, section headers
+- `"legend"` - For map keys, symbols, abbreviations
+- `"note"` - For explanatory text, legal statements, conditions
+- `"warning"` - For cautionary text, important notices
+- `"other"` - For any text that doesn't fit the above categories
+
+### Confidence Level (analysis_confidence)
+For `analysis_confidence`, use ONLY these values:
+- `"high"` - When analysis is comprehensive and confident
+- `"medium"` - When analysis has some uncertainty
+- `"low"` - When analysis has significant limitations
+
+### Boundary Type (boundary_type)
+For `boundary_elements.boundary_type`, use ONLY these values:
+- `"lot_boundary"` - Boundaries between lots
+- `"road_boundary"` - Boundaries with roads
+- `"reserve_boundary"` - Boundaries with public reserves
+- `"easement_boundary"` - Boundaries with easements
+
+### Survey Mark Type (survey_mark_type)
+For `boundary_elements.survey_mark_type`, use ONLY these values:
+- `"peg"` - Survey pegs
+- `"nail"` - Survey nails
+- `"drill_hole"` - Drill holes
+- `"monument"` - Survey monuments
+- `"other"` - Any other survey mark type
+
+**CRITICAL: Do not invent new enum values. If unsure, use "other" for text_type or the most appropriate existing value.**
+
 ## Survey Analysis Objectives
 
 ### 1. Boundary Elements (boundary_elements)

@@ -54,7 +54,46 @@ Focus on: {{ seed_snippets | tojson }}
 Analyzing: {{ diagram_filenames | join(", ") }}
 {% endif %}
 
-## Utility Infrastructure Analysis Objectives
+## Schema Compliance Requirements
+
+**IMPORTANT: Use ONLY the following enum values as specified in the schema:**
+
+### Text Type (text_type)
+For `textual_information.text_type`, use ONLY these values:
+- `"label"` - For utility labels, connection points, plan references
+- `"measurement"` - For pipe diameters, depths, distances, flows
+- `"title"` - For main headings, plan titles, section headers
+- `"legend"` - For map keys, symbols, abbreviations
+- `"note"` - For explanatory text, legal statements, conditions
+- `"warning"` - For cautionary text, important notices
+- `"other"` - For any text that doesn't fit the above categories
+
+### Confidence Level (analysis_confidence)
+For `analysis_confidence`, use ONLY these values:
+- `"high"` - When analysis is comprehensive and confident
+- `"medium"` - When analysis has some uncertainty
+- `"low"` - When analysis has significant limitations
+
+### Infrastructure Type (infrastructure_type)
+For `infrastructure_elements.infrastructure_type`, use ONLY these values:
+- `"water"` - Water supply infrastructure
+- `"sewer"` - Sewerage infrastructure
+- `"stormwater"` - Drainage infrastructure
+- `"power"` - Electrical infrastructure
+- `"telecommunications"` - Communication infrastructure
+- `"gas"` - Gas supply infrastructure
+- `"other"` - Any other infrastructure type
+
+### Connection Type (connection_type)
+For `infrastructure_elements.connection_type`, use ONLY these values:
+- `"main"` - Main utility connections
+- `"lateral"` - Lateral connections
+- `"service"` - Service connections
+- `"other"` - Any other connection type
+
+**CRITICAL: Do not invent new enum values. If unsure, use "other" for text_type or the most appropriate existing value.**
+
+## Utility Plan Analysis Objectives
 
 ### 1. Infrastructure Elements (infrastructure_elements)
 **Map all utility infrastructure:**

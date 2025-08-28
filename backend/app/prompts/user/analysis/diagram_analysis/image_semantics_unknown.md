@@ -54,7 +54,44 @@ Focus on: {{ seed_snippets | tojson }}
 Analyzing: {{ diagram_filenames | join(", ") }}
 {% endif %}
 
-## General Analysis Objectives
+## Schema Compliance Requirements
+
+**IMPORTANT: Use ONLY the following enum values as specified in the schema:**
+
+### Text Type (text_type)
+For `textual_information.text_type`, use ONLY these values:
+- `"label"` - For feature labels, area names, plan references
+- `"measurement"` - For dimensions, areas, distances, values
+- `"title"` - For main headings, diagram titles, section headers
+- `"legend"` - For map keys, symbols, abbreviations
+- `"note"` - For explanatory text, legal statements, conditions
+- `"warning"` - For cautionary text, important notices
+- `"other"` - For any text that doesn't fit the above categories
+
+### Confidence Level (analysis_confidence)
+For `analysis_confidence`, use ONLY these values:
+- `"high"` - When analysis is comprehensive and confident
+- `"medium"` - When analysis has some uncertainty
+- `"low"` - When analysis has significant limitations
+
+### Element Type (element_type)
+For `building_elements.element_type`, use ONLY these values:
+- `"building"` - Building structures
+- `"boundary"` - Boundary elements
+- `"infrastructure"` - Infrastructure elements
+- `"environmental"` - Environmental features
+- `"other"` - Any other element type
+
+### Analysis Type (analysis_type)
+For `analysis_metadata.analysis_type`, use ONLY these values:
+- `"general"` - General analysis
+- `"comprehensive"` - Comprehensive analysis
+- `"basic"` - Basic analysis
+- `"other"` - Any other analysis type
+
+**CRITICAL: Do not invent new enum values. If unsure, use "other" for text_type or the most appropriate existing value.**
+
+## Unknown Diagram Analysis Objectives
 
 Since this diagram type is unclassified, perform comprehensive analysis to identify:
 

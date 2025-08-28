@@ -54,6 +54,44 @@ Focus on: {{ seed_snippets | tojson }}
 Analyzing: {{ diagram_filenames | join(", ") }}
 {% endif %}
 
+## Schema Compliance Requirements
+
+**IMPORTANT: Use ONLY the following enum values as specified in the schema:**
+
+### Text Type (text_type)
+For `textual_information.text_type`, use ONLY these values:
+- `"label"` - For plant labels, area names, plan references
+- `"measurement"` - For dimensions, areas, distances, heights
+- `"title"` - For main headings, plan titles, section headers
+- `"legend"` - For map keys, symbols, abbreviations
+- `"note"` - For explanatory text, legal statements, conditions
+- `"warning"` - For cautionary text, important notices
+- `"other"` - For any text that doesn't fit the above categories
+
+### Confidence Level (analysis_confidence)
+For `analysis_confidence`, use ONLY these values:
+- `"high"` - When analysis is comprehensive and confident
+- `"medium"` - When analysis has some uncertainty
+- `"low"` - When analysis has significant limitations
+
+### Environmental Type (environmental_type)
+For `environmental_elements.environmental_type`, use ONLY these values:
+- `"vegetation"` - Natural vegetation areas
+- `"planting"` - Planted areas
+- `"hardscape"` - Hard landscape features
+- `"water_feature"` - Water features
+- `"other"` - Any other environmental feature
+
+### Vegetation Type (vegetation_type)
+For `environmental_elements.vegetation_type`, use ONLY these values:
+- `"tree"` - Trees
+- `"shrub"` - Shrubs
+- `"ground_cover"` - Ground cover plants
+- `"grass"` - Grass areas
+- `"other"` - Any other vegetation type
+
+**CRITICAL: Do not invent new enum values. If unsure, use "other" for text_type or the most appropriate existing value.**
+
 ## Landscape Plan Analysis Objectives
 
 ### 1. Environmental Elements (environmental_elements)

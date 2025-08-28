@@ -54,7 +54,43 @@ Focus on: {{ seed_snippets | tojson }}
 Analyzing: {{ diagram_filenames | join(", ") }}
 {% endif %}
 
-## Strata Analysis Objectives
+## Schema Compliance Requirements
+
+**IMPORTANT: Use ONLY the following enum values as specified in the schema:**
+
+### Text Type (text_type)
+For `textual_information.text_type`, use ONLY these values:
+- `"label"` - For lot numbers, area names, plan references
+- `"measurement"` - For lot areas, dimensions, distances
+- `"title"` - For main headings, plan titles, section headers
+- `"legend"` - For map keys, symbols, abbreviations
+- `"note"` - For explanatory text, legal statements, conditions
+- `"warning"` - For cautionary text, important notices
+- `"other"` - For any text that doesn't fit the above categories
+
+### Confidence Level (analysis_confidence)
+For `analysis_confidence`, use ONLY these values:
+- `"high"` - When analysis is comprehensive and confident
+- `"medium"` - When analysis has some uncertainty
+- `"low"` - When analysis has significant limitations
+
+### Building Type (building_type)
+For `building_elements.building_type`, use ONLY these values:
+- `"residential"` - Residential units
+- `"commercial"` - Commercial units
+- `"mixed_use"` - Mixed use units
+- `"other"` - Any other building type
+
+### Area Type (area_type)
+For `building_elements.area_type`, use ONLY these values:
+- `"exclusive_use"` - Exclusive use areas
+- `"common_area"` - Common areas
+- `"limited_common"` - Limited common areas
+- `"other"` - Any other area type
+
+**CRITICAL: Do not invent new enum values. If unsure, use "other" for text_type or the most appropriate existing value.**
+
+## Strata Plan Analysis Objectives
 
 ### 1. Boundary Elements (boundary_elements)
 **Extract strata lot boundaries:**

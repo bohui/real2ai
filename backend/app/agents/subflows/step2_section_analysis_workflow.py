@@ -288,6 +288,7 @@ class Step2AnalysisWorkflow:
             "purchase_method": parent_state.get("purchase_method"),
             "use_category": parent_state.get("use_category"),
             "property_condition": parent_state.get("property_condition"),
+            "contract_metadata": None,  # Will be populated by PrepareContextNode
             # Initialize results as None
             "parties_property": None,
             "financial_terms": None,

@@ -54,7 +54,46 @@ Focus on: {{ seed_snippets | tojson }}
 Analyzing: {{ diagram_filenames | join(", ") }}
 {% endif %}
 
-## Zoning Analysis Objectives Objectives
+## Schema Compliance Requirements
+
+**IMPORTANT: Use ONLY the following enum values as specified in the schema:**
+
+### Text Type (text_type)
+For `textual_information.text_type`, use ONLY these values:
+- `"label"` - For zone labels, area names, plan references
+- `"measurement"` - For zone dimensions, areas, distances
+- `"title"` - For main headings, map titles, section headers
+- `"legend"` - For map keys, symbols, abbreviations
+- `"note"` - For explanatory text, legal statements, conditions
+- `"warning"` - For cautionary text, important notices
+- `"other"` - For any text that doesn't fit the above categories
+
+### Confidence Level (analysis_confidence)
+For `analysis_confidence`, use ONLY these values:
+- `"high"` - When analysis is comprehensive and confident
+- `"medium"` - When analysis has some uncertainty
+- `"low"` - When analysis has significant limitations
+
+### Zoning Type (zoning_type)
+For `zoning_elements.zoning_type`, use ONLY these values:
+- `"residential"` - Residential zones
+- `"commercial"` - Commercial zones
+- `"industrial"` - Industrial zones
+- `"mixed_use"` - Mixed use zones
+- `"agricultural"` - Agricultural zones
+- `"conservation"` - Conservation zones
+- `"other"` - Any other zoning type
+
+### Development Control (development_control)
+For `zoning_elements.development_control`, use ONLY these values:
+- `"permitted"` - Permitted development
+- `"prohibited"` - Prohibited development
+- `"conditional"` - Conditional development
+- `"other"` - Any other development control
+
+**CRITICAL: Do not invent new enum values. If unsure, use "other" for text_type or the most appropriate existing value.**
+
+## Zoning Map Analysis Objectives
 
 ### 1. Environmental Elements (environmental_elements)
 **Map all zoning areas and overlays:**

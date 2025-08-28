@@ -54,6 +54,54 @@ Focus on: {{ seed_snippets | tojson }}
 Analyzing: {{ diagram_filenames | join(", ") }}
 {% endif %}
 
+## Schema Compliance Requirements
+
+**IMPORTANT: Use ONLY the following enum values as specified in the schema:**
+
+### Text Type (text_type)
+For `textual_information.text_type`, use ONLY these values:
+- `"label"` - For lot numbers, street names, plan references
+- `"measurement"` - For dimensions, distances, areas, bearings
+- `"title"` - For main headings, plan titles, section headers
+- `"legend"` - For map keys, symbols, abbreviations
+- `"note"` - For explanatory text, legal statements, conditions
+- `"warning"` - For cautionary text, important notices
+- `"other"` - For any text that doesn't fit the above categories
+
+### Confidence Level (analysis_confidence)
+For `analysis_confidence`, use ONLY these values:
+- `"high"` - When analysis is comprehensive and confident
+- `"medium"` - When analysis has some uncertainty
+- `"low"` - When analysis has significant limitations
+
+### Boundary Type (boundary_type)
+For `boundary_elements.boundary_type`, use ONLY these values:
+- `"front"` - Front boundary of the property
+- `"rear"` - Rear boundary of the property
+- `"side"` - Side boundaries of the property
+- `"common"` - Common boundaries with other properties
+
+### Building Type (building_type)
+For `building_elements.building_type`, use ONLY these values:
+- `"house"` - Main residential building
+- `"garage"` - Garage or carport structure
+- `"shed"` - Storage or utility building
+- `"pool"` - Swimming pool or spa
+- `"deck"` - Outdoor deck or patio
+- `"carport"` - Covered parking area
+- `"other"` - Any other building type
+
+### Infrastructure Type (infrastructure_type)
+For `infrastructure_elements.infrastructure_type`, use ONLY these values:
+- `"road"` - Road infrastructure
+- `"sewer"` - Sewerage infrastructure
+- `"water"` - Water supply infrastructure
+- `"stormwater"` - Drainage infrastructure
+- `"power"` - Electrical infrastructure
+- `"telecommunications"` - Communication infrastructure
+
+**CRITICAL: Do not invent new enum values. If unsure, use "other" for text_type or the most appropriate existing value.**
+
 ## Site Plan Analysis Objectives
 
 ### 1. Property Boundaries (boundary_elements)

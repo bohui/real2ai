@@ -11,6 +11,7 @@ class TextType(str, Enum):
     TITLE = "title"
     LEGEND = "legend"
     NOTE = "note"
+    WARNING = "warning"
     OTHER = "other"
 
 

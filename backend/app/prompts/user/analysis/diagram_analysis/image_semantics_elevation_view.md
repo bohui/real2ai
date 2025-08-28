@@ -54,7 +54,44 @@ Focus on: {{ seed_snippets | tojson }}
 Analyzing: {{ diagram_filenames | join(", ") }}
 {% endif %}
 
-## Elevation View Analysis Objectives Objectives
+## Schema Compliance Requirements
+
+**IMPORTANT: Use ONLY the following enum values as specified in the schema:**
+
+### Text Type (text_type)
+For `textual_information.text_type`, use ONLY these values:
+- `"label"` - For elevation labels, feature names, plan references
+- `"measurement"` - For heights, dimensions, distances, levels
+- `"title"` - For main headings, elevation titles, section headers
+- `"legend"` - For map keys, symbols, abbreviations
+- `"note"` - For explanatory text, legal statements, conditions
+- `"warning"` - For cautionary text, important notices
+- `"other"` - For any text that doesn't fit the above categories
+
+### Confidence Level (analysis_confidence)
+For `analysis_confidence`, use ONLY these values:
+- `"high"` - When analysis is comprehensive and confident
+- `"medium"` - When analysis has some uncertainty
+- `"low"` - When analysis has significant limitations
+
+### Building Type (building_type)
+For `building_elements.building_type`, use ONLY these values:
+- `"residential"` - Residential buildings
+- `"commercial"` - Commercial buildings
+- `"industrial"` - Industrial buildings
+- `"mixed_use"` - Mixed use buildings
+- `"other"` - Any other building type
+
+### Elevation Type (elevation_type)
+For `building_elements.elevation_type`, use ONLY these values:
+- `"front"` - Front elevation
+- `"rear"` - Rear elevation
+- `"side"` - Side elevation
+- `"other"` - Any other elevation type
+
+**CRITICAL: Do not invent new enum values. If unsure, use "other" for text_type or the most appropriate existing value.**
+
+## Elevation View Analysis Objectives
 
 ### 1. Building Elements (building_elements)
 **Document building facades and external features:**

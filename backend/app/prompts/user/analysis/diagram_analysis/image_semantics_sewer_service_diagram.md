@@ -54,7 +54,44 @@ Focus on: {{ seed_snippets | tojson }}
 Analyzing: {{ diagram_filenames | join(", ") }}
 {% endif %}
 
-## Sewer Infrastructure Analysis Objectives
+## Schema Compliance Requirements
+
+**IMPORTANT: Use ONLY the following enum values as specified in the schema:**
+
+### Text Type (text_type)
+For `textual_information.text_type`, use ONLY these values:
+- `"label"` - For pipe labels, manhole numbers, plan references
+- `"measurement"` - For pipe diameters, depths, distances, flows
+- `"title"` - For main headings, diagram titles, section headers
+- `"legend"` - For map keys, symbols, abbreviations
+- `"note"` - For explanatory text, legal statements, conditions
+- `"warning"` - For cautionary text, important notices
+- `"other"` - For any text that doesn't fit the above categories
+
+### Confidence Level (analysis_confidence)
+For `analysis_confidence`, use ONLY these values:
+- `"high"` - When analysis is comprehensive and confident
+- `"medium"` - When analysis has some uncertainty
+- `"low"` - When analysis has significant limitations
+
+### Infrastructure Type (infrastructure_type)
+For `infrastructure_elements.infrastructure_type`, use ONLY these values:
+- `"sewer"` - Sewerage infrastructure
+- `"water"` - Water supply infrastructure
+- `"stormwater"` - Drainage infrastructure
+- `"other"` - Any other infrastructure type
+
+### Pipe Material (pipe_material)
+For `infrastructure_elements.pipe_material`, use ONLY these values:
+- `"concrete"` - Concrete pipes
+- `"clay"` - Clay pipes
+- `"plastic"` - Plastic pipes
+- `"metal"` - Metal pipes
+- `"other"` - Any other pipe material
+
+**CRITICAL: Do not invent new enum values. If unsure, use "other" for text_type or the most appropriate existing value.**
+
+## Sewer Service Diagram Analysis Objectives
 
 ### 1. Infrastructure Elements (infrastructure_elements)
 **Map all sewer infrastructure:**

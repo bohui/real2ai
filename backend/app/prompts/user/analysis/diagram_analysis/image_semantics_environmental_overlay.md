@@ -54,6 +54,43 @@ Focus on: {{ seed_snippets | tojson }}
 Analyzing: {{ diagram_filenames | join(", ") }}
 {% endif %}
 
+## Schema Compliance Requirements
+
+**IMPORTANT: Use ONLY the following enum values as specified in the schema:**
+
+### Text Type (text_type)
+For `textual_information.text_type`, use ONLY these values:
+- `"label"` - For overlay labels, area names, plan references
+- `"measurement"` - For dimensions, areas, distances, boundaries
+- `"title"` - For main headings, map titles, section headers
+- `"legend"` - For map keys, symbols, abbreviations
+- `"note"` - For explanatory text, legal statements, conditions
+- `"warning"` - For cautionary text, important notices
+- `"other"` - For any text that doesn't fit the above categories
+
+### Confidence Level (analysis_confidence)
+For `analysis_confidence`, use ONLY these values:
+- `"high"` - When analysis is comprehensive and confident
+- `"medium"` - When analysis has some uncertainty
+- `"low"` - When analysis has significant limitations
+
+### Environmental Type (environmental_type)
+For `environmental_elements.environmental_type`, use ONLY these values:
+- `"vegetation"` - Natural vegetation areas
+- `"water_body"` - Water bodies
+- `"wetland"` - Wetland areas
+- `"habitat"` - Wildlife habitat areas
+- `"other"` - Any other environmental feature
+
+### Protection Level (protection_level)
+For `environmental_elements.protection_level`, use ONLY these values:
+- `"high"` - High protection areas
+- `"medium"` - Medium protection areas
+- `"low"` - Low protection areas
+- `"other"` - Any other protection level
+
+**CRITICAL: Do not invent new enum values. If unsure, use "other" for text_type or the most appropriate existing value.**
+
 ## Environmental Overlay Analysis Objectives
 
 ### 1. Environmental Elements (environmental_elements)
