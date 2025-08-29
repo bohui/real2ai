@@ -59,6 +59,7 @@ CREATE TABLE contracts (
     purchase_method purchase_method,
     use_category use_category,
     extracted_entity JSONB DEFAULT '{}'::jsonb,
+    extracted_sections JSONB DEFAULT '{}'::jsonb,
 
     parties_property JSONB DEFAULT '{}'::jsonb,
     financial_terms JSONB DEFAULT '{}'::jsonb,
@@ -599,6 +600,7 @@ CREATE INDEX idx_contracts_type_state ON contracts(contract_type, state);
 -- Ensure the new per-section columns exist (and remove deprecated ones) in upgrade scenarios
 ALTER TABLE contracts 
     ADD COLUMN IF NOT EXISTS parties_property JSONB DEFAULT '{}'::jsonb,
+    ADD COLUMN IF NOT EXISTS extracted_sections JSONB DEFAULT '{}'::jsonb,
     ADD COLUMN IF NOT EXISTS financial_terms JSONB DEFAULT '{}'::jsonb,
     ADD COLUMN IF NOT EXISTS conditions JSONB DEFAULT '{}'::jsonb,
     ADD COLUMN IF NOT EXISTS warranties JSONB DEFAULT '{}'::jsonb,

@@ -208,7 +208,8 @@ class AuthService:
             if not profile:
                 logger.warning(f"No profile found for user_id: {token_data.user_id}")
                 raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="User not authenticated",
                 )
 
             logger.info(

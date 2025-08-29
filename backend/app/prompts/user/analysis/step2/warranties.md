@@ -12,7 +12,6 @@ optional_variables:
   - "legal_requirements_matrix"
   - "contract_type"
   - "australian_state"
-  - "retrieval_index_id"
   - "seed_snippets"
 model_compatibility: ["gemini-2.5-flash", "gpt-4"]
 max_tokens: 8000
@@ -179,7 +178,7 @@ Previously extracted warranty data (use as baseline; verify and reconcile):
 ## Analysis Instructions (Seeds + Retrieval + Metadata Scoping)
 
 1. Use `extracted_entity` and `metadata` as the baseline. Verify and enrich using `seed_snippets` as primary evidence.
-2. If baseline + seeds are insufficient, retrieve targeted warranties/representations/disclosures from `retrieval_index_id` with concise queries.
+2. If baseline + seeds are insufficient, retrieve targeted warranties/representations/disclosures with concise queries.
 3. Classify each warranty and evaluate enforceability, scope, exclusions, and durations. Review buyer acknowledgments and statutory warranties.
 4. Assess overall warranty risk and buyer protection; provide clause citations and recommendations.
 5. Record whether retrieval was used and how many additional snippets were incorporated.

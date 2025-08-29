@@ -8,13 +8,12 @@ from app.agents.states.base import LangGraphBaseState
 class Step3SynthesisState(LangGraphBaseState):
     """LangGraph state schema for Step 3 synthesis (risk, actions, compliance, report)."""
 
-    # Context from parent/state
-    australian_state: Optional[str]
-    contract_type: Optional[str]
+    # Context from parent/state - must be annotated for concurrent updates
+    australian_state: Annotated[Optional[str], lambda x, y: y]
+    contract_type: Annotated[Optional[str], lambda x, y: y]
 
-    # Seeds / retrieval context
+    # Seeds context
     section_seeds: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
-    retrieval_index_id: Annotated[Optional[str], lambda x, y: y]
 
     # Inputs (from Step 2)
     special_risks_result: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
@@ -36,6 +35,6 @@ class Step3SynthesisState(LangGraphBaseState):
     compliance_summary: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
     buyer_report: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
 
-    # Tracking
-    start_time: Optional[datetime]
+    # Tracking - must be annotated for concurrent updates
+    start_time: Annotated[Optional[datetime], lambda x, y: y]
     processing_errors: Annotated[List[str], add]

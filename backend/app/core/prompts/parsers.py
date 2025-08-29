@@ -305,7 +305,14 @@ class RetryingPydanticOutputParser(LCPydanticOutputParser):
     def _attempt_lenient_parsing(
         self, json_data: Dict[str, Any]
     ) -> Optional[BaseModel]:
-        """Attempt lenient parsing that accepts invalid enum values by bypassing validation."""
+        """
+        Attempt lenient parsing that preserves LLM values and skips type validation.
+
+        This method:
+        - Preserves all actual values from LLM response (including invalid enums, malformed dates, etc.)
+        - Only adds default values for completely missing required fields
+        - Bypasses Pydantic validators to skip type checking
+        """
         try:
             # Pydantic v2: construct instance without validation and with proper internals
             # 1) Keep only fields declared on the model to avoid unknown-field noise
@@ -317,15 +324,23 @@ class RetryingPydanticOutputParser(LCPydanticOutputParser):
                 key: value for key, value in json_data.items() if key in allowed_keys
             }
 
-            # 2) Ensure required fields exist; set to None when missing to stabilize access
+            # 2) Ensure required fields exist; if any are missing, raise
             try:
                 schema = self._model.model_json_schema()
                 required_fields = set(schema.get("required", []))
             except Exception:
                 required_fields = set()
-            for required_name in required_fields:
-                if required_name not in filtered_values:
-                    filtered_values[required_name] = None
+
+            missing_required = [
+                name for name in required_fields if name not in filtered_values
+            ]
+            if missing_required:
+                logger.debug(
+                    f"Lenient parsing for {self._model.__name__}: missing required fields {sorted(missing_required)}"
+                )
+                raise ValueError(
+                    f"Missing required fields: {', '.join(sorted(missing_required))}"
+                )
 
             # 3) Build instance without running validators
             instance = self._model.model_construct(
@@ -334,9 +349,17 @@ class RetryingPydanticOutputParser(LCPydanticOutputParser):
 
             # Helpful debug for tracing lenient behavior without spamming logs
             dropped = set(json_data.keys()) - set(filtered_values.keys())
-            if dropped:
+            missing_required_fields = []
+            for required_name in required_fields:
+                if required_name not in json_data:
+                    missing_required_fields.append(required_name)
+
+            if dropped or missing_required_fields:
                 logger.debug(
-                    f"Lenient parsing for {self._model.__name__}: dropped unknown fields {sorted(dropped)}"
+                    f"Lenient parsing for {self._model.__name__}: "
+                    f"preserved all LLM values, "
+                    f"dropped unknown fields {sorted(dropped)}, "
+                    f"missing required fields {sorted(missing_required_fields)}"
                 )
 
             return instance

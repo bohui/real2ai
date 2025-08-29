@@ -19,7 +19,6 @@ from app.schema.enums import (
     UseCategory,
     PropertyCondition,
     TransactionComplexity,
-    SectionKey,
 )
 
 
@@ -346,39 +345,6 @@ class ContractMetadata(BaseModel):
 
 
 # Comprehensive extraction result
-class SectionSeedSnippet(BaseModel):
-    """High-signal snippet selected by Step 1 to seed Step 2 analysis for a section."""
-
-    section_key: SectionKey = Field(..., description="Section identifier (enum)")
-    clause_id: Optional[str] = Field(None, description="Clause id/heading if available")
-    page_number: Optional[int] = Field(None, description="Page number")
-    start_offset: Optional[int] = Field(None, description="Character start offset")
-    end_offset: Optional[int] = Field(None, description="Character end offset")
-    snippet_text: str = Field(..., description="Selected snippet text")
-    selection_rationale: Optional[str] = Field(
-        None, description="Why this snippet was selected"
-    )
-    confidence: Optional[float] = Field(
-        None, ge=0.0, le=1.0, description="Confidence for this selection"
-    )
-
-
-class SectionSeeds(BaseModel):
-    """Aggregated per-section seed snippets and retrieval guidance."""
-
-    retrieval_index_id: Optional[str] = Field(
-        None, description="Identifier/handle for paragraph/clause retrieval index"
-    )
-    retrieval_instructions: Dict[str, str] = Field(
-        default_factory=dict,
-        description="Per-section suggested retrieval queries keyed by section key",
-    )
-    snippets: Dict[str, List[SectionSeedSnippet]] = Field(
-        default_factory=dict,
-        description="Per-section list of seed snippets keyed by section key",
-    )
-
-
 class ContractEntityExtraction(BaseModel):
     """Complete entity extraction results for a contract"""
 
@@ -423,10 +389,7 @@ class ContractEntityExtraction(BaseModel):
         default_factory=list, description="Contact information found"
     )
 
-    # Step 1 planner outputs for Step 2 (seeds + retrieval)
-    section_seeds: Optional[SectionSeeds] = Field(
-        default=None, description="Per-section seed snippets and retrieval guidance"
-    )
+    # Note: Section seeds have been moved to a dedicated schema/output
 
     # Quality assessment
     confidence_score: float = Field(
@@ -457,46 +420,46 @@ class ContractEntityExtraction(BaseModel):
     # )
 
 
-# Diagram-specific entity extraction
-class DiagramEntityExtraction(BaseModel):
-    """Entity extraction specific to diagram analysis"""
+# # Diagram-specific entity extraction
+# class DiagramEntityExtraction(BaseModel):
+#     """Entity extraction specific to diagram analysis"""
 
-    diagram_id: str = Field(..., description="Diagram identifier")
-    diagram_type: str = Field(..., description="Type of diagram")
-    page_number: int = Field(..., description="Page number of diagram")
+#     diagram_id: str = Field(..., description="Diagram identifier")
+#     diagram_type: str = Field(..., description="Type of diagram")
+#     page_number: int = Field(..., description="Page number of diagram")
 
-    # Infrastructure elements
-    infrastructure_elements: List[str] = Field(
-        default_factory=list, description="Infrastructure found in diagram"
-    )
-    utilities: List[str] = Field(default_factory=list, description="Utilities shown")
-    boundaries: List[str] = Field(
-        default_factory=list, description="Boundary information"
-    )
+#     # Infrastructure elements
+#     infrastructure_elements: List[str] = Field(
+#         default_factory=list, description="Infrastructure found in diagram"
+#     )
+#     utilities: List[str] = Field(default_factory=list, description="Utilities shown")
+#     boundaries: List[str] = Field(
+#         default_factory=list, description="Boundary information"
+#     )
 
-    # Measurements and specifications
-    measurements: List[str] = Field(
-        default_factory=list, description="Measurements found"
-    )
-    specifications: List[str] = Field(
-        default_factory=list, description="Technical specifications"
-    )
+#     # Measurements and specifications
+#     measurements: List[str] = Field(
+#         default_factory=list, description="Measurements found"
+#     )
+#     specifications: List[str] = Field(
+#         default_factory=list, description="Technical specifications"
+#     )
 
-    # Risk indicators
-    risk_indicators: List[str] = Field(
-        default_factory=list, description="Potential risk indicators"
-    )
-    compliance_elements: List[str] = Field(
-        default_factory=list, description="Compliance-related elements"
-    )
+#     # Risk indicators
+#     risk_indicators: List[str] = Field(
+#         default_factory=list, description="Potential risk indicators"
+#     )
+#     compliance_elements: List[str] = Field(
+#         default_factory=list, description="Compliance-related elements"
+#     )
 
-    # Metadata
-    extraction_confidence: float = Field(
-        ..., ge=0.0, le=1.0, description="Confidence in diagram analysis"
-    )
-    analysis_notes: List[str] = Field(
-        default_factory=list, description="Analysis notes"
-    )
+#     # Metadata
+#     extraction_confidence: float = Field(
+#         ..., ge=0.0, le=1.0, description="Confidence in diagram analysis"
+#     )
+#     analysis_notes: List[str] = Field(
+#         default_factory=list, description="Analysis notes"
+#     )
 
 
 # Validation helpers

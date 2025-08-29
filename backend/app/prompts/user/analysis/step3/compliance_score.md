@@ -13,7 +13,7 @@ required_variables:
   - "conditions_result"
   - "settlement_logistics_result"
 optional_variables:
-  - "retrieval_index_id"
+  - "address"
 model_compatibility: ["gemini-1.5-flash", "gpt-4"]
 max_tokens: 8000
 temperature_range: [0.1, 0.3]

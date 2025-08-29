@@ -15,7 +15,6 @@ optional_variables:
   - "conditions_result"
   - "legal_requirements_matrix"
   - "contract_type"
-  - "retrieval_index_id"
   - "seed_snippets"
   - "image_semantics_result"
 model_compatibility: ["gemini-2.5-flash", "gpt-4"]
@@ -215,7 +214,7 @@ Use relevant diagram semantics that affect practical settlement logistics (servi
 ## Analysis Instructions (Seeds + Retrieval + Phase 1 Outputs)
 
 1. Use Phase 1 outputs (dependencies above) as baseline. Verify and enrich using `seed_snippets` as primary evidence.
-2. If baseline + seeds are insufficient, retrieve targeted settlement clauses (timing, location/method, required documents, funds, possession, statements/adjustments) from `retrieval_index_id` with concise queries. Record what was retrieved.
+2. If baseline + seeds are insufficient, retrieve targeted settlement clauses (timing, location/method, required documents, funds, possession, statements/adjustments) with concise queries. Record what was retrieved.
 3. Integrate dependencies: incorporate `financial_terms_result` and `conditions_result` when assessing logistics and timing.
 4. Emphasize practical feasibility: identify real-world coordination requirements and bottlenecks.
 5. Apply state-specific procedures and electronic settlement requirements; define fallback procedures if electronic settlement fails.

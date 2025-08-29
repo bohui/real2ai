@@ -44,7 +44,7 @@ async def update_user_profile(
         repo = ProfilesRepository()
         updated = await repo.update_profile(user_id=user.id, **update_data)
         if not updated:
-            raise HTTPException(status_code=404, detail="User profile not found")
+            raise HTTPException(status_code=401, detail="User not authenticated")
 
         return {
             "id": str(updated.user_id),

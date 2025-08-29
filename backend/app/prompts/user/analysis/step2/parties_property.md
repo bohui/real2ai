@@ -11,7 +11,6 @@ optional_variables:
   - "extracted_entity"
   - "legal_requirements_matrix"
   - "contract_type"
-  - "retrieval_index_id"
   - "seed_snippets"
   - "australian_state"
   - "use_category"
@@ -158,7 +157,7 @@ Relevant legal requirements for {{australian_state}} {{contract_type}}:
 
 1. Use `extracted_entity` (and its `metadata`) as the baseline; scope checks per state/contract_type/purchase_method/use_category/property_condition.
 2. Use `seed_snippets` as primary evidence. Cite clause ids/sections where possible.
-3. If seed coverage/confidence is insufficient, perform targeted retrieval from `retrieval_index_id` using concise queries (e.g., names/roles, authority/witness requirements, legal description lot/plan/title). Limit retrieval to only what is necessary.
+3. If seed coverage/confidence is insufficient, perform targeted retrieval using concise queries (e.g., names/roles, authority/witness requirements, legal description lot/plan/title). Limit retrieval to only what is necessary.
 4. Reconcile any discrepancies between seeds, retrieval snippets, and baseline entities; prefer explicit contract language.
 5. Assess risk levels using high/medium/low classification. Provide evidence citations for all findings.
 6. Report whether retrieval was used and how many additional snippets were incorporated.

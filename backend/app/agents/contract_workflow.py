@@ -42,11 +42,15 @@ from app.agents.nodes import (
     DocumentProcessingNode,
     SectionAnalysisNode,
     EntitiesExtractionNode,
+    # New node lives in step1_entities_extraction package; import directly below
     InputValidationNode,
     ErrorHandlingNode,
     RetryProcessingNode,
 )
 from app.agents.nodes.step3_synthesis_node import Step3SynthesisNode
+from app.agents.nodes.step1_entities_extraction.section_extraction_node import (
+    SectionExtractionNode,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -222,6 +226,7 @@ class ContractAnalysisWorkflow:
 
         # Contract Analysis Nodes
         self.entities_extraction_node = EntitiesExtractionNode(self)
+        self.section_extraction_node = SectionExtractionNode(self)
         self.section_analysis_node = SectionAnalysisNode(self)
         # Step 3 Synthesis Node
         self.step3_synthesis_node = Step3SynthesisNode(self)
@@ -236,6 +241,7 @@ class ContractAnalysisWorkflow:
             "input_validation": self.input_validation_node,
             "document_processing": self.document_processing_node,
             "entities_extraction": self.entities_extraction_node,
+            "section_extraction": self.section_extraction_node,
             "section_analysis": self.section_analysis_node,
             "step3_synthesis": self.step3_synthesis_node,
             "error_handling": self.error_handling_node,
@@ -304,6 +310,7 @@ class ContractAnalysisWorkflow:
         workflow.add_node("validate_input", self.validate_input)
         workflow.add_node("process_document", self.process_document)
         workflow.add_node("extract_entities", self.extract_entities)
+        workflow.add_node("extract_sections", self.extract_sections)
         workflow.add_node("extract_terms", self.extract_section_analysis)
         workflow.add_node("synthesize_step3", self.synthesize_step3)
 
@@ -327,11 +334,24 @@ class ContractAnalysisWorkflow:
                 "error": "handle_error",
             },
         )
+        # Fan out to section extraction in parallel when document processing succeeds
+        workflow.add_edge("process_document", "extract_sections")
 
         # After entities extraction, go to terms extraction
         workflow.add_conditional_edges(
             "extract_entities",
             self.check_entities_extraction_success,
+            {
+                "success": "extract_terms",
+                "retry": "retry_processing",
+                "error": "handle_error",
+            },
+        )
+
+        # After section extraction, also go to terms extraction
+        workflow.add_conditional_edges(
+            "extract_sections",
+            self.check_sections_extraction_success,
             {
                 "success": "extract_terms",
                 "retry": "retry_processing",
@@ -366,6 +386,7 @@ class ContractAnalysisWorkflow:
                 "restart_workflow": "validate_input",
                 "retry_document_processing": "process_document",
                 "retry_entities_extraction": "extract_entities",
+                "retry_sections_extraction": "extract_sections",
                 "retry_extraction": "extract_terms",
                 # With simplified workflow, route generic retries
                 "retry_extraction": "extract_terms",
@@ -608,6 +629,18 @@ class ContractAnalysisWorkflow:
                 state, e, "Entities extraction failed"
             )
 
+    async def extract_sections(
+        self, state: RealEstateAgentState
+    ) -> RealEstateAgentState:
+        """Extract section seeds using the section extraction node."""
+        try:
+            return await self.section_extraction_node.execute(state)
+        except Exception as e:
+            logger.error(f"Section extraction failed: {e}")
+            return self.error_handling_node._handle_node_error(
+                state, e, "Section extraction failed"
+            )
+
     def process_document(self, state: RealEstateAgentState) -> RealEstateAgentState:
         """Execute document processing node."""
         return self._run_async_node(
@@ -704,6 +737,21 @@ class ContractAnalysisWorkflow:
                 return "retry"
         except Exception as e:
             logger.error(f"Error checking entities extraction success: {e}")
+            return "error"
+
+    def check_sections_extraction_success(self, state: RealEstateAgentState) -> str:
+        """Check if section seeds extraction was successful."""
+        try:
+            if self._has_error_state(state):
+                return "error"
+            if state.get("extracted_sections"):
+                return "success"
+            elif state.get("section_extraction_skipped"):
+                return "success"
+            else:
+                return "retry"
+        except Exception as e:
+            logger.error(f"Error checking sections extraction success: {e}")
             return "error"
 
     def check_extraction_quality(self, state: RealEstateAgentState) -> str:

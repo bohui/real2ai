@@ -143,6 +143,10 @@ class Contract(TimestampedBaseModel):
         default_factory=dict,
         description="Complete ContractEntityExtraction payload (for reference)",
     )
+    extracted_sections: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Section seeds output persisted separately from extracted_entity",
+    )
     # Back-compat fields retained at model level (not persisted)
     ocr_confidence: Dict[str, Any] = Field(default_factory=dict)
     contract_terms: Dict[str, Any] = Field(default_factory=dict)

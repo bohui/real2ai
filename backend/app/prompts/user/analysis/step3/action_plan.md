@@ -14,7 +14,6 @@ required_variables:
   - "disclosure_compliance_result"
   - "conditions_result"
 optional_variables:
-  - "retrieval_index_id"
 model_compatibility: ["gemini-1.5-flash", "gpt-4"]
 max_tokens: 8000
 temperature_range: [0.1, 0.3]

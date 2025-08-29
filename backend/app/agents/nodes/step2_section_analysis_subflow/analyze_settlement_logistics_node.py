@@ -38,7 +38,6 @@ class SettlementLogisticsNode(ContractLLMNode):
                 "analysis_timestamp": datetime.now(UTC).isoformat(),
                 "australian_state": state.get("australian_state") or "NSW",
                 "contract_type": state.get("contract_type") or "purchase_agreement",
-                "retrieval_index_id": state.get("retrieval_index_id"),
                 "legal_requirements_matrix": state.get("legal_requirements_matrix", {}),
                 "seed_snippets": (state.get("section_seeds", {}) or {})
                 .get("snippets", {})

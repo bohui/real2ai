@@ -25,7 +25,6 @@ import traceback
 from app.utils.json_utils import safe_json_loads
 
 logger = logging.getLogger(__name__)
-from app.database.connection import get_service_role_connection
 
 
 class ArtifactsRepository:
@@ -74,6 +73,8 @@ class ArtifactsRepository:
             raise ValueError(f"Invalid params fingerprint: {params_fingerprint}")
 
         # Use context manager for proper connection management
+        from app.database.connection import get_service_role_connection
+
         async with get_service_role_connection() as conn:
             row = await conn.fetchrow(
                 """
@@ -126,6 +127,8 @@ class ArtifactsRepository:
         Returns:
             FullTextArtifact if found, None otherwise
         """
+        from app.database.connection import get_service_role_connection
+
         async with get_service_role_connection() as conn:
             row = await conn.fetchrow(
                 """
@@ -202,6 +205,8 @@ class ArtifactsRepository:
             raise ValueError(f"Invalid params fingerprint: {params_fingerprint}")
 
         # Use context manager for proper connection management
+        from app.database.connection import get_service_role_connection
+
         async with get_service_role_connection() as conn:
             # Use advisory lock to prevent stampedes on first compute
             lock_key = hash(content_hmac) & 0x7FFFFFFF  # Positive 32-bit integer
@@ -295,6 +300,8 @@ class ArtifactsRepository:
         if not validate_params_fingerprint(params_fingerprint):
             raise ValueError(f"Invalid params fingerprint: {params_fingerprint}")
 
+        from app.database.connection import get_service_role_connection
+
         async with get_service_role_connection() as conn:
             rows = await conn.fetch(
                 """
@@ -373,6 +380,8 @@ class ArtifactsRepository:
         if not validate_params_fingerprint(params_fingerprint):
             raise ValueError(f"Invalid params fingerprint: {params_fingerprint}")
 
+        from app.database.connection import get_service_role_connection
+
         async with get_service_role_connection() as conn:
             # Try insert first
             await conn.execute(
@@ -445,6 +454,8 @@ class ArtifactsRepository:
         if not validate_params_fingerprint(params_fingerprint):
             raise ValueError(f"Invalid params fingerprint: {params_fingerprint}")
 
+        from app.database.connection import get_service_role_connection
+
         async with get_service_role_connection() as conn:
             rows = await conn.fetch(
                 """
@@ -503,6 +514,8 @@ class ArtifactsRepository:
             raise ValueError(f"Invalid content HMAC: {content_hmac}")
         if not validate_params_fingerprint(params_fingerprint):
             raise ValueError(f"Invalid params fingerprint: {params_fingerprint}")
+
+        from app.database.connection import get_service_role_connection
 
         async with get_service_role_connection() as conn:
             # Try insert first
@@ -589,6 +602,8 @@ class ArtifactsRepository:
         if not validate_params_fingerprint(params_fingerprint):
             raise ValueError(f"Invalid params fingerprint: {params_fingerprint}")
 
+        from app.database.connection import get_service_role_connection
+
         async with get_service_role_connection() as conn:
             rows = await conn.fetch(
                 """
@@ -650,6 +665,8 @@ class ArtifactsRepository:
             raise ValueError(f"Invalid content HMAC: {content_hmac}")
         if not validate_params_fingerprint(params_fingerprint):
             raise ValueError(f"Invalid params fingerprint: {params_fingerprint}")
+
+        from app.database.connection import get_service_role_connection
 
         async with get_service_role_connection() as conn:
             rows = await conn.fetch(
@@ -715,6 +732,8 @@ class ArtifactsRepository:
             raise ValueError(f"Invalid content HMAC: {content_hmac}")
         if not validate_params_fingerprint(params_fingerprint):
             raise ValueError(f"Invalid params fingerprint: {params_fingerprint}")
+
+        from app.database.connection import get_service_role_connection
 
         async with get_service_role_connection() as conn:
             # Get page artifact summary
@@ -868,6 +887,8 @@ class ArtifactsRepository:
         if content_type not in ["text", "markdown", "json_metadata"]:
             raise ValueError(f"Invalid content_type: {content_type}")
 
+        from app.database.connection import get_service_role_connection
+
         async with get_service_role_connection() as conn:
             lock_key = (
                 hash(
@@ -991,6 +1012,8 @@ class ArtifactsRepository:
         if artifact_type not in ["diagram", "image_jpg", "image_png"]:
             raise ValueError(f"Invalid artifact_type: {artifact_type}")
 
+        from app.database.connection import get_service_role_connection
+
         async with get_service_role_connection() as conn:
             lock_key = (
                 hash(
@@ -1100,6 +1123,8 @@ class ArtifactsRepository:
         if not validate_content_hmac(content_hmac):
             raise ValueError(f"Invalid content HMAC: {content_hmac}")
 
+        from app.database.connection import get_service_role_connection
+
         async with get_service_role_connection() as conn:
             if params_fingerprint:
                 # Query with specific params_fingerprint
@@ -1183,6 +1208,8 @@ class ArtifactsRepository:
         """
         if not validate_content_hmac(content_hmac):
             raise ValueError(f"Invalid content HMAC: {content_hmac}")
+
+        from app.database.connection import get_service_role_connection
 
         async with get_service_role_connection() as conn:
             if params_fingerprint:

@@ -19,7 +19,6 @@ optional_variables:
   - "purchase_method"
   - "property_condition"
   - "legal_requirements_matrix"
-  - "retrieval_index_id"
   - "seed_snippets"
   - "diagram_filenames"
   - "extracted_entity"

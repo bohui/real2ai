@@ -50,7 +50,6 @@ class SpecialRisksNode(ContractLLMNode):
                 "australian_state": state.get("australian_state") or "NSW",
                 "contract_type": state.get("contract_type") or "purchase_agreement",
                 "legal_requirements_matrix": state.get("legal_requirements_matrix", {}),
-                "retrieval_index_id": state.get("retrieval_index_id"),
                 "seed_snippets": (state.get("section_seeds", {}) or {})
                 .get("snippets", {})
                 .get("special_risks"),

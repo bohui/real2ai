@@ -974,10 +974,10 @@ async def get_contract_analysis(
             ),
         }
 
-        # Add cache information if available
-        if analysis_result.get("cached_from"):
-            response["cached"] = True
-            response["cache_source"] = analysis_result["cached_from"]
+        # Add cache information with explicit defaults
+        cached_from = analysis_result.get("cached_from")
+        response["cached"] = bool(cached_from)
+        response["cache_source"] = cached_from
 
         logger.info(
             f"get_contract_analysis success: user_id={user.id}, contract_id={contract_id}, status={analysis.status}"

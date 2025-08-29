@@ -264,7 +264,7 @@ async def change_password(
         # The postgrest client already has RLS auth applied via middleware/context
         profile_result = client.table("profiles").select("id,email").limit(1).execute()
         if not profile_result.data:
-            raise HTTPException(status_code=404, detail="User profile not found")
+            raise HTTPException(status_code=401, detail="User not authenticated")
         email = profile_result.data[0]["email"]
 
         # Verify current password by sign-in

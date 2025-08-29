@@ -61,7 +61,6 @@ class TestPartiesPropertyNode:
             "property_condition": "existing",
             "purchase_method": "private_treaty",
             "legal_requirements_matrix": {"NSW": {"purchase_agreement": {}}},
-            "retrieval_index_id": "test_index_123",
             "section_seeds": {
                 "snippets": {
                     "parties_property": ["clause_1", "clause_2"],

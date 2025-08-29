@@ -12,7 +12,6 @@ optional_variables:
   - "legal_requirements_matrix"
   - "contract_type"
   - "australian_state"
-  - "retrieval_index_id"
   - "seed_snippets"
 model_compatibility: ["gemini-2.5-flash", "gpt-4"]
 max_tokens: 8000
@@ -179,7 +178,7 @@ Previously extracted condition data (use as baseline; verify and reconcile):
 ## Analysis Instructions (Seeds + Retrieval + Metadata Scoping)
 
 1. Use `extracted_entity.conditions` and `metadata` as the baseline. Verify and enrich using `seed_snippets` as primary evidence.
-2. If baseline + seeds are insufficient, perform targeted retrieval from `retrieval_index_id` for specific condition types (finance, inspection, special conditions) and deadlines (business days vs calendar).
+2. If baseline + seeds are insufficient, perform targeted retrieval for specific condition types (finance, inspection, special conditions) and deadlines (business days vs calendar).
 3. Classify each condition (standard/special, precedent/subsequent), identify responsible parties, requirements, deadlines, and dependencies.
 4. Compute or verify deadlines (use business day calculations where applicable) and map dependencies chronologically.
 5. Assess buyer protection and risk levels (high/medium/low). Provide clause citations for all findings.

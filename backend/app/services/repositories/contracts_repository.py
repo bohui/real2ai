@@ -361,6 +361,7 @@ class ContractsRepository:
             ocr_confidence=_normalize_json(row.get("ocr_confidence")),
             contract_terms=_normalize_json(row.get("contract_terms")),
             extracted_entity=_normalize_json(row.get("extracted_entity")),
+            extracted_sections=_normalize_json(row.get("extracted_sections")),
             parties_property=_normalize_json(row.get("parties_property")),
             financial_terms=_normalize_json(row.get("financial_terms")),
             conditions=_normalize_json(row.get("conditions")),
@@ -432,6 +433,7 @@ class ContractsRepository:
 
                 # Validate column name to avoid SQL injection; allow only known keys
                 allowed = {
+                    "extracted_sections",
                     "parties_property",
                     "financial_terms",
                     "conditions",
@@ -590,6 +592,7 @@ class ContractsRepository:
                                COALESCE(ocr_confidence, '{}'::jsonb) as ocr_confidence,
                                state,
                                COALESCE(extracted_entity, '{}'::jsonb) as extracted_entity,
+                               COALESCE(extracted_sections, '{}'::jsonb) as extracted_sections,
                                COALESCE(parties_property, '{}'::jsonb) as parties_property,
                                COALESCE(financial_terms, '{}'::jsonb) as financial_terms,
                                COALESCE(conditions, '{}'::jsonb) as conditions,
@@ -622,6 +625,7 @@ class ContractsRepository:
                 SELECT id, content_hash, contract_type, purchase_method, use_category,
                        state,
                        COALESCE(extracted_entity, '{}'::jsonb) as extracted_entity,
+                       COALESCE(extracted_sections, '{}'::jsonb) as extracted_sections,
                        COALESCE(parties_property, '{}'::jsonb) as parties_property,
                        COALESCE(financial_terms, '{}'::jsonb) as financial_terms,
                        COALESCE(conditions, '{}'::jsonb) as conditions,
@@ -670,6 +674,7 @@ class ContractsRepository:
             use_category=row.get("use_category"),
             state=row.get("state") or row.get("australian_state"),
             extracted_entity=_normalize_json(row.get("extracted_entity")),
+            extracted_sections=_normalize_json(row.get("extracted_sections")),
             ocr_confidence=_normalize_json(row.get("ocr_confidence")),
             parties_property=_normalize_json(row.get("parties_property")),
             financial_terms=_normalize_json(row.get("financial_terms")),

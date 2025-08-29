@@ -3,7 +3,7 @@ type: "system"
 category: "extraction"
 name: "entity_extraction_core"
 version: "2.0.0"
-description: "Standards for extracting structured entities and section seeds from Australian real estate contracts"
+description: "Standards for extracting structured entities from Australian real estate contracts"
 dependencies: []
 inheritance: null
 model_compatibility: ["gemini-2.5-flash", "gpt-4", "claude-3-opus"]
@@ -13,11 +13,11 @@ priority: 110
 tags: ["core", "system", "entity-extraction"]
 ---
 
-# Entity Extraction & Section Seeds Standards
+# Entity Extraction Standards
 
 ## Quality Standards
 
-- Ensure outputs conform to the `ContractEntityExtraction` schema (including `section_seeds`).
+- Ensure outputs conform to the `ContractEntityExtraction` schema .
 - Populate enums using lowercase values where known; otherwise set null.
 - Normalize dates to YYYY-MM-DD while preserving original `date_text`.
 - Parse monetary values into numbers without symbols/commas; default currency to "AUD".
@@ -54,58 +54,6 @@ tags: ["core", "system", "entity-extraction"]
 - Maintain internal consistency across entities (e.g., parties referenced in conditions should appear in `parties`).
 - Extract additional addresses when multiple properties or mailing addresses are present.
 - For strata properties, set `property_details.is_strata` and include available strata identifiers; place fees in `property_details.strata_fees` as a FinancialAmount when present.
-
-## Entity Indicators
-
-- property_address:
-  - Indicators: "Lot", "Plan/DP/SP", "Title Reference/CT", 4-digit postcodes, state abbreviations (NSW, VIC, QLD, SA, WA, TAS, ACT, NT), street patterns (number + street type)
-  - Guidance: Prefer `full_address`; include lot/plan/title when present; set `property_type` if named
-
-- parties:
-  - Indicators: Role keywords ("Vendor/Seller", "Purchaser/Buyer", "Landlord", "Tenant"), legal entity markers ("Pty Ltd", ABN/ACN), and solicitor fields ("Solicitor/Conveyancer")
-  - Guidance: Populate contact and solicitor fields when explicitly provided; infer role via nearest headings/labels
-
-- dates:
-  - Indicators: "Exchange", "Settlement/Completion", "Cooling-off", "Sunset", "Notice", "On or before", "Business days"
-  - Guidance: Normalize to YYYY-MM-DD in `date_value`, retain original in `date_text`, set `is_business_days` when stated; set `date_type` enum accordingly
-  - **CRITICAL**: Use `null` for `date_value` if date cannot be determined; never use placeholders
-
-- financial_amounts:
-  - Indicators: "$", "AUD", "deposit", "balance", "price", "%", "GST", "duty", "adjustments"
-  - Guidance: Strip symbols/commas for `amount`; default `currency` to "AUD" unless specified; set `amount_type` via cues
-  - **CRITICAL**: Use `null` for `amount` if value cannot be determined; never use placeholders
-  - **CRITICAL**: Use valid `amount_type` enum values: purchase_price, deposit, balance, stamp_duty, land_value, gst, transfer_fees, strata_fees, land_tax, legal_fees, agent_commission, conveyancing_fees, other_fees, etc.
-
-- legal_references:
-  - Indicators: "Act", "Regulation", sections (e.g., "s 66W", "s. 27"), clause references, state names
-  - Guidance: Populate `act_name`, `section_number`, and `state_specific` where available
-  - **CRITICAL**: Set `state_specific` to `null` for Commonwealth legislation; never use "Cth"
-
-- conditions:
-  - Indicators: "Special Condition/SC", "Subject to" (finance/building & pest/valuation/DA), "Time is of the essence"
-  - Guidance: Set `is_special_condition`/`is_standard_condition` and `requires_action`; include `action_by_whom` where named
-  - Deadlines: capture `deadline_text`; normalize `action_deadline` when determinable
-
-- property_details:
-  - Indicators: Zoning/planning ("Zoning/LEP", codes like R2, B4), easements/encumbrances, bedrooms/bathrooms/parking counts, strata cues ("Strata Plan/SP", "Owners Corporation", "levies")
-  - Guidance: Set `is_strata`, `strata_plan_number`; store levies in `strata_fees` as FinancialAmount
-
-- additional_addresses:
-  - Indicators: Mailing/service/registered office addresses, "PO Box", "c/-"
-  - Guidance: Use when distinct from the main property address
-
-- contact_references:
-  - Indicators: Phone numbers (AU formats), email addresses
-  - Guidance: Store raw strings as found
-
-## Section Seeds (Planner) Rules
-
-- Use `SectionKey` enum values for `section_key`.
-- Select 1–5 high-signal snippets per relevant section; avoid redundancy.
-- Each snippet includes: `section_key`, `clause_id` (if available), `page_number`, `start_offset`, `end_offset`, `snippet_text`, `selection_rationale`, `confidence`.
-- Provide concise `retrieval_instructions[section]` query hints.
-- Set `section_seeds.retrieval_index_id` to null if unknown (system may populate later).
-- No risk scoring, adequacy judgments, timelines, or dependency analysis.
 
 ## Australian-Specific Rules
 

@@ -14,7 +14,6 @@ optional_variables:
   - "uploaded_diagrams"
   - "legal_requirements_matrix"
   - "contract_type"
-  - "retrieval_index_id"
   - "seed_snippets"
   - "image_semantics_result"
 model_compatibility: ["gemini-2.5-flash"]
@@ -244,7 +243,7 @@ No seed snippets provided.
 ## Analysis Instructions (Seeds + Retrieval + Diagram Semantics)
 
 1. Use `extracted_entity` and `image_semantics_result` as baseline context; verify and enrich using `seed_snippets` as primary evidence.
-2. If baseline + seeds are insufficient, retrieve targeted clauses (title particulars, encumbrance schedules, easements/rights, services, overlays, surveys) from `retrieval_index_id` with concise queries. Record what was retrieved.
+2. If baseline + seeds are insufficient, retrieve targeted clauses (title particulars, encumbrance schedules, easements/rights, services, overlays, surveys) with concise queries. Record what was retrieved.
 3. Cross-verify: ensure consistency between title/contract text and diagram semantics; document discrepancies and their implications.
 4. Assess risks across title defects, encumbrance impacts, diagram reliance, and boundary issues; provide mitigation actions and verification steps.
 5. Apply state-specific title registration and diagram approval requirements; assess professional standards.

@@ -11,7 +11,6 @@ required_variables:
 optional_variables:
   - "legal_requirements_matrix"
   - "contract_type"
-  - "retrieval_index_id"
   - "seed_snippets"
   - "settlement_logistics_result"
   - "title_encumbrances_result"

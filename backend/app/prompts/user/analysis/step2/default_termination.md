@@ -12,7 +12,6 @@ optional_variables:
   - "legal_requirements_matrix"
   - "contract_type"
   - "australian_state"
-  - "retrieval_index_id"
   - "seed_snippets"
 model_compatibility: ["gemini-2.5-flash", "gpt-4"]
 max_tokens: 8000
@@ -182,7 +181,7 @@ Previously extracted default/termination data (use as baseline; verify and recon
 ## Analysis Instructions (Seeds + Retrieval + Metadata Scoping)
 
 1. Use `extracted_entity` and `metadata` as the baseline. Verify and enrich using `seed_snippets` as primary evidence.
-2. If baseline + seeds are insufficient, retrieve targeted default/termination/remedy clauses from `retrieval_index_id` with concise queries.
+2. If baseline + seeds are insufficient, retrieve targeted default/termination/remedy clauses with concise queries.
 3. Classify each default and termination right; analyze remedies, fairness, and consumer protection compliance.
 4. Assess overall default/termination risk; provide clause citations and practical enforcement considerations.
 5. Record whether retrieval was used and how many additional snippets were incorporated.

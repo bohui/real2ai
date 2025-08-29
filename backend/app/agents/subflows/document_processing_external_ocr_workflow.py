@@ -14,7 +14,7 @@ Architecture:
 """
 
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Annotated
 from datetime import datetime, timezone
 from langgraph.graph import StateGraph
 
@@ -31,26 +31,25 @@ class ExternalOCRProcessingState(DocumentProcessingState):
 
     Additional fields:
     - external_ocr_dir: Directory containing external OCR output files
-    - content_hmac: Content HMAC for artifact addressing
-    - algorithm_version: Algorithm version for artifact versioning
-    - params_fingerprint: Parameters fingerprint for artifact identification
+    - content_hmac: Content HMAC for artifact addressing (inherited from DocumentProcessingState)
+    - algorithm_version: Algorithm version for artifact versioning (inherited from DocumentProcessingState)
+    - params_fingerprint: Parameters fingerprint for artifact identification (inherited from DocumentProcessingState)
     - ocr_pages: List of OCR page file mappings
     - page_artifacts: List of unified page artifact metadata (text, markdown, JSON)
     - diagram_artifacts: List of unified visual artifact metadata (diagrams, images)
+
+    All additional fields use Annotated types with reducer functions to prevent LangGraph concurrent update errors.
     """
 
-    # External OCR specific fields
-    external_ocr_dir: Optional[str]
-    content_hmac: Optional[str]
-    algorithm_version: Optional[int]
-    params_fingerprint: Optional[str]
+    # External OCR specific fields - must be annotated for concurrent updates
+    external_ocr_dir: Annotated[Optional[str], lambda x, y: y]  # Last value wins
 
-    # OCR file mapping
-    ocr_pages: Optional[list]
+    # OCR file mapping - must be annotated for concurrent updates
+    ocr_pages: Annotated[Optional[list], lambda x, y: y]  # Last value wins
 
-    # Unified artifact results
-    page_artifacts: Optional[list]
-    diagram_artifacts: Optional[list]
+    # Unified artifact results - must be annotated for concurrent updates
+    page_artifacts: Annotated[Optional[list], lambda x, y: y]  # Last value wins
+    diagram_artifacts: Annotated[Optional[list], lambda x, y: y]  # Last value wins
 
 
 class DocumentProcessingExternalOCRWorkflow:

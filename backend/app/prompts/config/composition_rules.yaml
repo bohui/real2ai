@@ -86,6 +86,17 @@ compositions:
     user_prompts:
       - "contract_entities_extraction"
 
+  section_seeds_extraction:
+    description: "Extract section seeds using dedicated planner prompt"
+    version: "1.0.0"
+    system_prompts:
+      - name: "entity_extraction_core"
+        path: "system/entity_extraction_core.md"
+        priority: 110
+        required: true
+    user_prompts:
+      - "section_seeds_planner"
+
   # Step 2 Section Analysis Compositions
   step2_parties_property:
     description: "Step 2.1 - Parties and Property Verification Analysis"

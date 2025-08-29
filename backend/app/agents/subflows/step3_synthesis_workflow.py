@@ -78,7 +78,6 @@ class Step3SynthesisWorkflow:
             "australian_state": parent_state.get("australian_state"),
             "contract_type": parent_state.get("contract_type"),
             "section_seeds": parent_state.get("section_seeds"),
-            "retrieval_index_id": parent_state.get("retrieval_index_id"),
             # Inputs from Step 2
             "cross_section_validation_result": xval,
             "special_risks_result": section_results.get("special_risks"),

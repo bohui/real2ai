@@ -12,7 +12,6 @@ optional_variables:
   - "all_section_results"
   - "legal_requirements_matrix"
   - "contract_type"
-  - "retrieval_index_id"
   - "seed_snippets"
   - "address"
 model_compatibility: ["gemini-2.5-flash", "gpt-4"]

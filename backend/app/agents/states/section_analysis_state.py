@@ -8,23 +8,24 @@ from app.agents.states.base import LangGraphBaseState
 class Step2AnalysisState(LangGraphBaseState):
     """LangGraph state schema for Step 2 section-by-section analysis"""
 
-    # Input data
-    contract_text: str
-    extracted_entity: Dict[str, Any]
-    legal_requirements_matrix: Optional[Dict[str, Any]]
-    uploaded_diagrams: Optional[Dict[str, List[Dict[str, Any]]]]
+    # Input data - must be annotated for concurrent updates
+    contract_text: Annotated[str, lambda x, y: y]
+    extracted_entity: Annotated[Dict[str, Any], lambda x, y: y]
+    legal_requirements_matrix: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
+    uploaded_diagrams: Annotated[
+        Optional[Dict[str, List[Dict[str, Any]]]], lambda x, y: y
+    ]
 
-    # Context from parent state
-    australian_state: Optional[str]
-    contract_type: Optional[str]
-    purchase_method: Optional[str]
-    use_category: Optional[str]
-    property_condition: Optional[str]
-    contract_metadata: Optional[Dict[str, Any]]
+    # Context from parent state - must be annotated for concurrent updates
+    australian_state: Annotated[Optional[str], lambda x, y: y]
+    contract_type: Annotated[Optional[str], lambda x, y: y]
+    purchase_method: Annotated[Optional[str], lambda x, y: y]
+    use_category: Annotated[Optional[str], lambda x, y: y]
+    property_condition: Annotated[Optional[str], lambda x, y: y]
+    contract_metadata: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
 
-    # Seeds / retrieval context
+    # Seeds context
     section_seeds: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
-    retrieval_index_id: Annotated[Optional[str], lambda x, y: y]
 
     # Phase 1 Foundation Results (Parallel)
     parties_property: Annotated[Optional[Dict[str, Any]], lambda x, y: y]

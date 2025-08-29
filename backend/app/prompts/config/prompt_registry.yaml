@@ -168,6 +168,13 @@ registry:
       description: "Extract entities from contracts using the ContractEntityExtraction schema"
       estimated_tokens: 6000
 
+    section_seeds_planner:
+      path: "user/analysis/step1/section_seeds_planner.md"
+      category: "analysis"
+      system_requirements: ["entity_extraction_core"]
+      description: "High-signal snippet selection for Step 2 analyzers (no scoring)"
+      estimated_tokens: 6000
+
     # Step 2 Section Analysis Prompts
     step2_parties_property:
       path: "user/analysis/step2/parties_property.md"

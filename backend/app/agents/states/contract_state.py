@@ -79,6 +79,11 @@ class RealEstateAgentState(LangGraphBaseState):
         Optional[Dict[str, Any]], lambda x, y: y
     ]  # Last value wins
 
+    # Step 1 (parallel): Section seeds extraction results
+    extracted_sections: Annotated[
+        Optional[Dict[str, Any]], lambda x, y: y
+    ]  # Last value wins
+
     # Step 2: Section-by-section analysis results (NEW)
     step2_analysis_result: Annotated[
         Optional[Dict[str, Any]], lambda x, y: y

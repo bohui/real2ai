@@ -11,22 +11,23 @@ class PrepareContextNode(Step2NodeBase):
         try:
             extracted_entity = (state or {}).get("extracted_entity") or {}
 
-            # Hoist section seeds and retrieval index from Step 1 entities into Step 2 state
+            # Hoist section seeds and retrieval index from Step 1 (new location preferred)
             try:
-                seeds = (extracted_entity or {}).get("section_seeds") or {}
+                # Prefer state.extracted_sections; fallback to legacy location inside extracted_entity
+                seeds = (
+                    (state or {}).get("extracted_sections")
+                    or (extracted_entity or {}).get("section_seeds")
+                    or {}
+                )
                 if seeds:
                     updates["section_seeds"] = seeds
-                    retrieval_index_id = seeds.get("retrieval_index_id")
-                    if retrieval_index_id:
-                        updates["retrieval_index_id"] = retrieval_index_id
                     self.logger.info(
-                        "Hoisted section_seeds and retrieval_index_id for Step 2",
+                        "Hoisted section_seeds for Step 2",
                         extra={
                             "has_snippets": bool((seeds or {}).get("snippets")),
                             "has_retrieval_instructions": bool(
                                 (seeds or {}).get("retrieval_instructions")
                             ),
-                            "retrieval_index_id": retrieval_index_id,
                         },
                     )
             except Exception as hoist_err:

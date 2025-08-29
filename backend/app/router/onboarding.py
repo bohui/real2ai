@@ -30,7 +30,7 @@ async def get_onboarding_status(user: User = Depends(get_current_user)):
 
         if not profile:
             logger.error(f"[Onboarding] User profile not found for user_id={user.id}")
-            raise HTTPException(status_code=404, detail="User profile not found")
+            raise HTTPException(status_code=401, detail="User not authenticated")
 
         def _to_dict(value):
             if value is None:

@@ -228,7 +228,6 @@ class DiagramAnalysisSubWorkflow:
             "property_condition": state.get("property_condition")
             or meta.get("property_condition"),
             "legal_requirements_matrix": state.get("legal_requirements_matrix", {}),
-            "retrieval_index_id": state.get("retrieval_index_id"),
             "extracted_entity": entities,
             "diagram_uris": diagram_uris,
             "diagram_types": diagram_types,

@@ -8,7 +8,7 @@
 - **Solution**: Dynamic schema selection based on `image_type`
 
 ### 2. Variable Usage Problems
-- **Unused Variables**: `user_experience`, `specific_elements`, `comparison_basis`, `output_format`, `use_category`, `purchase_method`, `property_condition`, `retrieval_index_id`
+- **Unused Variables**: `user_experience`, `specific_elements`, `comparison_basis`, `output_format`, `use_category`, `purchase_method`, `property_condition`
 - **Missing Variables**: `diagram_type_confidence` (used in workflow but not in template)
 - **Impact**: Template rendering errors, unused complexity
 
@@ -38,7 +38,7 @@ output_parser: "DiagramSemanticsBase"
 # Removed unused variables:
 # - user_experience, specific_elements, comparison_basis
 # - output_format, use_category, purchase_method  
-# - property_condition, retrieval_index_id
+# - property_condition
 
 # Added actually used variables:
 # - diagram_type_confidence (from workflow)
