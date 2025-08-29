@@ -28,12 +28,15 @@ class ContractLLMNode(LLMNode):
         *,
         contract_attribute: str,
         result_model: Any,
+        state_attribute: Optional[str] = None,
         progress_range: tuple[int, int] = (0, 100),
     ):
         super().__init__(workflow, node_name, progress_range)
         self.contract_attribute = contract_attribute
         self.result_model = result_model
         self.min_confidence = DEFAULT_MIN_CONFIDENCE
+        # Allow state field name to differ from DB contract column
+        self.state_attribute = state_attribute or contract_attribute
 
     async def _short_circuit_check(
         self, state: RealEstateAgentState
@@ -57,12 +60,12 @@ class ContractLLMNode(LLMNode):
 
             cached_value = getattr(existing_contract, self.contract_attribute, None)
             if isinstance(cached_value, dict) and bool(cached_value):
-                state[self.contract_attribute] = cached_value
+                state[self.state_attribute] = cached_value
                 try:
                     confidence_score = cached_value.get("confidence_score")
                     if confidence_score is not None:
                         state.setdefault("confidence_scores", {})[
-                            self.contract_attribute
+                            self.state_attribute
                         ] = confidence_score
                 except Exception:
                     pass
@@ -211,7 +214,7 @@ class ContractLLMNode(LLMNode):
             )
         except Exception:
             value = None
-        return {self.contract_attribute: value}
+        return {self.state_attribute: value}
 
     async def _update_state_success(
         self, state: RealEstateAgentState, parsed: Any, quality: Dict[str, Any]
@@ -225,14 +228,14 @@ class ContractLLMNode(LLMNode):
         except Exception:
             value = None
 
-        state[self.contract_attribute] = value
+        state[self.state_attribute] = value
 
         # Try to propagate confidence score into a stable key for this contract attribute
         try:
             confidence_score = getattr(parsed, "confidence_score", None)
             if confidence_score is not None:
                 state.setdefault("confidence_scores", {})[
-                    self.contract_attribute
+                    self.state_attribute
                 ] = confidence_score
         except Exception:
             pass
@@ -251,7 +254,7 @@ class ContractLLMNode(LLMNode):
         Returns empty string on failure; logs details for diagnostics.
         """
         try:
-            document_metadata = state.get("document_metadata", {})
+            document_metadata = state.get("ocr_processing", {})
             full_text = document_metadata.get("full_text", "")
         except Exception:
             document_metadata = {}

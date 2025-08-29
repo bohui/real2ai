@@ -141,6 +141,15 @@ class AuthContextMiddleware(BaseHTTPMiddleware):
 
         # Set auth context if token is present
         if token:
+            # Attempt to include refresh token if this is a backend token
+            refresh_token: Optional[str] = None
+            try:
+                if BackendTokenService.is_backend_token(token):
+                    mapping = await BackendTokenService.get_mapping(token) or {}
+                    refresh_token = mapping.get("supabase_refresh_token")
+            except Exception as map_err:
+                logger.debug(f"Skipping refresh token mapping in middleware: {map_err}")
+
             AuthContext.set_auth_context(
                 token=token,
                 user_id=user_id,
@@ -150,6 +159,7 @@ class AuthContextMiddleware(BaseHTTPMiddleware):
                     "user_agent": request.headers.get("User-Agent"),
                     "ip_address": request.client.host if request.client else None,
                 },
+                refresh_token=refresh_token,
             )
             logger.debug(f"Auth context set for user: {user_id or 'unknown'}")
         else:

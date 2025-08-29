@@ -5,7 +5,7 @@ Tests validate the fixes implemented for:
 - Resume-from-checkpoint skips validation/diagram nodes correctly
 - Checkpoints only created after successful step execution
 - ContextType.VALIDATION works without errors
-- diagram_analysis handles missing document_metadata safely
+- diagram_analysis handles missing ocr_processing safely
 """
 
 import pytest
@@ -97,7 +97,7 @@ class TestResumeFromCheckpointSkipsValidationNodes:
             "user_id": "test_user",
             "australian_state": AustralianState.NSW,
             "document_data": {"document_id": "test_doc"},
-            "document_metadata": {
+            "ocr_processing": {
                 "full_text": "Sample contract text",
                 "character_count": 20,
             },
@@ -345,7 +345,7 @@ class TestContextTypeValidation:
 
 
 class TestDiagramAnalysisSafety:
-    """Test that diagram analysis handles missing document_metadata safely."""
+    """Test that diagram analysis handles missing ocr_processing safely."""
 
     @pytest.fixture
     def diagram_node(self):
@@ -355,13 +355,13 @@ class TestDiagramAnalysisSafety:
 
     @pytest.mark.asyncio
     async def test_diagram_analysis_handles_none_document_metadata(self, diagram_node):
-        """Test that diagram analysis handles None document_metadata safely."""
+        """Test that diagram analysis handles None ocr_processing safely."""
 
         state = {
             "session_id": "test",
             "user_id": "test_user",
             "document_data": {},
-            "document_metadata": None,  # This was causing AttributeError
+            "ocr_processing": None,  # This was causing AttributeError
             "confidence_scores": {},
         }
 
@@ -377,13 +377,13 @@ class TestDiagramAnalysisSafety:
 
     @pytest.mark.asyncio
     async def test_diagram_analysis_handles_empty_document_metadata(self, diagram_node):
-        """Test that diagram analysis handles empty document_metadata safely."""
+        """Test that diagram analysis handles empty ocr_processing safely."""
 
         state = {
             "session_id": "test",
             "user_id": "test_user",
             "document_data": {},
-            "document_metadata": {},  # Empty dict
+            "ocr_processing": {},  # Empty dict
             "confidence_scores": {},
         }
 
@@ -395,7 +395,7 @@ class TestDiagramAnalysisSafety:
         assert result["diagram_analysis"]["diagrams_found"] == False
 
     def test_detect_diagrams_handles_none_metadata(self, diagram_node):
-        """Test that _detect_diagrams handles None document_metadata safely."""
+        """Test that _detect_diagrams handles None ocr_processing safely."""
 
         document_data = {}
         document_metadata = None
@@ -439,8 +439,8 @@ class TestContractAnalysisServiceStateInitialization:
 
         # document_metadata should be an empty dict, not None
         assert "document_metadata" in initial_state
-        assert initial_state["document_metadata"] == {}
-        assert initial_state["document_metadata"] is not None
+        assert initial_state["ocr_processing"] == {}
+        assert initial_state["ocr_processing"] is not None
 
 
 class TestIntegrationScenarios:
@@ -468,7 +468,7 @@ class TestIntegrationScenarios:
         )
 
         # Verify safe initialization
-        assert initial_state["document_metadata"] == {}
+        assert initial_state["ocr_processing"] == {}
 
         # Test that diagram analysis would handle this state safely
         workflow_mock = Mock()

@@ -65,7 +65,7 @@ class PromptContext:
     # Document context
     document_id: Optional[str] = None
     document_type: Optional[str] = None
-    document_metadata: Dict[str, Any] = field(default_factory=dict)
+    ocr_processing: Dict[str, Any] = field(default_factory=dict)
     # New document/processing enums (kept separate for backward compatibility)
     document_type_enum: Optional[DocumentType] = None
     document_status: Optional[DocumentStatus] = None
@@ -92,12 +92,12 @@ class PromptContext:
             )
             self.metadata = {}
 
-        # Ensure document_metadata is always a dictionary
-        if not isinstance(self.document_metadata, dict):
+        # Ensure ocr_processing is always a dictionary
+        if not isinstance(self.ocr_processing, dict):
             logger.warning(
-                f"PromptContext document_metadata expected dict, got {type(self.document_metadata)}. Converting to empty dict."
+                f"PromptContext ocr_processing expected dict, got {type(self.ocr_processing)}. Converting to empty dict."
             )
-            self.document_metadata = {}
+            self.ocr_processing = {}
 
         # Ensure focus_areas is always a list
         if not isinstance(self.focus_areas, list):
@@ -130,7 +130,7 @@ class PromptContext:
             user_experience=other.user_experience or self.user_experience,
             document_id=other.document_id or self.document_id,
             document_type=other.document_type or self.document_type,
-            document_metadata={**self.document_metadata, **other.document_metadata},
+            ocr_processing={**self.ocr_processing, **other.ocr_processing},
             processing_priority=other.processing_priority or self.processing_priority,
             analysis_depth=other.analysis_depth or self.analysis_depth,
             focus_areas=list(set(self.focus_areas + other.focus_areas)),
@@ -188,8 +188,8 @@ class PromptContext:
             result["document_status"] = self.document_status.value
         if self.processing_status:
             result["processing_status"] = self.processing_status.value
-        if self.document_metadata:
-            result["document_metadata"] = self.document_metadata
+        if self.ocr_processing:
+            result["ocr_processing"] = self.ocr_processing
         if self.processing_priority:
             result["processing_priority"] = self.processing_priority
         if self.analysis_depth:
@@ -296,7 +296,7 @@ class ContextBuilder:
         self._context.document_id = doc_id
         self._context.document_type = doc_type
         if metadata:
-            self._context.document_metadata.update(metadata)
+            self._context.ocr_processing.update(metadata)
         return self
 
     def with_processing_context(

@@ -348,7 +348,17 @@ class BaseNode(ABC):
             minimal_state["error_state"] = (
                 f"Critical error in {self.node_name}: {error_message}"
             )
-            minimal_state["parsing_status"] = "FAILED"
+            from app.schema.enums import ProcessingStatus
+
+            minimal_state["progress"] = {
+                "status": ProcessingStatus.FAILED,
+                "error": error_message,
+                "step_name": f"{self.node_name}_error",
+                "current_step": 0,
+                "total_steps": 0,
+                "percentage": 0,
+                "step_history": [],
+            }
             return minimal_state
 
         self._log_exception(error, state, context)

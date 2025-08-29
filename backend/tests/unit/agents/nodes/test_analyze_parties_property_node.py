@@ -9,7 +9,7 @@ import pytest
 from unittest.mock import MagicMock, patch
 from datetime import datetime, UTC
 
-from app.agents.nodes.step2_section_analysis_subflow.analyze_parties_property_node import (
+from app.agents.nodes.step2_section_analysis.analyze_parties_property_node import (
     PartiesPropertyNode,
 )
 from app.prompts.schema.step2.parties_property_schema import (

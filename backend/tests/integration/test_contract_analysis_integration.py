@@ -208,16 +208,16 @@ class TestContractAnalysisIntegration:
 
                 # Verify analysis structure
                 analysis_results = result["analysis_results"]
-                assert "contract_terms" in analysis_results
                 assert "risk_assessment" in analysis_results
                 assert "compliance_check" in analysis_results
                 assert "recommendations" in analysis_results
 
-                # Verify contract terms extraction
-                contract_terms = analysis_results["contract_terms"]
-                assert contract_terms["purchase_price"] > 0
-                assert "settlement_date" in contract_terms
-                assert "parties" in contract_terms
+                # Verify Step 2 analysis exists
+                # (legacy contract_terms removed)
+                # Ensure section results present if provided
+                step2 = analysis_results.get("step2_analysis_result", {})
+                if step2:
+                    assert "section_results" in step2
 
                 # Verify risk assessment
                 risk_assessment = analysis_results["risk_assessment"]

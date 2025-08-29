@@ -45,9 +45,6 @@ class TestErrorHandlingNode:
             "risk_assessment": None,
             "compliance_check": None,
             "recommendations": [],
-            "property_data": None,
-            "market_analysis": None,
-            "financial_analysis": None,
             "user_preferences": {},
             "error_state": None,
             "confidence_scores": {},
@@ -64,10 +61,9 @@ class TestErrorHandlingNode:
                     },
                 ],
             },
-            "analysis_results": {},
             "report_data": None,
             "final_recommendations": [],
-            "document_metadata": {},
+            "ocr_processing": {},
         }
 
     @pytest.fixture
@@ -87,18 +83,14 @@ class TestErrorHandlingNode:
             "risk_assessment": None,
             "compliance_check": None,
             "recommendations": [],
-            "property_data": None,
-            "market_analysis": None,
-            "financial_analysis": None,
             "user_preferences": {},
             "error_state": None,
             "confidence_scores": {},
             "processing_time": None,
             "progress": None,  # This is the bug scenario
-            "analysis_results": {},
             "report_data": None,
             "final_recommendations": [],
-            "document_metadata": {},
+            "ocr_processing": {},
         }
 
     @pytest.fixture
@@ -118,18 +110,14 @@ class TestErrorHandlingNode:
             "risk_assessment": None,
             "compliance_check": None,
             "recommendations": [],
-            "property_data": None,
-            "market_analysis": None,
-            "financial_analysis": None,
             "user_preferences": {},
             "error_state": None,
             "confidence_scores": {},
             "processing_time": None,
             "progress": {},  # Empty progress
-            "analysis_results": {},
             "report_data": None,
             "final_recommendations": [],
-            "document_metadata": {},
+            "ocr_processing": {},
         }
 
     @pytest.fixture
@@ -149,9 +137,6 @@ class TestErrorHandlingNode:
             "risk_assessment": None,
             "compliance_check": None,
             "recommendations": [],
-            "property_data": None,
-            "market_analysis": None,
-            "financial_analysis": None,
             "user_preferences": {},
             "error_state": None,
             "confidence_scores": {},
@@ -170,10 +155,9 @@ class TestErrorHandlingNode:
                 ],
             },
             "error": "Contract validation error",  # Explicit error field
-            "analysis_results": {},
             "report_data": None,
             "final_recommendations": [],
-            "document_metadata": {},
+            "ocr_processing": {},
         }
 
     @pytest.mark.asyncio
@@ -481,15 +465,11 @@ class TestErrorHandlingNode:
             "risk_assessment": None,
             "compliance_check": None,
             "recommendations": [],
-            "property_data": None,
-            "market_analysis": None,
-            "financial_analysis": None,
             "user_preferences": {},
             "error_state": None,
             "confidence_scores": {},
             "processing_time": None,
             "progress": None,
-            "analysis_results": {},
             "report_data": None,
             "final_recommendations": [],
             "document_metadata": {},

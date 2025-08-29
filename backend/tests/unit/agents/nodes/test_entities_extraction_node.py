@@ -68,7 +68,7 @@ async def test_model_selection_uses_metadata_primary_and_fallbacks(mocker):
     # Minimal state
     state = {
         "progress": {"current_step": 0, "total_steps": 10},
-        "document_metadata": {"full_text": "some text"},
+        "ocr_processing": {"full_text": "some text"},
     }
 
     result = await node.execute(state)

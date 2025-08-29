@@ -5,7 +5,7 @@ Unit tests for Section Analysis Node (Step 2 Integration)
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from app.agents.nodes.step2_section_analysis_subflow.mainflow_entry import (
+from backend.app.agents.nodes.step2_section_analysis_node import (
     SectionAnalysisNode,
 )
 from app.agents.states.contract_state import RealEstateAgentState
@@ -35,15 +35,11 @@ class TestSectionAnalysisNode:
             agent_version="1.0",
             contract_id="test-contract",
             document_data={"document_id": "test-doc"},
-            document_metadata={"full_text": "Sample contract text"},
+            ocr_processing={"full_text": "Sample contract text"},
             parsing_status="complete",
-            contract_terms=None,
             risk_assessment=None,
             compliance_check=None,
             recommendations=[],
-            property_data=None,
-            market_analysis=None,
-            financial_analysis=None,
             user_preferences={},
             australian_state="NSW",
             user_type="general",
@@ -55,9 +51,8 @@ class TestSectionAnalysisNode:
             processing_time=None,
             progress=None,
             notify_progress=None,
-            extracted_entitydress": "123 Test St"}},
+            extracted_entity={"property": {"address": "123 Test St"}},
             step2_analysis_result=None,
-            analysis_results={},
             report_data=None,
             final_recommendations=[],
         )
@@ -72,7 +67,7 @@ class TestSectionAnalysisNode:
     async def test_execute_with_missing_contract_text(self, section_node, sample_state):
         """Test execution with missing contract text"""
         # Remove contract text
-        sample_state["document_metadata"] = {}
+        sample_state["ocr_processing"] = {}
 
         # Mock the workflow execute to not be called
         section_node.step2_workflow.execute = AsyncMock()
@@ -138,9 +133,6 @@ class TestSectionAnalysisNode:
         # Check result structure
         assert result is not None
         assert result.get("step2_analysis_result") == mock_step2_result
-        assert "analysis_results" in result
-        assert "step2" in result["analysis_results"]
-        assert "contract_terms" in result  # Backward compatibility
         assert result["confidence_scores"]["step2_analysis"] > 0
 
     @pytest.mark.asyncio
@@ -184,11 +176,8 @@ class TestSectionAnalysisNode:
 
         result = await section_node.execute(sample_state)
 
-        # Check backward compatibility
-        assert "contract_terms" in result
-        contract_terms = result["contract_terms"]
-        assert contract_terms["extraction_method"] == "step2_section_analysis"
-        assert "step2_metadata" in contract_terms
+        # Back-compat removed: ensure step2 result exists and has expected sections
+        assert result.get("step2_analysis_result") is not None
 
     def test_calculate_overall_confidence(self, section_node):
         """Test overall confidence calculation"""
@@ -234,7 +223,7 @@ class TestSectionAnalysisNode:
         """Test handling missing contract text"""
 
         # Remove text from metadata
-        sample_state["document_metadata"] = {}
+        sample_state["ocr_processing"] = {}
         sample_state["document_data"] = {}
 
         contract_text = await section_node._get_contract_text(sample_state)

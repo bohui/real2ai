@@ -38,7 +38,6 @@ class TestStateTypeConsistency:
         assert isinstance(initial_state["final_recommendations"], list)
 
         # Test dict fields
-        assert isinstance(initial_state["analysis_results"], dict)
         assert isinstance(initial_state["confidence_scores"], dict)
         assert isinstance(initial_state["user_preferences"], dict)
 
@@ -71,10 +70,8 @@ class TestStateTypeConsistency:
         """Test that update_state_step correctly handles dict data."""
         # Update with dict data
         update_data = {
-            "analysis_results": {
-                "risk_assessment": {"overall_risk": "medium"},
-                "compliance_check": {"status": "compliant"},
-            },
+            "risk_assessment": {"overall_risk": "medium"},
+            "compliance_check": {"status": "compliant"},
             "confidence_scores": {"terms_extraction": 0.85, "risk_assessment": 0.78},
         }
 
@@ -82,8 +79,8 @@ class TestStateTypeConsistency:
 
         # Verify the update was applied
         assert "test_step" in updated_state["current_step"]
-        assert "risk_assessment" in updated_state["analysis_results"]
-        assert "compliance_check" in updated_state["analysis_results"]
+        assert "risk_assessment" in updated_state
+        assert "compliance_check" in updated_state
         assert updated_state["confidence_scores"]["terms_extraction"] == 0.85
 
     def test_update_state_step_preserves_existing_lists(self, initial_state):
@@ -115,27 +112,21 @@ class TestStateTypeConsistency:
         first_update = update_state_step(
             initial_state,
             "step1",
-            data={"analysis_results": {"risk_assessment": {"overall_risk": "low"}}},
+            data={"risk_assessment": {"overall_risk": "low"}},
         )
 
         # Second update
         second_update = update_state_step(
             first_update,
             "step2",
-            data={"analysis_results": {"compliance_check": {"status": "compliant"}}},
+            data={"compliance_check": {"status": "compliant"}},
         )
 
         # Verify both analysis results are present
-        assert "risk_assessment" in second_update["analysis_results"]
-        assert "compliance_check" in second_update["analysis_results"]
-        assert (
-            second_update["analysis_results"]["risk_assessment"]["overall_risk"]
-            == "low"
-        )
-        assert (
-            second_update["analysis_results"]["compliance_check"]["status"]
-            == "compliant"
-        )
+        assert "risk_assessment" in second_update
+        assert "compliance_check" in second_update
+        assert second_update["risk_assessment"]["overall_risk"] == "low"
+        assert second_update["compliance_check"]["status"] == "compliant"
 
     def test_update_state_step_with_error_handling(self, initial_state):
         """Test that update_state_step correctly handles error states."""
@@ -154,7 +145,7 @@ class TestStateTypeConsistency:
         """Test that update_state_step correctly handles mixed data types in a single update."""
         mixed_data = {
             "recommendations": [{"action": "Mixed action", "priority": "high"}],  # List
-            "analysis_results": {"mixed_analysis": {"result": "success"}},  # Dict
+            "risk_assessment": {"mixed_analysis": {"result": "success"}},  # Dict
             "confidence_scores": {"mixed_confidence": 0.95},  # Dict
             "processing_time": 45.2,  # Float
         }
@@ -163,7 +154,7 @@ class TestStateTypeConsistency:
 
         # Verify all data types were handled correctly
         assert len(updated_state["recommendations"]) == 1
-        assert "mixed_analysis" in updated_state["analysis_results"]
+        assert "mixed_analysis" in updated_state["risk_assessment"]
         assert updated_state["confidence_scores"]["mixed_confidence"] == 0.95
         assert updated_state["processing_time"] == 45.2
 
@@ -171,8 +162,7 @@ class TestStateTypeConsistency:
         """Test that update_state_step handles None values gracefully."""
         # Update with None values
         update_data = {
-            "analysis_results": None,
-            "analysis_results": None,
+            "risk_assessment": None,
             "processing_time": None,
         }
 
@@ -187,23 +177,21 @@ class TestStateTypeConsistency:
 
         # None values are ignored, so they don't appear in the returned state
         assert "processing_time" not in updated_state
-        assert "analysis_results" not in updated_state
+        assert "risk_assessment" not in updated_state
 
     def test_update_state_step_with_empty_containers(self, initial_state):
         """Test that update_state_step handles empty containers correctly."""
         # Update with empty containers
         update_data = {
             "recommendations": [],
-            "analysis_results": {},
             "confidence_scores": {},
         }
 
         updated_state = update_state_step(initial_state, "empty_step", data=update_data)
 
         # Verify empty containers are handled correctly
-        assert isinstance(updated_state["analysis_results"], dict)
-        assert len(updated_state["analysis_results"]) == 0
-        assert len(updated_state["analysis_results"]) == 0
+        assert isinstance(updated_state["confidence_scores"], dict)
+        assert len(updated_state["confidence_scores"]) == 0
 
     def test_concurrent_step_updates(self, initial_state):
         """Test that concurrent step updates work correctly with the Annotated pattern."""
@@ -222,7 +210,6 @@ class TestStateTypeConsistency:
     def test_state_immutability_preserved(self, initial_state):
         """Test that the original state is not modified by update_state_step."""
         original_recommendations = initial_state["recommendations"].copy()
-        original_analysis_results = initial_state["analysis_results"].copy()
 
         # Make an update
         updated_state = update_state_step(
@@ -230,17 +217,16 @@ class TestStateTypeConsistency:
             "immutability_test",
             data={
                 "recommendations": [{"action": "Test action"}],
-                "analysis_results": {"test": "value"},
+                "risk_assessment": {"test": "value"},
             },
         )
 
         # Verify original state is unchanged
         assert initial_state["recommendations"] == original_recommendations
-        assert initial_state["analysis_results"] == original_analysis_results
 
         # Verify updated state has new data
         assert len(updated_state["recommendations"]) == 1
-        assert "test" in updated_state["analysis_results"]
+        assert "test" in updated_state["risk_assessment"]
 
     def test_get_current_step_returns_latest_step(self, initial_state):
         """Test that get_current_step returns the latest step from the list."""
@@ -303,7 +289,7 @@ class TestStateTypeConsistency:
         # Valid update with correct types
         valid_data = {
             "recommendations": [{"action": "Valid action"}],  # List
-            "analysis_results": {"valid": "analysis"},  # Dict
+            "risk_assessment": {"valid": "analysis"},  # Dict
             "confidence_scores": {"valid": 0.85},  # Dict
         }
 
@@ -311,5 +297,5 @@ class TestStateTypeConsistency:
 
         # Verify the update succeeded
         assert len(updated_state["recommendations"]) == 1
-        assert "valid" in updated_state["analysis_results"]
+        assert "valid" in updated_state["risk_assessment"]
         assert updated_state["confidence_scores"]["valid"] == 0.85

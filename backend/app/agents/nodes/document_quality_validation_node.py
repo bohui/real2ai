@@ -55,7 +55,7 @@ class DocumentQualityValidationNode(BaseNode):
 
             # Prefer processed full_text from document_metadata if present, otherwise fallback to raw document_data
             document_data = state.get("document_data", {}) or {}
-            processed_metadata = state.get("document_metadata", {}) or {}
+            processed_metadata = state.get("ocr_processing", {}) or {}
 
             # Primary text source precedence: processed full_text -> document_data.content -> ""
             document_text = processed_metadata.get("full_text") or document_data.get(

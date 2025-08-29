@@ -10,6 +10,27 @@ from app.schema.enums import AustralianState, ProcessingStatus, RiskLevel
 from app.agents.states.base import LangGraphBaseState
 
 
+class ProgressState(TypedDict, total=False):
+    """Canonical progress structure for the workflow.
+
+    - current_step: Zero-based numeric index of the current step
+    - total_steps: Total number of steps configured for this run
+    - percentage: Integer percentage derived from current_step/total_steps
+    - status: ProcessingStatus indicating overall run status
+    - step_name: Human-readable name of the latest step
+    - step_history: Ordered list of step names reached
+    - error: Optional error message when status is FAILED
+    """
+
+    current_step: int
+    total_steps: int
+    percentage: int
+    status: ProcessingStatus
+    step_name: str
+    step_history: List[str]
+    error: Optional[str]
+
+
 class RealEstateAgentState(LangGraphBaseState):
     """Central state for all Real2.AI agents"""
 
@@ -22,41 +43,7 @@ class RealEstateAgentState(LangGraphBaseState):
     # Contract identifier for UI progress payloads (UUID)
     contract_id: Annotated[Optional[str], lambda x, y: y]
 
-    # Document Processing
-    document_data: Annotated[
-        Optional[Dict[str, Any]], lambda x, y: y
-    ]  # Last value wins
-    document_metadata: Annotated[
-        Optional[Dict[str, Any]], lambda x, y: y
-    ]  # Last value wins
-    parsing_status: Annotated[
-        ProcessingStatus, lambda x, y: y
-    ]  # Last value wins for status updates
-
-    # Contract Analysis
-    contract_terms: Annotated[
-        Optional[Dict[str, Any]], lambda x, y: y
-    ]  # Last value wins
-    risk_assessment: Annotated[
-        Optional[Dict[str, Any]], lambda x, y: y
-    ]  # Last value wins
-    compliance_check: Annotated[
-        Optional[Dict[str, Any]], lambda x, y: y
-    ]  # Last value wins
-    recommendations: Annotated[
-        List[Dict[str, Any]], add
-    ]  # Use add for list concatenation
-
-    # Property Data (Phase 2+)
-    property_data: Annotated[
-        Optional[Dict[str, Any]], lambda x, y: y
-    ]  # Last value wins
-    market_analysis: Annotated[
-        Optional[Dict[str, Any]], lambda x, y: y
-    ]  # Last value wins
-    financial_analysis: Annotated[
-        Optional[Dict[str, Any]], lambda x, y: y
-    ]  # Last value wins
+    # Property Data (removed: not used in contract analysis workflow)
 
     # User Context
     user_preferences: Annotated[Dict[str, Any], lambda x, y: y]  # Last value wins
@@ -66,12 +53,19 @@ class RealEstateAgentState(LangGraphBaseState):
     document_type: Annotated[Optional[str], lambda x, y: y]  # Last value wins
 
     # Processing State
-    current_step: Annotated[List[str], add]  # Use add for list concatenation
-    # Allow concurrent writes; last update wins to satisfy LangGraph's reducer requirement
-    error_state: Annotated[Optional[str], lambda existing, incoming: incoming]
-    confidence_scores: Annotated[Dict[str, float], lambda x, y: y]  # Last value wins
     processing_time: Annotated[Optional[float], lambda x, y: y]  # Last value wins
-    progress: Annotated[Optional[Dict[str, Any]], lambda x, y: y]  # Last value wins
+    # Single source of truth for workflow progress
+    progress: Annotated[Optional[ProgressState], lambda x, y: y]  # Last value wins
+
+    confidence_scores: Annotated[Dict[str, float], lambda x, y: y]  # Last value wins
+
+    # Document Processing
+    step0_document_data: Annotated[
+        Optional[Dict[str, Any]], lambda x, y: y
+    ]  # Last value wins
+    step0_ocr_processing: Annotated[
+        Optional[Dict[str, Any]], lambda x, y: y
+    ]  # Last value wins
 
     # Analysis Results Structure
     # Step 1: Entity extraction results
@@ -84,16 +78,23 @@ class RealEstateAgentState(LangGraphBaseState):
         Optional[Dict[str, Any]], lambda x, y: y
     ]  # Last value wins
 
+    # Contract Analysis (legacy `contract_terms` removed; use `step2_analysis_result`)
+
     # Step 2: Section-by-section analysis results (NEW)
     step2_analysis_result: Annotated[
         Optional[Dict[str, Any]], lambda x, y: y
     ]  # Last value wins
 
     # Output
-    analysis_results: Annotated[
-        Dict[str, Any],
-        lambda existing, incoming: {**(existing or {}), **(incoming or {})},
-    ]
+    risk_assessment: Annotated[
+        Optional[Dict[str, Any]], lambda x, y: y
+    ]  # Last value wins
+    compliance_check: Annotated[
+        Optional[Dict[str, Any]], lambda x, y: y
+    ]  # Last value wins
+    recommendations: Annotated[
+        List[Dict[str, Any]], add
+    ]  # Use add for list concatenation
     report_data: Annotated[Optional[Dict[str, Any]], lambda x, y: y]  # Last value wins
     final_recommendations: Annotated[
         List[Dict[str, Any]], add
@@ -163,6 +164,27 @@ class StampDutyCalculation(TypedDict):
     breakdown: Dict[str, float]
 
 
+class ProgressState(TypedDict, total=False):
+    """Canonical progress structure for the workflow.
+
+    - current_step: Zero-based numeric index of the current step
+    - total_steps: Total number of steps configured for this run
+    - percentage: Integer percentage derived from current_step/total_steps
+    - status: ProcessingStatus indicating overall run status
+    - step_name: Human-readable name of the latest step
+    - step_history: Ordered list of step names reached
+    - error: Optional error message when status is FAILED
+    """
+
+    current_step: int
+    total_steps: int
+    percentage: int
+    status: ProcessingStatus
+    step_name: str
+    step_history: List[str]
+    error: Optional[str]
+
+
 def create_initial_state(
     user_id: str,
     content_hash: str,
@@ -183,18 +205,13 @@ def create_initial_state(
         # Base required field for LangGraph state
         content_hash=content_hash,
         # Document Processing
-        document_data=None,
-        document_metadata=None,
-        parsing_status=ProcessingStatus.PENDING,
+        step0_document_data=None,
+        step0_ocr_processing=None,
         # Contract Analysis
-        contract_terms=None,
         risk_assessment=None,
         compliance_check=None,
         recommendations=[],
-        # Property Data
-        property_data=None,
-        market_analysis=None,
-        financial_analysis=None,
+        # Property Data (removed)
         # User Context
         user_preferences=user_preferences or {},
         australian_state=australian_state,
@@ -202,14 +219,18 @@ def create_initial_state(
         contract_type=contract_type,
         document_type=document_type,
         # Processing State
-        current_step=["initialized"],  # Now a list for Annotated handling
-        error_state=None,
         confidence_scores={},
         processing_time=None,
-        progress={"percentage": 0, "step": "initialized"},
+        progress={
+            "current_step": 0,
+            "total_steps": 0,
+            "percentage": 0,
+            "status": ProcessingStatus.PENDING,
+            "step_name": "initialized",
+            "step_history": [],
+        },
         notify_progress=None,
         # Output
-        analysis_results={},
         report_data=None,
         final_recommendations=[],
     )
@@ -223,24 +244,95 @@ def update_state_step(
 ) -> Dict[str, Any]:
     """Update state with new step and optional data - returns minimal state to prevent concurrent updates"""
 
-    # Handle backward compatibility: convert string step to list for Annotated pattern
-    if isinstance(step, str):
-        updated_state = {
-            "current_step": [step]
-        }  # Convert to list for concurrent updates
-    else:
-        # Already a list
-        updated_state = {"current_step": step}
+    # Build minimal updated state
+    updated_state: Dict[str, Any] = {}
 
-    # Handle errors (these are always allowed)
+    # Build canonical progress update
+    existing_progress: ProgressState = state.get("progress") or {}  # type: ignore[assignment]
+    current_index = (
+        int(existing_progress.get("current_step", 0))
+        if isinstance(existing_progress, dict)
+        else 0
+    )
+    total_steps = (
+        int(existing_progress.get("total_steps", 0))
+        if isinstance(existing_progress, dict)
+        else 0
+    )
+    # Increment index by one when advancing a step, but don't exceed total_steps if set
+    next_index = (
+        current_index + 1
+        if total_steps == 0 or current_index + 1 <= total_steps
+        else total_steps
+    )
+
+    # Compute percentage if total_steps is known (>0)
+    percentage = (
+        (
+            int((next_index / total_steps) * 100)
+            if isinstance(total_steps, int) and total_steps > 0
+            else existing_progress.get("percentage", 0)
+        )
+        if isinstance(existing_progress, dict)
+        else 0
+    )
+
+    # Derive status from error or keep as IN_PROGRESS/PENDING
     if error:
-        updated_state["error_state"] = error
-        updated_state["parsing_status"] = ProcessingStatus.FAILED
+        status = ProcessingStatus.FAILED
+    else:
+        # If previously pending, mark as in progress; keep COMPLETED if already set by finalizer
+        previous_status = (
+            existing_progress.get("status", ProcessingStatus.PENDING)
+            if isinstance(existing_progress, dict)
+            else ProcessingStatus.PENDING
+        )
+        status = (
+            previous_status
+            if previous_status == ProcessingStatus.COMPLETED
+            else (
+                ProcessingStatus.IN_PROGRESS
+                if previous_status in (ProcessingStatus.PENDING, None)
+                else previous_status
+            )
+        )
+
+    # Update progress structure
+    new_progress: ProgressState = {
+        "current_step": next_index,
+        "total_steps": total_steps or 0,
+        "percentage": percentage if isinstance(percentage, int) else 0,
+        "status": status,
+        "step_name": step,
+        "step_history": (
+            list(existing_progress.get("step_history", []))
+            if isinstance(existing_progress, dict)
+            else []
+        ),
+    }
+    new_progress["step_history"].append(step)
+    if error:
+        new_progress["error"] = error
+
+    updated_state["progress"] = {**(existing_progress or {}), **new_progress}
 
     # Add explicitly provided data
     if data:
         for key, value in data.items():
             if value is not None:
+                # Special handling for progress to preserve canonical fields
+                if key == "progress" and isinstance(value, dict):
+                    base_progress = updated_state.get("progress") or {}
+                    merged = {**base_progress, **value}
+                    # Ensure step_name reflects latest step
+                    merged.setdefault("step_name", step)
+                    updated_state["progress"] = merged
+                    # Keep parsing_status in sync if provided
+                    status_override = merged.get("status")
+                    if status_override:
+                        updated_state["parsing_status"] = status_override
+                    continue
+
                 # For lists and dicts, we might need special handling
                 if (
                     key in state
@@ -268,19 +360,34 @@ def update_state_step(
 
 
 def get_current_step(state: RealEstateAgentState) -> str:
-    """Get the latest step from the Annotated list"""
-    steps = state.get("current_step", ["initialized"])
-    return steps[-1] if steps else "initialized"
+    """Get the latest human-readable step name.
+
+    Prefers the canonical progress.step_name; falls back to last item of current_step list.
+    """
+    progress = state.get("progress") or {}
+    if isinstance(progress, dict) and progress.get("step_name"):
+        return progress["step_name"]
+    return "initialized"
 
 
 def create_step_update(
     step_name: str, progress_data: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
-    """Create a proper state update for LangGraph concurrent handling"""
-    update = {"current_step": [step_name]}
+    """Create a proper state update for LangGraph concurrent handling.
 
-    if progress_data:
-        update.update(progress_data)
+    This ensures both the canonical progress structure and the legacy current_step list are updated.
+    """
+    update: Dict[str, Any] = {}
+
+    if progress_data and isinstance(progress_data, dict):
+        # If caller provides progress partials, place them under the progress key
+        # without overwriting other unrelated fields in the state at call site
+        update["progress"] = progress_data
+
+    # Always include step_name in progress
+    if "progress" not in update:
+        update["progress"] = {}
+    update["progress"]["step_name"] = step_name
 
     return update
 
@@ -320,8 +427,8 @@ def calculate_confidence_score(state: RealEstateAgentState) -> float:
     base_confidence = weighted_sum / total_weight if total_weight > 0 else 0.0
 
     # Apply additional penalties/bonuses
-    document_metadata = state.get("document_metadata", {})
-    text_quality = document_metadata.get("text_quality", {})
+    ocr_processing = state.get("step0_ocr_processing", {})
+    text_quality = ocr_processing.get("text_quality", {})
 
     # Bonus for high-quality text extraction
     if text_quality.get("score", 0) > 0.8:

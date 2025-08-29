@@ -6,7 +6,7 @@ import pytest
 from datetime import datetime, UTC
 from unittest.mock import AsyncMock, patch, MagicMock
 
-from app.agents.nodes.step2_section_analysis_subflow.analyze_financial_terms_node import (
+from app.agents.nodes.step2_section_analysis.analyze_financial_terms_node import (
     FinancialTermsNode,
 )
 from app.agents.subflows.step2_section_analysis_workflow import Step2AnalysisState

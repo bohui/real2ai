@@ -6,9 +6,9 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 import uuid
 
-from app.agents.nodes.document_processing_subflow.extract_text_node import ExtractTextNode
-from app.agents.nodes.document_processing_subflow.detect_diagrams_with_ocr_node import DetectDiagramsWithOCRNode
-from app.agents.nodes.document_processing_subflow.save_page_jpg_node import SavePageJPGAsArtifactPagesJPGNode
+from app.agents.nodes.step0_document_processing.extract_text_node import ExtractTextNode
+from app.agents.nodes.step0_document_processing.detect_diagrams_with_ocr_node import DetectDiagramsWithOCRNode
+from app.agents.nodes.step0_document_processing.save_page_jpg_node import SavePageJPGAsArtifactPagesJPGNode
 from app.services.visual_artifact_service import VisualArtifactService, VisualArtifactResult
 from app.schema.document import TextExtractionResult, PageExtraction, ContentAnalysis, LayoutFeatures
 

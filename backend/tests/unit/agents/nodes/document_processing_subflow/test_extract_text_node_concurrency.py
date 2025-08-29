@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.agents.nodes.document_processing_subflow.extract_text_node import (
+from app.agents.nodes.step0_document_processing.extract_text_node import (
     ExtractTextNode,
 )
 

@@ -65,7 +65,7 @@ async def test_workflow_execution():
         final_state = await workflow.analyze_contract(initial_state)
 
         # Print results
-        print("\\n" + "=" * 50)
+        print("\n" + "=" * 50)
         print("WORKFLOW EXECUTION RESULTS")
         print("=" * 50)
 
@@ -83,20 +83,21 @@ async def test_workflow_execution():
 
         # Confidence breakdown
         confidence_scores = final_state.get("confidence_scores", {})
-        print("\\nConfidence Scores:")
+        print("\nConfidence Scores:")
         for component, score in confidence_scores.items():
             print(f"  {component}: {score:.2f}")
 
-        # Contract terms extracted
-        contract_terms = final_state.get("contract_terms", {})
-        print("\\nExtracted Contract Terms:")
-        for term, value in contract_terms.items():
-            print(f"  {term}: {value}")
+        # Step 2 Section Analysis summary
+        step2 = final_state.get("step2_analysis_result", {})
+        print("\nStep 2 Section Analysis Summary:")
+        if step2:
+            sections = (step2.get("section_results") or {}).keys()
+            print(f"  Sections analyzed: {', '.join(sections)}")
 
         # Risk assessment
         risk_assessment = final_state.get("risk_assessment", {})
         if risk_assessment:
-            print(f"\\nRisk Assessment:")
+            print("\nRisk Assessment:")
             print(
                 f"  Overall Risk Score: {risk_assessment.get('overall_risk_score', 0)}/10"
             )
@@ -110,7 +111,7 @@ async def test_workflow_execution():
         # Compliance check
         compliance = final_state.get("compliance_check", {})
         if compliance:
-            print(f"\\nCompliance Check:")
+            print("\nCompliance Check:")
             print(
                 f"  State Compliance: {'✓' if compliance.get('state_compliance', False) else '✗'}"
             )
@@ -125,7 +126,7 @@ async def test_workflow_execution():
 
         # Recommendations
         recommendations = final_state.get("final_recommendations", [])
-        print(f"\\nRecommendations: {len(recommendations)} generated")
+        print(f"\nRecommendations: {len(recommendations)} generated")
         for i, rec in enumerate(recommendations[:3]):  # Show top 3
             print(
                 f"  {i+1}. [{rec.get('priority', 'medium').upper()}] {rec.get('recommendation', 'No recommendation')}"
@@ -133,14 +134,14 @@ async def test_workflow_execution():
 
         # Error state
         if final_state.get("error_state"):
-            print(f"\\n⚠️  Error: {final_state['error_state']}")
+            print("\n⚠️  Error: {final_state['error_state']}")
         else:
-            print("\\n✅ Workflow completed successfully!")
+            print("\n✅ Workflow completed successfully!")
 
         return final_state
 
     except Exception as e:
-        print(f"\\n❌ Workflow execution failed: {str(e)}")
+        print(f"\n❌ Workflow execution failed: {str(e)}")
         import traceback
 
         traceback.print_exc()
@@ -150,7 +151,7 @@ async def test_workflow_execution():
 def test_workflow_components():
     """Test individual workflow components"""
 
-    print("\\n" + "=" * 50)
+    print("\n" + "=" * 50)
     print("COMPONENT TESTING")
     print("=" * 50)
 
@@ -200,13 +201,13 @@ async def main():
 
     # Test components first
     if not test_workflow_components():
-        print("\\n❌ Component tests failed. Skipping workflow execution test.")
+        print("\n❌ Component tests failed. Skipping workflow execution test.")
         return
 
     # Test full workflow execution
     await test_workflow_execution()
 
-    print("\\n" + "=" * 60)
+    print("\n" + "=" * 60)
     print("Test suite completed!")
 
 

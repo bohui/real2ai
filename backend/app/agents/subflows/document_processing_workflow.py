@@ -96,7 +96,7 @@ class DocumentProcessingWorkflow:
         workflow = StateGraph(DocumentProcessingState)
 
         # Import nodes here to avoid circular imports
-        from app.agents.nodes.document_processing_subflow import (
+        from app.agents.nodes.step0_document_processing import (
             FetchDocumentRecordNode,
             AlreadyProcessedCheckNode,
             MarkProcessingStartedNode,

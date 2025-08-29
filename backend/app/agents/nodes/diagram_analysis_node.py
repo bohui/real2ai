@@ -48,7 +48,7 @@ class DiagramAnalysisNode(BaseNode):
 
             # Get document data
             document_data = state.get("document_data", {})
-            document_metadata = state.get("document_metadata", {})
+            document_metadata = state.get("ocr_processing", {})
 
             if not document_data and not document_metadata:
                 # No diagram data available - return empty analysis

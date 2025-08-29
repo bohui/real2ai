@@ -30,7 +30,7 @@ async def test_text_extraction():
 
     try:
         # Import the ExtractTextNode
-        from app.agents.nodes.document_processing_subflow.extract_text_node import (
+        from app.agents.nodes.step0_document_processing.extract_text_node import (
             ExtractTextNode,
         )
         from app.agents.subflows.document_processing_workflow import (

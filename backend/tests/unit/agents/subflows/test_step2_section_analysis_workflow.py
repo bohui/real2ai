@@ -31,15 +31,11 @@ class TestStep2AnalysisWorkflow:
             agent_version="1.0",
             contract_id="test-contract",
             document_data={"document_id": "test-doc"},
-            document_metadata={"full_text": "Sample contract text"},
+            ocr_processing={"full_text": "Sample contract text"},
             parsing_status="complete",
-            contract_terms=None,
             risk_assessment=None,
             compliance_check=None,
             recommendations=[],
-            property_data=None,
-            market_analysis=None,
-            financial_analysis=None,
             user_preferences={},
             australian_state="NSW",
             user_type="general",
@@ -53,7 +49,6 @@ class TestStep2AnalysisWorkflow:
             notify_progress=None,
             extracted_entity={"address": "123 Test St"},
             step2_analysis_result=None,
-            analysis_results={},
             report_data=None,
             final_recommendations=[],
         )
@@ -104,7 +99,7 @@ class TestStep2AnalysisWorkflow:
 
         result = await workflow.execute(
             contract_text=contract_text,
-            extracted_entity=extracted_entitys_result,
+            extracted_entity=sample_entities_result,
             parent_state=sample_state,
         )
 

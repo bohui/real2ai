@@ -7,7 +7,7 @@ Tests the layout format cleanup functionality without LLM processing.
 import pytest
 from unittest.mock import MagicMock, patch
 
-from app.agents.nodes.document_processing_subflow.layout_format_cleanup_node import (
+from app.agents.nodes.step0_document_processing.layout_format_cleanup_node import (
     LayoutFormatCleanupNode,
 )
 from app.agents.subflows.document_processing_workflow import DocumentProcessingState

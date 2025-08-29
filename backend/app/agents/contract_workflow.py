@@ -685,11 +685,14 @@ class ContractAnalysisWorkflow:
     # Conditional edge check methods (kept simple for orchestration)
     def _has_error_state(self, state: RealEstateAgentState) -> bool:
         """Check if the workflow state has any error indicators."""
+        progress = state.get("progress") or {}
         return (
             state.get("error") is not None
-            or state.get("error_state") is not None
             or any(key.endswith("_error") for key in state.keys())
-            or state.get("parsing_status") == ProcessingStatus.FAILED
+            or (
+                isinstance(progress, dict)
+                and progress.get("status") == ProcessingStatus.FAILED
+            )
         )
 
     def check_processing_success(self, state: RealEstateAgentState) -> str:
@@ -698,7 +701,7 @@ class ContractAnalysisWorkflow:
         if self._has_error_state(state):
             return "error"
 
-        if state.get("parsing_status") == ProcessingStatus.COMPLETED:
+        if (state.get("progress") or {}).get("status") == ProcessingStatus.COMPLETED:
             return "success"
         elif state.get("retry_attempts", 0) < 3:
             return "retry"

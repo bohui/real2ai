@@ -253,7 +253,7 @@ class DocumentProcessingNode(BaseNode):
 
             updated_data = {
                 # Keep detailed metadata (existing consumers rely on this)
-                "document_metadata": {
+                "ocr_processing": {
                     "full_text": extracted_text,
                     "extraction_method": extraction_method,
                     "extraction_confidence": extraction_confidence,

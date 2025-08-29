@@ -6,7 +6,7 @@ import pytest
 from unittest.mock import Mock, AsyncMock, patch
 from datetime import datetime, UTC
 
-from app.agents.nodes.document_processing_subflow.mainflow_entry import (
+from app.agents.nodes.step0_document_processing.mainflow_entry import (
     DocumentProcessingNode,
 )
 from app.agents.states.contract_state import RealEstateAgentState
@@ -113,9 +113,9 @@ class TestDocumentProcessingNode:
 
             # Verify state was updated correctly
             assert result_state.get("parsing_status") == ProcessingStatus.COMPLETED
-            assert "document_metadata" in result_state
+            assert "ocr_processing" in result_state
 
-            metadata = result_state["document_metadata"]
+            metadata = result_state["ocr_processing"]
             assert (
                 metadata["full_text"]
                 == "Sample contract text content extracted successfully."
@@ -383,7 +383,7 @@ class TestDocumentProcessingNodeIntegration:
 
                 # Verify successful processing
                 assert result_state.get("parsing_status") == ProcessingStatus.COMPLETED
-                assert "document_metadata" in result_state
+                assert "ocr_processing" in result_state
                 assert result_state["confidence_scores"]["document_processing"] > 0.7
 
                 # Verify task was launched with correct context

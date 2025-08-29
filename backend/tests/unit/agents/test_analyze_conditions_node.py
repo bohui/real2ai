@@ -11,7 +11,7 @@ import pytest
 from unittest.mock import Mock, AsyncMock, patch, MagicMock
 from typing import Dict, Any
 
-from app.agents.nodes.step2_section_analysis_subflow.analyze_conditions_node import (
+from app.agents.nodes.step2_section_analysis.analyze_conditions_node import (
     ConditionsNode,
 )
 

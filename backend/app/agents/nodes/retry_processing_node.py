@@ -249,14 +249,22 @@ class RetryProcessingNode(BaseNode):
                     },
                 )
 
-                # Clear error state and reset to initial state
-                state["error_state"] = None
-                state["parsing_status"] = None
-                state["current_step"] = ["validate_input"]  # Reset to beginning
+                # Clear failed state and reset canonical progress
+                from app.schema.enums import ProcessingStatus
 
-                # Clear any failed step indicators
-                if "progress" in state and state["progress"]:
-                    state["progress"]["current_step"] = "validate_input"
+                if "progress" not in state or not state["progress"]:
+                    state["progress"] = {
+                        "current_step": 0,
+                        "total_steps": 0,
+                        "percentage": 5,
+                        "status": ProcessingStatus.IN_PROGRESS,
+                        "step_name": "validate_input",
+                        "step_history": [],
+                    }
+                else:
+                    state["progress"].pop("error", None)
+                    state["progress"]["status"] = ProcessingStatus.IN_PROGRESS
+                    state["progress"]["step_name"] = "validate_input"
                     state["progress"]["percentage"] = 5  # Reset to initial progress
 
                 # Mark retry as successful since we're restarting

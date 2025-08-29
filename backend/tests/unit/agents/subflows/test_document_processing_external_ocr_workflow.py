@@ -92,7 +92,7 @@ class TestExternalOCRProcessingNodes:
     @pytest.mark.asyncio
     async def test_ingest_external_ocr_outputs_node_success(self, sample_state, temp_ocr_dir, mock_auth_context):
         """Test IngestExternalOCROutputsNode successful execution."""
-        from app.agents.nodes.document_processing_subflow.ingest_external_ocr_outputs_node import IngestExternalOCROutputsNode
+        from app.agents.nodes.step0_document_processing.ingest_external_ocr_outputs_node import IngestExternalOCROutputsNode
         
         temp_dir, page_files = temp_ocr_dir
         node = IngestExternalOCROutputsNode()
@@ -115,7 +115,7 @@ class TestExternalOCRProcessingNodes:
     @pytest.mark.asyncio
     async def test_ingest_external_ocr_outputs_node_missing_directory(self, mock_auth_context):
         """Test IngestExternalOCROutputsNode with missing directory."""
-        from app.agents.nodes.document_processing_subflow.ingest_external_ocr_outputs_node import IngestExternalOCROutputsNode
+        from app.agents.nodes.step0_document_processing.ingest_external_ocr_outputs_node import IngestExternalOCROutputsNode
         
         state = ExternalOCRProcessingState(
             document_id="test-doc",
@@ -140,7 +140,7 @@ class TestExternalOCRProcessingNodes:
     @pytest.mark.asyncio
     async def test_save_page_markdown_node_success(self, sample_state, temp_ocr_dir, mock_auth_context):
         """Test SavePageMarkdownAsArtifactPagesNode successful execution."""
-        from app.agents.nodes.document_processing_subflow.save_page_markdown_node import SavePageMarkdownAsArtifactPagesNode
+        from app.agents.nodes.step0_document_processing.save_page_markdown_node import SavePageMarkdownAsArtifactPagesNode
         
         temp_dir, page_files = temp_ocr_dir
         
@@ -182,7 +182,7 @@ class TestExternalOCRProcessingNodes:
     @pytest.mark.asyncio
     async def test_extract_diagrams_node_success(self, sample_state, temp_ocr_dir, mock_auth_context):
         """Test ExtractDiagramsFromMarkdownNode successful execution."""
-        from app.agents.nodes.document_processing_subflow.extract_diagrams_node import ExtractDiagramsFromMarkdownNode
+        from app.agents.nodes.step0_document_processing.extract_diagrams_node import ExtractDiagramsFromMarkdownNode
         
         temp_dir, page_files = temp_ocr_dir
         
@@ -445,7 +445,7 @@ class TestExternalOCRNodeEdgeCases:
     @pytest.mark.asyncio
     async def test_save_page_markdown_node_missing_files(self):
         """Test SavePageMarkdownNode with missing markdown files."""
-        from app.agents.nodes.document_processing_subflow.save_page_markdown_node import SavePageMarkdownAsArtifactPagesNode
+        from app.agents.nodes.step0_document_processing.save_page_markdown_node import SavePageMarkdownAsArtifactPagesNode
         
         state = ExternalOCRProcessingState(
             document_id="test-doc",
@@ -482,7 +482,7 @@ class TestExternalOCRNodeEdgeCases:
     @pytest.mark.asyncio
     async def test_extract_diagrams_node_no_images(self):
         """Test ExtractDiagramsNode with markdown containing no images."""
-        from app.agents.nodes.document_processing_subflow.extract_diagrams_node import ExtractDiagramsFromMarkdownNode
+        from app.agents.nodes.step0_document_processing.extract_diagrams_node import ExtractDiagramsFromMarkdownNode
         
         with tempfile.TemporaryDirectory() as temp_dir:
             # Create markdown file without base64 images

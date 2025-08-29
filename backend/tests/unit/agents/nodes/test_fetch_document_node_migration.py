@@ -9,7 +9,7 @@ import pytest
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4, UUID
 
-from app.agents.nodes.document_processing_subflow.fetch_document_node import (
+from app.agents.nodes.step0_document_processing.fetch_document_node import (
     FetchDocumentRecordNode,
 )
 from app.models.supabase_models import Document

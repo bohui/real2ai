@@ -11,7 +11,7 @@ from typing import Dict, Any, Optional
 
 from app.agents.states.contract_state import RealEstateAgentState
 from app.agents.subflows.step2_section_analysis_workflow import Step2AnalysisWorkflow
-from ..base import BaseNode
+from .base import BaseNode
 
 logger = logging.getLogger(__name__)
 
@@ -98,11 +98,7 @@ class SectionAnalysisNode(BaseNode):
             # Store Step 2 results in state
             state["step2_analysis_result"] = step2_results
 
-            # Update analysis_results for backward compatibility
-            self._update_analysis_results(state, step2_results)
-
-            # Maintain backward compatibility with contract_terms
-            self._maintain_backward_compatibility(state, step2_results)
+            # Back-compat with `contract_terms` removed; downstream should consume `step2_analysis_result`
 
             # Calculate confidence score for the overall analysis
             confidence_score = self._calculate_overall_confidence(step2_results)
@@ -162,8 +158,8 @@ class SectionAnalysisNode(BaseNode):
 
         Reuses logic from ContractTermsExtractionNode for consistency.
         """
-        # Check document metadata first
-        document_metadata = state.get("document_metadata", {})
+        # Check document metadata first (renamed to ocr_processing in state)
+        document_metadata = state.get("ocr_processing", {})
         full_text = document_metadata.get("full_text", "")
 
         if full_text:
@@ -240,7 +236,7 @@ class SectionAnalysisNode(BaseNode):
         self, state: RealEstateAgentState
     ) -> Optional[Dict[str, Any]]:
         """Get entities extraction result from state"""
-        return state.get("extracted_entity") or state.get("entities_result")
+        return state.get("step1_extracted_entity") or state.get("entities_result")
 
     def _prepare_additional_context(
         self, state: RealEstateAgentState
@@ -261,95 +257,7 @@ class SectionAnalysisNode(BaseNode):
 
         return context
 
-    def _update_analysis_results(
-        self, state: RealEstateAgentState, step2_results: Dict[str, Any]
-    ) -> None:
-        """Update analysis_results structure with Step 2 data"""
-        if "analysis_results" not in state:
-            state["analysis_results"] = {}
-
-        # Add Step 2 specific results to analysis_results
-        state["analysis_results"]["step2"] = {
-            "section_results": step2_results.get("section_results", {}),
-            "cross_section_validation": step2_results.get(
-                "cross_section_validation", {}
-            ),
-            "workflow_metadata": step2_results.get("workflow_metadata", {}),
-            "timestamp": step2_results.get("timestamp"),
-            "total_duration_seconds": step2_results.get("total_duration_seconds", 0),
-        }
-
-    def _maintain_backward_compatibility(
-        self, state: RealEstateAgentState, step2_results: Dict[str, Any]
-    ) -> None:
-        """
-        Maintain backward compatibility by populating contract_terms structure.
-
-        This ensures existing consumers of contract_terms continue to work
-        while transitioning to the new Step 2 structure.
-        """
-        try:
-            section_results = step2_results.get("section_results", {})
-
-            # Extract key data from section results for contract_terms compatibility
-            parties_result = section_results.get("parties_property", {})
-            financial_result = section_results.get("financial_terms", {})
-            conditions_result = section_results.get("conditions", {})
-
-            # Build backward-compatible contract_terms structure
-            contract_terms = {
-                "extraction_method": "step2_section_analysis",
-                "confidence": self._calculate_overall_confidence(step2_results),
-                "timestamp": datetime.now(UTC).isoformat(),
-                # Extract data from section results (placeholder until sections implemented)
-                "purchase_price": self._extract_field(
-                    financial_result, "purchase_price"
-                ),
-                "deposit_amount": self._extract_field(
-                    financial_result, "deposit_amount"
-                ),
-                "settlement_date": self._extract_field(
-                    financial_result, "settlement_date"
-                ),
-                "property_address": self._extract_field(
-                    parties_result, "property_address"
-                ),
-                "vendor_details": self._extract_field(
-                    parties_result, "vendor_details", {}
-                ),
-                "purchaser_details": self._extract_field(
-                    parties_result, "purchaser_details", {}
-                ),
-                "special_conditions": self._extract_field(
-                    conditions_result, "special_conditions", []
-                ),
-                # Metadata about Step 2 analysis
-                "step2_metadata": {
-                    "total_sections_analyzed": len(
-                        [v for v in section_results.values() if v is not None]
-                    ),
-                    "phases_completed": step2_results.get("workflow_metadata", {}).get(
-                        "phases_completed", {}
-                    ),
-                    "processing_errors": step2_results.get("workflow_metadata", {}).get(
-                        "processing_errors", []
-                    ),
-                },
-            }
-
-            state["contract_terms"] = contract_terms
-
-        except Exception as e:
-            logger.warning(
-                f"Failed to maintain backward compatibility for contract_terms: {str(e)}"
-            )
-            # Fallback minimal structure
-            state["contract_terms"] = {
-                "extraction_method": "step2_section_analysis",
-                "confidence": 0.5,
-                "error": "Backward compatibility extraction failed",
-                "step2_available": True,
-            }
+    # Legacy back-compat helper removed with migration away from `contract_terms`
 
     def _extract_field(
         self, section_result: Dict[str, Any], field_name: str, default_value: Any = None

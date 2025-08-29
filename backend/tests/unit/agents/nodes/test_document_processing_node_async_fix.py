@@ -8,7 +8,7 @@ without causing event loop conflicts when called from ContractAnalysisWorkflow.
 import asyncio
 import pytest
 from unittest.mock import Mock, patch, AsyncMock
-from app.agents.nodes.document_processing_subflow.mainflow_entry import (
+from app.agents.nodes.step0_document_processing.mainflow_entry import (
     DocumentProcessingNode,
 )
 from app.agents.states.contract_state import RealEstateAgentState

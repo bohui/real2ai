@@ -4,7 +4,7 @@ Unit tests for SavePagesNode
 
 import pytest
 
-from app.agents.nodes.document_processing_subflow.save_pages_node import SavePagesNode
+from app.agents.nodes.step0_document_processing.save_pages_node import SavePagesNode
 
 
 class TestSavePagesNode:

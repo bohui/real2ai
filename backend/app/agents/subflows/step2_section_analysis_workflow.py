@@ -68,7 +68,7 @@ class Step2AnalysisWorkflow:
 
     def _create_nodes(self):
         """Create node instances for Step 2 subflow."""
-        from app.agents.nodes.step2_section_analysis_subflow import (
+        from app.agents.nodes.step2_section_analysis import (
             InitializeWorkflowNode,
             PrepareContextNode,
             PartiesPropertyNode,

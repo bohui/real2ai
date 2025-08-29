@@ -176,6 +176,8 @@ class AuthContext:
                 )
 
                 if _BackendTokenService.is_backend_token(token):
+                    # Preserve the original backend token for mapping lookups
+                    original_backend_token = token
                     exchanged = await _BackendTokenService.ensure_supabase_access_token(
                         token
                     )
@@ -183,8 +185,11 @@ class AuthContext:
                         token = exchanged
                         # If we don't have a refresh token yet, try to pull from mapping
                         if not refresh_token:
+                            # Use the original backend token (not the exchanged Supabase token)
                             mapping = (
-                                await _BackendTokenService.get_mapping(cls.get_user_token())
+                                await _BackendTokenService.get_mapping(
+                                    original_backend_token
+                                )
                                 or {}
                             )
                             refresh_token = mapping.get("supabase_refresh_token")

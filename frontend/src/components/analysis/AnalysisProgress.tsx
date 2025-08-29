@@ -21,68 +21,97 @@ interface AnalysisProgressProps {
   className?: string;
 }
 
-const steps = [
-  {
-    key: "document_uploaded",
+// Define step mappings to match actual WebSocket messages from backend
+const stepDefinitions: Record<
+  string,
+  { icon: any; title: string; description: string }
+> = {
+  document_uploaded: {
     icon: CheckCircle,
     title: "Upload document",
     description: "Document uploaded successfully",
   },
-  {
-    key: "validate_input",
-    icon: CheckCircle,
-    title: "Initialize analysis",
-    description: "Checking file format and content quality",
+  queued: {
+    icon: Clock,
+    title: "Queued for analysis",
+    description: "Queued for AI contract analysis...",
   },
-  {
-    key: "document_processing",
+  contract_analysis: {
+    icon: FileText,
+    title: "Initialize analysis",
+    description: "Starting AI contract analysis...",
+  },
+  mark_processing_started: {
+    icon: CheckCircle,
+    title: "Processing started",
+    description: "Processing started",
+  },
+  extract_text: {
     icon: FileText,
     title: "Extract text & diagrams",
     description: "Reading contract content using OCR technology",
   },
-  {
-    key: "validate_document_quality",
-    icon: Shield,
-    title: "Validate document quality",
-    description: "Validating document quality and readability",
+  save_diagrams: {
+    icon: FileCheck,
+    title: "Save diagrams",
+    description: "Saving contract diagrams and charts",
   },
-  {
-    key: "extract_terms",
+  update_metrics: {
+    icon: TrendingUp,
+    title: "Update metrics",
+    description: "Updating analysis metrics",
+  },
+  mark_basic_complete: {
+    icon: CheckCircle,
+    title: "Basic processing complete",
+    description: "Basic processing complete",
+  },
+  build_summary: {
+    icon: FileCheck,
+    title: "Build summary",
+    description: "Building contract summary",
+  },
+  extract_terms: {
     icon: Search,
     title: "Extract contract terms",
-    description: "Finding key contract clauses and conditions",
+    description: "Performing section-by-section analysis",
   },
-  {
-    key: "validate_terms_completeness",
-    icon: CheckCircle,
-    title: "Validate terms completeness",
-    description: "Validating completeness of extracted terms",
-  },
-  {
-    key: "analyze_compliance",
-    icon: Shield,
-    title: "Analyze compliance",
-    description: "Verifying Australian legal requirements",
-  },
-  {
-    key: "assess_risks",
-    icon: AlertCircle,
-    title: "Assess risks",
-    description: "Evaluating potential issues and concerns",
-  },
-  {
-    key: "generate_recommendations",
+  analyze_financial_terms: {
     icon: TrendingUp,
-    title: "Generate recommendations",
-    description: "Generating actionable advice",
+    title: "Analyze financial terms",
+    description: "Financial terms analysis",
   },
-  {
-    key: "compile_report",
+  analyze_warranties: {
+    icon: Shield,
+    title: "Analyze warranties",
+    description: "Warranties analysis",
+  },
+  analyze_default_termination: {
+    icon: AlertCircle,
+    title: "Analyze default & termination",
+    description: "Default and termination analysis",
+  },
+  calculate_adjustments_outgoings: {
+    icon: TrendingUp,
+    title: "Calculate adjustments",
+    description: "Adjustments and outgoings calculation",
+  },
+  check_disclosure_compliance: {
+    icon: Shield,
+    title: "Check compliance",
+    description: "Disclosure compliance check",
+  },
+  validate_cross_sections: {
+    icon: CheckCircle,
+    title: "Validate cross-sections",
+    description: "Cross-section validation",
+  },
+  finalize_results: {
     icon: FileCheck,
-    title: "Compile report",
-    description: "Preparing comprehensive analysis",
+    title: "Finalize results",
+    description: "Finalizing analysis results",
   },
-];
+};
 
 const AnalysisProgress: React.FC<AnalysisProgressProps> = ({ className }) => {
   // Use specific selectors to ensure proper re-rendering
@@ -94,6 +123,52 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({ className }) => {
   const triggerAnalysisRetry = useAnalysisStore(
     (state) => state.triggerAnalysisRetry
   );
+
+  // Track completed steps from WebSocket messages
+  const [completedSteps, setCompletedSteps] = React.useState<Set<string>>(
+    new Set()
+  );
+  const [stepHistory, setStepHistory] = React.useState<
+    Array<{ key: string; progress: number }>
+  >([]);
+
+  // Update step history when progress changes
+  React.useEffect(() => {
+    if (
+      analysisProgress?.current_step &&
+      analysisProgress?.progress_percent !== undefined
+    ) {
+      const currentStep = analysisProgress.current_step;
+      const currentProgress = analysisProgress.progress_percent;
+
+      setStepHistory((prev) => {
+        // Add current step if not already in history
+        const existingIndex = prev.findIndex((s) => s.key === currentStep);
+        if (existingIndex === -1) {
+          return [...prev, { key: currentStep, progress: currentProgress }];
+        } else {
+          // Update progress for existing step
+          const updated = [...prev];
+          updated[existingIndex] = {
+            key: currentStep,
+            progress: currentProgress,
+          };
+          return updated;
+        }
+      });
+
+      // Mark previous steps as completed based on progress
+      setCompletedSteps((prev) => {
+        const newCompleted = new Set(prev);
+        stepHistory.forEach((step) => {
+          if (step.progress < currentProgress) {
+            newCompleted.add(step.key);
+          }
+        });
+        return newCompleted;
+      });
+    }
+  }, [analysisProgress, stepHistory]);
 
   // Debug logging
   console.log("🔍 AnalysisProgress component state:", {
@@ -183,39 +258,43 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({ className }) => {
 
   console.log("✅ AnalysisProgress: Rendering component");
 
-  // Helper function to determine when a step should be marked as completed based on progress
-  const getStepProgressThreshold = (stepKey: string): number => {
-    const thresholds: Record<string, number> = {
-      document_uploaded: 10,
-      validate_document_quality: 25,
-      document_processing: 40,
-      extract_text_diagrams: 50,
-      extract_terms: 59,
-      validate_terms_completeness: 70,
-      analyze_compliance: 80,
-      assess_risks: 85,
-      generate_recommendations: 90,
-      compile_report: 95,
-    };
-    return thresholds[stepKey] || 0;
-  };
-
   const progress = analysisProgress?.progress_percent || 0;
 
-  // Filter steps based on configuration and current progress
-  const visibleSteps = steps.filter((step) => {
-    // Always show validate_document_quality step unless we know it's disabled
-    // If we skipped from <=50% to 59%, then the step was disabled
-    if (step.key === "validate_document_quality") {
-      if (analysisProgress && progress > 50 && progress >= 59) {
-        // If we jumped from layout_summarise (<=50%) to extract_terms (59%), skip this step
-        if (analysisProgress.current_step === "extract_terms") {
-          return false;
-        }
+  // Create dynamic steps list based on actual WebSocket messages
+  const visibleSteps = React.useMemo(() => {
+    const steps: Array<{
+      key: string;
+      icon: any;
+      title: string;
+      description: string;
+    }> = [];
+
+    // Add steps from history in order they appeared
+    stepHistory.forEach(({ key }) => {
+      if (stepDefinitions[key] && !steps.find((s) => s.key === key)) {
+        steps.push({
+          key,
+          ...stepDefinitions[key],
+        });
+      }
+    });
+
+    // If we have a current step that's not in history yet, add it
+    if (
+      analysisProgress?.current_step &&
+      !steps.find((s) => s.key === analysisProgress.current_step)
+    ) {
+      const currentStepDef = stepDefinitions[analysisProgress.current_step];
+      if (currentStepDef) {
+        steps.push({
+          key: analysisProgress.current_step,
+          ...currentStepDef,
+        });
       }
     }
-    return true;
-  });
+
+    return steps;
+  }, [stepHistory, analysisProgress?.current_step]);
 
   const currentStepIndex = analysisProgress
     ? visibleSteps.findIndex(
@@ -303,28 +382,11 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({ className }) => {
         {/* Step List */}
         <div className="space-y-3">
           {visibleSteps.map((step, index) => {
+            // Use WebSocket-based completion tracking
             const isCompleted =
-              currentStepIndex > index ||
-              progress >= getStepProgressThreshold(step.key) ||
-              (!isAnalyzing && currentAnalysis);
-            const nextStepKey =
-              visibleSteps[Math.min(index + 1, visibleSteps.length - 1)]?.key;
-            const nextThreshold = nextStepKey
-              ? getStepProgressThreshold(nextStepKey)
-              : 100;
-
-            const isCurrent =
-              (currentStepIndex === index && isAnalyzing) ||
-              (isAnalyzing &&
-                progress >= getStepProgressThreshold(step.key) &&
-                progress < nextThreshold);
-            // A step is pending only if we are analyzing, it is not completed,
-            // and it comes after the current step. If current step is unknown (-1),
-            // treat all non-completed steps as pending.
-            const isPending =
-              isAnalyzing &&
-              !isCompleted &&
-              (currentStepIndex === -1 || currentStepIndex < index);
+              completedSteps.has(step.key) || (!isAnalyzing && currentAnalysis);
+            const isCurrent = currentStepIndex === index && isAnalyzing;
+            const isPending = isAnalyzing && !isCompleted && !isCurrent;
             const failureContext = !!analysisError && !isAnalyzing;
             const isFailedStep = failureContext && currentStepIndex === index;
 
@@ -383,7 +445,10 @@ const AnalysisProgress: React.FC<AnalysisProgressProps> = ({ className }) => {
                       isPending && "text-neutral-500"
                     )}
                   >
-                    {step.description}
+                    {/* Use real-time step description from WebSocket if current step, otherwise use default */}
+                    {isCurrent && analysisProgress?.step_description
+                      ? analysisProgress.step_description
+                      : step.description}
                   </p>
                 </div>
 

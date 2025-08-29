@@ -92,19 +92,19 @@ class DocumentProcessingExternalOCRWorkflow:
         workflow = StateGraph(ExternalOCRProcessingState)
 
         # Import nodes
-        from app.agents.nodes.document_processing_subflow.ingest_external_ocr_outputs_node import (
+        from app.agents.nodes.step0_document_processing.ingest_external_ocr_outputs_node import (
             IngestExternalOCROutputsNode,
         )
-        from app.agents.nodes.document_processing_subflow.save_page_markdown_node import (
+        from app.agents.nodes.step0_document_processing.save_page_markdown_node import (
             SavePageMarkdownAsArtifactPagesNode,
         )
-        from app.agents.nodes.document_processing_subflow.save_page_jpg_node import (
+        from app.agents.nodes.step0_document_processing.save_page_jpg_node import (
             SavePageJPGAsArtifactPagesJPGNode,
         )
-        from app.agents.nodes.document_processing_subflow.save_page_json_node import (
+        from app.agents.nodes.step0_document_processing.save_page_json_node import (
             SavePageJSONAsArtifactPagesJSONNode,
         )
-        from app.agents.nodes.document_processing_subflow.extract_diagrams_node import (
+        from app.agents.nodes.step0_document_processing.extract_diagrams_node import (
             ExtractDiagramsFromMarkdownNode,
         )
 

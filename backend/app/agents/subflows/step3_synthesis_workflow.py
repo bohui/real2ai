@@ -7,14 +7,14 @@ from langgraph.graph import StateGraph, START, END
 from app.agents.states.contract_state import RealEstateAgentState
 from app.core.prompts import get_prompt_manager
 from app.agents.states.step3_synthesis_state import Step3SynthesisState
-from app.agents.nodes.step3_synthesis_subflow.risk_aggregator_node import (
+from app.agents.nodes.step3_synthesis.risk_aggregator_node import (
     RiskAggregatorNode,
 )
-from app.agents.nodes.step3_synthesis_subflow.action_plan_node import ActionPlanNode
-from app.agents.nodes.step3_synthesis_subflow.compliance_score_node import (
+from app.agents.nodes.step3_synthesis.action_plan_node import ActionPlanNode
+from app.agents.nodes.step3_synthesis.compliance_score_node import (
     ComplianceScoreNode,
 )
-from app.agents.nodes.step3_synthesis_subflow.buyer_report_node import BuyerReportNode
+from app.agents.nodes.step3_synthesis.buyer_report_node import BuyerReportNode
 
 logger = logging.getLogger(__name__)
 
@@ -105,7 +105,7 @@ class Step3SynthesisWorkflow:
             "processing_errors": [],
             # Contract linkage
             "content_hash": parent_state.get("content_hash"),
-            "document_metadata": parent_state.get("document_metadata"),
+            "ocr_processing": parent_state.get("ocr_processing"),
             "document_data": parent_state.get("document_data"),
             "notify_progress": parent_state.get("notify_progress"),
         }

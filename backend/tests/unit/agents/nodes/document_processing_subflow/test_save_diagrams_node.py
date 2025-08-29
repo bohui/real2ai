@@ -6,7 +6,7 @@ import uuid
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from app.agents.nodes.document_processing_subflow.save_diagrams_node import SaveDiagramsNode
+from app.agents.nodes.step0_document_processing.save_diagrams_node import SaveDiagramsNode
 from app.agents.subflows.document_processing_workflow import DocumentProcessingState
 from app.schema.document import DiagramProcessingResult
 from app.schema.enums import DiagramType

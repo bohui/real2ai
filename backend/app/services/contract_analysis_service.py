@@ -391,20 +391,18 @@ class ContractAnalysisService:
                             "error_state"
                         ]
                 else:
-                    # Create analysis summary
-                    analysis_results = final_state.get("analysis_results", {})
+                    # Create analysis summary from canonical fields
                     summary = {
-                        "overall_confidence": analysis_results.get(
-                            "overall_confidence", 0
-                        ),
-                        "risk_score": analysis_results.get("risk_assessment", {}).get(
-                            "overall_risk_score", 0
-                        ),
-                        "compliance_status": analysis_results.get(
-                            "compliance_check", {}
+                        "overall_confidence": final_state.get("overall_confidence", 0),
+                        "risk_score": (
+                            final_state.get("risk_assessment", {}) or {}
+                        ).get("overall_risk_score", 0),
+                        "compliance_status": (
+                            final_state.get("compliance_check", {}) or {}
                         ).get("state_compliance", False),
                         "recommendations_count": len(
-                            analysis_results.get("recommendations", [])
+                            final_state.get("final_recommendations", [])
+                            or final_state.get("recommendations", [])
                         ),
                         "processing_time": processing_time,
                     }
@@ -583,9 +581,6 @@ class ContractAnalysisService:
             "contract_type": contract_type,
             "document_type": document_type,
             "user_experience": user_experience,
-            "current_step": [
-                "initialized"
-            ],  # Use list for Annotated concurrent updates
             "agent_version": "unified_v1.0",
             "created_at": datetime.now(timezone.utc).isoformat(),
             "workflow_config": {
@@ -595,20 +590,13 @@ class ContractAnalysisService:
                 "structured_parsing_enabled": self.config.enable_structured_parsing,
             },
             "confidence_scores": {},
-            "parsing_status": ProcessingStatus.PENDING,
             # Required fields from TypedDict
-            "document_metadata": {},
-            "contract_terms": None,
+            "ocr_processing": {},
             "risk_assessment": None,
             "compliance_check": None,
             "recommendations": [],
-            "property_data": None,
-            "market_analysis": None,
-            "financial_analysis": None,
-            "error_state": None,
             "processing_time": None,
             "progress": None,
-            "analysis_results": {},
             "report_data": None,
             "final_recommendations": [],
             # Required by LangGraph base state
@@ -621,7 +609,6 @@ class ContractAnalysisService:
         """Create enhanced analysis response"""
 
         # Safely coalesce optional fields that may be present but set to None
-        analysis_results = final_state.get("analysis_results") or {}
         report_data = final_state.get("report_data") or {}
         workflow_config = final_state.get("workflow_config") or {}
         progress_info = final_state.get("progress") or {}
@@ -629,20 +616,29 @@ class ContractAnalysisService:
         # Create comprehensive response
         response = ContractAnalysisServiceResponse(
             success=(
-                final_state.get("parsing_status") == ProcessingStatus.COMPLETED
-                and not final_state.get("error_state")
+                (
+                    (final_state.get("progress") or {}).get("status")
+                    == ProcessingStatus.COMPLETED
+                )
+                and not ((final_state.get("progress") or {}).get("error"))
             ),
             session_id=final_state.get("session_id"),
             analysis_timestamp=datetime.now(timezone.utc),
             processing_time_seconds=processing_time,
             workflow_version="unified_v1.0",
-            analysis_results=analysis_results,
+            analysis_results={
+                "overall_confidence": final_state.get("overall_confidence", 0.0),
+                "risk_assessment": final_state.get("risk_assessment", {}),
+                "compliance_check": final_state.get("compliance_check", {}),
+                "recommendations": final_state.get("final_recommendations", [])
+                or final_state.get("recommendations", []),
+            },
             report_data=report_data,
             quality_metrics=AnalysisQualityMetrics(
-                overall_confidence=analysis_results.get("overall_confidence", 0.0),
-                confidence_breakdown=analysis_results.get("confidence_breakdown", {}),
-                quality_assessment=analysis_results.get("confidence_assessment", ""),
-                processing_quality=analysis_results.get("quality_metrics", {}),
+                overall_confidence=final_state.get("overall_confidence", 0.0),
+                confidence_breakdown=final_state.get("confidence_breakdown", {}),
+                quality_assessment=final_state.get("confidence_assessment", ""),
+                processing_quality=final_state.get("quality_metrics", {}),
                 document_quality=(final_state.get("document_quality_metrics") or {}),
                 validation_results=(
                     (final_state.get("quality_metrics") or {}).get(

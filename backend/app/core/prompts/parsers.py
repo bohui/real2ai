@@ -8,7 +8,7 @@ import logging
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, List, Optional, Type, TypeVar
+from typing import Any, Dict, List, Optional, Type, TypeVar, get_args, get_origin
 
 from pydantic import BaseModel, ValidationError, PrivateAttr
 from langchain_core.output_parsers import PydanticOutputParser as LCPydanticOutputParser
@@ -342,6 +342,18 @@ class RetryingPydanticOutputParser(LCPydanticOutputParser):
                     f"Missing required fields: {', '.join(sorted(missing_required))}"
                 )
 
+            # 2b) Recursively ensure children schemas' required fields are present
+            nested_missing = self._collect_missing_required_fields_recursively(
+                self._model, filtered_values
+            )
+            if nested_missing:
+                logger.debug(
+                    f"Lenient parsing for {self._model.__name__}: missing nested required fields {nested_missing}"
+                )
+                raise ValueError(
+                    f"Missing nested required fields: {', '.join(nested_missing)}"
+                )
+
             # 3) Build instance without running validators
             instance = self._model.model_construct(
                 _fields_set=set(filtered_values.keys()), **filtered_values
@@ -367,6 +379,71 @@ class RetryingPydanticOutputParser(LCPydanticOutputParser):
         except Exception as e:
             logger.warning(f"Validation failed for model {self._model.__name__} on {e}")
             return None
+
+    def _collect_missing_required_fields_recursively(
+        self, model: Type[BaseModel], data: Any, path: str = ""
+    ) -> List[str]:
+        """Return dotted paths of missing required fields recursively for nested models.
+
+        - Preserves values without type validation; only checks presence of keys.
+        - For list fields of BaseModel, checks each item's required fields if items are dicts.
+        """
+        missing: List[str] = []
+        # Only check dict-like structures for presence
+        if not isinstance(data, dict):
+            return missing
+
+        try:
+            schema = model.model_json_schema()
+            required_fields = set(schema.get("required", []))
+        except Exception:
+            required_fields = set()
+
+        # Top-level for this model is handled by caller; still safe to re-check
+        for name in required_fields:
+            if name not in data:
+                missing.append(f"{path + '.' if path else ''}{name}")
+
+        # Walk children
+        model_fields: Dict[str, Any] = getattr(model, "model_fields", {}) or {}
+        for field_name, field_info in model_fields.items():
+            if field_name not in data:
+                continue
+            value = data.get(field_name)
+            ann = getattr(field_info, "annotation", None)
+            if ann is None:
+                continue
+            origin = get_origin(ann)
+            args = get_args(ann)
+
+            # List of nested models
+            if origin in (list, List) and args:
+                inner = args[0]
+                if isinstance(inner, type) and issubclass(inner, BaseModel):
+                    if isinstance(value, list):
+                        for idx, item in enumerate(value):
+                            if isinstance(item, dict):
+                                missing.extend(
+                                    self._collect_missing_required_fields_recursively(
+                                        inner,
+                                        item,
+                                        f"{path + '.' if path else ''}{field_name}[{idx}]",
+                                    )
+                                )
+                    # If not a list or items not dicts, skip type enforcement
+                continue
+
+            # Direct nested model
+            if isinstance(ann, type) and issubclass(ann, BaseModel):
+                if isinstance(value, dict):
+                    missing.extend(
+                        self._collect_missing_required_fields_recursively(
+                            ann, value, f"{path + '.' if path else ''}{field_name}"
+                        )
+                    )
+                # If not dict, skip type enforcement
+
+        return missing
 
     def _attempt_partial_parsing(
         self, json_data: Dict[str, Any]
