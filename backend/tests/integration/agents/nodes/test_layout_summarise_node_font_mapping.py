@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, patch, MagicMock
 from app.agents.nodes.step0_document_processing.layout_summarise_node_too_slow import (
     LayoutSummariseNode,
 )
-from app.agents.subflows.document_processing_workflow import DocumentProcessingState
+from app.agents.subflows.step0_document_processing_workflow import DocumentProcessingState
 from app.schema.enums import ContractType, AustralianState
 
 

@@ -20,7 +20,7 @@ from langgraph.graph import StateGraph
 
 from app.schema.document import ProcessedDocumentSummary, ProcessingErrorResponse
 from app.core.langsmith_config import langsmith_trace
-from app.agents.subflows.document_processing_workflow import DocumentProcessingState
+from app.agents.subflows.step0_document_processing_workflow import DocumentProcessingState
 
 logger = logging.getLogger(__name__)
 

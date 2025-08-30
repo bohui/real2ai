@@ -40,35 +40,49 @@ class Step3SynthesisNode(BaseNode):
 
             # Persist high-level results into explicit top-level keys
             if s3_results.get("risk_summary"):
-                state["risk_assessment"] = {
-                    **(state.get("risk_assessment") or {}),
+                state["step3_risk_assessment"] = {
+                    **(state.get("step3_risk_assessment") or {}),
                     "summary": s3_results.get("risk_summary", {}),
                 }
             if s3_results.get("compliance_summary"):
-                state["compliance_check"] = {
-                    **(state.get("compliance_check") or {}),
+                state["step3_compliance_check"] = {
+                    **(state.get("step3_compliance_check") or {}),
                     "summary": s3_results.get("compliance_summary", {}),
                 }
-            if s3_results.get("action_plan"):
-                state["final_recommendations"] = (
-                    state.get("final_recommendations") or []
-                ) + s3_results.get("action_plan", {}).get("items", [])
+            # Overwrite recommendations from Step 3 (do not append)
+            if s3_results.get("recommendations"):
+                state["step3_recommendations"] = s3_results.get("recommendations", [])
+
+            # Populate prefixed buyer report into parent state and avoid duplicating report_data
+            if s3_results.get("buyer_report"):
+                state["step3_buyer_report"] = s3_results.get("buyer_report")
+
+                # Only set report_data if it's empty or different from buyer report
+                current_report = state.get("report_data") or {}
+                if current_report != state["step3_buyer_report"]:
+                    state["report_data"] = state["step3_buyer_report"]
 
             self._log_step_debug(
                 "Step 3 synthesis completed",
                 state,
                 {
                     "has_risk_summary": bool(s3_results.get("risk_summary")),
-                    "has_action_plan": bool(s3_results.get("action_plan")),
+                    "has_recommendations": bool(s3_results.get("recommendations")),
                     "has_compliance_summary": bool(
                         s3_results.get("compliance_summary")
                     ),
                     "has_buyer_report": bool(s3_results.get("buyer_report")),
                 },
             )
-
             return self.update_state_step(
-                state, "step3_synthesis_complete", data=s3_results
+                state,
+                "step3_synthesis_complete",
+                data={
+                    "risk_summary": s3_results.get("risk_summary"),
+                    "recommendations": s3_results.get("recommendations"),
+                    "compliance_summary": s3_results.get("compliance_summary"),
+                    "buyer_report": s3_results.get("buyer_report"),
+                },
             )
         except Exception as e:
             return self._handle_node_error(

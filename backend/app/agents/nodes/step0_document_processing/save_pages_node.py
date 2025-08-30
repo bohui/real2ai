@@ -8,7 +8,7 @@ the artifact system for content-addressed storage and user-scoped references.
 import uuid
 from datetime import datetime, timezone
 
-from app.agents.subflows.document_processing_workflow import DocumentProcessingState
+from app.agents.subflows.step0_document_processing_workflow import DocumentProcessingState
 from .base_node import DocumentProcessingNodeBase
 from app.services.repositories.user_docs_repository import UserDocsRepository
 from app.services.repositories.artifacts_repository import ArtifactsRepository

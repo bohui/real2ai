@@ -395,14 +395,13 @@ class ContractAnalysisService:
                     summary = {
                         "overall_confidence": final_state.get("overall_confidence", 0),
                         "risk_score": (
-                            final_state.get("risk_assessment", {}) or {}
+                            final_state.get("step3_risk_assessment", {}) or {}
                         ).get("overall_risk_score", 0),
                         "compliance_status": (
-                            final_state.get("compliance_check", {}) or {}
+                            final_state.get("step3_compliance_check", {}) or {}
                         ).get("state_compliance", False),
                         "recommendations_count": len(
-                            final_state.get("final_recommendations", [])
-                            or final_state.get("recommendations", [])
+                            final_state.get("step3_recommendations", [])
                         ),
                         "processing_time": processing_time,
                     }
@@ -575,7 +574,7 @@ class ContractAnalysisService:
             "session_id": session_id,
             "user_id": user_id,
             "australian_state": australian_state,
-            "document_data": document_data,
+            "step0_document_data": document_data,
             "user_preferences": user_preferences,
             "user_type": user_type,
             "contract_type": contract_type,
@@ -591,14 +590,13 @@ class ContractAnalysisService:
             },
             "confidence_scores": {},
             # Required fields from TypedDict
-            "ocr_processing": {},
-            "risk_assessment": None,
-            "compliance_check": None,
-            "recommendations": [],
+            "step0_ocr_processing": {},
+            "step3_risk_assessment": None,
+            "step3_compliance_check": None,
+            "step3_recommendations": [],
             "processing_time": None,
             "progress": None,
             "report_data": None,
-            "final_recommendations": [],
             # Required by LangGraph base state
             "content_hash": raw_hash or "unknown_content_hash",
         }
@@ -628,10 +626,10 @@ class ContractAnalysisService:
             workflow_version="unified_v1.0",
             analysis_results={
                 "overall_confidence": final_state.get("overall_confidence", 0.0),
-                "risk_assessment": final_state.get("risk_assessment", {}),
-                "compliance_check": final_state.get("compliance_check", {}),
-                "recommendations": final_state.get("final_recommendations", [])
-                or final_state.get("recommendations", []),
+                "risk_assessment": final_state.get("step3_risk_assessment", {}),
+                "compliance_check": final_state.get("step3_compliance_check", {}),
+                "recommendations": final_state.get("step3_recommendations", []),
+                "buyer_report": final_state.get("step3_buyer_report", {}),
             },
             report_data=report_data,
             quality_metrics=AnalysisQualityMetrics(

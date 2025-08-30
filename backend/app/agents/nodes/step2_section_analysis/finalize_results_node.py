@@ -1,10 +1,10 @@
 from datetime import datetime, UTC
 
-from .base_node import Step2NodeBase
+from app.agents.nodes.base import BaseNode
 from app.agents.states.section_analysis_state import Step2AnalysisState
 
 
-class FinalizeResultsNode(Step2NodeBase):
+class FinalizeResultsNode(BaseNode):
     def __init__(
         self,
         workflow,

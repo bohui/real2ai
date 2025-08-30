@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, patch
 from datetime import datetime, timezone
 from uuid import UUID
 
-from app.agents.subflows.document_processing_workflow import DocumentProcessingState
+from app.agents.subflows.step0_document_processing_workflow import DocumentProcessingState
 from app.agents.nodes.step0_document_processing import (
     FetchDocumentRecordNode,
     AlreadyProcessedCheckNode,

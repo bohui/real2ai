@@ -69,12 +69,12 @@ class RealEstateAgentState(LangGraphBaseState):
 
     # Analysis Results Structure
     # Step 1: Entity extraction results
-    extracted_entity: Annotated[
+    step1_extracted_entity: Annotated[
         Optional[Dict[str, Any]], lambda x, y: y
     ]  # Last value wins
 
     # Step 1 (parallel): Section seeds extraction results
-    extracted_sections: Annotated[
+    step1_extracted_sections: Annotated[
         Optional[Dict[str, Any]], lambda x, y: y
     ]  # Last value wins
 
@@ -85,20 +85,20 @@ class RealEstateAgentState(LangGraphBaseState):
         Optional[Dict[str, Any]], lambda x, y: y
     ]  # Last value wins
 
-    # Output
-    risk_assessment: Annotated[
+    # Output (Step 3 synthesis)
+    step3_risk_assessment: Annotated[
         Optional[Dict[str, Any]], lambda x, y: y
     ]  # Last value wins
-    compliance_check: Annotated[
+    step3_compliance_check: Annotated[
         Optional[Dict[str, Any]], lambda x, y: y
     ]  # Last value wins
-    recommendations: Annotated[
+    step3_recommendations: Annotated[
         List[Dict[str, Any]], add
     ]  # Use add for list concatenation
+    step3_buyer_report: Annotated[
+        Optional[Dict[str, Any]], lambda x, y: y
+    ]  # Last value wins
     report_data: Annotated[Optional[Dict[str, Any]], lambda x, y: y]  # Last value wins
-    final_recommendations: Annotated[
-        List[Dict[str, Any]], add
-    ]  # Use add for list concatenation
 
 
 class ContractTerms(TypedDict):
@@ -208,9 +208,10 @@ def create_initial_state(
         step0_document_data=None,
         step0_ocr_processing=None,
         # Contract Analysis
-        risk_assessment=None,
-        compliance_check=None,
-        recommendations=[],
+        step3_risk_assessment=None,
+        step3_compliance_check=None,
+        step3_recommendations=[],
+        step3_buyer_report=None,
         # Property Data (removed)
         # User Context
         user_preferences=user_preferences or {},
@@ -232,7 +233,6 @@ def create_initial_state(
         notify_progress=None,
         # Output
         report_data=None,
-        final_recommendations=[],
     )
 
 

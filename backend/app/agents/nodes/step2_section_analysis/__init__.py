@@ -4,7 +4,6 @@ Step 2 Section Analysis Subflow Nodes
 Exports node classes used by the Step 2 LangGraph workflow.
 """
 
-from .base_node import Step2NodeBase
 from .initialize_workflow_node import InitializeWorkflowNode
 from .analyze_parties_property_node import PartiesPropertyNode
 from .analyze_financial_terms_node import FinancialTermsNode
@@ -23,7 +22,6 @@ from .finalize_results_node import FinalizeResultsNode
 from .prepare_context_node import PrepareContextNode
 
 __all__ = [
-    "Step2NodeBase",
     "InitializeWorkflowNode",
     "PartiesPropertyNode",
     "FinancialTermsNode",

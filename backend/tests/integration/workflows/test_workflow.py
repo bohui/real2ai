@@ -95,7 +95,7 @@ async def test_workflow_execution():
             print(f"  Sections analyzed: {', '.join(sections)}")
 
         # Risk assessment
-        risk_assessment = final_state.get("risk_assessment", {})
+        risk_assessment = final_state.get("step3_risk_assessment", {})
         if risk_assessment:
             print("\nRisk Assessment:")
             print(
@@ -109,7 +109,7 @@ async def test_workflow_execution():
                 )
 
         # Compliance check
-        compliance = final_state.get("compliance_check", {})
+        compliance = final_state.get("step3_compliance_check", {})
         if compliance:
             print("\nCompliance Check:")
             print(
@@ -125,7 +125,7 @@ async def test_workflow_execution():
                 print(f"  Stamp Duty: ${stamp_duty.get('total_duty', 0):,.2f}")
 
         # Recommendations
-        recommendations = final_state.get("final_recommendations", [])
+        recommendations = final_state.get("recommendations", [])
         print(f"\nRecommendations: {len(recommendations)} generated")
         for i, rec in enumerate(recommendations[:3]):  # Show top 3
             print(

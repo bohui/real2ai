@@ -1,10 +1,10 @@
 from datetime import datetime, UTC
 
-from .base_node import Step2NodeBase
+from app.agents.nodes.base import BaseNode
 from app.agents.states.section_analysis_state import Step2AnalysisState
 
 
-class CheckPhase1CompletionNode(Step2NodeBase):
+class CheckPhase1CompletionNode(BaseNode):
     async def execute(self, state: Step2AnalysisState) -> Step2AnalysisState:
         required_results = [
             "image_semantics_result",

@@ -12,8 +12,8 @@ from typing import Dict, Any
 from app.agents.states.contract_state import RealEstateAgentState
 from app.schema.enums import ProcessingStatus
 from app.core.async_utils import AsyncContextManager
-from ..base import BaseNode
-from app.agents.subflows.document_processing_workflow import (
+from .base import BaseNode
+from app.agents.subflows.step0_document_processing_workflow import (
     DocumentProcessingWorkflow,
 )
 from app.schema.document import (
@@ -58,7 +58,7 @@ class DocumentProcessingNode(BaseNode):
             self._log_step_debug("Starting document processing", state)
 
             # Validate document metadata
-            document_data: Dict[str, Any] = state.get("document_data", {})
+            document_data: Dict[str, Any] = state.get("step0_document_data", {})
             document_id = document_data.get("document_id")
 
             if not document_id:
@@ -253,7 +253,7 @@ class DocumentProcessingNode(BaseNode):
 
             updated_data = {
                 # Keep detailed metadata (existing consumers rely on this)
-                "ocr_processing": {
+                "step0_ocr_processing": {
                     "full_text": extracted_text,
                     "extraction_method": extraction_method,
                     "extraction_confidence": extraction_confidence,

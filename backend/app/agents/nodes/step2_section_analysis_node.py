@@ -158,8 +158,8 @@ class SectionAnalysisNode(BaseNode):
 
         Reuses logic from ContractTermsExtractionNode for consistency.
         """
-        # Check document metadata first (renamed to ocr_processing in state)
-        document_metadata = state.get("ocr_processing", {})
+        # Check document metadata first (Step 0 output in state)
+        document_metadata = state.get("step0_ocr_processing", {})
         full_text = document_metadata.get("full_text", "")
 
         if full_text:
@@ -167,7 +167,7 @@ class SectionAnalysisNode(BaseNode):
 
         # Fall back to repository access (same logic as original node)
         try:
-            document_data = state.get("document_data", {})
+            document_data = state.get("step0_document_data", {})
             document_id = document_data.get("document_id")
 
             if not document_id:
@@ -236,7 +236,7 @@ class SectionAnalysisNode(BaseNode):
         self, state: RealEstateAgentState
     ) -> Optional[Dict[str, Any]]:
         """Get entities extraction result from state"""
-        return state.get("step1_extracted_entity") or state.get("entities_result")
+        return state.get("step1_extracted_entity")
 
     def _prepare_additional_context(
         self, state: RealEstateAgentState

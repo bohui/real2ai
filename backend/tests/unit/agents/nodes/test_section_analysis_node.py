@@ -5,7 +5,7 @@ Unit tests for Section Analysis Node (Step 2 Integration)
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from backend.app.agents.nodes.step2_section_analysis_node import (
+from app.agents.nodes.step2_section_analysis_node import (
     SectionAnalysisNode,
 )
 from app.agents.states.contract_state import RealEstateAgentState
@@ -54,7 +54,7 @@ class TestSectionAnalysisNode:
             extracted_entity={"property": {"address": "123 Test St"}},
             step2_analysis_result=None,
             report_data=None,
-            final_recommendations=[],
+            # final_recommendations removed
         )
 
     def test_node_initialization(self, section_node):

@@ -8,7 +8,7 @@ the processed_summary field to enable short-circuiting.
 
 from datetime import datetime, timezone
 
-from app.agents.subflows.document_processing_workflow import DocumentProcessingState
+from app.agents.subflows.step0_document_processing_workflow import DocumentProcessingState
 from app.schema.document import ProcessedDocumentSummary
 from .base_node import DocumentProcessingNodeBase
 

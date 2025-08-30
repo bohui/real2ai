@@ -1,11 +1,11 @@
 from typing import Dict, Any
 from datetime import datetime, UTC
 
-from .base_node import Step2NodeBase
+from app.agents.nodes.base import BaseNode
 from app.agents.states.section_analysis_state import Step2AnalysisState
 
 
-class InitializeWorkflowNode(Step2NodeBase):
+class InitializeWorkflowNode(BaseNode):
     async def execute(self, state: Step2AnalysisState) -> Step2AnalysisState:
         self.logger.info("Initializing Step 2 section analysis workflow")
 

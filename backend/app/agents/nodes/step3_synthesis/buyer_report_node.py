@@ -31,7 +31,7 @@ class BuyerReportNode(ContractLLMNode):
             "australian_state": state.get("australian_state", "NSW"),
             # Step 3 synthesis results
             "risk_summary_result": state.get("risk_summary_result", {}),
-            "action_plan_result": state.get("action_plan_result", {}),
+            "recommendations_result": state.get("recommendations_result", {}),
             "compliance_summary_result": state.get("compliance_summary_result", {}),
             # Step 2 analysis results
             "parties_property_result": state.get("parties_property_result", {}),
@@ -53,7 +53,7 @@ class BuyerReportNode(ContractLLMNode):
         # Validate required inputs for buyer report
         step3_inputs = [
             "risk_summary_result",
-            "action_plan_result",
+            "recommendations_result",
             "compliance_summary_result",
         ]
         step2_inputs = [
@@ -104,7 +104,7 @@ class BuyerReportNode(ContractLLMNode):
                     "analysis_timestamp": datetime.now(UTC).isoformat(),
                     "step3_input_sources": [
                         "risk_summary_result",
-                        "action_plan_result",
+                        "recommendations_result",
                         "compliance_summary_result",
                     ],
                     "step2_input_sources": [

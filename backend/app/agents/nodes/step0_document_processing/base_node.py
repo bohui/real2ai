@@ -11,7 +11,7 @@ from typing import Dict, Any, Optional, List
 from datetime import datetime, timezone
 
 from app.core.auth_context import AuthContext
-from app.agents.subflows.document_processing_workflow import DocumentProcessingState
+from app.agents.subflows.step0_document_processing_workflow import DocumentProcessingState
 from app.agents.nodes.base import BaseNode
 
 logger = logging.getLogger(__name__)

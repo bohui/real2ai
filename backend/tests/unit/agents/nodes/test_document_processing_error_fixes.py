@@ -13,7 +13,7 @@ from uuid import uuid4
 from datetime import datetime, timezone
 
 from app.agents.nodes.step0_document_processing.error_handling_node import ErrorHandlingNode
-from app.agents.subflows.document_processing_workflow import DocumentProcessingState
+from app.agents.subflows.step0_document_processing_workflow import DocumentProcessingState
 from app.tasks.evaluation_tasks import run_async_task
 from app.database.connection import get_user_connection
 

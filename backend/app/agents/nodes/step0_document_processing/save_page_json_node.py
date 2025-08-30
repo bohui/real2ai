@@ -12,7 +12,7 @@ from typing import Dict, Any
 from datetime import datetime, timezone
 
 from .base_node import DocumentProcessingNodeBase
-from app.agents.subflows.document_processing_workflow import DocumentProcessingState
+from app.agents.subflows.step0_document_processing_workflow import DocumentProcessingState
 from app.services.repositories.artifacts_repository import ArtifactsRepository
 from app.utils.storage_utils import ArtifactStorageService
 

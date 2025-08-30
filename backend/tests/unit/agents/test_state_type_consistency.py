@@ -35,7 +35,7 @@ class TestStateTypeConsistency:
         # Test list fields
         assert isinstance(initial_state["current_step"], list)
         assert isinstance(initial_state["recommendations"], list)
-        assert isinstance(initial_state["final_recommendations"], list)
+        # final_recommendations removed; recommendations is the single source
 
         # Test dict fields
         assert isinstance(initial_state["confidence_scores"], dict)
@@ -54,9 +54,7 @@ class TestStateTypeConsistency:
                 {"action": "Get legal advice", "priority": "high"},
                 {"action": "Review contract terms", "priority": "medium"},
             ],
-            "final_recommendations": [
-                {"summary": "Overall assessment", "risk_level": "medium"}
-            ],
+            # final_recommendations removed
         }
 
         updated_state = update_state_step(initial_state, "test_step", data=update_data)
@@ -64,7 +62,7 @@ class TestStateTypeConsistency:
         # Verify the update was applied
         assert "test_step" in updated_state["current_step"]
         assert len(updated_state["recommendations"]) == 2
-        assert len(updated_state["final_recommendations"]) == 1
+        # final_recommendations removed
 
     def test_update_state_step_with_dict_data(self, initial_state):
         """Test that update_state_step correctly handles dict data."""
@@ -257,7 +255,7 @@ class TestStateTypeConsistency:
         # Instead, check if the types are what we expect
         assert type_hints["current_step"] == List[str]
         assert type_hints["recommendations"] == List[Dict[str, Any]]
-        assert type_hints["final_recommendations"] == List[Dict[str, Any]]
+        # final_recommendations removed from schema
 
         # Check that dict fields use Annotated with merge reducer
         assert type_hints["analysis_results"] == Dict[str, Any]

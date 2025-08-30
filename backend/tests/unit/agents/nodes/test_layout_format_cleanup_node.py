@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 from app.agents.nodes.step0_document_processing.layout_format_cleanup_node import (
     LayoutFormatCleanupNode,
 )
-from app.agents.subflows.document_processing_workflow import DocumentProcessingState
+from app.agents.subflows.step0_document_processing_workflow import DocumentProcessingState
 
 
 class TestLayoutFormatCleanupNode:

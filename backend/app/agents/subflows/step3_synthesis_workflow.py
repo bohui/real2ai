@@ -10,7 +10,7 @@ from app.agents.states.step3_synthesis_state import Step3SynthesisState
 from app.agents.nodes.step3_synthesis.risk_aggregator_node import (
     RiskAggregatorNode,
 )
-from app.agents.nodes.step3_synthesis.action_plan_node import ActionPlanNode
+from app.agents.nodes.step3_synthesis.recommendation_node import ActionPlanNode
 from app.agents.nodes.step3_synthesis.compliance_score_node import (
     ComplianceScoreNode,
 )
@@ -97,7 +97,7 @@ class Step3SynthesisWorkflow:
             "diagram_risk_assessment_result": section_results.get("diagram_risks"),
             # Outputs
             "risk_summary": None,
-            "action_plan": None,
+            "recommendations": None,
             "compliance_summary": None,
             "buyer_report": None,
             # Tracking
@@ -105,8 +105,8 @@ class Step3SynthesisWorkflow:
             "processing_errors": [],
             # Contract linkage
             "content_hash": parent_state.get("content_hash"),
-            "ocr_processing": parent_state.get("ocr_processing"),
-            "document_data": parent_state.get("document_data"),
+            "ocr_processing": parent_state.get("step0_ocr_processing"),
+            "document_data": parent_state.get("step0_document_data"),
             "notify_progress": parent_state.get("notify_progress"),
         }
 
@@ -115,7 +115,7 @@ class Step3SynthesisWorkflow:
             return {
                 "success": True,
                 "risk_summary": result_state.get("risk_summary"),
-                "action_plan": result_state.get("action_plan"),
+                "recommendations": result_state.get("recommendations"),
                 "compliance_summary": result_state.get("compliance_summary"),
                 "buyer_report": result_state.get("buyer_report"),
                 "timestamp": datetime.now(UTC).isoformat(),

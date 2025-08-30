@@ -31,7 +31,7 @@ class Step3SynthesisState(LangGraphBaseState):
 
     # Step 3 Outputs (aligned with contract attributes)
     risk_summary: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
-    action_plan: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
+    recommendations: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
     compliance_summary: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
     buyer_report: Annotated[Optional[Dict[str, Any]], lambda x, y: y]
 

@@ -11,7 +11,7 @@ from typing import Dict, Any, List, Set
 from app.agents.nodes.step0_document_processing.base_node import (
     DocumentProcessingNodeBase,
 )
-from app.agents.subflows.document_processing_workflow import DocumentProcessingState
+from app.agents.subflows.step0_document_processing_workflow import DocumentProcessingState
 from app.core.langsmith_config import langsmith_trace
 from app.services.ai.gemini_ocr_service import GeminiOCRService
 from app.prompts.schema.diagram_detection_schema import DiagramDetectionItem

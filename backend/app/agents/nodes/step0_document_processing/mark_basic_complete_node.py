@@ -9,7 +9,7 @@ diagram detection) has been completed successfully.
 from datetime import datetime, timezone
 
 from app.models.supabase_models import DocumentStatus
-from app.agents.subflows.document_processing_workflow import DocumentProcessingState
+from app.agents.subflows.step0_document_processing_workflow import DocumentProcessingState
 from .base_node import DocumentProcessingNodeBase
 from app.services.repositories.runs_repository import RunsRepository
 import uuid

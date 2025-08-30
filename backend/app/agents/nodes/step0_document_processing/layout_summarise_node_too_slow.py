@@ -10,7 +10,7 @@ from typing import Any
 import re
 from datetime import datetime, timezone
 
-from app.agents.subflows.document_processing_workflow import DocumentProcessingState
+from app.agents.subflows.step0_document_processing_workflow import DocumentProcessingState
 from .base_node import DocumentProcessingNodeBase
 from app.utils.font_layout_mapper import FontLayoutMapper
 from app.core.langsmith_config import langsmith_trace

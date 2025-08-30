@@ -62,7 +62,7 @@ class TestErrorHandlingNode:
                 ],
             },
             "report_data": None,
-            "final_recommendations": [],
+            # final_recommendations removed
             "ocr_processing": {},
         }
 
@@ -89,7 +89,7 @@ class TestErrorHandlingNode:
             "processing_time": None,
             "progress": None,  # This is the bug scenario
             "report_data": None,
-            "final_recommendations": [],
+            # final_recommendations removed
             "ocr_processing": {},
         }
 
@@ -116,7 +116,7 @@ class TestErrorHandlingNode:
             "processing_time": None,
             "progress": {},  # Empty progress
             "report_data": None,
-            "final_recommendations": [],
+            # final_recommendations removed
             "ocr_processing": {},
         }
 
@@ -156,7 +156,7 @@ class TestErrorHandlingNode:
             },
             "error": "Contract validation error",  # Explicit error field
             "report_data": None,
-            "final_recommendations": [],
+            # final_recommendations removed
             "ocr_processing": {},
         }
 

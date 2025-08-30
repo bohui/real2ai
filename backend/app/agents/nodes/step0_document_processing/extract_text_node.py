@@ -11,7 +11,7 @@ import tempfile
 from datetime import datetime, timezone
 import asyncio
 
-from app.agents.subflows.document_processing_workflow import DocumentProcessingState
+from app.agents.subflows.step0_document_processing_workflow import DocumentProcessingState
 from app.schema.document import (
     TextExtractionResult,
     PageExtraction,

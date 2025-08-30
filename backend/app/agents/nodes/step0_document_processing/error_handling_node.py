@@ -8,7 +8,7 @@ updating the document status to FAILED and storing error details.
 from datetime import datetime, timezone
 
 from app.models import ProcessingStatus
-from app.agents.subflows.document_processing_workflow import DocumentProcessingState
+from app.agents.subflows.step0_document_processing_workflow import DocumentProcessingState
 from .base_node import DocumentProcessingNodeBase
 
 

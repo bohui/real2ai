@@ -29,7 +29,6 @@ class EntitiesExtractionNode(ContractLLMNode):
             workflow=workflow,
             node_name="entities_extraction",
             contract_attribute="extracted_entity",
-            state_attribute="step1_extracted_entity",
             result_model=ContractEntityExtraction,
         )
         # Local parser instance; do not rely on workflow-managed parsers
@@ -45,7 +44,7 @@ class EntitiesExtractionNode(ContractLLMNode):
         # Use shared helper on base class
         full_text = await self.get_full_text(state)
 
-        document_metadata = state.get("ocr_processing", {})
+        document_metadata = state.get("step0_ocr_processing", {})
         contract_type_value = state.get("contract_type") or "purchase_agreement"
         user_type_value = state.get("user_type") or "general"
         user_experience_value = (
@@ -212,11 +211,11 @@ class EntitiesExtractionNode(ContractLLMNode):
         quality: Dict[str, Any],
     ) -> RealEstateAgentState:
         data = parsed.model_dump()
-        # Primary: write to state field (may differ from DB column)
-        state[self.state_attribute] = data
+        # Primary: write to state using contract_attribute
+        state[self.contract_attribute] = data
         if parsed.metadata and parsed.metadata.overall_confidence is not None:
             state.setdefault("confidence_scores", {})[
-                self.state_attribute
+                self.contract_attribute
             ] = parsed.metadata.overall_confidence
 
         return self.update_state_step(

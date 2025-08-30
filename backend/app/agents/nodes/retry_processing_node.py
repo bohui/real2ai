@@ -212,13 +212,13 @@ class RetryProcessingNode(BaseNode):
     def _check_required_artifacts(self, state: RealEstateAgentState) -> bool:
         """Check if required artifacts exist for report compilation steps."""
         # Check for document processing artifacts
-        document_data = state.get("document_data", {})
+        document_data = state.get("step0_document_data", {})
         extracted_text = document_data.get("content", "")
 
         # Check for contract analysis artifacts
         contract_terms = state.get("contract_terms")
         compliance_analysis = state.get("compliance_analysis")
-        risk_assessment = state.get("risk_assessment")
+        risk_assessment = state.get("step3_risk_assessment")
 
         # Basic validation - we need at least some extracted text and basic analysis results
         has_text = bool(extracted_text and len(extracted_text.strip()) > 50)

@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from .base_node import DocumentProcessingNodeBase
-from app.agents.subflows.document_processing_workflow import DocumentProcessingState
+from app.agents.subflows.step0_document_processing_workflow import DocumentProcessingState
 
 logger = logging.getLogger(__name__)
 

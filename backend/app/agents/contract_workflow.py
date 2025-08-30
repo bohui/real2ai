@@ -42,6 +42,7 @@ from app.agents.nodes import (
     DocumentProcessingNode,
     SectionAnalysisNode,
     EntitiesExtractionNode,
+    Step1EntitiesExtractionNode,
     # New node lives in step1_entities_extraction package; import directly below
     InputValidationNode,
     ErrorHandlingNode,
@@ -225,6 +226,7 @@ class ContractAnalysisWorkflow:
         self.document_processing_node = DocumentProcessingNode(self)
 
         # Contract Analysis Nodes
+        self.step1_extraction_node = Step1EntitiesExtractionNode(self)
         self.entities_extraction_node = EntitiesExtractionNode(self)
         self.section_extraction_node = SectionExtractionNode(self)
         self.section_analysis_node = SectionAnalysisNode(self)
@@ -240,6 +242,8 @@ class ContractAnalysisWorkflow:
         self.nodes = {
             "input_validation": self.input_validation_node,
             "document_processing": self.document_processing_node,
+            "step1_extraction": self.step1_extraction_node,
+            # Keep underlying Step 1 nodes initialized for the subflow to call
             "entities_extraction": self.entities_extraction_node,
             "section_extraction": self.section_extraction_node,
             "section_analysis": self.section_analysis_node,
@@ -309,10 +313,9 @@ class ContractAnalysisWorkflow:
         # Add minimal node execution methods to the workflow
         workflow.add_node("validate_input", self.validate_input)
         workflow.add_node("process_document", self.process_document)
-        workflow.add_node("extract_entities", self.extract_entities)
-        workflow.add_node("extract_sections", self.extract_sections)
-        workflow.add_node("extract_terms", self.extract_section_analysis)
-        workflow.add_node("synthesize_step3", self.synthesize_step3)
+        workflow.add_node("step1_extraction", self.step1_extraction)
+        workflow.add_node("step2_section_analysis", self.extract_section_analysis)
+        workflow.add_node("step3_synthesize", self.step3_synthesize)
 
         # Utility nodes (only error handling and retry)
         workflow.add_node("handle_error", self.handle_processing_error)
@@ -329,31 +332,18 @@ class ContractAnalysisWorkflow:
             "process_document",
             self.check_processing_success,
             {
-                "success": "extract_entities",
-                "retry": "retry_processing",
-                "error": "handle_error",
-            },
-        )
-        # Fan out to section extraction in parallel when document processing succeeds
-        workflow.add_edge("process_document", "extract_sections")
-
-        # After entities extraction, go to terms extraction
-        workflow.add_conditional_edges(
-            "extract_entities",
-            self.check_entities_extraction_success,
-            {
-                "success": "extract_terms",
+                "success": "step1_extraction",
                 "retry": "retry_processing",
                 "error": "handle_error",
             },
         )
 
-        # After section extraction, also go to terms extraction
+        # After Step 1 subflow, go to Step 2 analysis
         workflow.add_conditional_edges(
-            "extract_sections",
-            self.check_sections_extraction_success,
+            "step1_extraction",
+            self.check_step1_extraction_success,
             {
-                "success": "extract_terms",
+                "success": "step2_section_analysis",
                 "retry": "retry_processing",
                 "error": "handle_error",
             },
@@ -361,17 +351,17 @@ class ContractAnalysisWorkflow:
 
         # After terms extraction, proceed directly to Step 3 or retry on low confidence
         workflow.add_conditional_edges(
-            "extract_terms",
+            "step2_section_analysis",
             self.check_extraction_quality,
             {
-                "high_confidence": "synthesize_step3",
+                "high_confidence": "step3_synthesize",
                 "low_confidence": "retry_processing",
                 "error": "handle_error",
             },
         )
 
         # Route Step 3 synthesis to end
-        workflow.add_edge("synthesize_step3", "__end__")
+        workflow.add_edge("step3_synthesize", "__end__")
 
         # Terminal conditions
         workflow.add_edge("handle_error", "__end__")
@@ -385,12 +375,14 @@ class ContractAnalysisWorkflow:
             {
                 "restart_workflow": "validate_input",
                 "retry_document_processing": "process_document",
-                "retry_entities_extraction": "extract_entities",
-                "retry_sections_extraction": "extract_sections",
-                "retry_extraction": "extract_terms",
+                "retry_step1_extraction": "step1_extraction",
+                # Back-compat retry labels route to unified step1_extraction
+                "retry_entities_extraction": "step1_extraction",
+                "retry_sections_extraction": "step1_extraction",
+                "retry_extraction": "step2_section_analysis",
                 # With simplified workflow, route generic retries
-                "retry_extraction": "extract_terms",
-                "continue_workflow": "extract_entities",  # Default fallback
+                "retry_extraction": "step2_section_analysis",
+                "continue_workflow": "step1_extraction",  # Default fallback to step1
             },
         )
 
@@ -641,6 +633,10 @@ class ContractAnalysisWorkflow:
                 state, e, "Section extraction failed"
             )
 
+    def step1_extraction(self, state: RealEstateAgentState) -> RealEstateAgentState:
+        """Execute Step 1 entry node that runs entities + sections subflow."""
+        return self._run_async_node(lambda: self.step1_extraction_node.execute(state))
+
     def process_document(self, state: RealEstateAgentState) -> RealEstateAgentState:
         """Execute document processing node."""
         return self._run_async_node(
@@ -656,7 +652,7 @@ class ContractAnalysisWorkflow:
 
     # Removed: terms validation, covered by Step 3 synthesis outputs
 
-    def synthesize_step3(self, state: RealEstateAgentState) -> RealEstateAgentState:
+    def step3_synthesize(self, state: RealEstateAgentState) -> RealEstateAgentState:
         """Execute Step 3 synthesis node."""
         return self._run_async_node(lambda: self.step3_synthesis_node.execute(state))
 
@@ -755,6 +751,31 @@ class ContractAnalysisWorkflow:
                 return "retry"
         except Exception as e:
             logger.error(f"Error checking sections extraction success: {e}")
+            return "error"
+
+    def check_step1_extraction_success(self, state: RealEstateAgentState) -> str:
+        """Unified success check for the Step 1 subflow (entities + sections)."""
+        try:
+            if self._has_error_state(state):
+                return "error"
+            has_entities = bool(
+                state.get("step1_extracted_entity")
+                or state.get("extracted_entity")
+                or state.get("extracted_entity_skipped")
+            )
+            has_sections = bool(
+                state.get("step1_extracted_sections")
+                or state.get("extracted_sections")
+                or state.get("section_extraction_skipped")
+            )
+            if has_entities or has_sections:
+                return "success"
+            elif state.get("retry_attempts", 0) < 3:
+                return "retry"
+            else:
+                return "error"
+        except Exception as e:
+            logger.error(f"Error checking Step 1 extraction success: {e}")
             return "error"
 
     def check_extraction_quality(self, state: RealEstateAgentState) -> str:
@@ -884,9 +905,7 @@ class ContractAnalysisWorkflow:
             # Check if retry was successful
             if not retry_result.get("success", False):
                 # Retry failed - go to error handling
-                return (
-                    "continue_workflow"  # This will route to extract_terms as fallback
-                )
+                return "continue_workflow"  # This will route to step2_section_analysis as fallback
 
             # Route based on retry strategy
             if strategy == "restart_workflow":
@@ -899,7 +918,7 @@ class ContractAnalysisWorkflow:
 
                 if target_step == "process_document":
                     return "retry_document_processing"
-                elif target_step == "extract_terms":
+                elif target_step == "step2_section_analysis":
                     return "retry_extraction"
                 elif target_step == "analyze_compliance":
                     return "retry_compliance"
@@ -921,7 +940,7 @@ class ContractAnalysisWorkflow:
 
                 if current_step == "process_document":
                     return "retry_document_processing"
-                elif current_step == "extract_terms":
+                elif current_step == "step2_section_analysis":
                     return "retry_extraction"
                 elif current_step == "analyze_compliance":
                     return "retry_compliance"
@@ -1047,8 +1066,8 @@ class ProgressTrackingWorkflow(ContractAnalysisWorkflow):
         "document_uploaded",  # 5%
         "validate_input",  # 7%
         "process_document",  # 7-30%
-        "extract_terms",  # 59%
-        "synthesize_step3",  # 60%
+        "step2_section_analysis",  # 59%
+        "step3_synthesize",  # 60%
         "analysis_complete",  # 100%
     ]
 
@@ -1061,7 +1080,7 @@ class ProgressTrackingWorkflow(ContractAnalysisWorkflow):
         resume_from_step: Optional[str] = (state or {}).get("resume_from_step")
         if not resume_from_step:
             return 0
-        # Handle failed suffix like "extract_terms_failed"
+        # Handle failed suffix like "step2_section_analysis_failed"
         clean_step = (
             resume_from_step[:-7]
             if resume_from_step.endswith("_failed")
@@ -1147,38 +1166,38 @@ class ProgressTrackingWorkflow(ContractAnalysisWorkflow):
         return super().validate_document_quality_step(state)
 
     async def extract_section_analysis(self, state):
-        if self._should_skip("extract_terms", state):
+        if self._should_skip("step2_section_analysis", state):
             return state
         self._ws_progress(
             state,
-            "extract_terms",
+            "step2_section_analysis",
             59,
             "Performing Step 2 section-by-section analysis",
         )
         await self._notify_status(
             state,
-            "extract_terms",
+            "step2_section_analysis",
             59,
             "Performing Step 2 section-by-section analysis",
         )
         return super().extract_section_analysis(state)
 
-    async def synthesize_step3(self, state):
-        if self._should_skip("synthesize_step3", state):
+    async def step3_synthesize(self, state):
+        if self._should_skip("step3_synthesize", state):
             return state
         self._ws_progress(
             state,
-            "synthesize_step3",
+            "step3_synthesize",
             60,
             "Synthesizing analysis results for actionable recommendations",
         )
         await self._notify_status(
             state,
-            "synthesize_step3",
+            "step3_synthesize",
             60,
             "Synthesizing analysis results for actionable recommendations",
         )
-        return super().synthesize_step3(state)
+        return super().step3_synthesize(state)
 
     # Removed overridden progress step for compliance
 
@@ -1199,7 +1218,7 @@ class ProgressTrackingWorkflow(ContractAnalysisWorkflow):
     # Removed skip override for document quality
 
     def check_extraction_quality(self, state):
-        if self._should_skip("extract_terms", state):
+        if self._should_skip("step2_section_analysis", state):
             try:
                 contract_terms = (
                     state.get("contract_terms") if isinstance(state, dict) else None

@@ -8,7 +8,9 @@ from the database using user-authenticated context.
 from datetime import datetime, timezone
 from uuid import UUID
 
-from app.agents.subflows.document_processing_workflow import DocumentProcessingState
+from app.agents.subflows.step0_document_processing_workflow import (
+    DocumentProcessingState,
+)
 from .base_node import DocumentProcessingNodeBase
 from app.services.repositories.documents_repository import DocumentsRepository
 

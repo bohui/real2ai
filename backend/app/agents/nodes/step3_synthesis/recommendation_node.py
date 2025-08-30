@@ -14,8 +14,8 @@ class ActionPlanNode(ContractLLMNode):
     def __init__(self, workflow, progress_range: tuple[int, int] = (5, 10)):
         super().__init__(
             workflow=workflow,
-            node_name="generate_action_plan",
-            contract_attribute="action_plan",
+            node_name="generate_recommendations",
+            contract_attribute="recommendations",
             result_model=ActionPlanResult,
         )
         self.progress_range = progress_range
@@ -42,7 +42,7 @@ class ActionPlanNode(ContractLLMNode):
             "conditions_result": state.get("conditions_result", {}),
         }
 
-        # Validate required inputs for action planning
+        # Validate required inputs for recommendations
         required_inputs = [
             "cross_section_validation_result",
             "settlement_logistics_result",
@@ -61,12 +61,12 @@ class ActionPlanNode(ContractLLMNode):
 
         context = PromptContext(**context_dict)
         populated = len([k for k, v in context_dict.items() if v])
-        logger.info(f"Built action plan context with {populated} populated fields")
+        logger.info(f"Built recommendations context with {populated} populated fields")
 
         parser = create_parser(
             ActionPlanResult, strict_mode=False, retry_on_failure=True
         )
-        composition_name = "step3_action_plan"
+        composition_name = "step3_recommendations"
         return context, parser, composition_name
 
     # Coercion handled by base class via result_model
@@ -74,7 +74,7 @@ class ActionPlanNode(ContractLLMNode):
     async def _validate_and_enhance_result(
         self, raw_result: Dict[str, Any], state: Step3SynthesisState
     ) -> Dict[str, Any]:
-        """Validate and enhance the action plan result"""
+        """Validate and enhance the recommendations result"""
         try:
             # Validate against our strict schema
             validated_result = ActionPlanResult(**raw_result)
@@ -113,7 +113,7 @@ class ActionPlanNode(ContractLLMNode):
             )
 
             logger.info(
-                f"Action plan completed: {len(validated_result.actions)} actions, "
+                f"Recommendations completed: {len(validated_result.actions)} actions, "
                 f"{len(validated_result.critical_path)} critical path items"
             )
 
@@ -135,7 +135,7 @@ class ActionPlanNode(ContractLLMNode):
                         "estimated_duration_days": 5,
                     }
                 ],
-                "timeline_summary": f"Action plan generation failed: {str(e)}. Manual review required.",
+                "timeline_summary": f"Recommendations generation failed: {str(e)}. Manual review required.",
                 "critical_path": ["Review Contract Analysis"],
                 "total_estimated_days": 5,
                 "metadata": {

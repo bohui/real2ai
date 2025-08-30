@@ -7,7 +7,7 @@ whether from fresh processing or from already-processed document data.
 
 from datetime import datetime, timezone
 
-from app.agents.subflows.document_processing_workflow import DocumentProcessingState
+from app.agents.subflows.step0_document_processing_workflow import DocumentProcessingState
 from app.schema.document import ProcessedDocumentSummary
 from app.prompts.schema.contract_layout_summary_schema import (
     LayoutFormatResult,

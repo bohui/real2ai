@@ -60,7 +60,7 @@ class TestWorkflowTypeConsistencyIntegration:
             "processing_time": None,
             "error_state": None,
             "report_data": None,
-            "final_recommendations": [],
+            # final_recommendations removed
         }
 
     @pytest.fixture
@@ -181,7 +181,7 @@ class TestWorkflowTypeConsistencyIntegration:
         # Verify the types are what we expect
         assert get_origin(type_hints["current_step"]) == list
         assert get_origin(type_hints["recommendations"]) == list
-        assert get_origin(type_hints["final_recommendations"]) == list
+        # final_recommendations removed from schema
         assert get_origin(type_hints["analysis_results"]) == dict
         assert get_origin(type_hints["confidence_scores"]) == dict
 

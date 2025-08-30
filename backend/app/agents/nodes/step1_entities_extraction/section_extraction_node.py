@@ -27,7 +27,6 @@ class SectionExtractionNode(ContractLLMNode):
             workflow=workflow,
             node_name="section_extraction",
             contract_attribute="extracted_sections",
-            state_attribute="step1_extracted_sections",
             result_model=SectionExtractionOutput,
         )
         self._parser = create_parser(
@@ -39,7 +38,7 @@ class SectionExtractionNode(ContractLLMNode):
 
         full_text = await self.get_full_text(state)
 
-        document_metadata = state.get("ocr_processing", {})
+        document_metadata = state.get("step0_ocr_processing", {})
         contract_type_value = state.get("contract_type") or "purchase_agreement"
         user_type_value = state.get("user_type") or "general"
         user_experience_value = (

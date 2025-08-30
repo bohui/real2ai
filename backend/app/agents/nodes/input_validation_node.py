@@ -47,7 +47,7 @@ class InputValidationNode(BaseNode):
             validation_errors = []
 
             # Check for document data
-            document_data = state.get("document_data")
+            document_data = state.get("step0_document_data")
             if not document_data:
                 validation_errors.append("Missing document_data in input")
             else:

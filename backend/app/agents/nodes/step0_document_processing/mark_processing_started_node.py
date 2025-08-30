@@ -8,7 +8,7 @@ the processing_started_at timestamp and updating status to PROCESSING.
 from datetime import datetime, timezone
 
 from app.models import ProcessingStatus
-from app.agents.subflows.document_processing_workflow import DocumentProcessingState
+from app.agents.subflows.step0_document_processing_workflow import DocumentProcessingState
 from .base_node import DocumentProcessingNodeBase
 from app.services.repositories.user_docs_repository import UserDocsRepository
 from app.services.repositories.runs_repository import RunsRepository
